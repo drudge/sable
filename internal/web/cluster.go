@@ -150,152 +150,45 @@ func (server *Server) updateClusterOnboarding(writer http.ResponseWriter, reques
 	}
 	workflow := normalizeClusterWorkflow(request.FormValue("workflow"))
 	request.Form.Set("workflow", workflow)
-	nodeName := strings.TrimSpace(request.FormValue("node_name"))
-	advertiseURL := strings.TrimSpace(request.FormValue("advertise_url"))
-	dataDirectory := strings.TrimSpace(request.FormValue("data_dir"))
-	if nodeName == "" || advertiseURL == "" || dataDirectory == "" {
+	onboarding := clusterOnboarding{
+		nodeName:      strings.TrimSpace(request.FormValue("node_name")),
+		advertiseURL:  strings.TrimSpace(request.FormValue("advertise_url")),
+		dataDirectory: strings.TrimSpace(request.FormValue("data_dir")),
+		source:        strings.ToLower(strings.TrimSpace(request.FormValue("certificate_source"))),
+	}
+	if onboarding.nodeName == "" || onboarding.advertiseURL == "" || onboarding.dataDirectory == "" {
 		server.renderClusterMutation(writer, request, http.StatusUnprocessableEntity, "", "Node name, HTTPS Console / API URL, and cluster state directory are required")
 		return
 	}
-	if err := config.ValidateClusterAdvertiseURL(advertiseURL); err != nil {
+	if err := config.ValidateClusterAdvertiseURL(onboarding.advertiseURL); err != nil {
 		server.renderClusterMutation(writer, request, http.StatusUnprocessableEntity, "", "HTTPS Console / API URL must be an absolute HTTPS URL without credentials, query, or fragment")
 		return
 	}
-	source := strings.ToLower(strings.TrimSpace(request.FormValue("certificate_source")))
-	if source != "external" && source != "acme" && source != "import" && source != "generated" {
+	if source := onboarding.source; source != "external" && source != "acme" && source != "import" && source != "generated" {
 		server.renderClusterMutation(writer, request, http.StatusUnprocessableEntity, "", "Choose how HTTPS is provided")
 		return
 	}
-
-	var imported certificates.GeneratedCertificate
-	if source == "import" {
-		generator, generated := server.certificates.(certificateGenerator)
-		if !generated {
-			server.renderClusterMutation(writer, request, http.StatusNotImplemented, "", "Certificate import is unavailable")
-			return
-		}
-		var err error
-		imported, err = generator.ImportKeyPair(request.Context(), certificates.ImportCertificateOptions{
-			CertificatePEM:   []byte(strings.TrimSpace(request.FormValue("manual_certificate_pem")) + "\n"),
-			PrivateKeyPEM:    []byte(strings.TrimSpace(request.FormValue("manual_private_key_pem")) + "\n"),
-			StorageDirectory: strings.TrimSpace(request.FormValue("manual_import_storage_dir")),
-		})
-		if err != nil {
-			server.logger.Warn("import cluster onboarding certificate", "client", requestClientIP(request), "error", err)
-			server.renderClusterMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
-			return
-		}
-	}
-	current := server.config.Current().Config
-	reuseCA := source == "generated" && current.Cluster.TrustAnchorFile != "" && request.FormValue("replace_cluster_ca") != "confirmed"
-	if reuseCA {
-		imported = certificates.GeneratedCertificate{CertificateFile: current.EncryptedDNS.CertificateFile, PrivateKeyFile: current.EncryptedDNS.PrivateKeyFile, CAFile: current.Cluster.TrustAnchorFile}
-	}
-	if source == "generated" && !reuseCA {
-		if current.Cluster.TrustAnchorFile != "" {
-			// New paths retain the previous CA and key pair for recovery and avoid
-			// changing the live certificate before configuration is committed.
-			request.Form.Set("generated_storage_dir", filepath.Join(strings.TrimSpace(request.FormValue("generated_storage_dir")), fmt.Sprintf("replacement-%d", time.Now().UnixNano())))
-		}
-		generator, generated := server.certificates.(certificateGenerator)
-		if !generated {
-			server.renderClusterMutation(writer, request, http.StatusNotImplemented, "", "Self-signed certificate generation is unavailable")
-			return
-		}
-		validFor, err := certificateValidity(request.FormValue("generated_valid_days"), 365)
-		if err != nil {
-			server.renderClusterMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
-			return
-		}
-		advertised, err := url.Parse(advertiseURL)
-		if err != nil || advertised.Hostname() == "" {
-			server.renderClusterMutation(writer, request, http.StatusUnprocessableEntity, "", "HTTPS Console / API URL must include a hostname or IP address")
-			return
-		}
-		names := append([]string{advertised.Hostname()}, formLines(request.FormValue("generated_additional_names"))...)
-		imported, err = generator.GenerateClusterPKI(request.Context(), certificates.ClusterPKIOptions{
-			NodeName:         nodeName,
-			Names:            names,
-			StorageDirectory: strings.TrimSpace(request.FormValue("generated_storage_dir")),
-			ValidFor:         validFor,
-		})
-		if err != nil {
-			server.logger.Warn("generate cluster onboarding certificate", "client", requestClientIP(request), "error", err)
-			server.renderClusterMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
-			return
-		}
-	}
-
-	acmeRenewBefore := 30 * 24 * time.Hour
-	if source == "acme" {
-		if server.certificates == nil {
-			server.renderClusterMutation(writer, request, http.StatusServiceUnavailable, "", "Certificate automation service is unavailable")
-			return
-		}
-		var err error
-		acmeRenewBefore, err = durationfmt.Parse(request.FormValue("acme_renew_before"))
-		if err != nil {
-			server.renderClusterMutation(writer, request, http.StatusUnprocessableEntity, "", "ACME renewal window is invalid")
-			return
-		}
-		provider := strings.ToLower(strings.TrimSpace(request.FormValue("acme_dns_provider")))
-		credentials := certificateCredentialsFromForm(request, provider)
-		if credentials != (certificates.Credentials{}) {
-			if err := server.certificates.PutCredentials(request.Context(), provider, credentials); err != nil {
-				server.renderClusterMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
-				return
-			}
-		}
-	}
-
-	applyCandidate := func(candidate *config.Config) error {
-		candidate.Cluster.DataDirectory = dataDirectory
-		candidate.Cluster.NodeName = nodeName
-		candidate.Cluster.AdvertiseURL = advertiseURL
-		candidate.Cluster.TrustAnchorFile = ""
-		switch source {
-		case "import", "generated":
-			listenField := "import_https_listen"
-			if source == "generated" {
-				listenField = "generated_https_listen"
-			}
-			candidate.Server.HTTPSListen = strings.TrimSpace(request.FormValue(listenField))
-			candidate.EncryptedDNS.CertificateMode = "manual"
-			candidate.EncryptedDNS.CertificateFile = imported.CertificateFile
-			candidate.EncryptedDNS.PrivateKeyFile = imported.PrivateKeyFile
-			if source == "generated" {
-				candidate.Cluster.TrustAnchorFile = imported.CAFile
-			}
-		case "acme":
-			candidate.Server.HTTPSListen = strings.TrimSpace(request.FormValue("https_listen"))
-			candidate.EncryptedDNS.CertificateMode = "acme"
-			candidate.EncryptedDNS.ACME.Email = strings.TrimSpace(request.FormValue("acme_email"))
-			candidate.EncryptedDNS.ACME.Domains = formLines(request.FormValue("acme_domains"))
-			candidate.EncryptedDNS.ACME.DirectoryURL = strings.TrimSpace(request.FormValue("acme_directory_url"))
-			candidate.EncryptedDNS.ACME.DNSProvider = strings.ToLower(strings.TrimSpace(request.FormValue("acme_dns_provider")))
-			candidate.EncryptedDNS.ACME.DNSZone = strings.TrimSpace(request.FormValue("acme_dns_zone"))
-			candidate.EncryptedDNS.ACME.StorageDirectory = strings.TrimSpace(request.FormValue("acme_storage_dir"))
-			candidate.EncryptedDNS.ACME.RenewBefore = config.Duration{Duration: acmeRenewBefore}
-		}
-		return nil
-	}
-	preview := server.config.Current().Config
-	if err := applyCandidate(&preview); err != nil {
-		server.renderClusterMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
+	if status, err := server.prepareOnboardingHTTPS(request, &onboarding); err != nil {
+		server.renderClusterMutation(writer, request, status, "", err.Error())
 		return
 	}
+	preview := server.config.Current().Config
+	onboarding.apply(request, &preview)
 	if err := preview.Validate(); err != nil {
 		server.renderClusterMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
 		return
 	}
-	if source == "acme" {
+	if onboarding.source == "acme" {
 		if _, err := server.certificates.Ensure(request.Context(), preview.EncryptedDNS, true); err != nil {
 			server.logger.Warn("issue cluster onboarding certificate", "client", requestClientIP(request), "error", err)
 			server.renderClusterMutation(writer, request, http.StatusUnprocessableEntity, "", "The certificate could not be issued: "+err.Error())
 			return
 		}
 	}
-	err := editor.Update(request.Context(), applyCandidate)
+	err := editor.Update(request.Context(), func(candidate *config.Config) error {
+		onboarding.apply(request, candidate)
+		return nil
+	})
 	if err != nil {
 		server.logger.Warn("stage cluster onboarding", "client", requestClientIP(request), "error", err)
 		server.renderClusterMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
@@ -307,13 +200,146 @@ func (server *Server) updateClusterOnboarding(writer http.ResponseWriter, reques
 	request.URL.RawQuery = query.Encode()
 	restartRequired := server.clusterRestartRequired(request)
 	writer.Header().Set("HX-Replace-Url", "/cluster?onboarding="+workflow+"&resume=ready")
-	server.logger.Info("cluster onboarding staged", "client", requestClientIP(request), "workflow", workflow, "https_source", source, "restart_required", restartRequired)
+	server.logger.Info("cluster onboarding staged", "client", requestClientIP(request), "workflow", workflow, "https_source", onboarding.source, "restart_required", restartRequired)
 	server.recordControlPlaneAudit(request, "cluster.onboarding.configure", "configured node identity and HTTPS for cluster onboarding")
 	message := "Node identity and HTTPS are ready."
 	if restartRequired {
 		message = "Node identity and HTTPS are ready to activate."
 	}
 	server.renderClusterMutation(writer, request, http.StatusOK, message, "")
+}
+
+// clusterOnboarding is the node identity and HTTPS choice from the cluster
+// onboarding form, with the certificate prepared for it.
+type clusterOnboarding struct {
+	nodeName        string
+	advertiseURL    string
+	dataDirectory   string
+	source          string
+	certificate     certificates.GeneratedCertificate
+	acmeRenewBefore time.Duration
+}
+
+// prepareOnboardingHTTPS imports, generates or arranges the certificate the
+// chosen HTTPS source needs. The status is the response code for a returned
+// error.
+func (server *Server) prepareOnboardingHTTPS(request *http.Request, onboarding *clusterOnboarding) (int, error) {
+	onboarding.acmeRenewBefore = 30 * 24 * time.Hour
+	switch onboarding.source {
+	case "import":
+		return server.importOnboardingCertificate(request, onboarding)
+	case "generated":
+		current := server.config.Current().Config
+		if current.Cluster.TrustAnchorFile != "" && request.FormValue("replace_cluster_ca") != "confirmed" {
+			onboarding.certificate = certificates.GeneratedCertificate{CertificateFile: current.EncryptedDNS.CertificateFile, PrivateKeyFile: current.EncryptedDNS.PrivateKeyFile, CAFile: current.Cluster.TrustAnchorFile}
+			return http.StatusOK, nil
+		}
+		if current.Cluster.TrustAnchorFile != "" {
+			// New paths retain the previous CA and key pair for recovery and avoid
+			// changing the live certificate before configuration is committed.
+			request.Form.Set("generated_storage_dir", filepath.Join(strings.TrimSpace(request.FormValue("generated_storage_dir")), fmt.Sprintf("replacement-%d", time.Now().UnixNano())))
+		}
+		return server.generateOnboardingCertificate(request, onboarding)
+	case "acme":
+		return server.prepareOnboardingACME(request, onboarding)
+	}
+	return http.StatusOK, nil
+}
+
+func (server *Server) importOnboardingCertificate(request *http.Request, onboarding *clusterOnboarding) (int, error) {
+	generator, generated := server.certificates.(certificateGenerator)
+	if !generated {
+		return http.StatusNotImplemented, errors.New("Certificate import is unavailable")
+	}
+	imported, err := generator.ImportKeyPair(request.Context(), certificates.ImportCertificateOptions{
+		CertificatePEM:   []byte(strings.TrimSpace(request.FormValue("manual_certificate_pem")) + "\n"),
+		PrivateKeyPEM:    []byte(strings.TrimSpace(request.FormValue("manual_private_key_pem")) + "\n"),
+		StorageDirectory: strings.TrimSpace(request.FormValue("manual_import_storage_dir")),
+	})
+	if err != nil {
+		server.logger.Warn("import cluster onboarding certificate", "client", requestClientIP(request), "error", err)
+		return http.StatusUnprocessableEntity, err
+	}
+	onboarding.certificate = imported
+	return http.StatusOK, nil
+}
+
+func (server *Server) generateOnboardingCertificate(request *http.Request, onboarding *clusterOnboarding) (int, error) {
+	generator, generated := server.certificates.(certificateGenerator)
+	if !generated {
+		return http.StatusNotImplemented, errors.New("Self-signed certificate generation is unavailable")
+	}
+	validFor, err := certificateValidity(request.FormValue("generated_valid_days"), 365)
+	if err != nil {
+		return http.StatusUnprocessableEntity, err
+	}
+	advertised, err := url.Parse(onboarding.advertiseURL)
+	if err != nil || advertised.Hostname() == "" {
+		return http.StatusUnprocessableEntity, errors.New("HTTPS Console / API URL must include a hostname or IP address")
+	}
+	names := append([]string{advertised.Hostname()}, formLines(request.FormValue("generated_additional_names"))...)
+	generatedCertificate, err := generator.GenerateClusterPKI(request.Context(), certificates.ClusterPKIOptions{
+		NodeName:         onboarding.nodeName,
+		Names:            names,
+		StorageDirectory: strings.TrimSpace(request.FormValue("generated_storage_dir")),
+		ValidFor:         validFor,
+	})
+	if err != nil {
+		server.logger.Warn("generate cluster onboarding certificate", "client", requestClientIP(request), "error", err)
+		return http.StatusUnprocessableEntity, err
+	}
+	onboarding.certificate = generatedCertificate
+	return http.StatusOK, nil
+}
+
+func (server *Server) prepareOnboardingACME(request *http.Request, onboarding *clusterOnboarding) (int, error) {
+	if server.certificates == nil {
+		return http.StatusServiceUnavailable, errors.New("Certificate automation service is unavailable")
+	}
+	renewBefore, err := durationfmt.Parse(request.FormValue("acme_renew_before"))
+	if err != nil {
+		return http.StatusUnprocessableEntity, errors.New("ACME renewal window is invalid")
+	}
+	onboarding.acmeRenewBefore = renewBefore
+	provider := strings.ToLower(strings.TrimSpace(request.FormValue("acme_dns_provider")))
+	credentials := certificateCredentialsFromForm(request, provider)
+	if credentials != (certificates.Credentials{}) {
+		if err := server.certificates.PutCredentials(request.Context(), provider, credentials); err != nil {
+			return http.StatusUnprocessableEntity, err
+		}
+	}
+	return http.StatusOK, nil
+}
+
+func (onboarding clusterOnboarding) apply(request *http.Request, candidate *config.Config) {
+	candidate.Cluster.DataDirectory = onboarding.dataDirectory
+	candidate.Cluster.NodeName = onboarding.nodeName
+	candidate.Cluster.AdvertiseURL = onboarding.advertiseURL
+	candidate.Cluster.TrustAnchorFile = ""
+	switch onboarding.source {
+	case "import", "generated":
+		listenField := "import_https_listen"
+		if onboarding.source == "generated" {
+			listenField = "generated_https_listen"
+		}
+		candidate.Server.HTTPSListen = strings.TrimSpace(request.FormValue(listenField))
+		candidate.EncryptedDNS.CertificateMode = "manual"
+		candidate.EncryptedDNS.CertificateFile = onboarding.certificate.CertificateFile
+		candidate.EncryptedDNS.PrivateKeyFile = onboarding.certificate.PrivateKeyFile
+		if onboarding.source == "generated" {
+			candidate.Cluster.TrustAnchorFile = onboarding.certificate.CAFile
+		}
+	case "acme":
+		candidate.Server.HTTPSListen = strings.TrimSpace(request.FormValue("https_listen"))
+		candidate.EncryptedDNS.CertificateMode = "acme"
+		candidate.EncryptedDNS.ACME.Email = strings.TrimSpace(request.FormValue("acme_email"))
+		candidate.EncryptedDNS.ACME.Domains = formLines(request.FormValue("acme_domains"))
+		candidate.EncryptedDNS.ACME.DirectoryURL = strings.TrimSpace(request.FormValue("acme_directory_url"))
+		candidate.EncryptedDNS.ACME.DNSProvider = strings.ToLower(strings.TrimSpace(request.FormValue("acme_dns_provider")))
+		candidate.EncryptedDNS.ACME.DNSZone = strings.TrimSpace(request.FormValue("acme_dns_zone"))
+		candidate.EncryptedDNS.ACME.StorageDirectory = strings.TrimSpace(request.FormValue("acme_storage_dir"))
+		candidate.EncryptedDNS.ACME.RenewBefore = config.Duration{Duration: onboarding.acmeRenewBefore}
+	}
 }
 
 func (server *Server) deleteCluster(writer http.ResponseWriter, request *http.Request) {

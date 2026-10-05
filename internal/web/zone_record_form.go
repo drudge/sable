@@ -80,30 +80,12 @@ func consoleRecordUpdate(request *http.Request) (recordUpdate, error) {
 }
 
 func zoneRecordValueFromForm(request *http.Request, recordType, prefix string) (string, error) {
-	field := func(name string) string { return strings.TrimSpace(request.FormValue(prefix + name)) }
-	required := func(name, label string) (string, error) {
-		value := field(name)
-		if value == "" {
-			return "", fmt.Errorf("%s is required", label)
-		}
-		return value, nil
-	}
-	unsigned := func(name, label, fallback string, bits int) (string, error) {
-		value := field(name)
-		if value == "" {
-			value = fallback
-		}
-		if _, err := strconv.ParseUint(value, 10, bits); err != nil {
-			return "", fmt.Errorf("%s must be an unsigned integer", label)
-		}
-		return value, nil
-	}
-
+	form := &recordForm{request: request, prefix: prefix}
 	switch recordType {
 	case "A", "AAAA":
-		address, err := required("value", map[string]string{"A": "IPv4 address", "AAAA": "IPv6 address"}[recordType])
-		if err != nil {
-			return "", err
+		address := form.required("value", map[string]string{"A": "IPv4 address", "AAAA": "IPv6 address"}[recordType])
+		if form.err != nil {
+			return "", form.err
 		}
 		parsed, err := netip.ParseAddr(address)
 		if err != nil || (recordType == "A" && !parsed.Is4()) || (recordType == "AAAA" && !parsed.Is6()) {
@@ -111,203 +93,161 @@ func zoneRecordValueFromForm(request *http.Request, recordType, prefix string) (
 		}
 		return parsed.String(), nil
 	case "CNAME", "ANAME", "DNAME", "NS", "PTR":
-		return required("value", map[string]string{
+		return form.value(form.required("value", map[string]string{
 			"CNAME": "target host", "ANAME": "target host", "DNAME": "target host", "NS": "name server", "PTR": "domain name",
-		}[recordType])
+		}[recordType]))
 	case "MX":
-		preference, err := unsigned("preference", "priority", "10", 16)
-		if err != nil {
-			return "", err
-		}
-		exchange, err := required("exchange", "mail server")
-		if err != nil {
-			return "", err
-		}
-		return preference + " " + exchange, nil
+		return form.value(form.unsigned("preference", "priority", "10", 16), form.required("exchange", "mail server"))
 	case "TXT":
-		text, err := required("text", "text value")
-		if err != nil {
-			return "", err
-		}
-		return quoteDNSString(text), nil
+		return form.value(quoteDNSString(form.required("text", "text value")))
 	case "SRV":
-		priority, err := unsigned("priority", "priority", "0", 16)
-		if err != nil {
-			return "", err
-		}
-		weight, err := unsigned("weight", "weight", "0", 16)
-		if err != nil {
-			return "", err
-		}
-		port, err := unsigned("port", "port", "", 16)
-		if err != nil {
-			return "", err
-		}
-		target, err := required("target", "target host")
-		if err != nil {
-			return "", err
-		}
-		return strings.Join([]string{priority, weight, port, target}, " "), nil
+		return form.value(
+			form.unsigned("priority", "priority", "0", 16), form.unsigned("weight", "weight", "0", 16),
+			form.unsigned("port", "port", "", 16), form.required("target", "target host"),
+		)
 	case "CAA":
-		flags, err := unsigned("flags", "flags", "0", 8)
-		if err != nil {
-			return "", err
-		}
-		tag, err := required("tag", "tag")
-		if err != nil {
-			return "", err
-		}
-		value, err := required("ca_domain", "CA domain")
-		if err != nil {
-			return "", err
-		}
-		return flags + " " + tag + " " + quoteDNSString(value), nil
+		return form.value(
+			form.unsigned("flags", "flags", "0", 8), form.required("tag", "tag"),
+			quoteDNSString(form.required("ca_domain", "CA domain")),
+		)
 	case "DS":
-		keyTag, err := unsigned("key_tag", "key tag", "", 16)
-		if err != nil {
-			return "", err
-		}
-		algorithm, err := unsigned("algorithm", "algorithm", "13", 8)
-		if err != nil {
-			return "", err
-		}
-		digestType, err := unsigned("digest_type", "digest type", "2", 8)
-		if err != nil {
-			return "", err
-		}
-		digest, err := required("digest", "digest")
-		if err != nil {
-			return "", err
-		}
-		return strings.Join([]string{keyTag, algorithm, digestType, digest}, " "), nil
+		return form.value(
+			form.unsigned("key_tag", "key tag", "", 16), form.unsigned("algorithm", "algorithm", "13", 8),
+			form.unsigned("digest_type", "digest type", "2", 8), form.required("digest", "digest"),
+		)
 	case "SSHFP":
-		algorithm, err := unsigned("algorithm", "algorithm", "4", 8)
-		if err != nil {
-			return "", err
-		}
-		fingerprintType, err := unsigned("fingerprint_type", "fingerprint type", "2", 8)
-		if err != nil {
-			return "", err
-		}
-		fingerprint, err := required("fingerprint", "fingerprint")
-		if err != nil {
-			return "", err
-		}
-		return strings.Join([]string{algorithm, fingerprintType, fingerprint}, " "), nil
+		return form.value(
+			form.unsigned("algorithm", "algorithm", "4", 8), form.unsigned("fingerprint_type", "fingerprint type", "2", 8),
+			form.required("fingerprint", "fingerprint"),
+		)
 	case "TLSA":
-		usage, err := unsigned("certificate_usage", "certificate usage", "3", 8)
-		if err != nil {
-			return "", err
-		}
-		selector, err := unsigned("selector", "selector", "1", 8)
-		if err != nil {
-			return "", err
-		}
-		matchingType, err := unsigned("matching_type", "matching type", "1", 8)
-		if err != nil {
-			return "", err
-		}
-		certificate, err := required("certificate", "certificate association data")
-		if err != nil {
-			return "", err
-		}
-		return strings.Join([]string{usage, selector, matchingType, certificate}, " "), nil
+		return form.value(
+			form.unsigned("certificate_usage", "certificate usage", "3", 8), form.unsigned("selector", "selector", "1", 8),
+			form.unsigned("matching_type", "matching type", "1", 8), form.required("certificate", "certificate association data"),
+		)
 	case "SVCB", "HTTPS":
-		priority, err := unsigned("svc_priority", "priority", "1", 16)
-		if err != nil {
-			return "", err
-		}
-		target, err := required("svc_target", "target name")
-		if err != nil {
-			return "", err
-		}
-		params, err := zoneServiceParameters(field("svc_params"))
-		if err != nil {
-			return "", err
-		}
-		return strings.TrimSpace(priority + " " + target + " " + params), nil
+		return form.serviceBinding()
 	case "URI":
-		priority, err := unsigned("uri_priority", "priority", "0", 16)
-		if err != nil {
-			return "", err
-		}
-		weight, err := unsigned("uri_weight", "weight", "0", 16)
-		if err != nil {
-			return "", err
-		}
-		uri, err := required("uri", "URI")
-		if err != nil {
-			return "", err
-		}
-		return priority + " " + weight + " " + quoteDNSString(uri), nil
+		return form.value(
+			form.unsigned("uri_priority", "priority", "0", 16), form.unsigned("uri_weight", "weight", "0", 16),
+			quoteDNSString(form.required("uri", "URI")),
+		)
 	case "NAPTR":
-		order, err := unsigned("naptr_order", "order", "0", 16)
-		if err != nil {
-			return "", err
-		}
-		preference, err := unsigned("naptr_preference", "preference", "0", 16)
-		if err != nil {
-			return "", err
-		}
-		replacement := field("naptr_replacement")
-		if replacement == "" {
-			replacement = "."
-		}
-		return strings.Join([]string{
-			order, preference, quoteDNSString(field("naptr_flags")), quoteDNSString(field("naptr_services")),
-			quoteDNSString(field("naptr_regexp")), replacement,
-		}, " "), nil
+		return form.naptr()
 	case "SOA":
-		primaryNS, err := required("primary_ns", "primary name server")
-		if err != nil {
-			return "", err
-		}
-		normalizedNS, err := dnsname.Normalize(primaryNS)
-		if err != nil {
-			return "", fmt.Errorf("primary name server: %w", err)
-		}
-		responsible, err := soaResponsibleName(field("responsible"))
-		if err != nil {
-			return "", err
-		}
-		serial, err := unsigned("serial", "serial", "1", 32)
-		if err != nil {
-			return "", err
-		}
-		refresh, err := unsigned("refresh", "refresh", "3600", 32)
-		if err != nil {
-			return "", err
-		}
-		retry, err := unsigned("retry", "retry", "600", 32)
-		if err != nil {
-			return "", err
-		}
-		expire, err := unsigned("expire", "expire", "1209600", 32)
-		if err != nil {
-			return "", err
-		}
-		minimum, err := unsigned("minimum", "minimum TTL", "300", 32)
-		if err != nil {
-			return "", err
-		}
-		return strings.Join([]string{dns.Fqdn(normalizedNS), responsible, serial, refresh, retry, expire, minimum}, " "), nil
+		return form.soa()
 	case "FWD":
-		address, err := required("fwd_address", "forwarder address")
-		if err != nil {
-			return "", err
-		}
-		priority, err := unsigned("fwd_priority", "priority", "0", 16)
-		if err != nil {
-			return "", err
-		}
-		forwarder, err := forwarding.NewRecord(field("fwd_protocol"), priority, address)
-		if err != nil {
-			return "", err
-		}
-		return forwarder.String(), nil
+		return form.forwarder()
 	default:
-		return required("value", "record value")
+		return form.value(form.required("value", "record value"))
 	}
+}
+
+// recordForm reads one record's typed fields from the record editor. The
+// first problem sticks: later reads return "" and value reports it, so a
+// record's fields can be read in a row and checked once.
+type recordForm struct {
+	request *http.Request
+	prefix  string
+	err     error
+}
+
+func (form *recordForm) field(name string) string {
+	return strings.TrimSpace(form.request.FormValue(form.prefix + name))
+}
+
+func (form *recordForm) required(name, label string) string {
+	if form.err != nil {
+		return ""
+	}
+	value := form.field(name)
+	if value == "" {
+		form.err = fmt.Errorf("%s is required", label)
+	}
+	return value
+}
+
+// unsigned reads an unsigned integer of the given size, using fallback when
+// the field is blank.
+func (form *recordForm) unsigned(name, label, fallback string, bits int) string {
+	if form.err != nil {
+		return ""
+	}
+	value := form.field(name)
+	if value == "" {
+		value = fallback
+	}
+	if _, err := strconv.ParseUint(value, 10, bits); err != nil {
+		form.err = fmt.Errorf("%s must be an unsigned integer", label)
+		return ""
+	}
+	return value
+}
+
+// value joins the record's fields with spaces, or reports the first problem
+// reading them.
+func (form *recordForm) value(fields ...string) (string, error) {
+	if form.err != nil {
+		return "", form.err
+	}
+	return strings.Join(fields, " "), nil
+}
+
+func (form *recordForm) serviceBinding() (string, error) {
+	priority, target := form.unsigned("svc_priority", "priority", "1", 16), form.required("svc_target", "target name")
+	if form.err != nil {
+		return "", form.err
+	}
+	params, err := zoneServiceParameters(form.field("svc_params"))
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(priority + " " + target + " " + params), nil
+}
+
+func (form *recordForm) naptr() (string, error) {
+	order, preference := form.unsigned("naptr_order", "order", "0", 16), form.unsigned("naptr_preference", "preference", "0", 16)
+	replacement := form.field("naptr_replacement")
+	if replacement == "" {
+		replacement = "."
+	}
+	return form.value(
+		order, preference, quoteDNSString(form.field("naptr_flags")), quoteDNSString(form.field("naptr_services")),
+		quoteDNSString(form.field("naptr_regexp")), replacement,
+	)
+}
+
+func (form *recordForm) soa() (string, error) {
+	primaryNS := form.required("primary_ns", "primary name server")
+	if form.err != nil {
+		return "", form.err
+	}
+	normalizedNS, err := dnsname.Normalize(primaryNS)
+	if err != nil {
+		return "", fmt.Errorf("primary name server: %w", err)
+	}
+	responsible, err := soaResponsibleName(form.field("responsible"))
+	if err != nil {
+		return "", err
+	}
+	return form.value(
+		dns.Fqdn(normalizedNS), responsible,
+		form.unsigned("serial", "serial", "1", 32), form.unsigned("refresh", "refresh", "3600", 32),
+		form.unsigned("retry", "retry", "600", 32), form.unsigned("expire", "expire", "1209600", 32),
+		form.unsigned("minimum", "minimum TTL", "300", 32),
+	)
+}
+
+func (form *recordForm) forwarder() (string, error) {
+	address, priority := form.required("fwd_address", "forwarder address"), form.unsigned("fwd_priority", "priority", "0", 16)
+	if form.err != nil {
+		return "", form.err
+	}
+	forwarder, err := forwarding.NewRecord(form.field("fwd_protocol"), priority, address)
+	if err != nil {
+		return "", err
+	}
+	return forwarder.String(), nil
 }
 
 func quoteDNSString(value string) string {
