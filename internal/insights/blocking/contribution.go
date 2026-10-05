@@ -102,13 +102,56 @@ func Analyze(ctx context.Context, baseDirectory string, lists []List, now time.T
 	seed := maphash.MakeSeed()
 	hash := func(name string) uint64 { return maphash.String(seed, name) }
 
-	// Pass one: each list becomes a sorted, de-duplicated set of name hashes.
+	hashes, analyzed, err := hashLists(ctx, baseDirectory, lists, hash, &result)
+	if err != nil {
+		return Contribution{}, err
+	}
+	result.Analyzed = len(analyzed)
+
+	// The union records, for every distinct name, which lists contain it.
+	membership := unionMembership(hashes, analyzed)
+	result.Domains = len(membership)
+	lookup := membershipLookup(membership, hash)
+
+	// Pass two: a domain is covered by another list when that list contains
+	// the domain or any of its parents.
+	for bit, index := range analyzed {
+		if err := ctx.Err(); err != nil {
+			return Contribution{}, err
+		}
+		unique, overlaps, err := compareList(baseDirectory, lists[index], hashes[index], uint64(1)<<bit, len(analyzed), hash, lookup)
+		contribution := &result.Lists[index]
+		if err != nil {
+			// The file changed or vanished between passes. Report it rather
+			// than publish numbers from two different copies of the list.
+			contribution.Available = false
+			contribution.Problem = readProblem(err)
+			contribution.Domains = 0
+			result.Analyzed--
+			continue
+		}
+		contribution.Unique = unique
+		contribution.Covered = contribution.Domains - unique
+		result.Unique += unique
+		for other, count := range overlaps {
+			if count > contribution.LargestOverlap.Domains {
+				contribution.LargestOverlap = Overlap{Name: lists[analyzed[other]].Name, Domains: count}
+			}
+		}
+	}
+	return result, nil
+}
+
+// hashLists is pass one: each list becomes a sorted, de-duplicated set of
+// name hashes. It fills in each list's row of result and returns the sets
+// with the indexes of the lists it could read, in the order it read them.
+func hashLists(ctx context.Context, baseDirectory string, lists []List, hash func(string) uint64, result *Contribution) ([][]uint64, []int, error) {
 	hashes := make([][]uint64, len(lists))
 	analyzed := make([]int, 0, min(len(lists), MaximumAnalyzedLists))
 	for index, list := range lists {
 		result.Lists[index] = ListContribution{Name: list.Name, URL: list.URL}
 		if err := ctx.Err(); err != nil {
-			return Contribution{}, err
+			return nil, nil, err
 		}
 		if len(analyzed) == MaximumAnalyzedLists {
 			result.Lists[index].Problem = fmt.Sprintf("Only the first %d block lists are compared", MaximumAnalyzedLists)
@@ -131,12 +174,12 @@ func Analyze(ctx context.Context, baseDirectory string, lists []List, now time.T
 		result.Lists[index].Domains = len(set)
 		analyzed = append(analyzed, index)
 	}
-	result.Analyzed = len(analyzed)
+	return hashes, analyzed, nil
+}
 
-	// The union records, for every distinct name, which lists contain it.
-	membership := unionMembership(hashes, analyzed)
-	result.Domains = len(membership)
-	lookup := func(name string) uint64 {
+// membershipLookup returns the bits of the lists that contain name.
+func membershipLookup(membership []listMembership, hash func(string) uint64) func(string) uint64 {
+	return func(name string) uint64 {
 		target := hash(name)
 		position, found := slices.BinarySearchFunc(membership, target, func(entry listMembership, target uint64) int {
 			switch {
@@ -153,64 +196,41 @@ func Analyze(ctx context.Context, baseDirectory string, lists []List, now time.T
 		}
 		return membership[position].lists
 	}
+}
 
-	// Pass two: a domain is covered by another list when that list contains
-	// the domain or any of its parents.
-	for bit, index := range analyzed {
-		if err := ctx.Err(); err != nil {
-			return Contribution{}, err
+// compareList re-reads one list and counts its names no other list covers,
+// and how many each other analyzed list covers. own is the list's own bit.
+func compareList(baseDirectory string, list List, set []uint64, own uint64, analyzedLists int, hash, lookup func(string) uint64) (int, []int, error) {
+	visited := make([]bool, len(set))
+	overlaps := make([]int, analyzedLists)
+	unique := 0
+	_, err := blockcompiler.ReadSource(baseDirectory, source(list), func(domain string) {
+		position, found := slices.BinarySearch(set, hash(domain))
+		if !found || visited[position] {
+			return
 		}
-		own := uint64(1) << bit
-		set := hashes[index]
-		visited := make([]bool, len(set))
-		overlaps := make([]int, len(analyzed))
-		unique := 0
-		_, err := blockcompiler.ReadSource(baseDirectory, source(lists[index]), func(domain string) {
-			position, found := slices.BinarySearch(set, hash(domain))
-			if !found || visited[position] {
-				return
+		visited[position] = true
+		covering := lookup(domain)
+		for parent := domain; ; {
+			_, rest, cut := strings.Cut(parent, ".")
+			if !cut || rest == "" {
+				break
 			}
-			visited[position] = true
-			covering := lookup(domain)
-			for parent := domain; ; {
-				_, rest, cut := strings.Cut(parent, ".")
-				if !cut || rest == "" {
-					break
-				}
-				covering |= lookup(rest)
-				parent = rest
-			}
-			covering &^= own
-			if covering == 0 {
-				unique++
-				return
-			}
-			for covering != 0 {
-				other := bits.TrailingZeros64(covering)
-				overlaps[other]++
-				covering &^= uint64(1) << other
-			}
-		})
-		contribution := &result.Lists[index]
-		if err != nil {
-			// The file changed or vanished between passes. Report it rather
-			// than publish numbers from two different copies of the list.
-			contribution.Available = false
-			contribution.Problem = readProblem(err)
-			contribution.Domains = 0
-			result.Analyzed--
-			continue
+			covering |= lookup(rest)
+			parent = rest
 		}
-		contribution.Unique = unique
-		contribution.Covered = contribution.Domains - unique
-		result.Unique += unique
-		for other, count := range overlaps {
-			if count > contribution.LargestOverlap.Domains {
-				contribution.LargestOverlap = Overlap{Name: lists[analyzed[other]].Name, Domains: count}
-			}
+		covering &^= own
+		if covering == 0 {
+			unique++
+			return
 		}
-	}
-	return result, nil
+		for covering != 0 {
+			other := bits.TrailingZeros64(covering)
+			overlaps[other]++
+			covering &^= uint64(1) << other
+		}
+	})
+	return unique, overlaps, err
 }
 
 type listMembership struct {
