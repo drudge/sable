@@ -11,91 +11,36 @@ import (
 	"sync"
 	"time"
 
-	"github.com/miekg/dns"
-
 	"github.com/drudge/sable/internal/alerts"
-	"github.com/drudge/sable/internal/auth"
 	blockcompiler "github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/certificates"
-	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
-	"github.com/drudge/sable/internal/dnsprovider"
 	"github.com/drudge/sable/internal/dnsserver"
-	"github.com/drudge/sable/internal/dynamicdns"
-	"github.com/drudge/sable/internal/insights/devices"
-	"github.com/drudge/sable/internal/localnet"
-	"github.com/drudge/sable/internal/neighbors"
-	"github.com/drudge/sable/internal/querylog"
-	"github.com/drudge/sable/internal/secrets"
 	"github.com/drudge/sable/internal/serverlog"
 	"github.com/drudge/sable/internal/store"
-	"github.com/drudge/sable/internal/trustanchor"
 	"github.com/drudge/sable/internal/tsig"
-	"github.com/drudge/sable/internal/update"
-	"github.com/drudge/sable/internal/version"
 	"github.com/drudge/sable/internal/web"
-	webassets "github.com/drudge/sable/internal/web/assets"
 	"github.com/drudge/sable/internal/zone"
 )
 
 var ErrRestartRequested = errors.New("controlled restart requested")
 
 func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (runError error) {
-	runtimeContext, stopRuntime := context.WithCancel(ctx)
-	defer stopRuntime()
-	var runtimeWorkers sync.WaitGroup
-	runRuntimeWorker := func(run func(context.Context)) {
-		runtimeWorkers.Add(1)
-		go func() {
-			defer runtimeWorkers.Done()
-			run(runtimeContext)
-		}()
-	}
-	startedAt := time.Now()
-	runtimeLogs := serverlog.New(serverlog.DefaultCapacity)
-	var minimumLogLevel slog.LevelVar
-	minimumLogLevel.Set(slog.LevelInfo)
-	// baseLogger stays unwrapped so the server log recorder can report its own
-	// failures without feeding them back into the buffer it drains.
-	baseLogger := slog.New(serverlog.NewLevelHandler(logger.Handler(), &minimumLogLevel))
-	logger = slog.New(serverlog.NewHandler(baseLogger.Handler(), runtimeLogs))
-	absoluteConfigurationPath, err := config.AbsolutePath(configurationPath)
-	if err != nil {
+	process := newProcess(ctx, logger)
+	defer process.stopRuntime()
+	if err := process.loadConfiguration(ctx, configurationPath); err != nil {
 		return err
 	}
-	if recovered, recoverErr := recoverInterruptedRestore(ctx, absoluteConfigurationPath); recoverErr != nil {
-		return fmt.Errorf("recover interrupted restore: %w", recoverErr)
-	} else if recovered {
-		logger.Warn("recovered deployment after an interrupted restore")
-	}
-	if applied, applyErr := applyStagedRestore(ctx, absoluteConfigurationPath); applyErr != nil {
-		return fmt.Errorf("apply staged restore: %w", applyErr)
-	} else if applied {
-		logger.Warn("applied staged deployment restore")
-	}
-	absolutePath, initial, err := loadConfiguration(configurationPath)
-	if err != nil {
-		return err
-	}
-	minimumLogLevel.Set(serverLogLevel(initial.ServerLog.Level))
-	configurationDirectory := filepath.Dir(absolutePath)
-
-	database, err := store.Open(ctx, initial.Database.Driver, initial.Database.DSN)
-	if err != nil {
-		return err
-	}
-	// Before the query log writer and the device workers start, so none of
-	// them keeps a sighting while Insights is off.
-	if err := switchInsights(ctx, database, true, initial.Insights.Enabled, time.Now()); err != nil {
+	if err := process.openDatabase(ctx); err != nil {
 		return err
 	}
 	// Run is the process lifecycle boundary. If a worker outlives its shutdown
 	// deadline, leave its database open until process exit rather than close a
 	// dependency it may still be using. Incomplete shutdown is returned as an error.
-	storesSafe := true
+	process.storesSafe = true
 	defer func() {
-		if storesSafe {
-			database.Close()
+		if process.storesSafe {
+			process.database.Close()
 		}
 	}()
 	// The recorder attaches here rather than alongside the other services so
@@ -103,579 +48,50 @@ func Run(ctx context.Context, configurationPath string, logger *slog.Logger) (ru
 	// every path out of Run flushes it, including the startup failures that
 	// are the most valuable thing to still have after a restart. Deferred
 	// after database.Close, so it runs before it.
-	serverLogRecorder, err := serverlog.NewRecorder(database, serverlog.Options{
-		Enabled:       initial.ServerLog.Enabled,
-		BufferSize:    initial.ServerLog.BufferSize,
-		BatchSize:     initial.ServerLog.BatchSize,
-		FlushInterval: initial.ServerLog.FlushInterval.Duration,
-		Retention:     initial.ServerLog.Retention.Duration,
-	}, baseLogger)
-	if err != nil {
-		return fmt.Errorf("start server log recorder: %w", err)
+	if err := process.startServerLog(); err != nil {
+		return err
 	}
 	defer func() {
-		if err := closeServerLogRecorder(serverLogRecorder, initial); err != nil {
-			storesSafe = false
+		if err := closeServerLogRecorder(process.serverLogRecorder, process.initial); err != nil {
+			process.storesSafe = false
 			runError = errors.Join(runError, fmt.Errorf("close server log recorder: %w", err))
 		}
 	}()
-	runtimeLogs.Attach(serverLogRecorder)
-	secretVault, err := secrets.Open(initial.SecuritySecretKeyPath(configurationDirectory), database)
-	if err != nil {
-		return fmt.Errorf("initialize secret vault: %w", err)
-	}
-
-	var authentication *auth.Service
-	setupRequired := false
-	if initial.Security.Enabled {
-		if err := database.PruneExpiredAuthentication(ctx, time.Now()); err != nil {
-			return err
-		}
-		authentication, err = auth.NewService(database, auth.Options{
-			SessionTTL: initial.Security.SessionTTL.Duration,
-			TokenTTL:   initial.Security.APITokenTTL.Duration,
-		})
-		if err != nil {
-			return fmt.Errorf("initialize authentication: %w", err)
-		}
-		setupRequired, err = authentication.SetupRequired(ctx)
-		if err != nil {
-			return fmt.Errorf("check administrator setup: %w", err)
-		}
-	}
-
-	tsigSecrets := tsig.NewStore(secretVault)
-	dnssec := newDNSSECSigner(secretVault)
-	var configurationManager *config.Manager
-	var scheduledBackups *scheduledBackupService
-	var webServer *web.Server
-	var handler *dnsserver.Handler
-	var clusterService *cluster.Service
-	var queryRecorder *querylog.Recorder
-	var listeners *dnsserver.ListenerGroup
-	zoneManager, err := zone.NewManager(
-		ctx,
-		database,
-		// Catalog membership is applied first so a zone a catalog just
-		// provisioned exists before aliases and signing look at the set. Alias
-		// zones then mirror their source before signing runs, so a mirrored
-		// record set is covered by the alias zone's own signatures rather than
-		// the stale ones the source was signed with.
-		func(ctx context.Context, zones *[]zone.Zone) error {
-			logCatalogEvents(logger, zone.ReconcileCatalogs(zones))
-			if err := zone.MaterializeAliases(zones, time.Now()); err != nil {
-				return err
-			}
-			if err := zone.MaterializeCatalogs(zones, time.Now()); err != nil {
-				return err
-			}
-			return dnssec.Prepare(ctx, zones)
-		},
-		func(zones []zone.Zone) error {
-			configuration := initial
-			if configurationManager != nil {
-				configuration = configurationManager.Current().Config
-			}
-			return zone.ValidateAll(zones, tsigKeyNames(configuration))
-		},
-		func(activateContext context.Context, _, zones []zone.Zone) error {
-			if handler == nil {
-				return nil
-			}
-			configuration := configurationManager.Current().Config
-			keys := hydrateTSIGKeys(activateContext, tsigSecrets, configuration, logger).TSIGKeys
-			return handler.ActivateZones(authoritativeZones(zones), runtimeTSIGKeys(keys))
-		},
-	)
-	if err != nil {
+	if err := process.openSecurity(ctx); err != nil {
 		return err
 	}
-	warnCNAMEConflicts(logger, zoneManager.Current().Zones)
-	runtime, err := compileRuntime(
-		hydrateTSIGKeys(ctx, tsigSecrets, initial, logger),
-		zoneManager.Current().Zones,
-		configurationDirectory,
-	)
-	if err != nil {
+	if err := process.startDNS(ctx); err != nil {
 		return err
 	}
-	handler = dnsserver.NewHandler(runtime)
-	handler.SetLogger(logger)
-	handler.StartMaintenance()
-	// Private recursion admits the IPv6 networks this node is attached to.
-	// They are read once before any listener opens, then kept current.
-	readInterfaces := attachedInterfaceReader()
-	attachedNetworks := localnet.NewWatcher(handler.SetAttachedNetworks)
-	_ = attachedNetworks.Refresh(readInterfaces)
-	startupComplete := false
 	defer func() {
-		if startupComplete {
+		if process.startupComplete {
 			return
 		}
-		cleanupContext, cancel := context.WithTimeout(context.Background(), initial.Server.ShutdownTimeout.Duration)
-		defer cancel()
-		stopRuntime()
-		workerError := waitRuntimeWorkers(cleanupContext, &runtimeWorkers)
-		if workerError != nil {
-			storesSafe = false
-		}
-		var cleanupError error
-		if webServer != nil {
-			cleanupError = errors.Join(cleanupError, webServer.Close(cleanupContext))
-		}
-		if clusterService != nil {
-			cleanupError = errors.Join(cleanupError, clusterService.Close(cleanupContext))
-		}
-		if listeners != nil {
-			cleanupError = errors.Join(cleanupError, listeners.Close(cleanupContext))
-		}
-		if handler != nil {
-			cleanupError = errors.Join(cleanupError, handler.Shutdown(cleanupContext))
-		}
-		if queryRecorder != nil {
-			recorderContext, recorderCancel := recorderContextForShutdown(cleanupContext, initial.Server.ShutdownTimeout.Duration)
-			cleanupError = errors.Join(cleanupError, queryRecorder.Close(recorderContext))
-			recorderCancel()
-		}
-		if workerError != nil || cleanupError != nil {
-			storesSafe = false
-		}
+		workerError, cleanupError := process.abortStartup()
 		runError = errors.Join(runError, workerError, cleanupError)
 	}()
-	if initial.Resolver.SaveCache {
-		restored, restoreErr := restoreDNSCache(ctx, database, handler)
-		if restoreErr != nil {
-			logger.Warn("restore persisted DNS cache", "error", restoreErr, "restored", restored)
-		} else {
-			logger.Info("restored persisted DNS cache", "entries", restored)
-		}
-	}
-	trustAnchorManager, err := trustanchor.New(ctx, database, handler.DNSSECTrustAnchorQuery, trustanchor.Options{
-		Enabled:  handler.DNSSECTrustAnchorUpdatesEnabled,
-		OnChange: handler.ApplyManagedTrustAnchors,
-	})
-	if err != nil {
-		return fmt.Errorf("initialize RFC 5011 trust-anchor manager: %w", err)
-	}
-	handler.SetTrustAnchorManager(trustAnchorManager)
-	queryRecorder, err = querylog.NewRecorder(database, querylog.Options{
-		Enabled:       initial.QueryLog.Enabled,
-		BufferSize:    initial.QueryLog.BufferSize,
-		BatchSize:     initial.QueryLog.BatchSize,
-		FlushInterval: initial.QueryLog.FlushInterval.Duration,
-		Retention:     initial.QueryLog.Retention.Duration,
-	}, logger)
-	if err != nil {
-		return fmt.Errorf("start query recorder: %w", err)
-	}
-	handler.SetQueryObserver(queryRecorder)
-	listeners = dnsserver.NewListenerGroup(handler, logger)
-	certificateManager := certificates.New(secretVault, logger, configurationDirectory)
-
-	apply := func(reloadContext context.Context, active, candidate config.Config) error {
-		if err := store.IsBackendChange(
-			active.Database.Driver,
-			active.Database.DSN,
-			candidate.Database.Driver,
-			candidate.Database.DSN,
-		); err != nil {
-			return err
-		}
-		if active.Server.HTTPListen != candidate.Server.HTTPListen {
-			return errors.New("server.http_listen changes require a controlled restart")
-		}
-		webRestartRequired := active.Server.HTTPSListen != candidate.Server.HTTPSListen
-		if err := queryLogWorkerChange(active.QueryLog, candidate.QueryLog); err != nil {
-			return err
-		}
-		if err := serverLogWorkerChange(active.ServerLog, candidate.ServerLog); err != nil {
-			return err
-		}
-		if active.Security != candidate.Security {
-			return errors.New("security settings require a controlled restart")
-		}
-		if scheduledBackups != nil {
-			if err := scheduledBackups.Prepare(candidate.Backup); err != nil {
-				return err
-			}
-		}
-		clusterRestartRequired := active.Cluster != candidate.Cluster
-		zones := zoneManager.Current().Zones
-		if err := zone.ValidateAll(zones, tsigKeyNames(candidate)); err != nil {
-			return fmt.Errorf("validate zones with reloaded configuration: %w", err)
-		}
-		candidateRuntime, err := compileRuntime(
-			hydrateTSIGKeys(reloadContext, tsigSecrets, candidate, logger),
-			zones,
-			configurationDirectory,
-		)
-		if err != nil {
-			return err
-		}
-		if _, err := certificateManager.Ensure(reloadContext, candidate.EncryptedDNS, false); err != nil {
-			return fmt.Errorf("prepare public TLS certificate: %w", err)
-		}
-		if err := listeners.Replace(reloadContext, listenerConfiguration(candidate, configurationDirectory)); err != nil {
-			return err
-		}
-		if webServer != nil && candidate.Server.HTTPSListen != "" {
-			certificate, privateKey := candidate.EncryptedDNSCertificatePaths(configurationDirectory)
-			if err := webServer.ReplaceCertificate(certificate, privateKey); err != nil {
-				return err
-			}
-		}
-		if err := handler.Activate(candidateRuntime); err != nil {
-			return err
-		}
-		queryRecorder.SetEnabled(candidate.QueryLog.Enabled)
-		if err := switchInsights(reloadContext, database, active.Insights.Enabled, candidate.Insights.Enabled, time.Now()); err != nil {
-			return err
-		}
-		if err := queryRecorder.SetRetention(candidate.QueryLog.Retention.Duration); err != nil {
-			return err
-		}
-		serverLogRecorder.SetEnabled(candidate.ServerLog.Enabled)
-		if err := serverLogRecorder.SetRetention(candidate.ServerLog.Retention.Duration); err != nil {
-			return err
-		}
-		minimumLogLevel.Set(serverLogLevel(candidate.ServerLog.Level))
-		if webServer != nil {
-			webServer.SetStatsRetention(candidate.Statistics.Retention.Duration)
-		}
-		if clusterRestartRequired {
-			logger.Info("cluster bootstrap settings staged", "restart_required", true)
-		}
-		if webRestartRequired {
-			logger.Info("HTTPS web listener settings staged", "restart_required", true)
-		}
-		if scheduledBackups != nil {
-			scheduledBackups.Apply(candidate.Backup)
-		}
-		return nil
-	}
-	configurationManager = config.NewManager(absolutePath, initial, apply)
-	scheduledBackups, err = newScheduledBackupService(absolutePath, configurationManager, secretVault, logger, initial.Backup)
-	if err != nil {
-		return fmt.Errorf("initialize scheduled backups: %w", err)
-	}
-	if _, err := certificateManager.Ensure(ctx, initial.EncryptedDNS, false); err != nil {
-		return fmt.Errorf("prepare public TLS certificate: %w", err)
-	}
-	if err := listeners.Replace(ctx, listenerConfiguration(initial, configurationDirectory)); err != nil {
+	if err := process.startResolverServices(ctx); err != nil {
 		return err
 	}
-	migrateTSIGSecrets(ctx, configurationManager, tsigSecrets, logger)
-	alertSecrets := alerts.NewSecretStore(secretVault)
-	migrateAlertSecrets(ctx, configurationManager, alertSecrets, logger)
-	dynamicUpdater := newDynamicZoneUpdater(ctx, zoneManager, handler, database, logger)
-	handler.SetZoneUpdater(dynamicUpdater.Update)
-	handler.SetZoneUpdateAuditor(dynamicUpdater.Audit)
-	zoneRefreshContext, stopZoneRefresh := context.WithCancel(runtimeContext)
+	if err := process.startConfiguration(ctx); err != nil {
+		return err
+	}
+	zoneRefreshContext, stopZoneRefresh := context.WithCancel(process.runtimeContext)
 	defer stopZoneRefresh()
-	zoneRefresher := newZoneRefresher(zoneManager, handler, logger)
-	runRuntimeWorker(func(context.Context) { zoneRefresher.Run(zoneRefreshContext) })
-	runRuntimeWorker(func(context.Context) { runDNSSECRefresher(zoneRefreshContext, zoneManager, dnssec, handler, logger) })
-	runRuntimeWorker(func(context.Context) { trustAnchorManager.Run(zoneRefreshContext, logger) })
-
-	unifiCredentials := newUniFiCredentialStore(secretVault)
-	oidcSecrets := newOIDCSecretStore(secretVault)
-	dnsProviderCredentials := dnsprovider.NewStore(secretVault)
-	stateReplicator := newClusterStateReplicator(configurationManager, zoneManager, database, tsigSecrets, unifiCredentials, oidcSecrets)
-	stateReplicator.setDNSProviderCredentials(dnsProviderCredentials)
-	stateReplicator.setInsightData(database)
-	clusterCertificateFile, _ := initial.EncryptedDNSCertificatePaths(configurationDirectory)
-	clusterService, err = cluster.Open(cluster.Options{
-		HTTPSCertificateFile: clusterCertificateFile,
-		DataDirectory:        initial.ClusterDataPath(configurationDirectory),
-		NodeName:             clusterNodeName(initial.Cluster.NodeName),
-		AdvertiseURL:         clusterAdvertiseURL(initial),
-		HTTPSListen:          initial.Server.HTTPSListen,
-		DNSListeners:         initial.Server.DNSListen,
-		TrustAnchorFile:      initial.ClusterTrustAnchorPath(configurationDirectory),
-		Logger:               logger,
-		Replicator:           stateReplicator,
-		Version:              version.Current().Release,
-		StartedAt:            startedAt,
-	})
-	if err != nil {
-		return fmt.Errorf("initialize cluster identity: %w", err)
-	}
-	handler.SetZoneUpdater(func(updateContext context.Context, request dnsserver.ZoneUpdateRequest) dnsserver.ZoneUpdateResult {
-		state := clusterService.Snapshot()
-		if state.Initialized && state.LocalRole == cluster.RoleReplica {
-			return dnsserver.ZoneUpdateResult{Rcode: dns.RcodeRefused}
-		}
-		return dynamicUpdater.Update(updateContext, request)
-	})
-
-	insightsEnabled := func() bool { return configurationManager.Current().Config.Insights.Enabled }
-	unifiSync := newUniFiSyncer(
-		configurationManager,
-		zoneManager,
-		unifiCredentials,
-		func() bool {
-			state := clusterService.Snapshot()
-			return !state.Initialized || state.LocalRole != cluster.RoleReplica
-		},
-		logger,
-	)
-	unifiSync.identities = database.RecordClientIdentities
-	unifiSync.reading = database.RecordUniFiReading
-	runRuntimeWorker(func(context.Context) { unifiSync.Run(zoneRefreshContext) })
-	runRuntimeWorker(func(context.Context) {
-		runNeighborSampler(runtimeContext, insightsEnabled, neighbors.Read, database.RecordClientIdentities, logger)
-	})
-	runRuntimeWorker(func(context.Context) { attachedNetworks.Run(runtimeContext, readInterfaces, logger) })
-	runRuntimeWorker(func(context.Context) {
-		maintainQueryLogSearch(runtimeContext, database.BuildQueryLogSearch, queryLogSearchInterval, logger)
-	})
-	runRuntimeWorker(func(context.Context) {
-		// One after the other: each reads through the whole query history.
-		backfillClientSightings(runtimeContext, database.BackfillClientSightings, logger)
-		backfillBlockedClientRollups(runtimeContext, database.BackfillBlockedClientRollups, logger)
-		backfillAppRollups(runtimeContext, database.BackfillAppRollups, logger)
-		compactQueryLogRollups(runtimeContext, database.CompactQueryLogRollups, rollupCompactionInterval, logger)
-	})
-	dynamicDNS := dynamicdns.New(
-		configurationManager,
-		dnsProviderCredentials,
-		database,
-		func() bool {
-			state := clusterService.Snapshot()
-			return !state.Initialized || state.LocalRole != cluster.RoleReplica
-		},
-		logger,
-	)
-	runRuntimeWorker(func(context.Context) { dynamicDNS.Run(zoneRefreshContext) })
-	updateManager := newUpdateManager(update.Options{
-		ReleaseStore:   database,
-		Resolver:       handler,
-		Logger:         logger,
-		BinaryPath:     os.Getenv(update.BinaryPathEnvironment),
-		RestartManaged: initial.Updates.RestartManaged,
-		PreRelease:     initial.Updates.PreRelease,
-	})
-	runRuntimeWorker(newScheduledUpdateCheck(updateManager, configurationManager, func() bool {
-		state := clusterService.Snapshot()
-		return !state.Initialized || state.LocalRole != cluster.RoleReplica
-	}, logger).Run)
-
-	var webAuthentication web.Authenticator
-	if authentication != nil {
-		webAuthentication = authentication
-	}
-	webServer, err = web.New(
-		logger,
-		handler,
-		configurationManager,
-		zoneManager,
-		database.Driver(),
-		queryRecorder,
-		database,
-		configurationManager.Reload,
-		webAuthentication,
-		initial.Security.Enabled,
-		setupRequired,
-		initial.Security.SecureCookies,
-	)
-	if err != nil {
+	process.zoneRefreshContext = zoneRefreshContext
+	process.startZoneWorkers()
+	if err := process.openCluster(); err != nil {
 		return err
 	}
-	webServer.SetDNSSECController(dnssec)
-	webServer.SetClusterController(clusterService)
-	webServer.SetCertificateController(certificateManager)
-	webServer.SetDynamicDNSController(dynamicDNS)
-	webServer.SetUniFiController(unifiSync)
-	webServer.SetTSIGController(tsig.NewManager(configurationManager, tsigSecrets))
-	pushKeys := newPushKeyStore(secretVault)
-	webServer.SetPushKeys(pushKeys)
-	stateReplicator.setAlerts(alertSecrets, pushKeys, database)
-	alertDispatcher := &alerts.Dispatcher{
-		Config:   func() config.Config { return configurationManager.Current().Config },
-		Secrets:  alertSecrets,
-		Sent:     database,
-		Browsers: &alerts.Browsers{Keys: pushKeys, Store: database, Logger: logger},
-		Icon:     webassets.URL("sable-icon-180.png"),
-		Logger:   logger,
-	}
-	alertDispatcher.Add(webServer.InsightAlerts())
-	alertDispatcher.Add(newUniFiAlertSource(unifiSync, configurationManager), newDynamicDNSAlertSource(dynamicDNS, configurationManager))
-	alertDispatcher.Add(newUpdateAlertSource(updateManager))
-	alertDispatcher.Add(nodeHealth{
-		node: clusterAlertNode(clusterService, configurationManager), configuration: configurationManager,
-		certificates: certificateManager, zones: zoneRefresher, backups: scheduledBackups,
-		trustAnchors: trustAnchorManager, trustAnchorUpdates: handler.DNSSECTrustAnchorUpdatesEnabled,
-		auditLog: database, signIns: authentication != nil,
-	}.alertSources()...)
-	alertDispatcher.Add(clusterAlertSources(clusterService)...)
-	alertLeading := func() bool {
-		state := clusterService.Snapshot()
-		return !state.Initialized || state.LocalRole != cluster.RoleReplica
-	}
-	watches := newWatchSource(database, func() config.Config { return configurationManager.Current().Config },
-		clusterAlertNode(clusterService, configurationManager), alertLeading, clusterService.ReportedAlerts)
-	alertDispatcher.Add(watches.alertSources()...)
-	clusterService.SetLocalAlerts(alertDispatcher.Local)
-	clusterService.SetLocalLookups(database.ClientLastLookups)
-	// The lead hands replicas the addresses it has tied to hardware, since a
-	// replica may not see the network's hardware addresses itself.
-	clusterService.SetClientIdentities(cluster.ClientIdentities{
-		Read: database.ClientIdentities, Record: database.RecordClientIdentities, Lookback: devices.Lookback,
-		Enabled: insightsEnabled,
-	})
-	// A replica in a container can't see the LAN it serves, so the lead hands
-	// it the networks private recursion should admit.
-	clusterService.SetAttachedNetworks(cluster.AttachedNetworks{Own: attachedNetworks.Own, Lead: attachedNetworks.SetLead})
-	webServer.SetAttachedNetworks(attachedNetworks)
-	webServer.SetAlerts(alertDispatcher, alertSecrets)
-	webServer.SetWatchStatus(watches.LastAlert)
-	if authentication != nil {
-		// Single sign-on rides on the authentication service, so a deployment
-		// with security switched off has no provider and no sign-in button.
-		singleSignOn := newSSOService(configurationManager, oidcSecrets, authentication, logger)
-		webServer.SetSSO(singleSignOn)
-		webServer.SetSSOAdministration(singleSignOn)
-	}
-	webServer.SetRuntimeLogs(runtimeLogs)
-	if err := webServer.SetStatsStore(ctx, database); err != nil {
-		logger.Warn("restore query statistics", "error", err)
-	}
-	webServer.SetUpdateController(updateManager)
-	webServer.SetBackupController(scheduledBackups)
-	restartRequests := make(chan struct{}, 1)
-	requestRestart := func() {
-		select {
-		case restartRequests <- struct{}{}:
-		default:
-		}
-	}
-	webServer.SetRestartController(requestRestart)
-	if err := clusterService.SetUpdateController(updateManager, requestRestart); err != nil {
-		logger.Error("restore cluster update progress", "error", err)
-	}
-	if err := webServer.Start(initial.Server.HTTPListen); err != nil {
+	process.startIntegrations()
+	if err := process.startWeb(ctx); err != nil {
 		return err
 	}
-	if initial.Server.HTTPSListen != "" {
-		certificate, privateKey := initial.EncryptedDNSCertificatePaths(configurationDirectory)
-		if err := webServer.StartTLS(initial.Server.HTTPSListen, certificate, privateKey, initial.EncryptedDNS.MinimumTLSVersion()); err != nil {
-			return err
-		}
-	}
-	clusterService.StartMonitoring(runtimeContext)
-	runRuntimeWorker(func(context.Context) { scheduledBackups.Run(runtimeContext) })
-	runRuntimeWorker(func(context.Context) {
-		alertDispatcher.Run(runtimeContext, alertLeading)
-	})
-	runRuntimeWorker(func(context.Context) {
-		runCertificateRenewal(runtimeContext, certificateManager, configurationManager, listeners, webServer, configurationDirectory, logger)
-	})
-	startupComplete = true
-
-	releaseInfo := version.Current()
-	clusterState := clusterService.Snapshot()
-	logger.Info(
-		"Sable started",
-		"version", releaseInfo.Release,
-		"commit", releaseInfo.Commit,
-		"go", releaseInfo.Go,
-		"dns", initial.Server.DNSListen,
-		"dot", initial.EncryptedDNS.DoTListen,
-		"doh", initial.EncryptedDNS.DoHListen,
-		"doq", initial.EncryptedDNS.DoQListen,
-		"http", initial.Server.HTTPListen,
-		"https", initial.Server.HTTPSListen,
-		"database", initial.Database.Driver,
-		"security", initial.Security.Enabled,
-		"setup_required", setupRequired,
-		"node_id", clusterState.NodeID,
-		"cluster_initialized", clusterState.Initialized,
-		"cluster_id", clusterState.ClusterID,
-		"cluster_network_ready", clusterState.NetworkReady,
-		"cluster_role", clusterState.LocalRole,
-		"cluster_generation", clusterState.Generation,
-	)
-
-	var watchErrors chan error
-	if initial.Reload.Watch {
-		watchErrors = make(chan error, 1)
-		runRuntimeWorker(func(runtimeContext context.Context) {
-			watchErrors <- config.Watch(
-				runtimeContext,
-				absolutePath,
-				initial.Reload.Debounce.Duration,
-				logger,
-				configurationManager.Reload,
-				func() []string {
-					return configurationManager.Current().Config.ReloadDependencyPaths(configurationDirectory)
-				},
-			)
-		})
-	}
-
-	restartRequested := false
-	running := true
-	for running {
-		select {
-		case <-ctx.Done():
-			running = false
-		case <-restartRequests:
-			restartRequested = true
-			running = false
-		case watchError := <-watchErrors:
-			if watchError != nil {
-				logger.Error("configuration watcher stopped", "error", watchError)
-			}
-			watchErrors = nil
-		}
-	}
-
-	shutdownTimeout := configurationManager.Current().Config.Server.ShutdownTimeout.Duration
-	shutdownContext, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	defer cancel()
-
-	if restartRequested {
-		logger.Info("Sable restarting")
-	} else {
-		logger.Info("Sable stopping")
-	}
-	stopRuntime()
-	webError := webServer.Close(shutdownContext)
-	listenerError := listeners.Close(shutdownContext)
-	workerError := waitRuntimeWorkers(shutdownContext, &runtimeWorkers)
-	clusterError := clusterService.Close(shutdownContext)
-	// Stop background cache refreshes before snapshotting, so what gets persisted
-	// is a settled cache rather than one being written to as it is read.
-	handlerError := handler.Shutdown(shutdownContext)
-	cacheError := error(nil)
-	runtimeDrained := workerError == nil && webError == nil && listenerError == nil && clusterError == nil && handlerError == nil
-	if runtimeDrained {
-		cacheError = persistDNSCache(
-			shutdownContext,
-			database,
-			handler,
-			configurationManager.Current().Config.Resolver.SaveCache,
-		)
-	} else {
-		cacheError = errors.Join(
-			errors.New("skip DNS cache persistence because runtime shutdown was incomplete"),
-			workerError, webError, listenerError, handlerError,
-		)
-	}
-	queryContext, queryCancel := recorderContextForShutdown(shutdownContext, shutdownTimeout)
-	queryLogError := queryRecorder.Close(queryContext)
-	queryCancel()
-	if !runtimeDrained || queryLogError != nil {
-		storesSafe = false
-	}
-	shutdownError := errors.Join(webError, listenerError, workerError, clusterError, handlerError, cacheError, queryLogError)
-	if restartRequested {
-		if shutdownError != nil {
-			logger.Error("controlled restart shutdown failed", "error", shutdownError)
-		}
-		return errors.Join(ErrRestartRequested, shutdownError)
-	}
-	return shutdownError
+	process.startBackgroundServices()
+	process.startupComplete = true
+	process.logStarted()
+	restartRequested := process.wait(ctx)
+	return process.shutdown(restartRequested)
 }
 
 func clusterNodeName(configured string) string {
