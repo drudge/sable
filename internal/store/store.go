@@ -310,25 +310,95 @@ func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (qu
 	}
 	filter.PageSize = min(filter.PageSize, 250)
 
-	conditions := make([]string, 0, 5)
-	arguments := make([]any, 0, 7)
-	addCondition := func(column, operator string, value any) {
-		arguments = append(arguments, value)
-		conditions = append(conditions, column+" "+operator+" "+store.placeholder(len(arguments)))
+	scope := store.queryEventScope(filter)
+	total, err := store.countQueryEvents(ctx, scope, filter)
+	if err != nil {
+		return querylog.Page{}, err
 	}
-	// Text found anywhere in a column, as opposed to an exact value, comes
-	// from the search index when it can; see query_log_search.go.
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + filter.PageSize - 1) / filter.PageSize
+		filter.Page = min(filter.Page, totalPages)
+	}
+	entries, err := store.selectQueryEvents(ctx, scope, filter, total)
+	if err != nil {
+		return querylog.Page{}, err
+	}
+	return querylog.Page{
+		Entries: entries, Page: filter.Page, PageSize: filter.PageSize,
+		TotalEntries: total, TotalPages: totalPages,
+	}, nil
+}
+
+// queryEventScope is the part of a query log query a filter decides: where
+// rows come from, the column that orders them, and the conditions on them.
+type queryEventScope struct {
+	store      *Store
+	from       string
+	idColumn   string
+	conditions []string
+	arguments  []any
+}
+
+func (scope *queryEventScope) add(column, operator string, value any) {
+	scope.arguments = append(scope.arguments, value)
+	scope.conditions = append(scope.conditions, column+" "+operator+" "+scope.store.placeholder(len(scope.arguments)))
+}
+
+// clone copies the conditions so a count and a page can each add their own.
+func (scope queryEventScope) clone() queryEventScope {
+	scope.conditions = append([]string(nil), scope.conditions...)
+	scope.arguments = append([]any(nil), scope.arguments...)
+	return scope
+}
+
+func (store *Store) queryEventScope(filter querylog.Filter) queryEventScope {
+	scope := queryEventScope{
+		store: store, from: " FROM sable_query_log", idColumn: "id",
+		conditions: make([]string, 0, 5), arguments: make([]any, 0, 7),
+	}
+	store.addQueryEventTextSearch(&scope, filter)
+	if !filter.Since.IsZero() {
+		scope.add("occurred_at", ">=", filter.Since.UTC())
+	}
+	if !filter.Until.IsZero() {
+		scope.add("occurred_at", "<=", filter.Until.UTC())
+	}
+	if len(filter.RecordTypes) > 0 {
+		placeholders := make([]string, 0, len(filter.RecordTypes))
+		for _, recordType := range filter.RecordTypes {
+			scope.arguments = append(scope.arguments, recordType)
+			placeholders = append(placeholders, store.placeholder(len(scope.arguments)))
+		}
+		scope.conditions = append(scope.conditions, "record_type IN ("+strings.Join(placeholders, ", ")+")")
+	}
+	if filter.ResponseCode != nil {
+		scope.add("response_code", "=", *filter.ResponseCode)
+	}
+	if filter.Source != "" {
+		scope.add("source", "=", filter.Source)
+	}
+	if filter.Protocol != "" {
+		scope.add("protocol", "=", strings.ToUpper(filter.Protocol))
+	}
+	return scope
+}
+
+// addQueryEventTextSearch adds the client, name and free-text parts of a
+// filter. Text found anywhere in a column, as opposed to an exact value,
+// comes from the search index when it can; see query_log_search.go.
+func (store *Store) addQueryEventTextSearch(scope *queryEventScope, filter querylog.Filter) {
 	var textSearches [][]textMatch
 	if value := strings.TrimSpace(filter.ClientIP); value != "" {
 		if filter.Exact || filter.ExactClient {
-			addCondition("client_ip_key", "=", queryLogClientKey(value))
+			scope.add("client_ip_key", "=", queryLogClientKey(value))
 		} else {
 			textSearches = append(textSearches, []textMatch{{"client_ip_key", queryLogClientKey(value)}})
 		}
 	}
 	if value := strings.TrimSpace(filter.Name); value != "" {
 		if filter.Exact {
-			addCondition(queryLogDomainExpression, "=", queryLogDomainKey(value))
+			scope.add(queryLogDomainExpression, "=", queryLogDomainKey(value))
 		} else {
 			textSearches = append(textSearches, []textMatch{{queryLogDomainExpression, queryLogDomainKey(value)}})
 		}
@@ -340,82 +410,57 @@ func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (qu
 			{"answer", value},
 		})
 	}
-	from, idColumn := " FROM sable_query_log", "id"
 	if expression, indexed := store.indexedTextSearch(textSearches); indexed {
 		// The index leads, so a page stops after its rows and a count reads
 		// only the matches. Joining the log leaves out rows pruned since.
-		from = " FROM " + queryLogSearchTable + " JOIN sable_query_log ON sable_query_log.id = " + queryLogSearchTable + ".rowid"
-		idColumn = queryLogSearchTable + ".rowid"
-		addCondition(queryLogSearchTable, "MATCH", expression)
-	} else {
-		for _, matches := range textSearches {
-			condition, values := store.likeTextSearch(len(arguments)+1, matches)
-			conditions = append(conditions, condition)
-			arguments = append(arguments, values...)
-		}
+		scope.from = " FROM " + queryLogSearchTable + " JOIN sable_query_log ON sable_query_log.id = " + queryLogSearchTable + ".rowid"
+		scope.idColumn = queryLogSearchTable + ".rowid"
+		scope.add(queryLogSearchTable, "MATCH", expression)
+		return
 	}
-	if !filter.Since.IsZero() {
-		addCondition("occurred_at", ">=", filter.Since.UTC())
+	for _, matches := range textSearches {
+		condition, values := store.likeTextSearch(len(scope.arguments)+1, matches)
+		scope.conditions = append(scope.conditions, condition)
+		scope.arguments = append(scope.arguments, values...)
 	}
-	if !filter.Until.IsZero() {
-		addCondition("occurred_at", "<=", filter.Until.UTC())
-	}
-	if len(filter.RecordTypes) > 0 {
-		placeholders := make([]string, 0, len(filter.RecordTypes))
-		for _, recordType := range filter.RecordTypes {
-			arguments = append(arguments, recordType)
-			placeholders = append(placeholders, store.placeholder(len(arguments)))
-		}
-		conditions = append(conditions, "record_type IN ("+strings.Join(placeholders, ", ")+")")
-	}
-	if filter.ResponseCode != nil {
-		addCondition("response_code", "=", *filter.ResponseCode)
-	}
-	if filter.Source != "" {
-		addCondition("source", "=", filter.Source)
-	}
-	if filter.Protocol != "" {
-		addCondition("protocol", "=", strings.ToUpper(filter.Protocol))
-	}
-	total := filter.KnownTotal
-	countConditions := append([]string(nil), conditions...)
-	countArguments := append([]any(nil), arguments...)
-	if filter.Incremental {
-		countArguments = append(countArguments, filter.AfterID)
-		countConditions = append(countConditions, idColumn+" > "+store.placeholder(len(countArguments)))
-	}
-	if !filter.UseKnownTotal || filter.Incremental {
-		countWhere := queryLogWhere(countConditions)
-		var counted int
-		if err := store.database.QueryRowContext(ctx, "SELECT COUNT(*)"+from+countWhere, countArguments...).Scan(&counted); err != nil {
-			return querylog.Page{}, fmt.Errorf("count query events: %w", err)
-		}
-		if filter.Incremental {
-			total += counted
-		} else {
-			total = counted
-		}
-	}
-	totalPages := 0
-	if total > 0 {
-		totalPages = (total + filter.PageSize - 1) / filter.PageSize
-		filter.Page = min(filter.Page, totalPages)
-	}
+}
 
-	selectConditions := append([]string(nil), conditions...)
-	selectArguments := append([]any(nil), arguments...)
+// countQueryEvents returns how many rows the filter matches. A caller that
+// already knows the total skips the count, and an incremental refresh counts
+// only the rows after the last one it saw.
+func (store *Store) countQueryEvents(ctx context.Context, scope queryEventScope, filter querylog.Filter) (int, error) {
+	total := filter.KnownTotal
+	if filter.UseKnownTotal && !filter.Incremental {
+		return total, nil
+	}
+	count := scope.clone()
+	if filter.Incremental {
+		count.add(count.idColumn, ">", filter.AfterID)
+	}
+	var counted int
+	if err := store.database.QueryRowContext(ctx, "SELECT COUNT(*)"+count.from+queryLogWhere(count.conditions), count.arguments...).Scan(&counted); err != nil {
+		return 0, fmt.Errorf("count query events: %w", err)
+	}
+	if filter.Incremental {
+		return total + counted, nil
+	}
+	return counted, nil
+}
+
+// selectQueryEvents reads one page, newest first, either by page number or
+// relative to a cursor row.
+func (store *Store) selectQueryEvents(ctx context.Context, scope queryEventScope, filter querylog.Filter, total int) ([]querylog.Entry, error) {
+	page := scope.clone()
 	order := "DESC"
 	useOffset := false
 	switch filter.Direction {
 	case "older":
 		if filter.Cursor > 0 {
-			selectArguments = append(selectArguments, filter.Cursor)
-			selectConditions = append(selectConditions, idColumn+" < "+store.placeholder(len(selectArguments)))
+			page.add(page.idColumn, "<", filter.Cursor)
 		}
 	case "newer":
 		if filter.Cursor > 0 {
-			selectArguments = append(selectArguments, filter.Cursor)
-			selectConditions = append(selectConditions, idColumn+" > "+store.placeholder(len(selectArguments)))
+			page.add(page.idColumn, ">", filter.Cursor)
 			order = "ASC"
 		}
 	case "oldest":
@@ -423,37 +468,34 @@ func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (qu
 	default:
 		useOffset = filter.Page > 1
 	}
-	selectWhere := queryLogWhere(selectConditions)
+	selectWhere := queryLogWhere(page.conditions)
 	selectionLimit := filter.PageSize
 	if filter.Direction == "oldest" && total%filter.PageSize != 0 {
 		selectionLimit = total % filter.PageSize
 	}
-	selectArguments = append(selectArguments, selectionLimit)
+	arguments := append(page.arguments, selectionLimit)
 	query := `
 	SELECT id, occurred_at, client_ip, name, record_type, class, response_code, source, protocol, answer, decision, duration_us
-	` + from + selectWhere + `
-	ORDER BY ` + idColumn + ` ` + order + `
-	LIMIT ` + store.placeholder(len(selectArguments))
+	` + page.from + selectWhere + `
+	ORDER BY ` + page.idColumn + ` ` + order + `
+	LIMIT ` + store.placeholder(len(arguments))
 	if useOffset {
-		selectArguments = append(selectArguments, (filter.Page-1)*filter.PageSize)
-		query += ` OFFSET ` + store.placeholder(len(selectArguments))
+		arguments = append(arguments, (filter.Page-1)*filter.PageSize)
+		query += ` OFFSET ` + store.placeholder(len(arguments))
 	}
-	rows, err := store.database.QueryContext(ctx, query, selectArguments...)
+	rows, err := store.database.QueryContext(ctx, query, arguments...)
 	if err != nil {
-		return querylog.Page{}, fmt.Errorf("query events: %w", err)
+		return nil, fmt.Errorf("query events: %w", err)
 	}
 	defer rows.Close()
 	entries, err := scanQueryEvents(rows, selectionLimit)
 	if err != nil {
-		return querylog.Page{}, err
+		return nil, err
 	}
 	if order == "ASC" {
 		slices.Reverse(entries)
 	}
-	return querylog.Page{
-		Entries: entries, Page: filter.Page, PageSize: filter.PageSize,
-		TotalEntries: total, TotalPages: totalPages,
-	}, nil
+	return entries, nil
 }
 
 // QueryEvent returns the query log row with the given ID, and whether it is
