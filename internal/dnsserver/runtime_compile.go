@@ -18,7 +18,41 @@ import (
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
+// Compile validates configuration and builds the Runtime that serves it. It
+// runs in the same order the checks have always run, so the first invalid
+// setting is still the one reported.
 func Compile(configuration RuntimeConfig) (*Runtime, error) {
+	runtime, err := compileResolver(configuration)
+	if err != nil {
+		return nil, err
+	}
+	if err := runtime.compilePolicy(configuration); err != nil {
+		return nil, err
+	}
+	if runtime.routes, err = compileRoutes(configuration.Routes); err != nil {
+		return nil, err
+	}
+	if runtime.hosts, err = compileHosts(configuration.Hosts); err != nil {
+		return nil, err
+	}
+	if runtime.tsigKeys, err = compileTSIGKeys(configuration.TSIGKeys); err != nil {
+		return nil, err
+	}
+	if err := runtime.compileZones(configuration.Zones); err != nil {
+		return nil, err
+	}
+	if runtime.dnssec != nil {
+		runtime.dnssec.setZoneInsecure(runtime.zoneInsecure)
+	}
+	runtime.upstreams = upstreamSignature(configuration.Forwarders, runtime.routes) + "|mode=" + runtime.mode +
+		"|roots=" + strings.Join(runtime.rootHints, ",") + dnssecRuntimeSignature(configuration)
+	return runtime, nil
+}
+
+// compileResolver checks the resolver limits, mode, recursion access, root
+// hints, timeouts and DNSSEC validator, and returns a Runtime holding them and
+// the response cache.
+func compileResolver(configuration RuntimeConfig) (*Runtime, error) {
 	totalLimit := cmp.Or(configuration.MaxConcurrent, defaultMaxConcurrent)
 	clientLimit := cmp.Or(configuration.MaxConcurrentPerClient, defaultMaxConcurrentPerClient)
 	if totalLimit < 1 || totalLimit > maximumConcurrentResolutions || clientLimit < 1 || clientLimit > totalLimit {
@@ -50,12 +84,45 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 	}
 	var validator *dnssecValidator
 	if configuration.DNSSECValidation {
-		var err error
 		validator, err = newDNSSECValidator(configuration.DNSSECTrustAnchors, configuration.DNSSECNegativeTrustAnchors)
 		if err != nil {
 			return nil, fmt.Errorf("compile DNSSEC validator: %w", err)
 		}
 	}
+	return &Runtime{
+		maxConcurrent: totalLimit, maxConcurrentPerClient: clientLimit,
+		recursion:         recursion,
+		mode:              mode,
+		forwarders:        append([]string(nil), configuration.Forwarders...),
+		rootHints:         rootHints,
+		qnameMinimization: !configuration.DisableQNAMEMinimization,
+		delegations:       newDelegationCache(4096),
+		zoneCuts:          newZoneCutCache(4096),
+		nameServers:       newAddressCache(4096),
+		baseRoutes:        cloneForwardingRoutes(configuration.Routes),
+		timeout:           configuration.Timeout,
+		retries:           cmp.Or(configuration.Retries, defaultRuntimeRetries),
+		retryTimeout:      cmp.Or(configuration.RetryTimeout, defaultRuntimeRetryTimeout),
+		staleMaxWait:      configuration.CacheStaleMaxWait,
+		cache: NewResponseCacheWithOptions(configuration.CacheSize, CacheOptions{
+			MinimumTTL: configuration.CacheMinimumTTL, MaximumTTL: configuration.CacheMaximumTTL,
+			NegativeTTL: configuration.CacheNegativeTTL, FailureTTL: configuration.CacheFailureTTL,
+			ServeStale: configuration.ServeStale, StaleTTL: configuration.CacheStaleTTL,
+			StaleAnswerTTL: configuration.CacheStaleAnswerTTL, StaleResetTTL: configuration.CacheStaleResetTTL,
+			PrefetchMinTTL: configuration.CachePrefetchMinimumTTL, PrefetchAtTTL: configuration.CachePrefetchTriggerTTL,
+			PrefetchSample: configuration.CachePrefetchSample, PrefetchHits: configuration.CachePrefetchHitsPerHour,
+		}),
+		blockLists:          append([]BlockListStats(nil), configuration.BlockLists...),
+		dnssec:              validator,
+		managedTrustAnchors: configuration.DNSSECValidation && configuration.DNSSECTrustAnchorUpdates && len(configuration.DNSSECTrustAnchors) == 0,
+		zoneSource:          configuration.Zones,
+		keySource:           configuration.TSIGKeys,
+	}, nil
+}
+
+// compilePolicy fills in the block and allow lists, the blocking response and
+// the clients that bypass blocking.
+func (runtime *Runtime) compilePolicy(configuration RuntimeConfig) error {
 	blocked := make(map[string]uint32, len(configuration.BlockedDomains))
 	attributed := len(configuration.BlockedDomainOwners) == len(configuration.BlockedDomains)
 	for index, domain := range configuration.BlockedDomains {
@@ -73,7 +140,7 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 		}
 		normalized, err := dnsname.Normalize(trimmed)
 		if err != nil {
-			return nil, fmt.Errorf("invalid blocked domain %q: %w", domain, err)
+			return fmt.Errorf("invalid blocked domain %q: %w", domain, err)
 		}
 		blocked[normalized] = owner
 	}
@@ -84,7 +151,7 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 		wildcard := strings.HasPrefix(domain, "*.")
 		normalized, err := dnsname.Normalize(strings.TrimPrefix(domain, "*."))
 		if err != nil {
-			return nil, fmt.Errorf("invalid allowed domain %q: %w", domain, err)
+			return fmt.Errorf("invalid allowed domain %q: %w", domain, err)
 		}
 		if wildcard {
 			allowedWildcard[normalized] = struct{}{}
@@ -97,7 +164,7 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 		blockingType = "nxdomain"
 	}
 	if blockingType != "nxdomain" && blockingType != "zero" && blockingType != "custom" {
-		return nil, fmt.Errorf("invalid blocking response type %q", configuration.BlockingType)
+		return fmt.Errorf("invalid blocking response type %q", configuration.BlockingType)
 	}
 	blockAddresses := make([]netip.Addr, 0, len(configuration.BlockingAddrs)+2)
 	if blockingType == "zero" {
@@ -106,7 +173,7 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 		for _, value := range configuration.BlockingAddrs {
 			address, err := netip.ParseAddr(value)
 			if err != nil || address.Zone() != "" {
-				return nil, fmt.Errorf("invalid custom blocking address %q", value)
+				return fmt.Errorf("invalid custom blocking address %q", value)
 			}
 			blockAddresses = append(blockAddresses, address.Unmap())
 		}
@@ -117,14 +184,30 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 		if err != nil {
 			address, addressErr := netip.ParseAddr(value)
 			if addressErr != nil || address.Zone() != "" {
-				return nil, fmt.Errorf("invalid blocking bypass client %q", value)
+				return fmt.Errorf("invalid blocking bypass client %q", value)
 			}
 			prefix = netip.PrefixFrom(address.Unmap(), address.Unmap().BitLen())
 		}
 		bypass = append(bypass, prefix.Masked())
 	}
-	routes := make(map[string][]string, len(configuration.Routes))
-	for _, route := range configuration.Routes {
+	runtime.blocked = blocked
+	runtime.blockedOwners = configuration.BlockedDomainOwnerSets
+	runtime.allowedExact = allowedExact
+	runtime.allowedWildcard = allowedWildcard
+	runtime.blocking = configuration.Blocking
+	runtime.blockType = blockingType
+	runtime.blockTTL = configuration.BlockingTTL
+	runtime.blockAddrs = blockAddresses
+	runtime.bypass = bypass
+	runtime.blockTXT = configuration.AllowTXTReport
+	return nil
+}
+
+// compileRoutes builds the conditional forwarding table, keyed by the
+// normalized domain.
+func compileRoutes(configured []ForwardingRoute) (map[string][]string, error) {
+	routes := make(map[string][]string, len(configured))
+	for _, route := range configured {
 		domain, err := dnsname.Normalize(route.Domain)
 		if err != nil || len(route.Forwarders) == 0 {
 			return nil, fmt.Errorf("conditional forwarding route %q is invalid", route.Domain)
@@ -134,8 +217,14 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 		}
 		routes[domain] = append([]string(nil), route.Forwarders...)
 	}
-	hosts := make(map[string]localHostRecords, len(configuration.Hosts))
-	for _, host := range configuration.Hosts {
+	return routes, nil
+}
+
+// compileHosts turns the local host overrides into ready-made A and AAAA
+// records.
+func compileHosts(configured []HostOverride) (map[string]localHostRecords, error) {
+	hosts := make(map[string]localHostRecords, len(configured))
+	for _, host := range configured {
 		name, err := dnsname.Normalize(host.Name)
 		if err != nil || host.TTL == 0 || len(host.Addresses) == 0 {
 			return nil, fmt.Errorf("local host override %q is invalid", host.Name)
@@ -161,10 +250,14 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 		}
 		hosts[name] = records
 	}
-	zones := make(map[string]*authoritativeZone, len(configuration.Zones))
-	managedZones := make(map[string]managedZone)
-	tsigKeys := make(map[string]tsigKey, len(configuration.TSIGKeys))
-	for _, key := range configuration.TSIGKeys {
+	return hosts, nil
+}
+
+// compileTSIGKeys indexes the TSIG keys by their canonical name, defaulting
+// the algorithm to HMAC-SHA256.
+func compileTSIGKeys(configured []TSIGKey) (map[string]tsigKey, error) {
+	tsigKeys := make(map[string]tsigKey, len(configured))
+	for _, key := range configured {
 		name := strings.ToLower(dns.Fqdn(strings.TrimSpace(key.Name)))
 		if _, duplicate := tsigKeys[name]; duplicate {
 			return nil, fmt.Errorf("duplicate TSIG key %q", name)
@@ -175,232 +268,233 @@ func Compile(configuration RuntimeConfig) (*Runtime, error) {
 		}
 		tsigKeys[name] = tsigKey{algorithm: algorithm, secret: key.Secret}
 	}
-	zoneCount := 0
-	zoneInsecure := make([]string, 0)
-	for _, configuredZone := range configuration.Zones {
+	return tsigKeys, nil
+}
+
+// compileZones compiles every enabled zone. Stub zones and FWD records add to
+// runtime.routes, so compileRoutes must run first.
+func (runtime *Runtime) compileZones(configured []AuthoritativeZone) error {
+	runtime.zones = make(map[string]*authoritativeZone, len(configured))
+	runtime.managedZones = make(map[string]managedZone)
+	runtime.zoneInsecure = make([]string, 0)
+	for _, configuredZone := range configured {
 		if configuredZone.Disabled || configuredZone.AwaitingTransfer {
 			continue
 		}
-		zoneCount++
-		zoneName, err := dnsname.Normalize(configuredZone.Name)
-		if err != nil || len(configuredZone.Records) == 0 {
-			return nil, fmt.Errorf("authoritative zone %q is invalid", configuredZone.Name)
+		runtime.zoneCount++
+		if err := runtime.compileZone(configuredZone); err != nil {
+			return err
 		}
-		if _, duplicate := zones[zoneName]; duplicate {
-			return nil, fmt.Errorf("duplicate authoritative zone %q", configuredZone.Name)
+	}
+	slices.Sort(runtime.zoneInsecure)
+	return nil
+}
+
+// compileZone compiles one enabled zone into runtime. A stub zone only adds a
+// forwarding route to its primaries; every other type is compiled into the
+// zone map.
+func (runtime *Runtime) compileZone(configuredZone AuthoritativeZone) error {
+	zoneName, err := dnsname.Normalize(configuredZone.Name)
+	if err != nil || len(configuredZone.Records) == 0 {
+		return fmt.Errorf("authoritative zone %q is invalid", configuredZone.Name)
+	}
+	if _, duplicate := runtime.zones[zoneName]; duplicate {
+		return fmt.Errorf("duplicate authoritative zone %q", configuredZone.Name)
+	}
+	zoneType := strings.ToLower(strings.TrimSpace(configuredZone.Type))
+	if zoneType == "" {
+		zoneType = "primary"
+	}
+	if configuredZone.DNSSECValidationDisabled {
+		if !zonemodel.IsForwarderType(zoneType) && zoneType != "stub" {
+			return fmt.Errorf("authoritative zone %q may not disable DNSSEC validation for a %s zone", zoneName, zoneType)
 		}
-		zoneType := strings.ToLower(strings.TrimSpace(configuredZone.Type))
-		if zoneType == "" {
-			zoneType = "primary"
+		runtime.zoneInsecure = append(runtime.zoneInsecure, zoneName)
+	}
+	zoneTSIGKey := ""
+	if strings.TrimSpace(configuredZone.TSIGKey) != "" {
+		zoneTSIGKey = strings.ToLower(dns.Fqdn(strings.TrimSpace(configuredZone.TSIGKey)))
+		if _, found := runtime.tsigKeys[zoneTSIGKey]; !found {
+			return fmt.Errorf("authoritative zone %q references unknown TSIG key %q", zoneName, zoneTSIGKey)
 		}
-		if configuredZone.DNSSECValidationDisabled {
-			if !zonemodel.IsForwarderType(zoneType) && zoneType != "stub" {
-				return nil, fmt.Errorf("authoritative zone %q may not disable DNSSEC validation for a %s zone", zoneName, zoneType)
+	}
+	if zoneType == "stub" {
+		return runtime.compileStubZone(configuredZone, zoneName, zoneTSIGKey)
+	}
+	// A catalog zone with primary servers is transferred exactly like a
+	// secondary. It is compiled into the zone map either way so that a
+	// published catalog can be served over AXFR/IXFR and journaled for
+	// incremental transfers.
+	if zoneType == "secondary" || zoneType == zonemodel.TypeSecondaryForwarder || (zoneType == "catalog" && len(configuredZone.PrimaryServers) > 0) {
+		runtime.managedZones[zoneName] = managedZone{kind: zoneType, primaries: append([]string(nil), configuredZone.PrimaryServers...), tsigKey: zoneTSIGKey}
+	}
+	zone := &authoritativeZone{
+		name: zoneName, records: make(map[string]map[uint16][]authoritativeRecord),
+		anames: make(map[string][]authoritativeANAME), forwarders: make(map[string][]authoritativeForwarder),
+		owners:       make(map[string]struct{}),
+		transferMode: configuredZone.ZoneTransfer,
+		tsigKey:      zoneTSIGKey,
+		kind:         zoneType,
+		dynamic:      configuredZone.DynamicUpdates,
+	}
+	if zone.transferMode == "" {
+		zone.transferMode = "deny"
+	}
+	for _, rawPrefix := range configuredZone.TransferACL {
+		prefix, parseErr := netip.ParsePrefix(rawPrefix)
+		if parseErr != nil {
+			address, addressErr := netip.ParseAddr(rawPrefix)
+			if addressErr != nil || address.Zone() != "" {
+				return fmt.Errorf("authoritative zone %q transfer ACL %q is invalid", zoneName, rawPrefix)
 			}
-			zoneInsecure = append(zoneInsecure, zoneName)
+			prefix = netip.PrefixFrom(address, address.BitLen())
 		}
-		zoneTSIGKey := ""
-		if strings.TrimSpace(configuredZone.TSIGKey) != "" {
-			zoneTSIGKey = strings.ToLower(dns.Fqdn(strings.TrimSpace(configuredZone.TSIGKey)))
-			if _, found := tsigKeys[zoneTSIGKey]; !found {
-				return nil, fmt.Errorf("authoritative zone %q references unknown TSIG key %q", zoneName, zoneTSIGKey)
-			}
+		zone.transferACL = append(zone.transferACL, prefix)
+	}
+	if err := zone.compileRecords(configuredZone.Records); err != nil {
+		return err
+	}
+	if len(zone.soa) != 1 || (!zonemodel.IsForwarderType(zoneType) && len(zone.records[zoneName][dns.TypeNS]) == 0) {
+		return fmt.Errorf("authoritative zone %q has invalid authority records", zoneName)
+	}
+	if zonemodel.IsForwarderType(zoneType) && len(zone.forwarders[zoneName]) == 0 {
+		return fmt.Errorf("forwarder zone %q requires an active apex FWD record", zoneName)
+	}
+	if err := runtime.routeZoneForwarders(zone); err != nil {
+		return err
+	}
+	runtime.zones[zoneName] = zone
+	return nil
+}
+
+// routeZoneForwarders orders each FWD owner's forwarders by priority and adds
+// them to the forwarding table, refusing an owner that already has a route.
+func (runtime *Runtime) routeZoneForwarders(zone *authoritativeZone) error {
+	for owner, ordered := range zone.forwarders {
+		slices.SortFunc(ordered, func(left, right authoritativeForwarder) int {
+			return int(left.priority) - int(right.priority)
+		})
+		if _, duplicate := runtime.routes[owner]; duplicate {
+			return fmt.Errorf("authoritative zone %q FWD owner duplicates forwarding route %q", zone.name, owner)
 		}
-		if zoneType == "stub" {
-			managedZones[zoneName] = managedZone{kind: zoneType, primaries: append([]string(nil), configuredZone.PrimaryServers...), tsigKey: zoneTSIGKey}
-			if _, duplicate := routes[zoneName]; duplicate {
-				return nil, fmt.Errorf("stub zone %q duplicates a forwarding route", zoneName)
-			}
-			protocol := configuredZone.PrimaryProtocol
-			if protocol == "" {
-				protocol = "udp"
-			}
-			for _, primary := range configuredZone.PrimaryServers {
-				routes[zoneName] = append(routes[zoneName], protocol+"://"+primary)
-			}
-			if len(routes[zoneName]) == 0 {
-				return nil, fmt.Errorf("stub zone %q requires at least one primary server", zoneName)
-			}
+		endpoints := make([]string, 0, len(ordered))
+		for _, forwarder := range ordered {
+			endpoints = append(endpoints, forwarder.endpoint)
+		}
+		runtime.routes[owner] = endpoints
+		zone.forwarders[owner] = ordered
+	}
+	return nil
+}
+
+// compileStubZone records a stub zone and routes its name to the zone's
+// primary servers.
+func (runtime *Runtime) compileStubZone(configuredZone AuthoritativeZone, zoneName, zoneTSIGKey string) error {
+	runtime.managedZones[zoneName] = managedZone{kind: "stub", primaries: append([]string(nil), configuredZone.PrimaryServers...), tsigKey: zoneTSIGKey}
+	if _, duplicate := runtime.routes[zoneName]; duplicate {
+		return fmt.Errorf("stub zone %q duplicates a forwarding route", zoneName)
+	}
+	protocol := configuredZone.PrimaryProtocol
+	if protocol == "" {
+		protocol = "udp"
+	}
+	for _, primary := range configuredZone.PrimaryServers {
+		runtime.routes[zoneName] = append(runtime.routes[zoneName], protocol+"://"+primary)
+	}
+	if len(runtime.routes[zoneName]) == 0 {
+		return fmt.Errorf("stub zone %q requires at least one primary server", zoneName)
+	}
+	return nil
+}
+
+// compileRecords adds the zone's active records, ANAMEs and FWDs, and marks
+// the zone signed when it carries both DNSKEY and RRSIG records.
+func (zone *authoritativeZone) compileRecords(records []ZoneRecord) error {
+	zoneName := zone.name
+	hasDNSKEY, hasRRSIG := false, false
+	for _, record := range records {
+		if record.Disabled || (!record.ExpiresAt.IsZero() && !record.ExpiresAt.After(time.Now())) {
 			continue
 		}
-		// A catalog zone with primary servers is transferred exactly like a
-		// secondary. It is compiled into the zone map either way so that a
-		// published catalog can be served over AXFR/IXFR and journaled for
-		// incremental transfers.
-		if zoneType == "secondary" || zoneType == zonemodel.TypeSecondaryForwarder || (zoneType == "catalog" && len(configuredZone.PrimaryServers) > 0) {
-			managedZones[zoneName] = managedZone{kind: zoneType, primaries: append([]string(nil), configuredZone.PrimaryServers...), tsigKey: zoneTSIGKey}
+		owner, err := authoritativeOwner(zoneName, record.Name)
+		if err != nil {
+			return fmt.Errorf("authoritative zone %q record owner %q: %w", zoneName, record.Name, err)
 		}
-		zone := &authoritativeZone{
-			name: zoneName, records: make(map[string]map[uint16][]authoritativeRecord),
-			anames: make(map[string][]authoritativeANAME), forwarders: make(map[string][]authoritativeForwarder),
-			owners:       make(map[string]struct{}),
-			transferMode: configuredZone.ZoneTransfer,
-			tsigKey:      zoneTSIGKey,
-			kind:         zoneType,
-			dynamic:      configuredZone.DynamicUpdates,
-		}
-		if zone.transferMode == "" {
-			zone.transferMode = "deny"
-		}
-		for _, rawPrefix := range configuredZone.TransferACL {
-			prefix, parseErr := netip.ParsePrefix(rawPrefix)
-			if parseErr != nil {
-				address, addressErr := netip.ParseAddr(rawPrefix)
-				if addressErr != nil || address.Zone() != "" {
-					return nil, fmt.Errorf("authoritative zone %q transfer ACL %q is invalid", zoneName, rawPrefix)
-				}
-				prefix = netip.PrefixFrom(address, address.BitLen())
+		recordType := strings.ToUpper(strings.TrimSpace(record.Type))
+		if recordType == "ANAME" {
+			target, normalizeErr := dnsname.Normalize(record.Value)
+			if normalizeErr != nil {
+				return fmt.Errorf("compile authoritative zone %q ANAME record: %w", zoneName, normalizeErr)
 			}
-			zone.transferACL = append(zone.transferACL, prefix)
-		}
-		hasDNSKEY, hasRRSIG := false, false
-		for _, record := range configuredZone.Records {
-			if record.Disabled || (!record.ExpiresAt.IsZero() && !record.ExpiresAt.After(time.Now())) {
-				continue
-			}
-			owner, err := authoritativeOwner(zoneName, record.Name)
-			if err != nil {
-				return nil, fmt.Errorf("authoritative zone %q record owner %q: %w", zoneName, record.Name, err)
-			}
-			recordType := strings.ToUpper(strings.TrimSpace(record.Type))
-			if recordType == "ANAME" {
-				target, normalizeErr := dnsname.Normalize(record.Value)
-				if normalizeErr != nil {
-					return nil, fmt.Errorf("compile authoritative zone %q ANAME record: %w", zoneName, normalizeErr)
-				}
-				zone.anames[owner] = append(zone.anames[owner], authoritativeANAME{
-					target: target, ttl: record.TTL, expiresAt: record.ExpiresAt,
-				})
-				zone.owners[owner] = struct{}{}
-				continue
-			}
-			if recordType == "FWD" {
-				forwarder, parseErr := forwarding.ParseRecord(record.Value)
-				if parseErr != nil {
-					return nil, fmt.Errorf("compile authoritative zone %q FWD record: %w", zoneName, parseErr)
-				}
-				zone.forwarders[owner] = append(zone.forwarders[owner], authoritativeForwarder{
-					priority: forwarder.Priority, endpoint: forwarder.Endpoint(),
-				})
-				zone.owners[owner] = struct{}{}
-				continue
-			}
-			if _, found := dns.StringToType[recordType]; !found {
-				return nil, fmt.Errorf("authoritative zone %q has unsupported record type %q", zoneName, record.Type)
-			}
-			rr, err := dns.NewRR(fmt.Sprintf("%s %d IN %s %s", dns.Fqdn(owner), record.TTL, recordType, record.Value))
-			if err != nil {
-				return nil, fmt.Errorf("compile authoritative zone %q record: %w", zoneName, err)
-			}
-			if owner != zoneName && !strings.HasSuffix(owner, "."+zoneName) {
-				return nil, fmt.Errorf("authoritative record owner %q is outside zone %q", owner, zoneName)
-			}
-			byType := zone.records[owner]
-			if byType == nil {
-				byType = make(map[uint16][]authoritativeRecord)
-				zone.records[owner] = byType
-			}
-			compiledRecord := authoritativeRecord{record: rr, expiresAt: record.ExpiresAt}
-			byType[rr.Header().Rrtype] = append(byType[rr.Header().Rrtype], compiledRecord)
-			zone.owners[owner] = struct{}{}
-			for ancestor := owner; ancestor != zoneName; {
-				separator := strings.IndexByte(ancestor, '.')
-				if separator < 0 {
-					break
-				}
-				ancestor = ancestor[separator+1:]
-				zone.owners[ancestor] = struct{}{}
-			}
-			if owner == zoneName && rr.Header().Rrtype == dns.TypeSOA {
-				zone.soa = append(zone.soa, compiledRecord)
-			}
-			if rr.Header().Rrtype == dns.TypeNSEC {
-				zone.nsecs = append(zone.nsecs, compiledRecord)
-			}
-			if rr.Header().Rrtype == dns.TypeNSEC3 {
-				zone.nsec3s = append(zone.nsec3s, compiledRecord)
-			}
-			if rr.Header().Rrtype == dns.TypeDNSKEY {
-				hasDNSKEY = true
-			}
-			if rr.Header().Rrtype == dns.TypeRRSIG {
-				hasRRSIG = true
-			}
-		}
-		zone.signed = hasDNSKEY && hasRRSIG
-		if len(zone.soa) != 1 || (!zonemodel.IsForwarderType(zoneType) && len(zone.records[zoneName][dns.TypeNS]) == 0) {
-			return nil, fmt.Errorf("authoritative zone %q has invalid authority records", zoneName)
-		}
-		if zonemodel.IsForwarderType(zoneType) && len(zone.forwarders[zoneName]) == 0 {
-			return nil, fmt.Errorf("forwarder zone %q requires an active apex FWD record", zoneName)
-		}
-		for owner, ordered := range zone.forwarders {
-			slices.SortFunc(ordered, func(left, right authoritativeForwarder) int {
-				return int(left.priority) - int(right.priority)
+			zone.anames[owner] = append(zone.anames[owner], authoritativeANAME{
+				target: target, ttl: record.TTL, expiresAt: record.ExpiresAt,
 			})
-			if _, duplicate := routes[owner]; duplicate {
-				return nil, fmt.Errorf("authoritative zone %q FWD owner duplicates forwarding route %q", zoneName, owner)
-			}
-			endpoints := make([]string, 0, len(ordered))
-			for _, forwarder := range ordered {
-				endpoints = append(endpoints, forwarder.endpoint)
-			}
-			routes[owner] = endpoints
-			zone.forwarders[owner] = ordered
+			zone.owners[owner] = struct{}{}
+			continue
 		}
-		zones[zoneName] = zone
+		if recordType == "FWD" {
+			forwarder, parseErr := forwarding.ParseRecord(record.Value)
+			if parseErr != nil {
+				return fmt.Errorf("compile authoritative zone %q FWD record: %w", zoneName, parseErr)
+			}
+			zone.forwarders[owner] = append(zone.forwarders[owner], authoritativeForwarder{
+				priority: forwarder.Priority, endpoint: forwarder.Endpoint(),
+			})
+			zone.owners[owner] = struct{}{}
+			continue
+		}
+		if _, found := dns.StringToType[recordType]; !found {
+			return fmt.Errorf("authoritative zone %q has unsupported record type %q", zoneName, record.Type)
+		}
+		rr, err := dns.NewRR(fmt.Sprintf("%s %d IN %s %s", dns.Fqdn(owner), record.TTL, recordType, record.Value))
+		if err != nil {
+			return fmt.Errorf("compile authoritative zone %q record: %w", zoneName, err)
+		}
+		if owner != zoneName && !strings.HasSuffix(owner, "."+zoneName) {
+			return fmt.Errorf("authoritative record owner %q is outside zone %q", owner, zoneName)
+		}
+		zone.addRecord(owner, rr, record.ExpiresAt)
+		switch rr.Header().Rrtype {
+		case dns.TypeDNSKEY:
+			hasDNSKEY = true
+		case dns.TypeRRSIG:
+			hasRRSIG = true
+		}
 	}
-	slices.Sort(zoneInsecure)
-	if validator != nil {
-		validator.setZoneInsecure(zoneInsecure)
+	zone.signed = hasDNSKEY && hasRRSIG
+	return nil
+}
+
+// addRecord indexes rr under its owner and type, marks the owner and its
+// ancestors inside the zone as existing, and keeps the SOA and NSEC/NSEC3
+// records in their own lists for negative answers.
+func (zone *authoritativeZone) addRecord(owner string, rr dns.RR, expiresAt time.Time) {
+	byType := zone.records[owner]
+	if byType == nil {
+		byType = make(map[uint16][]authoritativeRecord)
+		zone.records[owner] = byType
 	}
-	return &Runtime{
-		maxConcurrent: totalLimit, maxConcurrentPerClient: clientLimit,
-		recursion:         recursion,
-		mode:              mode,
-		forwarders:        append([]string(nil), configuration.Forwarders...),
-		rootHints:         rootHints,
-		qnameMinimization: !configuration.DisableQNAMEMinimization,
-		delegations:       newDelegationCache(4096),
-		zoneCuts:          newZoneCutCache(4096),
-		nameServers:       newAddressCache(4096),
-		baseRoutes:        cloneForwardingRoutes(configuration.Routes),
-		routes:            routes,
-		upstreams:         upstreamSignature(configuration.Forwarders, routes) + "|mode=" + mode + "|roots=" + strings.Join(rootHints, ",") + dnssecRuntimeSignature(configuration),
-		timeout:           configuration.Timeout,
-		retries:           cmp.Or(configuration.Retries, defaultRuntimeRetries),
-		retryTimeout:      cmp.Or(configuration.RetryTimeout, defaultRuntimeRetryTimeout),
-		staleMaxWait:      configuration.CacheStaleMaxWait,
-		blocked:           blocked,
-		blockedOwners:     configuration.BlockedDomainOwnerSets,
-		allowedExact:      allowedExact,
-		allowedWildcard:   allowedWildcard,
-		blocking:          configuration.Blocking,
-		blockType:         blockingType,
-		blockTTL:          configuration.BlockingTTL,
-		blockAddrs:        blockAddresses,
-		bypass:            bypass,
-		blockTXT:          configuration.AllowTXTReport,
-		cache: NewResponseCacheWithOptions(configuration.CacheSize, CacheOptions{
-			MinimumTTL: configuration.CacheMinimumTTL, MaximumTTL: configuration.CacheMaximumTTL,
-			NegativeTTL: configuration.CacheNegativeTTL, FailureTTL: configuration.CacheFailureTTL,
-			ServeStale: configuration.ServeStale, StaleTTL: configuration.CacheStaleTTL,
-			StaleAnswerTTL: configuration.CacheStaleAnswerTTL, StaleResetTTL: configuration.CacheStaleResetTTL,
-			PrefetchMinTTL: configuration.CachePrefetchMinimumTTL, PrefetchAtTTL: configuration.CachePrefetchTriggerTTL,
-			PrefetchSample: configuration.CachePrefetchSample, PrefetchHits: configuration.CachePrefetchHitsPerHour,
-		}),
-		blockLists:          append([]BlockListStats(nil), configuration.BlockLists...),
-		hosts:               hosts,
-		zones:               zones,
-		managedZones:        managedZones,
-		tsigKeys:            tsigKeys,
-		zoneCount:           zoneCount,
-		dnssec:              validator,
-		zoneInsecure:        zoneInsecure,
-		managedTrustAnchors: configuration.DNSSECValidation && configuration.DNSSECTrustAnchorUpdates && len(configuration.DNSSECTrustAnchors) == 0,
-		zoneSource:          configuration.Zones,
-		keySource:           configuration.TSIGKeys,
-	}, nil
+	compiledRecord := authoritativeRecord{record: rr, expiresAt: expiresAt}
+	byType[rr.Header().Rrtype] = append(byType[rr.Header().Rrtype], compiledRecord)
+	zone.owners[owner] = struct{}{}
+	for ancestor := owner; ancestor != zone.name; {
+		separator := strings.IndexByte(ancestor, '.')
+		if separator < 0 {
+			break
+		}
+		ancestor = ancestor[separator+1:]
+		zone.owners[ancestor] = struct{}{}
+	}
+	switch rr.Header().Rrtype {
+	case dns.TypeSOA:
+		if owner == zone.name {
+			zone.soa = append(zone.soa, compiledRecord)
+		}
+	case dns.TypeNSEC:
+		zone.nsecs = append(zone.nsecs, compiledRecord)
+	case dns.TypeNSEC3:
+		zone.nsec3s = append(zone.nsec3s, compiledRecord)
+	}
 }
 
 // withZones returns a copy of base serving zones, with keys available for
