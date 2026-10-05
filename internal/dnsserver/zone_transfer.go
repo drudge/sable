@@ -12,6 +12,9 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+
+	"github.com/drudge/sable/internal/dnsname"
+	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
 const maximumZoneJournalEntries = 128
@@ -585,4 +588,279 @@ func zoneRecordSetsEqual(left, right []ZoneRecord) bool {
 		}
 	}
 	return true
+}
+
+func (handler *Handler) serveZoneTransfer(writer dns.ResponseWriter, request *dns.Msg, runtime *Runtime, clientIP string) bool {
+	if request.Opcode != dns.OpcodeQuery || len(request.Question) != 1 {
+		return false
+	}
+	question := request.Question[0]
+	if question.Qtype != dns.TypeAXFR && question.Qtype != dns.TypeIXFR {
+		return false
+	}
+	zone := runtime.zones[normalizeName(question.Name)]
+	// A transfer streams many messages, but a DoH response carries exactly one,
+	// so DoH is refused even though its local address is a TCP socket. TSIG is
+	// not the reason: DoH reports a signed request as unverified.
+	if zone == nil || isDoHWriter(writer) || !zone.transferAllowed(clientIP) ||
+		writer.LocalAddr() == nil || !strings.HasPrefix(writer.LocalAddr().Network(), "tcp") ||
+		handler.zoneExpired(runtime, question.Name) {
+		_ = writer.WriteMsg(errorResponse(request, dns.RcodeRefused))
+		handler.refused.Add(1)
+		return true
+	}
+	if !tsigRequestAuthenticated(writer, request, zone.tsigKey) {
+		_ = writer.WriteMsg(errorResponse(request, dns.RcodeRefused))
+		handler.refused.Add(1)
+		return true
+	}
+	records := zone.transferRecords(time.Now())
+	if question.Qtype == dns.TypeIXFR {
+		records = handler.incrementalTransferRecords(request, zone.name, records)
+	}
+	if len(records) == 0 || (question.Qtype == dns.TypeAXFR && len(records) < 2) {
+		handler.logResolutionFailure(request, clientIP, "zone transfer has no records to send", "records", len(records))
+		_ = writer.WriteMsg(errorResponse(request, dns.RcodeServerFailure))
+		handler.serverFailures.Add(1)
+		return true
+	}
+	envelopes := make(chan *dns.Envelope, (len(records)+127)/128)
+	for len(records) > 0 {
+		count := min(128, len(records))
+		envelopes <- &dns.Envelope{RR: records[:count]}
+		records = records[count:]
+	}
+	close(envelopes)
+	if err := new(dns.Transfer).Out(writer, request, envelopes); err != nil {
+		handler.failures.Add(1)
+		return true
+	}
+	handler.authoritativeAnswers.Add(1)
+	handler.noError.Add(1)
+	return true
+}
+
+func (zone *authoritativeZone) transferAllowed(client string) bool {
+	address, err := netip.ParseAddr(client)
+	if err != nil {
+		return false
+	}
+	address = address.Unmap()
+	switch zone.transferMode {
+	case "allow":
+		return true
+	case "private":
+		return address.IsPrivate() || address.IsLoopback() || address.IsLinkLocalUnicast()
+	case "acl":
+		for _, prefix := range zone.transferACL {
+			if prefix.Contains(address) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (zone *authoritativeZone) transferRecords(now time.Time) []dns.RR {
+	soa := cloneRecords(zone.soa, "", now)
+	if len(soa) != 1 {
+		return nil
+	}
+	body := make([]dns.RR, 0, len(zone.owners))
+	for _, typed := range zone.records {
+		for recordType, records := range typed {
+			if recordType == dns.TypeSOA {
+				continue
+			}
+			body = append(body, cloneRecords(records, "", now)...)
+		}
+	}
+	slices.SortFunc(body, func(left, right dns.RR) int { return strings.Compare(left.String(), right.String()) })
+	result := make([]dns.RR, 0, len(body)+2)
+	result = append(result, soa[0])
+	result = append(result, body...)
+	result = append(result, dns.Copy(soa[0]))
+	return result
+}
+
+func (handler *Handler) NotifyZone(ctx context.Context, zoneName string, targets []string) []error {
+	auth := handler.transferAuth(zoneName, "")
+	errorsByTarget := make([]error, 0)
+	for _, target := range targets {
+		message := new(dns.Msg)
+		message.SetNotify(dns.Fqdn(zoneName))
+		var response *dns.Msg
+		var err error
+		if auth.keyName == "" {
+			response, err = handler.upstreamExchange(ctx, message, "udp://"+target, 2*time.Second)
+		} else {
+			message.SetTsig(auth.keyName, auth.algorithm, 300, time.Now().Unix())
+			client := &dns.Client{
+				Net: "udp", Timeout: 2 * time.Second,
+				TsigSecret: map[string]string{auth.keyName: auth.secret},
+			}
+			response, _, err = client.ExchangeContext(ctx, message, target)
+		}
+		if err != nil {
+			errorsByTarget = append(errorsByTarget, fmt.Errorf("%s: %w", target, err))
+			continue
+		}
+		if response.Rcode != dns.RcodeSuccess {
+			errorsByTarget = append(errorsByTarget, fmt.Errorf("%s returned %s", target, dns.RcodeToString[response.Rcode]))
+		}
+	}
+	return errorsByTarget
+}
+
+func (handler *Handler) FetchZone(
+	ctx context.Context,
+	zoneName, zoneType string,
+	primaries []string,
+	protocol, tsigKeyName string,
+) ([]ZoneRecord, error) {
+	zoneName, err := dnsname.Normalize(zoneName)
+	if err != nil {
+		return nil, err
+	}
+	zoneType = strings.ToLower(strings.TrimSpace(zoneType))
+	protocol = strings.ToLower(strings.TrimSpace(protocol))
+	if protocol == "" {
+		if zoneType == "stub" {
+			protocol = "udp"
+		} else {
+			protocol = "tcp"
+		}
+	}
+	if len(primaries) == 0 {
+		return nil, errors.New("at least one primary server is required")
+	}
+	timeout := handler.runtime.Load().timeout
+	var failures []error
+	auth := handler.transferAuth(zoneName, tsigKeyName)
+	for _, primary := range primaries {
+		var records []dns.RR
+		if zoneType == "secondary" || zoneType == zonemodel.TypeSecondaryForwarder || zoneType == "catalog" {
+			records, err = handler.zoneTransfer(ctx, zoneName, primary, protocol, auth, timeout)
+		} else if zoneType == "stub" {
+			records, err = handler.fetchStubZone(ctx, zoneName, primary, protocol, timeout)
+		} else {
+			return nil, fmt.Errorf("zone type %q cannot be synchronized", zoneType)
+		}
+		if err == nil {
+			return zoneRecordsFromRR(zoneName, records)
+		}
+		failures = append(failures, fmt.Errorf("%s: %w", primary, err))
+	}
+	return nil, fmt.Errorf("synchronize %s zone %q: %w", zoneType, zoneName, errors.Join(failures...))
+}
+
+func exchangeZoneTransfer(
+	ctx context.Context,
+	zoneName, primary, protocol string,
+	auth transferAuth,
+	timeout time.Duration,
+) ([]dns.RR, error) {
+	if protocol != "tcp" && protocol != "tls" {
+		return nil, fmt.Errorf("AXFR protocol must be tcp or tls")
+	}
+	transfer := &dns.Transfer{DialTimeout: timeout, ReadTimeout: timeout, WriteTimeout: timeout}
+	if protocol == "tls" {
+		host, _, err := net.SplitHostPort(primary)
+		if err != nil {
+			return nil, fmt.Errorf("TLS primary address: %w", err)
+		}
+		transfer.TLS = &tls.Config{MinVersion: tls.VersionTLS13, ServerName: strings.Trim(host, "[]")}
+	}
+	request := new(dns.Msg)
+	request.SetAxfr(dns.Fqdn(zoneName))
+	applyTransferTSIG(request, transfer, auth)
+	envelopes, err := transfer.In(request, primary)
+	if err != nil {
+		return nil, err
+	}
+	defer transfer.Close()
+	var records []dns.RR
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case envelope, open := <-envelopes:
+			if !open {
+				if len(records) < 2 || records[0].Header().Rrtype != dns.TypeSOA || records[len(records)-1].Header().Rrtype != dns.TypeSOA {
+					return nil, errors.New("AXFR did not contain opening and closing SOA records")
+				}
+				return records[:len(records)-1], nil
+			}
+			if envelope.Error != nil {
+				return nil, envelope.Error
+			}
+			records = append(records, envelope.RR...)
+		}
+	}
+}
+
+func (handler *Handler) fetchStubZone(
+	ctx context.Context,
+	zoneName, primary, protocol string,
+	timeout time.Duration,
+) ([]dns.RR, error) {
+	endpoint := protocol + "://" + primary
+	var records []dns.RR
+	for _, recordType := range []uint16{dns.TypeSOA, dns.TypeNS} {
+		request := new(dns.Msg)
+		request.SetQuestion(dns.Fqdn(zoneName), recordType)
+		response, err := handler.upstreamExchange(ctx, request, endpoint, timeout)
+		if err != nil {
+			return nil, err
+		}
+		if response.Rcode != dns.RcodeSuccess {
+			return nil, fmt.Errorf("%s query returned %s", dns.TypeToString[recordType], dns.RcodeToString[response.Rcode])
+		}
+		for _, section := range [][]dns.RR{response.Answer, response.Ns, response.Extra} {
+			for _, record := range section {
+				if record.Header().Rrtype == recordType || record.Header().Rrtype == dns.TypeA || record.Header().Rrtype == dns.TypeAAAA {
+					records = append(records, record)
+				}
+			}
+		}
+	}
+	return uniqueZoneRR(records), nil
+}
+
+func uniqueZoneRR(records []dns.RR) []dns.RR {
+	seen := make(map[string]struct{}, len(records))
+	result := make([]dns.RR, 0, len(records))
+	for _, record := range records {
+		key := strings.ToLower(record.String())
+		if _, duplicate := seen[key]; duplicate {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, record)
+	}
+	return result
+}
+
+func zoneRecordsFromRR(zoneName string, records []dns.RR) ([]ZoneRecord, error) {
+	result := make([]ZoneRecord, 0, len(records))
+	for _, record := range uniqueZoneRR(records) {
+		owner := normalizeName(record.Header().Name)
+		if owner != zoneName && !strings.HasSuffix(owner, "."+zoneName) {
+			continue
+		}
+		name := "@"
+		if owner != zoneName {
+			name = strings.TrimSuffix(owner, "."+zoneName)
+		}
+		fields := strings.Fields(record.String())
+		if len(fields) < 5 {
+			return nil, fmt.Errorf("invalid transferred record %q", record.String())
+		}
+		recordType := dns.Type(record.Header().Rrtype).String()
+		result = append(result, ZoneRecord{
+			Name: name, Type: recordType,
+			Value: strings.Join(fields[4:], " "), TTL: record.Header().Ttl,
+		})
+	}
+	return result, nil
 }

@@ -68,6 +68,17 @@ Elsewhere, run `scripts/browser/node_modules/.bin/playwright install chromium` a
 
 A browser test must pass on a slow CI machine too. Wait for the request or state it depends on, never a fixed delay. For example, a test that hides something and then opens a link waits for the hide request to finish first.
 
+## Code conventions
+
+These keep the codebase DRY and the hot path fast. Follow them in new code, and fix what you touch.
+- **One service per domain.** Each domain has one service that every surface uses: the console, the JSON API, and MCP. Zones and records go through `zoneService`, and blocking rules through `policyService`, in `internal/web`. A new surface is an adapter over the service, never a second copy of its rules.
+- **Declare routes once,** in `routeTable` (see [Secrets and security](#secrets-and-security)).
+- **No hand-rolled body limits or error JSON.** A handler doesn't call `http.MaxBytesReader` or build its own error map. Use the route's `bodyLimit` and the shared helpers, and add a helper rather than a third copy of a pattern.
+- **Keep functions under about 80 lines.** Split a long function into named steps, as `Compile` in `internal/dnsserver/runtime_compile.go` does, rather than leaving one long body.
+- **Keep files to one concern.** When a file grows past roughly 1,000 lines or mixes jobs, split it by job. Moving code is its own PR with no behavior change.
+- **No `Msg.Copy` on the hot path** without a comment saying why the copy is needed.
+- **Benchmark hot-path changes.** Put `go tool mage bench` numbers from before and after in the PR.
+
 ## The Vandelay demo
 
 Check UI work in the demo, not in a custom seed.
@@ -145,6 +156,19 @@ Every screen should look finished: polished, responsive, and consistent with the
 ## The DNS data plane
 
 The query path in `internal/dnsserver` runs for every lookup. `ServeDNS` leads to `resolveRequest`, which leads to `policyDecision`.
+
+| File | What it holds |
+| --- | --- |
+| `handler.go` | The `Runtime`, `Handler`, and configuration types |
+| `runtime_compile.go` | `Compile`, which validates a `RuntimeConfig` and builds a `Runtime` |
+| `lifecycle.go` | Starting, activating, restoring, and shutting down a `Handler` |
+| `resolve.go` | `ServeDNS`, request coalescing, stale answers, and prefetch |
+| `authoritative.go`, `authoritative_dnssec.go` | Answers from local zones and hosts, and their DNSSEC proofs |
+| `upstream.go` | Forwarder exchange, retries, health, and DNSSEC validation of answers |
+| `policy.go` | The block and allow decision, and blocked responses |
+| `querylog_record.go` | Turning a finished query into a query log entry |
+| `zone_transfer.go` | AXFR, IXFR, NOTIFY, and secondary and stub zone refresh |
+
 - Keep new work off that path. Do analysis in the background, on data that's already stored.
 - A change that has to touch the path must not add allocations. Show that with a benchmark (`go tool mage bench`).
 
