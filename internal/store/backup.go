@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 )
@@ -42,33 +43,26 @@ SELECT name, ciphertext, updated_at FROM sable_secrets ORDER BY name`)
 // deployment has to remove secrets the backup does not know about, otherwise a
 // stale DNSSEC key left behind on the target node outlives the restore.
 func (store *Store) ReplaceSecrets(ctx context.Context, secrets []EncryptedSecret) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin secret replacement: %w", err)
-	}
-	defer transaction.Rollback()
-
-	if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_secrets"); err != nil {
-		return fmt.Errorf("clear secrets: %w", err)
-	}
-	for _, secret := range secrets {
-		if secret.Name == "" {
-			return fmt.Errorf("secret name is required")
+	return store.withTx(ctx, "secret replacement", func(transaction *sql.Tx) error {
+		if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_secrets"); err != nil {
+			return fmt.Errorf("clear secrets: %w", err)
 		}
-		updatedAt := secret.UpdatedAt
-		if updatedAt.IsZero() {
-			updatedAt = time.Now()
-		}
-		if _, err := transaction.ExecContext(ctx, `
+		for _, secret := range secrets {
+			if secret.Name == "" {
+				return fmt.Errorf("secret name is required")
+			}
+			updatedAt := secret.UpdatedAt
+			if updatedAt.IsZero() {
+				updatedAt = time.Now()
+			}
+			if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_secrets (name, ciphertext, updated_at)
 VALUES (`+store.placeholders(3)+`)`, secret.Name, secret.Ciphertext, updatedAt.UTC()); err != nil {
-			return fmt.Errorf("restore secret %q: %w", secret.Name, err)
+				return fmt.Errorf("restore secret %q: %w", secret.Name, err)
+			}
 		}
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit secret replacement: %w", err)
-	}
-	return nil
+		return nil
+	})
 }
 
 // TrustAnchorOwners lists the trust points that have persisted state, so a

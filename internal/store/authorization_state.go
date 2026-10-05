@@ -290,203 +290,196 @@ func (store *Store) ReplaceAuthorizationState(ctx context.Context, state Authori
 	if err := validateAuthorizationState(state); err != nil {
 		return err
 	}
-	transaction, err := store.database.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
-	if err != nil {
-		return fmt.Errorf("begin authorization state replacement: %w", err)
-	}
-	defer transaction.Rollback()
-
-	localPasskeys, err := store.passkeysInTransaction(ctx, transaction)
-	if err != nil {
-		return err
-	}
-
-	passwords := map[int64]string{}
-	rows, err := transaction.QueryContext(ctx, `SELECT id, password_hash FROM sable_users`)
-	if err != nil {
-		return fmt.Errorf("read existing authorization users: %w", err)
-	}
-	for rows.Next() {
-		var id int64
-		var passwordHash string
-		if err := rows.Scan(&id, &passwordHash); err != nil {
-			rows.Close()
+	return store.withTxOptions(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable}, "authorization state replacement", func(transaction *sql.Tx) error {
+		localPasskeys, err := store.passkeysInTransaction(ctx, transaction)
+		if err != nil {
 			return err
 		}
-		passwords[id] = passwordHash
-	}
-	if err := rows.Close(); err != nil {
-		return err
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
 
-	lastUsed := map[int64]struct {
-		hash string
-		at   sql.NullTime
-	}{}
-	rows, err = transaction.QueryContext(ctx, `SELECT id, token_hash, last_used_at FROM sable_api_tokens`)
-	if err != nil {
-		return fmt.Errorf("read existing API token activity: %w", err)
-	}
-	for rows.Next() {
-		var id int64
-		var hash string
-		var at sql.NullTime
-		if err := rows.Scan(&id, &hash, &at); err != nil {
-			rows.Close()
+		passwords := map[int64]string{}
+		rows, err := transaction.QueryContext(ctx, `SELECT id, password_hash FROM sable_users`)
+		if err != nil {
+			return fmt.Errorf("read existing authorization users: %w", err)
+		}
+		for rows.Next() {
+			var id int64
+			var passwordHash string
+			if err := rows.Scan(&id, &passwordHash); err != nil {
+				rows.Close()
+				return err
+			}
+			passwords[id] = passwordHash
+		}
+		if err := rows.Close(); err != nil {
 			return err
 		}
-		lastUsed[id] = struct {
+		if err := rows.Err(); err != nil {
+			return err
+		}
+
+		lastUsed := map[int64]struct {
 			hash string
 			at   sql.NullTime
-		}{hash: hash, at: at}
-	}
-	if err := rows.Close(); err != nil {
-		return err
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-
-	for _, statement := range []string{
-		"DELETE FROM sable_api_token_roles",
-		"DELETE FROM sable_api_tokens",
-		"DELETE FROM sable_user_identities",
-		"DELETE FROM sable_passkeys",
-		"DELETE FROM sable_user_roles",
-		"DELETE FROM sable_role_grants",
-		"DELETE FROM sable_roles",
-		// The incoming built-in roles may come from another Sable version,
-		// so the next start writes this build's again, as it always did.
-		"DELETE FROM sable_metadata WHERE key = '" + builtInRolesKey + "'",
-	} {
-		if _, err := transaction.ExecContext(ctx, statement); err != nil {
-			return fmt.Errorf("clear replicated authorization state: %w", err)
+		}{}
+		rows, err = transaction.QueryContext(ctx, `SELECT id, token_hash, last_used_at FROM sable_api_tokens`)
+		if err != nil {
+			return fmt.Errorf("read existing API token activity: %w", err)
 		}
-	}
+		for rows.Next() {
+			var id int64
+			var hash string
+			var at sql.NullTime
+			if err := rows.Scan(&id, &hash, &at); err != nil {
+				rows.Close()
+				return err
+			}
+			lastUsed[id] = struct {
+				hash string
+				at   sql.NullTime
+			}{hash: hash, at: at}
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
 
-	incomingUsers := make(map[int64]AuthorizationUser, len(state.Users))
-	for _, user := range state.Users {
-		incomingUsers[user.ID] = user
-	}
-	for id := range passwords {
-		if _, found := incomingUsers[id]; !found {
-			if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_users WHERE id = "+store.placeholder(1), id); err != nil {
-				return fmt.Errorf("remove obsolete authorization user: %w", err)
+		for _, statement := range []string{
+			"DELETE FROM sable_api_token_roles",
+			"DELETE FROM sable_api_tokens",
+			"DELETE FROM sable_user_identities",
+			"DELETE FROM sable_passkeys",
+			"DELETE FROM sable_user_roles",
+			"DELETE FROM sable_role_grants",
+			"DELETE FROM sable_roles",
+			// The incoming built-in roles may come from another Sable version,
+			// so the next start writes this build's again, as it always did.
+			"DELETE FROM sable_metadata WHERE key = '" + builtInRolesKey + "'",
+		} {
+			if _, err := transaction.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("clear replicated authorization state: %w", err)
 			}
 		}
-	}
-	// Free usernames before applying the primary's stable ID mapping.
-	// The staging prefix exceeds Sable's maximum username length, so it cannot
-	// collide with a valid replicated identity while unique names are remapped.
-	if _, err := transaction.ExecContext(ctx, `UPDATE sable_users SET username = '__sable_cluster_replication_staging_username_that_exceeds_sixty_four_characters__' || id`); err != nil {
-		return fmt.Errorf("stage authorization usernames: %w", err)
-	}
-	for _, user := range state.Users {
-		_, err := transaction.ExecContext(ctx, `
+
+		incomingUsers := make(map[int64]AuthorizationUser, len(state.Users))
+		for _, user := range state.Users {
+			incomingUsers[user.ID] = user
+		}
+		for id := range passwords {
+			if _, found := incomingUsers[id]; !found {
+				if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_users WHERE id = "+store.placeholder(1), id); err != nil {
+					return fmt.Errorf("remove obsolete authorization user: %w", err)
+				}
+			}
+		}
+		// Free usernames before applying the primary's stable ID mapping.
+		// The staging prefix exceeds Sable's maximum username length, so it cannot
+		// collide with a valid replicated identity while unique names are remapped.
+		if _, err := transaction.ExecContext(ctx, `UPDATE sable_users SET username = '__sable_cluster_replication_staging_username_that_exceeds_sixty_four_characters__' || id`); err != nil {
+			return fmt.Errorf("stage authorization usernames: %w", err)
+		}
+		for _, user := range state.Users {
+			_, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_users (id, username, password_hash, created_at)
 VALUES (`+store.placeholders(4)+`)
 ON CONFLICT(id) DO UPDATE SET username = excluded.username, password_hash = excluded.password_hash, created_at = excluded.created_at`,
-			user.ID, user.Username, user.PasswordHash, user.CreatedAt.UTC())
-		if err != nil {
-			return fmt.Errorf("replace authorization user %q: %w", user.Username, err)
-		}
-		_, err = transaction.ExecContext(ctx, `
+				user.ID, user.Username, user.PasswordHash, user.CreatedAt.UTC())
+			if err != nil {
+				return fmt.Errorf("replace authorization user %q: %w", user.Username, err)
+			}
+			_, err = transaction.ExecContext(ctx, `
 INSERT INTO sable_user_profiles (user_id, display_name, email, disabled, password_login, updated_at)
 VALUES (`+store.placeholders(6)+`)
 ON CONFLICT(user_id) DO UPDATE SET display_name = excluded.display_name, email = excluded.email,
 disabled = excluded.disabled, password_login = excluded.password_login, updated_at = excluded.updated_at`,
-			user.ID, user.DisplayName, user.Email, user.Disabled, user.PasswordLogin, user.UpdatedAt.UTC())
-		if err != nil {
-			return fmt.Errorf("replace authorization profile %q: %w", user.Username, err)
-		}
-		if previous, found := passwords[user.ID]; found && previous != user.PasswordHash {
-			if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_sessions WHERE user_id = "+store.placeholder(1), user.ID); err != nil {
-				return fmt.Errorf("revoke sessions after credential replacement: %w", err)
+				user.ID, user.DisplayName, user.Email, user.Disabled, user.PasswordLogin, user.UpdatedAt.UTC())
+			if err != nil {
+				return fmt.Errorf("replace authorization profile %q: %w", user.Username, err)
+			}
+			if previous, found := passwords[user.ID]; found && previous != user.PasswordHash {
+				if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_sessions WHERE user_id = "+store.placeholder(1), user.ID); err != nil {
+					return fmt.Errorf("revoke sessions after credential replacement: %w", err)
+				}
 			}
 		}
-	}
 
-	for _, role := range state.Roles {
-		if _, err := transaction.ExecContext(ctx, `
+		for _, role := range state.Roles {
+			if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_roles (id, name, description, built_in, created_at)
 VALUES (`+store.placeholders(5)+`)`, role.ID, role.Name, role.Description, role.BuiltIn, role.CreatedAt.UTC()); err != nil {
-			return fmt.Errorf("replace authorization role %q: %w", role.Name, err)
-		}
-		for _, grant := range role.Grants {
-			if _, err := transaction.ExecContext(ctx, `
+				return fmt.Errorf("replace authorization role %q: %w", role.Name, err)
+			}
+			for _, grant := range role.Grants {
+				if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_role_grants (role_id, permission, surface, resource_type, resource_id)
 VALUES (`+store.placeholders(5)+`)`, role.ID, grant.Permission, grant.Surface, grant.ResourceType, grant.ResourceID); err != nil {
-				return fmt.Errorf("replace grant for role %q: %w", role.Name, err)
+					return fmt.Errorf("replace grant for role %q: %w", role.Name, err)
+				}
 			}
 		}
-	}
-	for _, user := range state.Users {
-		for _, roleID := range user.RoleIDs {
-			if _, err := transaction.ExecContext(ctx, `INSERT INTO sable_user_roles (user_id, role_id) VALUES (`+store.placeholders(2)+`)`, user.ID, roleID); err != nil {
-				return fmt.Errorf("replace role membership for user %q: %w", user.Username, err)
+		for _, user := range state.Users {
+			for _, roleID := range user.RoleIDs {
+				if _, err := transaction.ExecContext(ctx, `INSERT INTO sable_user_roles (user_id, role_id) VALUES (`+store.placeholders(2)+`)`, user.ID, roleID); err != nil {
+					return fmt.Errorf("replace role membership for user %q: %w", user.Username, err)
+				}
 			}
-		}
-		for _, key := range user.Passkeys {
-			key = preservePasskeyActivity(key, localPasskeys[key.ID])
-			data, err := json.Marshal(key)
-			if err != nil {
-				return err
+			for _, key := range user.Passkeys {
+				key = preservePasskeyActivity(key, localPasskeys[key.ID])
+				data, err := json.Marshal(key)
+				if err != nil {
+					return err
+				}
+				if _, err := transaction.ExecContext(ctx, "INSERT INTO sable_passkeys (id, user_id, data) VALUES ("+store.placeholders(3)+")", key.ID, user.ID, string(data)); err != nil {
+					return err
+				}
 			}
-			if _, err := transaction.ExecContext(ctx, "INSERT INTO sable_passkeys (id, user_id, data) VALUES ("+store.placeholders(3)+")", key.ID, user.ID, string(data)); err != nil {
-				return err
-			}
-		}
-		for _, identity := range user.Identities {
-			if _, err := transaction.ExecContext(ctx, `
+			for _, identity := range user.Identities {
+				if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_user_identities (provider, subject, user_id, issuer, linked_at)
 VALUES (`+store.placeholders(5)+`)`, identity.Provider, identity.Subject, user.ID, identity.Issuer, identity.LinkedAt.UTC()); err != nil {
-				return fmt.Errorf("replace identity link for user %q: %w", user.Username, err)
+					return fmt.Errorf("replace identity link for user %q: %w", user.Username, err)
+				}
 			}
 		}
-	}
-	for _, token := range state.Tokens {
-		var expiration any
-		if token.ExpiresAt != nil {
-			expiration = token.ExpiresAt.UTC()
-		}
-		var activity any
-		if existing, found := lastUsed[token.ID]; found && existing.hash == token.TokenHash && existing.at.Valid {
-			activity = existing.at.Time.UTC()
-		}
-		if _, err := transaction.ExecContext(ctx, `
+		for _, token := range state.Tokens {
+			var expiration any
+			if token.ExpiresAt != nil {
+				expiration = token.ExpiresAt.UTC()
+			}
+			var activity any
+			if existing, found := lastUsed[token.ID]; found && existing.hash == token.TokenHash && existing.at.Valid {
+				activity = existing.at.Time.UTC()
+			}
+			if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_api_tokens (id, token_hash, user_id, name, created_at, expires_at, last_used_at)
 VALUES (`+store.placeholders(7)+`)`, token.ID, token.TokenHash, token.UserID, token.Name, token.CreatedAt.UTC(), expiration, activity); err != nil {
-			return fmt.Errorf("replace API token %q: %w", token.Name, err)
-		}
-		for _, roleID := range token.RoleIDs {
-			if _, err := transaction.ExecContext(ctx, `INSERT INTO sable_api_token_roles (token_id, role_id) VALUES (`+store.placeholders(2)+`)`, token.ID, roleID); err != nil {
-				return fmt.Errorf("replace API token group for %q: %w", token.Name, err)
+				return fmt.Errorf("replace API token %q: %w", token.Name, err)
+			}
+			for _, roleID := range token.RoleIDs {
+				if _, err := transaction.ExecContext(ctx, `INSERT INTO sable_api_token_roles (token_id, role_id) VALUES (`+store.placeholders(2)+`)`, token.ID, roleID); err != nil {
+					return fmt.Errorf("replace API token group for %q: %w", token.Name, err)
+				}
 			}
 		}
-	}
-	if state.Initialized {
-		if _, err := transaction.ExecContext(ctx, `
+		if state.Initialized {
+			if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_metadata (key, value) VALUES (`+store.placeholders(2)+`)
 ON CONFLICT(key) DO UPDATE SET value = excluded.value`, "security_initialized", "true"); err != nil {
+				return fmt.Errorf("replace authorization setup state: %w", err)
+			}
+		} else if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_metadata WHERE key = "+store.placeholder(1), "security_initialized"); err != nil {
 			return fmt.Errorf("replace authorization setup state: %w", err)
 		}
-	} else if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_metadata WHERE key = "+store.placeholder(1), "security_initialized"); err != nil {
-		return fmt.Errorf("replace authorization setup state: %w", err)
-	}
-	if store.driver == "postgres" {
-		for _, table := range []string{"sable_users", "sable_roles", "sable_api_tokens"} {
-			if _, err := transaction.ExecContext(ctx, `SELECT setval(pg_get_serial_sequence('`+table+`', 'id'), COALESCE(MAX(id), 1), COUNT(*) > 0) FROM `+table); err != nil {
-				return fmt.Errorf("advance %s identity sequence: %w", table, err)
+		if store.driver == "postgres" {
+			for _, table := range []string{"sable_users", "sable_roles", "sable_api_tokens"} {
+				if _, err := transaction.ExecContext(ctx, `SELECT setval(pg_get_serial_sequence('`+table+`', 'id'), COALESCE(MAX(id), 1), COUNT(*) > 0) FROM `+table); err != nil {
+					return fmt.Errorf("advance %s identity sequence: %w", table, err)
+				}
 			}
 		}
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit authorization state replacement: %w", err)
-	}
-	return nil
+		return nil
+	})
 }
 
 func validateAuthorizationState(state AuthorizationState) error {

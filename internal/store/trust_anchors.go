@@ -101,64 +101,55 @@ WHERE owner = `+store.placeholder(1)+` ORDER BY key_id`, owner)
 }
 
 func (store *Store) SaveTrustAnchorSnapshot(ctx context.Context, snapshot trustanchor.Snapshot) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin DNSSEC trust-anchor transaction: %w", err)
-	}
-	rollback := func(failure error) error {
-		_ = transaction.Rollback()
-		return failure
-	}
-	if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_dnssec_trust_anchors WHERE owner = "+store.placeholder(1), snapshot.Status.Owner); err != nil {
-		return rollback(fmt.Errorf("replace DNSSEC trust anchors: %w", err))
-	}
-	if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_dnssec_trust_points WHERE owner = "+store.placeholder(1), snapshot.Status.Owner); err != nil {
-		return rollback(fmt.Errorf("replace DNSSEC trust point: %w", err))
-	}
-	pointInsert := `INSERT INTO sable_dnssec_trust_points
+	return store.withTx(ctx, "DNSSEC trust-anchor transaction", func(transaction *sql.Tx) error {
+		if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_dnssec_trust_anchors WHERE owner = "+store.placeholder(1), snapshot.Status.Owner); err != nil {
+			return fmt.Errorf("replace DNSSEC trust anchors: %w", err)
+		}
+		if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_dnssec_trust_points WHERE owner = "+store.placeholder(1), snapshot.Status.Owner); err != nil {
+			return fmt.Errorf("replace DNSSEC trust point: %w", err)
+		}
+		pointInsert := `INSERT INTO sable_dnssec_trust_points
 (owner, initialized, last_success, next_refresh, last_error, original_ttl_seconds, signature_validity_seconds)
 VALUES (` + store.placeholders(7) + `)`
-	if _, err := transaction.ExecContext(
-		ctx,
-		pointInsert,
-		snapshot.Status.Owner,
-		snapshot.Status.Initialized,
-		nullTime(snapshot.Status.LastSuccess),
-		nullTime(snapshot.Status.NextRefresh),
-		snapshot.Status.LastError,
-		snapshot.Status.OriginalTTLSeconds,
-		snapshot.Status.SignatureValiditySeconds,
-	); err != nil {
-		return rollback(fmt.Errorf("insert DNSSEC trust point: %w", err))
-	}
-	anchorInsert := `INSERT INTO sable_dnssec_trust_anchors
-(owner, key_id, dnskey, state, first_seen, hold_down_until, last_seen, revoked_at, source_key_ids)
-VALUES (` + store.placeholders(9) + `)`
-	for _, anchor := range snapshot.Anchors {
-		sourceKeyIDs, err := json.Marshal(anchor.SourceKeyIDs)
-		if err != nil {
-			return rollback(fmt.Errorf("encode DNSSEC source keys: %w", err))
-		}
 		if _, err := transaction.ExecContext(
 			ctx,
-			anchorInsert,
+			pointInsert,
 			snapshot.Status.Owner,
-			anchor.KeyID,
-			anchor.DNSKEY,
-			anchor.State,
-			nullTime(anchor.FirstSeen),
-			nullTime(anchor.HoldDownUntil),
-			nullTime(anchor.LastSeen),
-			nullTime(anchor.RevokedAt),
-			string(sourceKeyIDs),
+			snapshot.Status.Initialized,
+			nullTime(snapshot.Status.LastSuccess),
+			nullTime(snapshot.Status.NextRefresh),
+			snapshot.Status.LastError,
+			snapshot.Status.OriginalTTLSeconds,
+			snapshot.Status.SignatureValiditySeconds,
 		); err != nil {
-			return rollback(fmt.Errorf("insert DNSSEC trust anchor: %w", err))
+			return fmt.Errorf("insert DNSSEC trust point: %w", err)
 		}
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit DNSSEC trust anchors: %w", err)
-	}
-	return nil
+		anchorInsert := `INSERT INTO sable_dnssec_trust_anchors
+(owner, key_id, dnskey, state, first_seen, hold_down_until, last_seen, revoked_at, source_key_ids)
+VALUES (` + store.placeholders(9) + `)`
+		for _, anchor := range snapshot.Anchors {
+			sourceKeyIDs, err := json.Marshal(anchor.SourceKeyIDs)
+			if err != nil {
+				return fmt.Errorf("encode DNSSEC source keys: %w", err)
+			}
+			if _, err := transaction.ExecContext(
+				ctx,
+				anchorInsert,
+				snapshot.Status.Owner,
+				anchor.KeyID,
+				anchor.DNSKEY,
+				anchor.State,
+				nullTime(anchor.FirstSeen),
+				nullTime(anchor.HoldDownUntil),
+				nullTime(anchor.LastSeen),
+				nullTime(anchor.RevokedAt),
+				string(sourceKeyIDs),
+			); err != nil {
+				return fmt.Errorf("insert DNSSEC trust anchor: %w", err)
+			}
+		}
+		return nil
+	})
 }
 
 func nullableTime(value sql.NullTime) time.Time {

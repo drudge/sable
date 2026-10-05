@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -443,18 +444,15 @@ WHERE occurred_at >= `+store.placeholder(1)+` AND occurred_at < `+store.placehol
 	}
 	rollups := sortedRollups(counts)
 
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin app backfill: %w", err)
-	}
-	defer func() { _ = transaction.Rollback() }()
-	for index := 0; index < len(rollups); index += queryLogRollupInsertRows {
-		if err := store.replaceQueryLogRollups(ctx, transaction, rollups[index:min(index+queryLogRollupInsertRows, len(rollups))]); err != nil {
-			return err
+	if err := store.withTx(ctx, "app backfill", func(transaction *sql.Tx) error {
+		for index := 0; index < len(rollups); index += queryLogRollupInsertRows {
+			if err := store.replaceQueryLogRollups(ctx, transaction, rollups[index:min(index+queryLogRollupInsertRows, len(rollups))]); err != nil {
+				return err
+			}
 		}
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit app backfill: %w", err)
+		return nil
+	}); err != nil {
+		return err
 	}
 	if err := store.resumTierDimensions(ctx, appRollupDimensions, start, end); err != nil {
 		return err

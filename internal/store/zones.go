@@ -269,68 +269,61 @@ SELECT EXISTS (
 }
 
 func (store *Store) ensureZoneRecordKeys(ctx context.Context, addColumn bool) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin zone record schema upgrade: %w", err)
-	}
-	defer transaction.Rollback()
-
-	if addColumn {
-		if _, err := transaction.ExecContext(ctx, "ALTER TABLE sable_zone_records ADD COLUMN record_key TEXT"); err != nil {
-			return fmt.Errorf("add zone record key column: %w", err)
+	return store.withTx(ctx, "zone record schema upgrade", func(transaction *sql.Tx) error {
+		if addColumn {
+			if _, err := transaction.ExecContext(ctx, "ALTER TABLE sable_zone_records ADD COLUMN record_key TEXT"); err != nil {
+				return fmt.Errorf("add zone record key column: %w", err)
+			}
 		}
-	}
-	type legacyRecord struct {
-		zoneName, ownerName, recordType, recordValue string
-		ordinal, ttl                                 int64
-	}
-	rows, err := transaction.QueryContext(ctx, `
+		type legacyRecord struct {
+			zoneName, ownerName, recordType, recordValue string
+			ordinal, ttl                                 int64
+		}
+		rows, err := transaction.QueryContext(ctx, `
 SELECT zone_name, ordinal, owner_name, record_type, record_value, ttl
 FROM sable_zone_records
 WHERE record_key IS NULL OR record_key = ''
 ORDER BY zone_name, ordinal`)
-	if err != nil {
-		return fmt.Errorf("read legacy zone records: %w", err)
-	}
-	records := make([]legacyRecord, 0)
-	for rows.Next() {
-		var record legacyRecord
-		if err := rows.Scan(&record.zoneName, &record.ordinal, &record.ownerName, &record.recordType, &record.recordValue, &record.ttl); err != nil {
-			rows.Close()
-			return fmt.Errorf("scan legacy zone record: %w", err)
+		if err != nil {
+			return fmt.Errorf("read legacy zone records: %w", err)
 		}
-		records = append(records, record)
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return fmt.Errorf("iterate legacy zone records: %w", err)
-	}
-	if err := rows.Close(); err != nil {
-		return fmt.Errorf("close legacy zone records: %w", err)
-	}
+		records := make([]legacyRecord, 0)
+		for rows.Next() {
+			var record legacyRecord
+			if err := rows.Scan(&record.zoneName, &record.ordinal, &record.ownerName, &record.recordType, &record.recordValue, &record.ttl); err != nil {
+				rows.Close()
+				return fmt.Errorf("scan legacy zone record: %w", err)
+			}
+			records = append(records, record)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return fmt.Errorf("iterate legacy zone records: %w", err)
+		}
+		if err := rows.Close(); err != nil {
+			return fmt.Errorf("close legacy zone records: %w", err)
+		}
 
-	for _, record := range records {
-		key := zoneRecordKey(zone.Record{
-			Name: record.ownerName, Type: record.recordType,
-			Value: record.recordValue, TTL: uint32(record.ttl),
-		})
-		if _, err := transaction.ExecContext(ctx, `
+		for _, record := range records {
+			key := zoneRecordKey(zone.Record{
+				Name: record.ownerName, Type: record.recordType,
+				Value: record.recordValue, TTL: uint32(record.ttl),
+			})
+			if _, err := transaction.ExecContext(ctx, `
 UPDATE sable_zone_records SET record_key = `+store.placeholder(1)+`
 WHERE zone_name = `+store.placeholder(2)+` AND ordinal = `+store.placeholder(3),
-			key, record.zoneName, record.ordinal,
-		); err != nil {
-			return fmt.Errorf("backfill zone record key for %q record %d: %w", record.zoneName, record.ordinal, err)
+				key, record.zoneName, record.ordinal,
+			); err != nil {
+				return fmt.Errorf("backfill zone record key for %q record %d: %w", record.zoneName, record.ordinal, err)
+			}
 		}
-	}
-	if store.driver == "postgres" && addColumn {
-		if _, err := transaction.ExecContext(ctx, "ALTER TABLE sable_zone_records ALTER COLUMN record_key SET NOT NULL"); err != nil {
-			return fmt.Errorf("require zone record keys: %w", err)
+		if store.driver == "postgres" && addColumn {
+			if _, err := transaction.ExecContext(ctx, "ALTER TABLE sable_zone_records ALTER COLUMN record_key SET NOT NULL"); err != nil {
+				return fmt.Errorf("require zone record keys: %w", err)
+			}
 		}
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit zone record schema upgrade: %w", err)
-	}
-	return nil
+		return nil
+	})
 }
 
 func (store *Store) ListZones(ctx context.Context) ([]zone.Zone, error) {
@@ -442,81 +435,80 @@ FROM sable_zone_records ORDER BY zone_name, ordinal`)
 }
 
 func (store *Store) ReplaceZones(ctx context.Context, previous, candidate []zone.Zone) ([]zone.Zone, error) {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("begin zone transaction: %w", err)
-	}
-	defer transaction.Rollback()
-
-	previousByName := zoneMap(previous)
-	candidateByName := zoneMap(candidate)
-	now := time.Now().UTC()
-	for name, oldZone := range previousByName {
-		_, found := candidateByName[name]
-		if found {
-			continue
-		}
-		tombstone := oldZone
-		tombstone.Revision = oldZone.Revision + 1
-		if err := store.appendZoneRevision(ctx, transaction, tombstone, tombstone.Revision, "deleted", now); err != nil {
-			return nil, err
-		}
-		if err := store.pruneZoneRevisions(ctx, transaction, oldZone.Name, tombstone.Revision); err != nil {
-			return nil, err
-		}
-		if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_zones WHERE name = "+store.placeholder(1), name); err != nil {
-			return nil, fmt.Errorf("delete zone %q: %w", name, err)
-		}
-		if _, err := transaction.ExecContext(ctx, `
+	var persisted []zone.Zone
+	err := store.withTx(ctx, "zone transaction", func(transaction *sql.Tx) error {
+		var err error
+		previousByName := zoneMap(previous)
+		candidateByName := zoneMap(candidate)
+		now := time.Now().UTC()
+		for name, oldZone := range previousByName {
+			_, found := candidateByName[name]
+			if found {
+				continue
+			}
+			tombstone := oldZone
+			tombstone.Revision = oldZone.Revision + 1
+			if err := store.appendZoneRevision(ctx, transaction, tombstone, tombstone.Revision, "deleted", now); err != nil {
+				return err
+			}
+			if err := store.pruneZoneRevisions(ctx, transaction, oldZone.Name, tombstone.Revision); err != nil {
+				return err
+			}
+			if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_zones WHERE name = "+store.placeholder(1), name); err != nil {
+				return fmt.Errorf("delete zone %q: %w", name, err)
+			}
+			if _, err := transaction.ExecContext(ctx, `
 DELETE FROM sable_role_grants
 WHERE resource_type = `+store.placeholder(1)+` AND resource_id = `+store.placeholder(2), "zone", oldZone.ID); err != nil {
-			return nil, fmt.Errorf("delete authorization grants for zone %q: %w", name, err)
+				return fmt.Errorf("delete authorization grants for zone %q: %w", name, err)
+			}
 		}
-	}
 
-	persisted := zone.Clone(candidate)
-	for index := range persisted {
-		current := &persisted[index]
-		oldZone, existed := previousByName[current.Name]
-		if existed && zoneContentEqual(oldZone, *current) {
-			current.Revision = oldZone.Revision
-			continue
-		}
-		current.Revision = 1
-		changeKind := "created"
-		if existed {
-			current.Revision = oldZone.Revision + 1
-			changeKind = "updated"
-		} else {
-			if current.ID == "" {
-				current.ID, err = newZoneID()
+		persisted = zone.Clone(candidate)
+		for index := range persisted {
+			current := &persisted[index]
+			oldZone, existed := previousByName[current.Name]
+			if existed && zoneContentEqual(oldZone, *current) {
+				current.Revision = oldZone.Revision
+				continue
+			}
+			current.Revision = 1
+			changeKind := "created"
+			if existed {
+				current.Revision = oldZone.Revision + 1
+				changeKind = "updated"
+			} else {
+				if current.ID == "" {
+					current.ID, err = newZoneID()
+					if err != nil {
+						return err
+					}
+				}
+				current.Revision, err = store.nextZoneRevision(ctx, transaction, current.Name)
 				if err != nil {
-					return nil, err
+					return err
 				}
 			}
-			current.Revision, err = store.nextZoneRevision(ctx, transaction, current.Name)
-			if err != nil {
-				return nil, err
+			if existed {
+				if err := store.updateZone(ctx, transaction, oldZone, *current, now); err != nil {
+					return err
+				}
+			} else {
+				if err := store.insertZone(ctx, transaction, *current, now); err != nil {
+					return err
+				}
+			}
+			if err := store.appendZoneRevision(ctx, transaction, *current, current.Revision, changeKind, now); err != nil {
+				return err
+			}
+			if err := store.pruneZoneRevisions(ctx, transaction, current.Name, current.Revision); err != nil {
+				return err
 			}
 		}
-		if existed {
-			if err := store.updateZone(ctx, transaction, oldZone, *current, now); err != nil {
-				return nil, err
-			}
-		} else {
-			if err := store.insertZone(ctx, transaction, *current, now); err != nil {
-				return nil, err
-			}
-		}
-		if err := store.appendZoneRevision(ctx, transaction, *current, current.Revision, changeKind, now); err != nil {
-			return nil, err
-		}
-		if err := store.pruneZoneRevisions(ctx, transaction, current.Name, current.Revision); err != nil {
-			return nil, err
-		}
-	}
-	if err := transaction.Commit(); err != nil {
-		return nil, fmt.Errorf("commit zone transaction: %w", err)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return persisted, nil
 }

@@ -176,24 +176,20 @@ func (store *Store) migrateAuthenticationSchema(ctx context.Context) error {
 }
 
 func (store *Store) rebuildAPITokensWithoutScopes(ctx context.Context) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin API token authorization migration: %w", err)
-	}
-	defer transaction.Rollback()
-	// Pre-release tokens used coarse scopes and cannot be translated safely to
-	// group grants. Revoke them while preserving the clean final schema.
-	if _, err := transaction.ExecContext(ctx, "DROP TABLE IF EXISTS sable_api_token_roles"); err != nil {
-		return err
-	}
-	if _, err := transaction.ExecContext(ctx, "DROP TABLE sable_api_tokens"); err != nil {
-		return fmt.Errorf("drop scoped API tokens: %w", err)
-	}
-	primaryKey := "INTEGER PRIMARY KEY AUTOINCREMENT"
-	if store.driver == "postgres" {
-		primaryKey = "BIGSERIAL PRIMARY KEY"
-	}
-	statements := []string{fmt.Sprintf(`CREATE TABLE sable_api_tokens (
+	return store.withTx(ctx, "API token authorization migration", func(transaction *sql.Tx) error {
+		// Pre-release tokens used coarse scopes and cannot be translated safely to
+		// group grants. Revoke them while preserving the clean final schema.
+		if _, err := transaction.ExecContext(ctx, "DROP TABLE IF EXISTS sable_api_token_roles"); err != nil {
+			return err
+		}
+		if _, err := transaction.ExecContext(ctx, "DROP TABLE sable_api_tokens"); err != nil {
+			return fmt.Errorf("drop scoped API tokens: %w", err)
+		}
+		primaryKey := "INTEGER PRIMARY KEY AUTOINCREMENT"
+		if store.driver == "postgres" {
+			primaryKey = "BIGSERIAL PRIMARY KEY"
+		}
+		statements := []string{fmt.Sprintf(`CREATE TABLE sable_api_tokens (
     id %s,
     token_hash TEXT NOT NULL UNIQUE,
     user_id BIGINT NOT NULL REFERENCES sable_users(id) ON DELETE CASCADE,
@@ -206,12 +202,13 @@ func (store *Store) rebuildAPITokensWithoutScopes(ctx context.Context) error {
     role_id BIGINT NOT NULL REFERENCES sable_roles(id) ON DELETE CASCADE,
     PRIMARY KEY (token_id, role_id)
 )`, `CREATE INDEX sable_api_tokens_expires_at_idx ON sable_api_tokens (expires_at)`}
-	for _, statement := range statements {
-		if _, err := transaction.ExecContext(ctx, statement); err != nil {
-			return fmt.Errorf("rebuild API token authorization: %w", err)
+		for _, statement := range statements {
+			if _, err := transaction.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("rebuild API token authorization: %w", err)
+			}
 		}
-	}
-	return transaction.Commit()
+		return nil
+	})
 }
 
 func (store *Store) apiTokenExpirationNullable(ctx context.Context) (bool, error) {
@@ -249,15 +246,11 @@ func (store *Store) makeAPITokenExpirationNullable(ctx context.Context) error {
 		_, err := store.database.ExecContext(ctx, "ALTER TABLE sable_api_tokens ALTER COLUMN expires_at DROP NOT NULL")
 		return err
 	}
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin API token expiration migration: %w", err)
-	}
-	defer transaction.Rollback()
-	statements := []string{
-		`CREATE TEMP TABLE sable_api_token_roles_backup AS SELECT token_id, role_id FROM sable_api_token_roles`,
-		`DROP TABLE sable_api_token_roles`,
-		`CREATE TABLE sable_api_tokens_new (
+	return store.withTx(ctx, "API token expiration migration", func(transaction *sql.Tx) error {
+		statements := []string{
+			`CREATE TEMP TABLE sable_api_token_roles_backup AS SELECT token_id, role_id FROM sable_api_token_roles`,
+			`DROP TABLE sable_api_token_roles`,
+			`CREATE TABLE sable_api_tokens_new (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     token_hash TEXT NOT NULL UNIQUE,
     user_id BIGINT NOT NULL REFERENCES sable_users(id) ON DELETE CASCADE,
@@ -266,25 +259,26 @@ func (store *Store) makeAPITokenExpirationNullable(ctx context.Context) error {
     expires_at TIMESTAMP,
     last_used_at TIMESTAMP
 )`,
-		`INSERT INTO sable_api_tokens_new (id, token_hash, user_id, name, created_at, expires_at, last_used_at)
+			`INSERT INTO sable_api_tokens_new (id, token_hash, user_id, name, created_at, expires_at, last_used_at)
 SELECT id, token_hash, user_id, name, created_at, expires_at, last_used_at FROM sable_api_tokens`,
-		`DROP TABLE sable_api_tokens`,
-		`ALTER TABLE sable_api_tokens_new RENAME TO sable_api_tokens`,
-		`CREATE TABLE sable_api_token_roles (
+			`DROP TABLE sable_api_tokens`,
+			`ALTER TABLE sable_api_tokens_new RENAME TO sable_api_tokens`,
+			`CREATE TABLE sable_api_token_roles (
     token_id BIGINT NOT NULL REFERENCES sable_api_tokens(id) ON DELETE CASCADE,
     role_id BIGINT NOT NULL REFERENCES sable_roles(id) ON DELETE CASCADE,
     PRIMARY KEY (token_id, role_id)
 )`,
-		`INSERT INTO sable_api_token_roles (token_id, role_id) SELECT token_id, role_id FROM sable_api_token_roles_backup`,
-		`DROP TABLE sable_api_token_roles_backup`,
-		`CREATE INDEX IF NOT EXISTS sable_api_tokens_expires_at_idx ON sable_api_tokens (expires_at)`,
-	}
-	for _, statement := range statements {
-		if _, err := transaction.ExecContext(ctx, statement); err != nil {
-			return fmt.Errorf("migrate API token expiration: %w", err)
+			`INSERT INTO sable_api_token_roles (token_id, role_id) SELECT token_id, role_id FROM sable_api_token_roles_backup`,
+			`DROP TABLE sable_api_token_roles_backup`,
+			`CREATE INDEX IF NOT EXISTS sable_api_tokens_expires_at_idx ON sable_api_tokens (expires_at)`,
 		}
-	}
-	return transaction.Commit()
+		for _, statement := range statements {
+			if _, err := transaction.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("migrate API token expiration: %w", err)
+			}
+		}
+		return nil
+	})
 }
 
 func (store *Store) userProfilesHaveEmail(ctx context.Context) (bool, error) {
@@ -377,66 +371,56 @@ func (store *Store) syncBuiltInRoles(ctx context.Context) error {
 	if stored == fingerprint {
 		return nil
 	}
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin built-in roles: %w", err)
-	}
-	defer transaction.Rollback()
-	now := time.Now().UTC()
-	for _, role := range roles {
-		if _, err := transaction.ExecContext(ctx, `
+	return store.withTx(ctx, "built-in roles", func(transaction *sql.Tx) error {
+		now := time.Now().UTC()
+		for _, role := range roles {
+			if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_roles (name, description, built_in, created_at)
 VALUES (`+store.placeholders(4)+`)
 ON CONFLICT(name) DO UPDATE SET description = excluded.description, built_in = excluded.built_in`,
-			role.Name, role.Description, true, now,
-		); err != nil {
-			return fmt.Errorf("seed role %q: %w", role.Name, err)
-		}
-		var roleID int64
-		if err := transaction.QueryRowContext(ctx,
-			"SELECT id FROM sable_roles WHERE name = "+store.placeholder(1), role.Name,
-		).Scan(&roleID); err != nil {
-			return fmt.Errorf("read seeded role %q: %w", role.Name, err)
-		}
-		if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_role_grants WHERE role_id = "+store.placeholder(1), roleID); err != nil {
-			return fmt.Errorf("reset grants for role %q: %w", role.Name, err)
-		}
-		for _, grant := range role.Grants {
-			if _, err := transaction.ExecContext(ctx, `
+				role.Name, role.Description, true, now,
+			); err != nil {
+				return fmt.Errorf("seed role %q: %w", role.Name, err)
+			}
+			var roleID int64
+			if err := transaction.QueryRowContext(ctx,
+				"SELECT id FROM sable_roles WHERE name = "+store.placeholder(1), role.Name,
+			).Scan(&roleID); err != nil {
+				return fmt.Errorf("read seeded role %q: %w", role.Name, err)
+			}
+			if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_role_grants WHERE role_id = "+store.placeholder(1), roleID); err != nil {
+				return fmt.Errorf("reset grants for role %q: %w", role.Name, err)
+			}
+			for _, grant := range role.Grants {
+				if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_role_grants (role_id, permission, surface, resource_type, resource_id)
 VALUES (`+store.placeholders(5)+`)`, roleID, grant.Permission, grant.Surface, grant.ResourceType, grant.ResourceID); err != nil {
-				return fmt.Errorf("seed %s grant %q for role %q: %w", grant.Surface, grant.Permission, role.Name, err)
+					return fmt.Errorf("seed %s grant %q for role %q: %w", grant.Surface, grant.Permission, role.Name, err)
+				}
 			}
 		}
-	}
-	if _, err := transaction.ExecContext(ctx,
-		"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholders(2)+") ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-		builtInRolesKey, fingerprint,
-	); err != nil {
-		return fmt.Errorf("record built-in roles fingerprint: %w", err)
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit built-in roles: %w", err)
-	}
-	return nil
+		if _, err := transaction.ExecContext(ctx,
+			"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholders(2)+") ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+			builtInRolesKey, fingerprint,
+		); err != nil {
+			return fmt.Errorf("record built-in roles fingerprint: %w", err)
+		}
+		return nil
+	})
 }
 
 // backfillUserAuthorization gives accounts from before profiles and roles
 // existed a profile, and makes them administrators, as they were then.
 func (store *Store) backfillUserAuthorization(ctx context.Context) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin authorization backfill: %w", err)
-	}
-	defer transaction.Rollback()
-	if _, err := transaction.ExecContext(ctx, `
+	return store.withTx(ctx, "authorization backfill", func(transaction *sql.Tx) error {
+		if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_user_profiles (user_id, display_name, disabled, updated_at)
 SELECT id, username, FALSE, `+store.placeholder(1)+` FROM sable_users
 WHERE 1 = 1
 ON CONFLICT(user_id) DO NOTHING`, time.Now().UTC()); err != nil {
-		return fmt.Errorf("seed user profiles: %w", err)
-	}
-	if _, err := transaction.ExecContext(ctx, `
+			return fmt.Errorf("seed user profiles: %w", err)
+		}
+		if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_user_roles (user_id, role_id)
 SELECT users.id, roles.id
 FROM sable_users AS users
@@ -444,12 +428,10 @@ CROSS JOIN sable_roles AS roles
 WHERE roles.name = 'Administrator'
   AND NOT EXISTS (SELECT 1 FROM sable_user_roles WHERE user_id = users.id)
 ON CONFLICT(user_id, role_id) DO NOTHING`); err != nil {
-		return fmt.Errorf("seed administrator assignments: %w", err)
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit authorization backfill: %w", err)
-	}
-	return nil
+			return fmt.Errorf("seed administrator assignments: %w", err)
+		}
+		return nil
+	})
 }
 
 func (store *Store) AdminExists(ctx context.Context) (bool, error) {
@@ -471,48 +453,46 @@ func (store *Store) CreateInitialAdmin(
 	username, passwordHash string,
 	createdAt time.Time,
 ) (auth.User, error) {
-	transaction, err := store.database.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
-	if err != nil {
-		return auth.User{}, fmt.Errorf("begin administrator setup: %w", err)
-	}
-	defer transaction.Rollback()
-	result, err := transaction.ExecContext(
-		ctx,
-		"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholder(1)+", "+store.placeholder(2)+") ON CONFLICT(key) DO NOTHING",
-		"security_initialized", "true",
-	)
-	if err != nil {
-		return auth.User{}, fmt.Errorf("reserve administrator setup: %w", err)
-	}
-	inserted, err := result.RowsAffected()
-	if err != nil {
-		return auth.User{}, fmt.Errorf("inspect administrator setup: %w", err)
-	}
-	if inserted == 0 {
-		return auth.User{}, auth.ErrSetupComplete
-	}
-	user := auth.User{Username: username, PasswordHash: passwordHash, LoginAllowed: true}
-	err = transaction.QueryRowContext(
-		ctx,
-		"INSERT INTO sable_users (username, password_hash, created_at) VALUES ("+
-			store.placeholder(1)+", "+store.placeholder(2)+", "+store.placeholder(3)+") RETURNING id",
-		username, passwordHash, createdAt.UTC(),
-	).Scan(&user.ID)
-	if err != nil {
-		return auth.User{}, fmt.Errorf("create initial administrator: %w", err)
-	}
-	if _, err := transaction.ExecContext(ctx, `
+	var user auth.User
+	if err := store.withTxOptions(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable}, "administrator setup", func(transaction *sql.Tx) error {
+		result, err := transaction.ExecContext(
+			ctx,
+			"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholder(1)+", "+store.placeholder(2)+") ON CONFLICT(key) DO NOTHING",
+			"security_initialized", "true",
+		)
+		if err != nil {
+			return fmt.Errorf("reserve administrator setup: %w", err)
+		}
+		inserted, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("inspect administrator setup: %w", err)
+		}
+		if inserted == 0 {
+			return auth.ErrSetupComplete
+		}
+		user = auth.User{Username: username, PasswordHash: passwordHash, LoginAllowed: true}
+		err = transaction.QueryRowContext(
+			ctx,
+			"INSERT INTO sable_users (username, password_hash, created_at) VALUES ("+
+				store.placeholder(1)+", "+store.placeholder(2)+", "+store.placeholder(3)+") RETURNING id",
+			username, passwordHash, createdAt.UTC(),
+		).Scan(&user.ID)
+		if err != nil {
+			return fmt.Errorf("create initial administrator: %w", err)
+		}
+		if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_user_profiles (user_id, display_name, disabled, updated_at)
 VALUES (`+store.placeholders(4)+`)`, user.ID, username, false, createdAt.UTC()); err != nil {
-		return auth.User{}, fmt.Errorf("create administrator profile: %w", err)
-	}
-	if _, err := transaction.ExecContext(ctx, `
+			return fmt.Errorf("create administrator profile: %w", err)
+		}
+		if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_user_roles (user_id, role_id)
 SELECT `+store.placeholder(1)+`, id FROM sable_roles WHERE name = 'Administrator'`, user.ID); err != nil {
-		return auth.User{}, fmt.Errorf("assign administrator role: %w", err)
-	}
-	if err := transaction.Commit(); err != nil {
-		return auth.User{}, fmt.Errorf("commit administrator setup: %w", err)
+			return fmt.Errorf("assign administrator role: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return auth.User{}, err
 	}
 	return user, nil
 }
@@ -606,23 +586,19 @@ func (store *Store) CreateAPIToken(
 	groups []string,
 	createdAt, expiresAt time.Time,
 ) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin API token creation: %w", err)
-	}
-	defer transaction.Rollback()
-	var tokenID int64
-	var expiration any
-	if !expiresAt.IsZero() {
-		expiration = expiresAt.UTC()
-	}
-	if err := transaction.QueryRowContext(ctx, `
+	return store.withTx(ctx, "API token creation", func(transaction *sql.Tx) error {
+		var tokenID int64
+		var expiration any
+		if !expiresAt.IsZero() {
+			expiration = expiresAt.UTC()
+		}
+		if err := transaction.QueryRowContext(ctx, `
 INSERT INTO sable_api_tokens (token_hash, user_id, name, created_at, expires_at)
 VALUES (`+store.placeholders(5)+`) RETURNING id`, tokenHash, userID, name, createdAt.UTC(), expiration).Scan(&tokenID); err != nil {
-		return fmt.Errorf("create API token: %w", err)
-	}
-	for _, group := range groups {
-		result, err := transaction.ExecContext(ctx, `
+			return fmt.Errorf("create API token: %w", err)
+		}
+		for _, group := range groups {
+			result, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_api_token_roles (token_id, role_id)
 SELECT `+store.placeholder(1)+`, roles.id
 FROM sable_roles AS roles
@@ -635,15 +611,16 @@ WHERE membership.user_id = `+store.placeholder(2)+` AND roles.name = `+store.pla
       SELECT 1 FROM sable_role_grants AS grants
       WHERE grants.role_id = roles.id AND grants.surface = `+store.placeholder(4)+`
   )`, tokenID, userID, group, auth.SurfaceAPI)
-		if err != nil {
-			return fmt.Errorf("assign API token group %q: %w", group, err)
+			if err != nil {
+				return fmt.Errorf("assign API token group %q: %w", group, err)
+			}
+			assigned, _ := result.RowsAffected()
+			if assigned != 1 {
+				return fmt.Errorf("group %q is not assigned to this active user or has no API permissions", group)
+			}
 		}
-		assigned, _ := result.RowsAffected()
-		if assigned != 1 {
-			return fmt.Errorf("group %q is not assigned to this active user or has no API permissions", group)
-		}
-	}
-	return transaction.Commit()
+		return nil
+	})
 }
 
 func (store *Store) APITokenByHash(ctx context.Context, tokenHash string, now time.Time) (auth.StoredAPIToken, error) {
