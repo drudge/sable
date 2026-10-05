@@ -29,6 +29,17 @@ func (handler *Handler) recordRuntimeChanges(active, candidate *Runtime, now tim
 	if active == nil || candidate == nil {
 		return
 	}
+	// A journal outlives only the zone it was written for. A deleted zone's
+	// deltas go with it, and a zone created under a name the active runtime
+	// does not serve starts empty, so IXFR never chains through another
+	// zone's history that happens to share its serials.
+	handler.journalMu.Lock()
+	for name := range handler.zoneJournals {
+		if candidate.zones[name] == nil || active.zones[name] == nil {
+			delete(handler.zoneJournals, name)
+		}
+	}
+	handler.journalMu.Unlock()
 	for name, current := range candidate.zones {
 		previous := active.zones[name]
 		if previous == nil {
