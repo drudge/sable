@@ -370,6 +370,77 @@ func TestHandlerServesJournaledIXFRAndFallsBackToAXFR(t *testing.T) {
 	}
 }
 
+func TestHandlerDropsJournalWhenZoneIsDeletedAndRecreated(t *testing.T) {
+	t.Parallel()
+
+	zoneAt := func(serial int, host string) []AuthoritativeZone {
+		return []AuthoritativeZone{{
+			Name: "example.test", ZoneTransfer: "allow",
+			Records: []ZoneRecord{
+				{Name: "@", Type: "SOA", TTL: 300, Value: fmt.Sprintf("ns1.example.test. hostmaster.example.test. %d 10 3 30 300", serial)},
+				{Name: "@", Type: "NS", TTL: 300, Value: "ns1.example.test."},
+				{Name: host, Type: "A", TTL: 60, Value: "192.0.2.1"},
+			},
+		}}
+	}
+	configuration := testRuntimeConfig()
+	configuration.Zones = zoneAt(1, "old-first")
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	handler := NewHandler(runtime)
+	activate := func(zones []AuthoritativeZone) {
+		t.Helper()
+		if err := handler.ActivateZones(zones, nil); err != nil {
+			t.Fatalf("ActivateZones() error = %v", err)
+		}
+	}
+	journalLength := func() int {
+		handler.journalMu.RLock()
+		defer handler.journalMu.RUnlock()
+		return len(handler.zoneJournals["example.test"])
+	}
+
+	activate(zoneAt(2, "old-second"))
+	if journalLength() != 1 {
+		t.Fatalf("journal after change = %d deltas, want 1", journalLength())
+	}
+	activate(nil)
+	handler.journalMu.RLock()
+	leaked := len(handler.zoneJournals)
+	handler.journalMu.RUnlock()
+	if leaked != 0 {
+		t.Fatalf("journals after deleting the zone = %d, want none", leaked)
+	}
+
+	// The new zone reuses the old zone's serials, so a stale 1 -> 2 delta
+	// would chain cleanly and hand a secondary the deleted zone's records.
+	activate(zoneAt(1, "new-first"))
+	activate(zoneAt(2, "new-second"))
+	if journalLength() != 1 {
+		t.Fatalf("journal after re-creating the zone = %d deltas, want 1", journalLength())
+	}
+
+	request := new(dns.Msg)
+	request.SetIxfr("example.test.", 1, "ns1.example.test.", "hostmaster.example.test.")
+	capture := &transferCapture{remote: &net.TCPAddr{IP: net.ParseIP("192.0.2.44"), Port: 53000}}
+	handler.ServeDNS(capture, request)
+	var records []dns.RR
+	for _, message := range capture.messages {
+		records = append(records, message.Answer...)
+	}
+	names := make([]string, 0, len(records))
+	for _, record := range records {
+		if record.Header().Rrtype == dns.TypeA {
+			names = append(names, record.Header().Name)
+		}
+	}
+	if !slices.Equal(names, []string{"new-first.example.test.", "new-second.example.test."}) {
+		t.Fatalf("IXFR A records = %v, want only the re-created zone's delta", names)
+	}
+}
+
 func TestHandlerNotifiesConfiguredSecondaryServers(t *testing.T) {
 	t.Parallel()
 
