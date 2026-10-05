@@ -1477,10 +1477,6 @@ templ StatCard(label string, value string, subValue string, color string, href s
 	}
 }
 
-templ SummaryCard(label string, value string) {
-	<article class="summary-card"><strong>{ value }</strong><span>{ label }</span></article>
-}
-
 templ OperationalMetricCard(icon, label, value, description, color string) {
 	<article class={ "operational-metric " + color }>
 		<div class="operational-metric-row">
