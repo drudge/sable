@@ -185,35 +185,8 @@ func CreateBackup(ctx context.Context, options BackupOptions) ([]byte, error) {
 		}
 	}
 
-	if slices.Contains(sections, backup.SectionSecrets) {
-		keyPath := configuration.SecuritySecretKeyPath(baseDirectory)
-		key, err := readOptionalFile(keyPath)
-		if err != nil {
-			return nil, fmt.Errorf("read secret vault key: %w", err)
-		}
-		if len(key) == 0 && len(archive.Secrets) > 0 {
-			return nil, fmt.Errorf("secret vault key %s is missing; the stored secrets could never be opened again", keyPath)
-		}
-		archive.VaultKey = key
-	}
-
-	if slices.Contains(sections, backup.SectionCertificates) {
-		progress.stage("Collecting TLS material")
-		files, err := captureCertificates(configuration, baseDirectory)
-		if err != nil {
-			return nil, err
-		}
-		archive.Files = append(archive.Files, files...)
-	}
-
-	if slices.Contains(sections, backup.SectionCluster) {
-		progress.stage("Collecting cluster state")
-		files, clusterID, err := captureCluster(configuration, baseDirectory)
-		if err != nil {
-			return nil, err
-		}
-		archive.Files = append(archive.Files, files...)
-		archive.Manifest.ClusterID = clusterID
+	if err := captureFileSections(configuration, baseDirectory, sections, &archive, progress); err != nil {
+		return nil, err
 	}
 
 	progress.stage("Sealing the archive")
@@ -229,6 +202,42 @@ func CreateBackup(ctx context.Context, options BackupOptions) ([]byte, error) {
 	}
 	progress.done("Backup ready")
 	return sealed, nil
+}
+
+// captureFileSections adds the requested sections that live in files beside
+// the configuration: the secret vault key, TLS material, and cluster state.
+func captureFileSections(configuration config.Config, baseDirectory string, sections []string, archive *backup.Archive, progress *reporter) error {
+	if slices.Contains(sections, backup.SectionSecrets) {
+		keyPath := configuration.SecuritySecretKeyPath(baseDirectory)
+		key, err := readOptionalFile(keyPath)
+		if err != nil {
+			return fmt.Errorf("read secret vault key: %w", err)
+		}
+		if len(key) == 0 && len(archive.Secrets) > 0 {
+			return fmt.Errorf("secret vault key %s is missing; the stored secrets could never be opened again", keyPath)
+		}
+		archive.VaultKey = key
+	}
+
+	if slices.Contains(sections, backup.SectionCertificates) {
+		progress.stage("Collecting TLS material")
+		files, err := captureCertificates(configuration, baseDirectory)
+		if err != nil {
+			return err
+		}
+		archive.Files = append(archive.Files, files...)
+	}
+
+	if slices.Contains(sections, backup.SectionCluster) {
+		progress.stage("Collecting cluster state")
+		files, clusterID, err := captureCluster(configuration, baseDirectory)
+		if err != nil {
+			return err
+		}
+		archive.Files = append(archive.Files, files...)
+		archive.Manifest.ClusterID = clusterID
+	}
+	return nil
 }
 
 func captureDatabase(ctx context.Context, database *store.Store, sections []string, archive *backup.Archive, progress *reporter) error {
@@ -443,39 +452,41 @@ func RestoreBackup(ctx context.Context, options RestoreOptions) (result RestoreR
 		result.ConfigurationBackedUp = previousPath
 	}
 
+	if err := applyRestoredSections(ctx, archive, requested, configuration, baseDirectory, database, progress, &result); err != nil {
+		return result, err
+	}
+	if rollback != nil {
+		if err := rollback.commit(); err != nil {
+			return result, fmt.Errorf("commit restored deployment: %w", err)
+		}
+	}
+	committed = true
+	progress.done("Restore complete")
+	return result, nil
+}
+
+// applyRestoredSections writes each requested section of archive, counting
+// what it restored into result as it goes.
+func applyRestoredSections(ctx context.Context, archive backup.Archive, requested []string, configuration config.Config, baseDirectory string, database *store.Store, progress *reporter, result *RestoreResult) error {
 	// The vault key lands before the secrets it opens, so a restore that fails
 	// midway never leaves ciphertext behind that nothing can decrypt.
 	if slices.Contains(requested, backup.SectionSecrets) {
 		progress.stage("Restoring secrets and the vault key")
-		if len(archive.VaultKey) > 0 {
-			keyPath := configuration.SecuritySecretKeyPath(baseDirectory)
-			if keyPath == "" {
-				return result, errors.New("restored configuration names no security.secret_key_file")
-			}
-			if err := writeRestoredFile(keyPath, 0o600, archive.VaultKey); err != nil {
-				return result, fmt.Errorf("restore secret vault key: %w", err)
-			}
+		restored, err := restoreSecrets(ctx, archive, configuration, baseDirectory, database)
+		if err != nil {
+			return err
 		}
-		secrets := make([]store.EncryptedSecret, 0, len(archive.Secrets))
-		for _, secret := range archive.Secrets {
-			secrets = append(secrets, store.EncryptedSecret{
-				Name: secret.Name, Ciphertext: secret.Ciphertext, UpdatedAt: secret.UpdatedAt,
-			})
-		}
-		if err := database.ReplaceSecrets(ctx, secrets); err != nil {
-			return result, err
-		}
-		result.Secrets = len(secrets)
+		result.Secrets = restored
 	}
 
 	if slices.Contains(requested, backup.SectionZones) {
 		progress.stage("Restoring zones and records")
 		current, err := database.ListZones(ctx)
 		if err != nil {
-			return result, err
+			return err
 		}
 		if _, err := database.ReplaceZones(ctx, current, zone.Clone(archive.Zones)); err != nil {
-			return result, fmt.Errorf("restore zones: %w", err)
+			return fmt.Errorf("restore zones: %w", err)
 		}
 		result.Zones = len(archive.Zones)
 	}
@@ -483,7 +494,7 @@ func RestoreBackup(ctx context.Context, options RestoreOptions) (result RestoreR
 	if slices.Contains(requested, backup.SectionAuthorization) {
 		progress.stage("Restoring users, roles, and tokens")
 		if err := database.ReplaceAuthorizationState(ctx, archive.Authorization); err != nil {
-			return result, fmt.Errorf("restore authorization: %w", err)
+			return fmt.Errorf("restore authorization: %w", err)
 		}
 		result.Users = len(archive.Authorization.Users)
 		result.Roles = len(archive.Authorization.Roles)
@@ -494,7 +505,7 @@ func RestoreBackup(ctx context.Context, options RestoreOptions) (result RestoreR
 		progress.stage("Restoring DNSSEC trust anchors")
 		for _, snapshot := range archive.TrustAnchors {
 			if err := database.SaveTrustAnchorSnapshot(ctx, snapshot); err != nil {
-				return result, fmt.Errorf("restore trust anchors: %w", err)
+				return fmt.Errorf("restore trust anchors: %w", err)
 			}
 		}
 		result.TrustAnchors = len(archive.TrustAnchors)
@@ -504,7 +515,7 @@ func RestoreBackup(ctx context.Context, options RestoreOptions) (result RestoreR
 		progress.stage("Restoring TLS material")
 		written, err := restoreCertificates(archive, configuration, baseDirectory)
 		if err != nil {
-			return result, err
+			return err
 		}
 		result.Files += written
 	}
@@ -513,18 +524,35 @@ func RestoreBackup(ctx context.Context, options RestoreOptions) (result RestoreR
 		progress.stage("Restoring cluster state")
 		written, err := restoreCluster(archive, configuration, baseDirectory)
 		if err != nil {
-			return result, err
+			return err
 		}
 		result.Files += written
 	}
-	if rollback != nil {
-		if err := rollback.commit(); err != nil {
-			return result, fmt.Errorf("commit restored deployment: %w", err)
+	return nil
+}
+
+// restoreSecrets writes the vault key, then replaces the stored secrets with
+// the archive's, and returns how many it restored.
+func restoreSecrets(ctx context.Context, archive backup.Archive, configuration config.Config, baseDirectory string, database *store.Store) (int, error) {
+	if len(archive.VaultKey) > 0 {
+		keyPath := configuration.SecuritySecretKeyPath(baseDirectory)
+		if keyPath == "" {
+			return 0, errors.New("restored configuration names no security.secret_key_file")
+		}
+		if err := writeRestoredFile(keyPath, 0o600, archive.VaultKey); err != nil {
+			return 0, fmt.Errorf("restore secret vault key: %w", err)
 		}
 	}
-	committed = true
-	progress.done("Restore complete")
-	return result, nil
+	secrets := make([]store.EncryptedSecret, 0, len(archive.Secrets))
+	for _, secret := range archive.Secrets {
+		secrets = append(secrets, store.EncryptedSecret{
+			Name: secret.Name, Ciphertext: secret.Ciphertext, UpdatedAt: secret.UpdatedAt,
+		})
+	}
+	if err := database.ReplaceSecrets(ctx, secrets); err != nil {
+		return 0, err
+	}
+	return len(secrets), nil
 }
 
 // effectiveConfiguration decides which configuration governs the restore and
