@@ -2,9 +2,7 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/drudge/sable/internal/dynamicdns"
@@ -15,17 +13,12 @@ const dynamicDNSStateMetadataKey = "dynamic_dns_state"
 // LoadDynamicDNSState restores publication history saved by the Dynamic DNS
 // manager. A deployment that has never published anything has no row yet.
 func (store *Store) LoadDynamicDNSState(ctx context.Context) (dynamicdns.PersistentState, error) {
-	var encoded string
-	err := store.database.QueryRowContext(
-		ctx,
-		"SELECT value FROM sable_metadata WHERE key = "+store.placeholder(1),
-		dynamicDNSStateMetadataKey,
-	).Scan(&encoded)
-	if errors.Is(err, sql.ErrNoRows) {
-		return dynamicdns.PersistentState{}, nil
-	}
+	encoded, found, err := store.getMeta(ctx, store.database, dynamicDNSStateMetadataKey)
 	if err != nil {
 		return dynamicdns.PersistentState{}, fmt.Errorf("load dynamic DNS state: %w", err)
+	}
+	if !found {
+		return dynamicdns.PersistentState{}, nil
 	}
 	var state dynamicdns.PersistentState
 	if err := json.Unmarshal([]byte(encoded), &state); err != nil {
@@ -41,14 +34,7 @@ func (store *Store) SaveDynamicDNSState(ctx context.Context, state dynamicdns.Pe
 	if err != nil {
 		return fmt.Errorf("encode dynamic DNS state: %w", err)
 	}
-	_, err = store.database.ExecContext(
-		ctx,
-		"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholders(2)+") "+
-			"ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-		dynamicDNSStateMetadataKey,
-		string(encoded),
-	)
-	if err != nil {
+	if err := store.setMeta(ctx, store.database, dynamicDNSStateMetadataKey, string(encoded)); err != nil {
 		return fmt.Errorf("save dynamic DNS state: %w", err)
 	}
 	return nil

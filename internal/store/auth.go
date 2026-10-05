@@ -122,7 +122,7 @@ ON sable_user_identities (user_id)`,
 }
 
 func (store *Store) migrateAuthenticationSchema(ctx context.Context) error {
-	hasEmail, err := store.userProfilesHaveEmail(ctx)
+	hasEmail, err := store.tableHasColumn(ctx, "sable_user_profiles", "email")
 	if err != nil {
 		return err
 	}
@@ -212,33 +212,14 @@ func (store *Store) rebuildAPITokensWithoutScopes(ctx context.Context) error {
 }
 
 func (store *Store) apiTokenExpirationNullable(ctx context.Context) (bool, error) {
-	if store.driver == "postgres" {
-		var nullable string
-		err := store.database.QueryRowContext(ctx, `
-SELECT is_nullable FROM information_schema.columns
-WHERE table_schema = current_schema() AND table_name = 'sable_api_tokens' AND column_name = 'expires_at'`).Scan(&nullable)
-		return nullable == "YES", err
-	}
-	rows, err := store.database.QueryContext(ctx, "PRAGMA table_info(sable_api_tokens)")
+	found, nullable, err := store.tableColumn(ctx, "sable_api_tokens", "expires_at")
 	if err != nil {
 		return false, fmt.Errorf("inspect API token expiration: %w", err)
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var ordinal, notNull, primaryKey int
-		var name, columnType string
-		var defaultValue any
-		if err := rows.Scan(&ordinal, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
-			return false, err
-		}
-		if name == "expires_at" {
-			return notNull == 0, nil
-		}
+	if !found {
+		return false, errors.New("API token expiration column is missing")
 	}
-	if err := rows.Err(); err != nil {
-		return false, fmt.Errorf("inspect API token expiration: %w", err)
-	}
-	return false, errors.New("API token expiration column is missing")
+	return nullable, nil
 }
 
 func (store *Store) makeAPITokenExpirationNullable(ctx context.Context) error {
@@ -279,37 +260,6 @@ SELECT id, token_hash, user_id, name, created_at, expires_at, last_used_at FROM 
 		}
 		return nil
 	})
-}
-
-func (store *Store) userProfilesHaveEmail(ctx context.Context) (bool, error) {
-	if store.driver == "postgres" {
-		var exists bool
-		err := store.database.QueryRowContext(ctx, `
-SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = current_schema()
-      AND table_name = 'sable_user_profiles'
-      AND column_name = 'email'
-)`).Scan(&exists)
-		return exists, err
-	}
-	rows, err := store.database.QueryContext(ctx, "PRAGMA table_info(sable_user_profiles)")
-	if err != nil {
-		return false, fmt.Errorf("inspect user profile columns: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var columnID, notNull, primaryKey int
-		var name, columnType string
-		var defaultValue any
-		if err := rows.Scan(&columnID, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
-			return false, fmt.Errorf("scan user profile column: %w", err)
-		}
-		if name == "email" {
-			return true, nil
-		}
-	}
-	return false, rows.Err()
 }
 
 // builtInRolesKey holds a fingerprint of the built-in roles' grants as this
@@ -361,11 +311,8 @@ func (store *Store) syncBuiltInRoles(ctx context.Context) error {
 	}
 	sum := sha256.Sum256(encoded)
 	fingerprint := hex.EncodeToString(sum[:])
-	var stored string
-	err = store.database.QueryRowContext(ctx,
-		"SELECT value FROM sable_metadata WHERE key = "+store.placeholder(1), builtInRolesKey,
-	).Scan(&stored)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	stored, _, err := store.getMeta(ctx, store.database, builtInRolesKey)
+	if err != nil {
 		return fmt.Errorf("read built-in roles fingerprint: %w", err)
 	}
 	if stored == fingerprint {
@@ -399,10 +346,7 @@ VALUES (`+store.placeholders(5)+`)`, roleID, grant.Permission, grant.Surface, gr
 				}
 			}
 		}
-		if _, err := transaction.ExecContext(ctx,
-			"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholders(2)+") ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-			builtInRolesKey, fingerprint,
-		); err != nil {
+		if err := store.setMeta(ctx, transaction, builtInRolesKey, fingerprint); err != nil {
 			return fmt.Errorf("record built-in roles fingerprint: %w", err)
 		}
 		return nil
@@ -435,13 +379,7 @@ ON CONFLICT(user_id, role_id) DO NOTHING`); err != nil {
 }
 
 func (store *Store) AdminExists(ctx context.Context) (bool, error) {
-	var value string
-	err := store.database.QueryRowContext(
-		ctx, "SELECT value FROM sable_metadata WHERE key = "+store.placeholder(1), "security_initialized",
-	).Scan(&value)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
+	value, _, err := store.getMeta(ctx, store.database, "security_initialized")
 	if err != nil {
 		return false, fmt.Errorf("check administrator setup: %w", err)
 	}
@@ -455,19 +393,11 @@ func (store *Store) CreateInitialAdmin(
 ) (auth.User, error) {
 	var user auth.User
 	if err := store.withTxOptions(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable}, "administrator setup", func(transaction *sql.Tx) error {
-		result, err := transaction.ExecContext(
-			ctx,
-			"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholder(1)+", "+store.placeholder(2)+") ON CONFLICT(key) DO NOTHING",
-			"security_initialized", "true",
-		)
+		inserted, err := store.setMetaIfAbsent(ctx, transaction, "security_initialized", "true")
 		if err != nil {
 			return fmt.Errorf("reserve administrator setup: %w", err)
 		}
-		inserted, err := result.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("inspect administrator setup: %w", err)
-		}
-		if inserted == 0 {
+		if !inserted {
 			return auth.ErrSetupComplete
 		}
 		user = auth.User{Username: username, PasswordHash: passwordHash, LoginAllowed: true}
@@ -782,19 +712,4 @@ func (store *Store) EncryptedSecret(ctx context.Context, name string) (string, e
 		return "", fmt.Errorf("read encrypted secret: %w", err)
 	}
 	return ciphertext, nil
-}
-
-func (store *Store) placeholder(index int) string {
-	if store.driver == "postgres" {
-		return fmt.Sprintf("$%d", index)
-	}
-	return "?"
-}
-
-func (store *Store) placeholders(count int) string {
-	values := make([]string, count)
-	for index := range count {
-		values[index] = store.placeholder(index + 1)
-	}
-	return strings.Join(values, ", ")
 }

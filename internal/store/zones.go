@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS sable_zone_revisions (
 // the stable identity for a resource record. CREATE TABLE IF NOT EXISTS cannot
 // evolve an existing table, so the upgrade must be explicit and idempotent.
 func (store *Store) migrateZoneRecordSchema(ctx context.Context) error {
-	hasRecordKey, err := store.zoneRecordsHaveRecordKey(ctx)
+	hasRecordKey, err := store.tableHasColumn(ctx, "sable_zone_records", "record_key")
 	if err != nil {
 		return err
 	}
@@ -228,44 +228,6 @@ func newZoneID() (string, error) {
 		return "", fmt.Errorf("generate zone identity: %w", err)
 	}
 	return "zone_" + base64.RawURLEncoding.EncodeToString(buffer), nil
-}
-
-func (store *Store) zoneRecordsHaveRecordKey(ctx context.Context) (bool, error) {
-	if store.driver == "postgres" {
-		var exists bool
-		err := store.database.QueryRowContext(ctx, `
-SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = current_schema()
-      AND table_name = 'sable_zone_records'
-      AND column_name = 'record_key'
-)`).Scan(&exists)
-		if err != nil {
-			return false, fmt.Errorf("inspect zone record schema: %w", err)
-		}
-		return exists, nil
-	}
-
-	rows, err := store.database.QueryContext(ctx, "PRAGMA table_info(sable_zone_records)")
-	if err != nil {
-		return false, fmt.Errorf("inspect zone record schema: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var columnID, notNull, primaryKey int
-		var name, columnType string
-		var defaultValue any
-		if err := rows.Scan(&columnID, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
-			return false, fmt.Errorf("scan zone record schema: %w", err)
-		}
-		if name == "record_key" {
-			return true, nil
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return false, fmt.Errorf("iterate zone record schema: %w", err)
-	}
-	return false, nil
 }
 
 func (store *Store) ensureZoneRecordKeys(ctx context.Context, addColumn bool) error {

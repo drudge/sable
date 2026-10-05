@@ -55,20 +55,11 @@ func (store *Store) BackfillClientSightings(ctx context.Context) (bool, error) {
 					return fmt.Errorf("backfill %s: %w", fill.table, err)
 				}
 			}
-			if _, err := transaction.ExecContext(ctx,
-				"UPDATE sable_metadata SET value = "+store.placeholder(1)+" WHERE key = "+store.placeholder(2),
-				oldest.UTC().Format(time.RFC3339Nano), clientSeenSinceKey,
-			); err != nil {
+			if err := store.updateMeta(ctx, transaction, clientSeenSinceKey, metaTime(oldest)); err != nil {
 				return fmt.Errorf("move %s: %w", clientSeenSinceKey, err)
 			}
 		}
-		if _, err := transaction.ExecContext(ctx,
-			"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholders(2)+") ON CONFLICT(key) DO NOTHING",
-			clientSeenBackfilledKey, time.Now().UTC().Format(time.RFC3339Nano),
-		); err != nil {
-			return fmt.Errorf("record %s: %w", clientSeenBackfilledKey, err)
-		}
-		return nil
+		return store.skipClientSightingBackfill(ctx, transaction)
 	})
 	if err != nil {
 		return false, err
