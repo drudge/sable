@@ -397,7 +397,7 @@ templ UserTokensContent(view AdministrationPageView, user auth.ManagedUser) {
 		</div>
 	}
 	if userTokenCount(view, user.ID) == 0 {
-		<div class="admin-empty user-token-empty">No active API tokens for this user</div>
+		@components.EmptyState(components.EmptyStateProps{Description: "No active API tokens for this user", Class: "admin-empty user-token-empty"})
 	}
 	if userTokenCount(view, user.ID) > 0 {
 		<div class="user-token-list">
@@ -434,7 +434,9 @@ templ RoleChecks(roles []auth.Role, selected []string) {
 		}
 	</div>
 }
-templ AdminEmpty(message string) { <div class="admin-empty">{ message }</div> }
+templ AdminEmpty(message string) {
+	@components.EmptyState(components.EmptyStateProps{Description: message, Class: "admin-empty"})
+}
 
 func administrationUserName(user auth.ManagedUser) string { if user.DisplayName != "" { return user.DisplayName }; return user.Username }
 func roleHasSurface(role auth.Role, surface auth.Surface) bool { for _, grant := range role.Grants { if grant.Surface == surface { return true } }; return false }

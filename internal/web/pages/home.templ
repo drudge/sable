@@ -162,7 +162,7 @@ templ RankedPanel(title string, kind string, items []RankedStatView, insights Da
 		}
 		<div class="ranking-list">
 			if len(items) == 0 {
-				<div class="dashboard-empty">No queries in this range</div>
+				@components.EmptyState(components.EmptyStateProps{Description: "No queries in this range", Class: "dashboard-empty"})
 			}
 			for _, item := range firstRanked(items, 5) {
 				if item.Drawer != nil {
@@ -212,7 +212,7 @@ templ TopStatsDialog(title string, kind string, items []RankedStatView, insights
 		</div>
 		<div class="top-stats-list">
 			if len(items) == 0 {
-				<div class="top-stats-empty">No data for this period</div>
+				@components.EmptyState(components.EmptyStateProps{Description: "No data for this period", Class: "top-stats-empty"})
 			}
 			for index, item := range items {
 				if item.Drawer != nil {
@@ -229,7 +229,7 @@ templ TopStatsDialog(title string, kind string, items []RankedStatView, insights
 					</div>
 				}
 			}
-			<div class="top-stats-empty" data-top-stats-empty hidden>No entries match your filter</div>
+			@components.EmptyState(components.EmptyStateProps{Description: "No entries match your filter", Class: "top-stats-empty", Attrs: templ.Attributes{"data-top-stats-empty": true, "hidden": true}})
 		</div>
 		<footer class="top-stats-footer" hidden?={ len(items) == 0 }><span data-top-stats-count data-top-stats-noun={ topStatsNoun(kind) }>{ fmt.Sprint(min(len(items), 100)) } { topStatsNoun(kind) }</span><span data-top-stats-total>{ formatNumber(rankedTotal(firstRanked(items, 100))) } hits</span></footer>
 	</dialog>
@@ -275,7 +275,7 @@ templ DistributionPanel(title string, items []DistributionItemView) {
 			</div>
 			<div class="distribution-legend" role="list" aria-label={ title + " values" }>
 				if len(items) == 0 {
-					<div class="dashboard-empty compact">Waiting for queries</div>
+					@components.EmptyState(components.EmptyStateProps{Description: "Waiting for queries", Class: "dashboard-empty compact"})
 				}
 				for index, item := range items {
 					<div role="listitem" tabindex="0" aria-label={ fmt.Sprintf("%s: %s, %.1f%% of total", item.Name, formatNumber(item.Value), item.Percent) } data-donut-legend={ fmt.Sprint(index) }><i class={ fmt.Sprintf("donut-color-%d", item.Color) } aria-hidden="true"></i><span title={ item.Name }>{ item.Name }</span><strong>{ compactNumber(item.Value) }</strong></div>

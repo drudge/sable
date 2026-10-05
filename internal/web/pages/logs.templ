@@ -132,9 +132,9 @@ templ RuntimeLogsPanel(view RuntimeLogsView) {
 		</form>
 		<textarea class="sr-only" id="runtime-log-copy" readonly tabindex="-1" aria-hidden="true">{ view.CopyText }</textarea>
 		if view.Error != "" {
-			<div class="logs-empty error" role="alert">{ view.Error }</div>
+			@components.EmptyState(components.EmptyStateProps{Description: view.Error, Class: "logs-empty error", Attrs: templ.Attributes{"role": "alert"}})
 		} else if len(view.Entries) == 0 {
-			<div class="logs-empty" role="status">No runtime log entries match these filters.</div>
+			@components.EmptyState(components.EmptyStateProps{Description: "No runtime log entries match these filters.", Class: "logs-empty", Attrs: templ.Attributes{"role": "status"}})
 		} else {
 			<div class="runtime-log-viewer" role="log" aria-live="polite" aria-relevant="additions text" aria-atomic="false" aria-label="Runtime log entries" tabindex="0">
 				for _, entry := range view.Entries {
@@ -230,9 +230,9 @@ templ QueryLogsPanel(view QueryLogsView) {
 		</form>
 		<textarea class="sr-only" id="query-log-copy" readonly tabindex="-1" aria-hidden="true">{ view.CopyText }</textarea>
 		if view.Error != "" {
-			<div class="logs-empty error" role="alert">{ view.Error }</div>
+			@components.EmptyState(components.EmptyStateProps{Description: view.Error, Class: "logs-empty error", Attrs: templ.Attributes{"role": "alert"}})
 		} else if len(view.Entries) == 0 {
-			<div class="logs-empty" role="status">No DNS queries match these filters.</div>
+			@components.EmptyState(components.EmptyStateProps{Description: "No DNS queries match these filters.", Class: "logs-empty", Attrs: templ.Attributes{"role": "status"}})
 		} else {
 			<div class="table-scroll query-log-table-scroll" role="region" aria-label="DNS query results" tabindex="0"><table class="query-log-table full isotope-query-log-table"><caption class="sr-only">DNS query results. Use the details button in each row for the full decision path.</caption><thead><tr><th class="query-col-time">Timestamp</th><th class="query-col-client">Client IP</th><th class="query-col-domain">Domain</th><th class="query-col-type">Type</th><th class="query-col-source">Response</th><th class="query-col-status">Status</th><th class="query-col-protocol">Protocol</th><th class="query-col-answer">Answer</th><th class="query-col-actions"><span class="sr-only">Actions</span></th></tr></thead><tbody>
 				for _, entry := range view.Entries {
