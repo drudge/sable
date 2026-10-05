@@ -8,6 +8,86 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.0-beta.1] - 2026-10-05
+
+Sable 1.7.0-beta.1 makes the console and the DNS path lighter and more
+consistent. The console runs on one shared set of components, Insights and
+the dashboard read far less of the query log, a query allocates less, and the
+console and MCP now change zones and blocking through the same rules.
+ExternalDNS can manage the override records on Forwarder zones, and database
+upgrades run once instead of on every start.
+
+### Upgrading
+
+Coming from 1.6.1, also read the 1.6.2-beta.1 upgrade notes below: the MCP
+`lookup` tool needs `zones.read`, and TSIG-signed messages over DoH are
+refused.
+
+- The first start on 1.7.0-beta.1 records the database's schema version, and
+  later starts skip the upgrade work entirely. On PostgreSQL, nodes that share
+  a database take turns migrating, and the query log indexes are built without
+  blocking writes, so a large log can take a while on that first start.
+- Allowed and blocked domains are now exclusive everywhere. Adding a domain to
+  one list removes it from the other, whether you use the console, MCP, the
+  query log's allow and block actions, or a file import.
+- The console and MCP match records by lowercase name and DNS value and ignore
+  the TTL when deciding which record you meant. A record edited or deleted
+  through MCP now behaves the same way it does in the console.
+
+### DNS
+
+- Accept RFC 2136 dynamic updates on Forwarder zones, so Kubernetes
+  ExternalDNS and similar tools can manage a Forwarder zone's local override
+  records. Secondary Forwarder zones still refuse them, and no update can add
+  or remove forwarding routes.
+- Accept an RFC 2136 "delete this RRset" or "RRset exists" record sent by a
+  real client. Sable answered those updates with FORMERR.
+- Drop a zone's IXFR history when the zone is deleted or re-created. A
+  secondary asking for an incremental transfer could be sent the deleted
+  zone's records.
+- Allocate less per query: the question name is lowercased once, cache hits
+  and DoH responses copy less, and the query log formats answers off the
+  query path.
+
+### Insights and Logs
+
+- Read all-time and open-ended Insights windows from the rollups instead of
+  grouping the whole query log.
+- Stream the query log CSV export without skipping or repeating rows that
+  arrive during the download. A failure partway through now fails the
+  download instead of saving a short file.
+- Share the dashboard's client count and chart data between open dashboards
+  for a few seconds instead of re-reading them on every poll.
+
+### Zones
+
+- Render only the zone you changed after a record edit, and load a zone's
+  history when you open its History dialog instead of for every zone in the
+  list.
+
+### Console
+
+- Every page now draws its dialogs, buttons, cards, tabs, tables, menus,
+  badges, empty states, and field help from one shared component set. Pages
+  look the same, with these differences:
+  - Status badges use one green and one red. Active matches Success and
+    Disabled matches Danger.
+  - Profile's empty API tokens card groups its message in the middle like the
+    other empty states.
+  - File sizes use binary units everywhere, so a backup shows the same size
+    before upload as in the backup list.
+  - A linked identity's last sign-in follows your time setting instead of UTC.
+  - Every table heading is announced as a column heading by screen readers.
+- Cache the command palette's zone commands and the backup passphrase check,
+  so each page loads with less work.
+- Count MCP tool usage in memory and save it with the statistics flush, so a
+  tool call no longer waits on a database write.
+
+### Clustering
+
+- Fail an authorization export when reading memberships stops early. A
+  replica could replace its state with one where users had lost their roles.
+
 ## [1.6.2-beta.1] - 2026-10-03
 
 Sable 1.6.2-beta.1 is a stability release. Update checks work on networks
