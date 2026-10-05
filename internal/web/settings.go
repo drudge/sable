@@ -42,122 +42,15 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 		server.renderSettingsMutation(writer, request, http.StatusNotImplemented, "", "Settings are read-only.")
 		return
 	}
-	queryLogRetention, err := parsePositiveDurationSetting(request.FormValue("query_log_retention"), "query log retention")
+	form, err := parseSettingsForm(request)
 	if err != nil {
 		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
 		return
 	}
-	serverLogRetention, err := parsePositiveDurationSetting(request.FormValue("server_log_retention"), "server log retention")
-	if err != nil {
-		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
-		return
-	}
-	statisticsRetention, err := parsePositiveDurationSetting(request.FormValue("statistics_retention"), "statistics retention")
-	if err != nil {
-		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
-		return
-	}
-	blockingUpdateHours, err := strconv.Atoi(request.FormValue("blocking_update_hours"))
-	if err != nil || blockingUpdateHours < 1 || blockingUpdateHours > 8760 {
-		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", "Block-list update interval must be between 1 and 8760 hours.")
-		return
-	}
-	blockingResponseType := strings.TrimSpace(request.FormValue("blocking_response_type"))
-	if blockingResponseType != "zero" && blockingResponseType != "nxdomain" && blockingResponseType != "custom" {
-		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", "Blocking response type is invalid.")
-		return
-	}
-	blockingResponseTTL, err := strconv.ParseUint(request.FormValue("blocking_response_ttl"), 10, 32)
-	if err != nil {
-		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", "Blocking response TTL must be a non-negative number.")
-		return
-	}
-	cacheMinimumTTL, err := parseUint32Setting(request.FormValue("cache_minimum_ttl"), "minimum cache TTL", true)
-	if err != nil {
-		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
-		return
-	}
-	cacheMaximumTTL, err := parseUint32Setting(request.FormValue("cache_maximum_ttl"), "maximum cache TTL", false)
-	if err != nil || cacheMinimumTTL > cacheMaximumTTL {
-		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", "Maximum cache TTL must be positive and no smaller than the minimum cache TTL.")
-		return
-	}
-	cacheNegativeTTL, err := parseUint32Setting(request.FormValue("cache_negative_ttl"), "negative cache TTL", true)
-	if err != nil {
-		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
-		return
-	}
-	cacheFailureTTL, err := parseUint32Setting(request.FormValue("cache_failure_ttl"), "failure cache TTL", true)
-	if err != nil {
-		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
-		return
-	}
-	cacheStaleTTL, err := parseUint32Setting(request.FormValue("cache_stale_ttl"), "maximum stale age", false)
-	if err != nil {
-		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
-		return
-	}
-	cacheStaleAnswerTTL, err := parseUint32Setting(request.FormValue("cache_stale_answer_ttl"), "stale answer TTL", false)
-	if err != nil {
-		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
-		return
-	}
-	cacheStaleResetTTL, err := parseUint32Setting(request.FormValue("cache_stale_reset_ttl"), "stale retry TTL", false)
-	if err != nil {
-		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
-		return
-	}
-	cacheStaleMaxWaitMS, err := strconv.ParseInt(strings.TrimSpace(request.FormValue("cache_stale_max_wait_ms")), 10, 64)
-	if err != nil || cacheStaleMaxWaitMS < 1 || cacheStaleMaxWaitMS > 60_000 {
-		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", "Stale max wait must be between 1 and 60000 milliseconds.")
-		return
-	}
-	cachePrefetchMinimumTTL, err := parseUint32Setting(request.FormValue("cache_prefetch_minimum_ttl"), "prefetch eligibility TTL", true)
-	if err != nil {
-		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
-		return
-	}
-	cachePrefetchTriggerTTL, err := parseUint32Setting(request.FormValue("cache_prefetch_trigger_ttl"), "prefetch trigger TTL", true)
-	if err != nil {
-		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
-		return
-	}
-	cachePrefetchSample, err := durationfmt.Parse(request.FormValue("cache_prefetch_sample_interval"))
-	if err != nil || cachePrefetchSample <= 0 || cachePrefetchSample > 24*time.Hour {
-		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", "Prefetch sample interval must be a positive duration no greater than 24h.")
-		return
-	}
-	cachePrefetchHits, err := parseUint32Setting(request.FormValue("cache_prefetch_hits_per_hour"), "prefetch hits per hour", false)
-	if err != nil {
-		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
-		return
-	}
-	certificateMode := strings.ToLower(strings.TrimSpace(request.FormValue("certificate_mode")))
-	if certificateMode == "" {
-		certificateMode = "manual"
-	}
-	if certificateMode != "manual" && certificateMode != "acme" {
-		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", "Certificate mode must be manual or managed ACME.")
-		return
-	}
-	acmeRenewBefore := 30 * 24 * time.Hour
-	if certificateMode == "acme" {
-		acmeRenewBefore, err = durationfmt.Parse(request.FormValue("acme_renew_before"))
-		if err != nil {
-			server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", "ACME renewal window is invalid.")
+	if form.certificateMode == "acme" {
+		if status, err := server.saveACMECredentials(request); err != nil {
+			server.renderSettingsMutation(writer, request, status, "", err.Error())
 			return
-		}
-		if server.certificates == nil {
-			server.renderSettingsMutation(writer, request, http.StatusServiceUnavailable, "", "Certificate automation service is unavailable.")
-			return
-		}
-		provider := strings.ToLower(strings.TrimSpace(request.FormValue("acme_dns_provider")))
-		credentials := certificateCredentialsFromForm(request, provider)
-		if credentials != (certificates.Credentials{}) {
-			if err := server.certificates.PutCredentials(request.Context(), provider, credentials); err != nil {
-				server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
-				return
-			}
 		}
 	}
 	err = editor.Update(request.Context(), func(candidate *config.Config) error {
@@ -166,122 +59,14 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 				return err
 			}
 		}
-		if request.PostForm.Has("passkeys_present") {
-			disabled := request.FormValue("passkeys_enabled") != "true"
-			if disabled {
-				validator, ok := server.auth.(interface {
-					ValidatePasskeyDisable(context.Context, string) error
-				})
-				if !ok {
-					return errors.New("passkey settings are unavailable")
-				}
-				issuer := ""
-				if candidate.OIDC.Enabled {
-					issuer = candidate.OIDC.Issuer
-				}
-				if err := validator.ValidatePasskeyDisable(request.Context(), issuer); err != nil {
-					return err
-				}
-			}
-			candidate.Security.PasskeysDisabled = disabled
+		if err := server.applyPasskeySetting(request, candidate); err != nil {
+			return err
 		}
-
-		dnsListeners := formLines(request.FormValue("dns_listen"))
-		resolverMode := strings.ToLower(strings.TrimSpace(request.FormValue("resolver_mode")))
-		if resolverMode == "" {
-			resolverMode = candidate.Resolver.Mode
+		if err := applyResolverSettings(request, candidate, form); err != nil {
+			return err
 		}
-		forwarders := formLines(request.FormValue("forwarders"))
-		if resolverMode != "forward" && resolverMode != "recursive" {
-			return errors.New("resolution mode must be iterative recursion or forwarding")
-		}
-		if len(dnsListeners) == 0 || (resolverMode == "forward" && len(forwarders) == 0) {
-			return errors.New("DNS listeners are required, and forwarding mode requires at least one forwarder")
-		}
-		resolverTimeout, err := durationfmt.Parse(request.FormValue("resolver_timeout"))
-		if err != nil {
-			return errors.New("resolver timeout is invalid")
-		}
-		resolverRetries, err := strconv.Atoi(strings.TrimSpace(request.FormValue("resolver_retries")))
-		if err != nil || resolverRetries < 1 || resolverRetries > 10 {
-			return errors.New("resolver retries must be a whole number between 1 and 10")
-		}
-		resolverRetryTimeout, err := durationfmt.Parse(request.FormValue("resolver_retry_timeout"))
-		if err != nil || resolverRetryTimeout <= 0 {
-			return errors.New("resolver retry timeout is invalid")
-		}
-		cacheSize, err := strconv.Atoi(request.FormValue("cache_size"))
-		if err != nil || cacheSize <= 0 {
-			return errors.New("cache size must be positive")
-		}
-		candidate.Server.DNSListen = dnsListeners
-		candidate.Server.HTTPSListen = strings.TrimSpace(request.FormValue("https_listen"))
-		candidate.Resolver.Mode = resolverMode
-		if request.Form.Has("max_concurrent") {
-			total, err := strconv.Atoi(request.FormValue("max_concurrent"))
-			if err != nil || total < 1 || total > 65536 {
-				return errors.New("maximum concurrent resolutions must be between 1 and 65536")
-			}
-			perClient, err := strconv.Atoi(request.FormValue("max_concurrent_per_client"))
-			if err != nil || perClient < 1 || perClient > total {
-				return errors.New("per-client concurrent resolutions must be between 1 and the total limit")
-			}
-			candidate.Resolver.MaxConcurrent = total
-			candidate.Resolver.MaxConcurrentPerClient = perClient
-		}
-		if request.Form.Has("recursion") {
-			candidate.Resolver.Recursion = request.FormValue("recursion")
-			candidate.Resolver.RecursionClients = formLines(request.FormValue("recursion_clients"))
-		}
-		candidate.Resolver.Forwarders = forwarders
-		candidate.Resolver.RootHints = formLines(request.FormValue("root_hints"))
-		candidate.Resolver.Timeout = config.Duration{Duration: resolverTimeout}
-		candidate.Resolver.Retries = resolverRetries
-		candidate.Resolver.RetryTimeout = config.Duration{Duration: resolverRetryTimeout}
-		candidate.Resolver.CacheSize = cacheSize
-		candidate.Resolver.CacheMinimumTTL = cacheMinimumTTL
-		candidate.Resolver.CacheMaximumTTL = cacheMaximumTTL
-		candidate.Resolver.CacheNegativeTTL = cacheNegativeTTL
-		candidate.Resolver.CacheFailureTTL = cacheFailureTTL
-		candidate.Resolver.SaveCache = request.FormValue("save_cache") == "true"
-		candidate.Resolver.ServeStale = request.FormValue("serve_stale") == "true"
-		candidate.Resolver.CacheStaleTTL = cacheStaleTTL
-		candidate.Resolver.CacheStaleAnswerTTL = cacheStaleAnswerTTL
-		candidate.Resolver.CacheStaleResetTTL = cacheStaleResetTTL
-		candidate.Resolver.CacheStaleMaxWait.Duration = time.Duration(cacheStaleMaxWaitMS) * time.Millisecond
-		candidate.Resolver.CachePrefetchMinimumTTL = cachePrefetchMinimumTTL
-		candidate.Resolver.CachePrefetchTriggerTTL = cachePrefetchTriggerTTL
-		candidate.Resolver.CachePrefetchSample.Duration = cachePrefetchSample
-		candidate.Resolver.CachePrefetchHitsPerHour = cachePrefetchHits
-		candidate.Resolver.DNSSECValidation = request.FormValue("dnssec_validation") == "true"
-		candidate.Resolver.QNAMEMinimization = request.FormValue("qname_minimization") == "true"
-		candidate.Resolver.DNSSECTrustAnchorUpdates = request.FormValue("trust_anchor_updates") == "true"
-		candidate.EncryptedDNS.DoTListen = formLines(request.FormValue("dot_listen"))
-		candidate.EncryptedDNS.DoHListen = formLines(request.FormValue("doh_listen"))
-		candidate.EncryptedDNS.DoQListen = formLines(request.FormValue("doq_listen"))
-		candidate.EncryptedDNS.CertificateMode = certificateMode
-		candidate.EncryptedDNS.CertificateFile = strings.TrimSpace(request.FormValue("certificate_file"))
-		candidate.EncryptedDNS.PrivateKeyFile = strings.TrimSpace(request.FormValue("private_key_file"))
-		candidate.EncryptedDNS.MinimumVersion = strings.TrimSpace(request.FormValue("minimum_tls_version"))
-		candidate.EncryptedDNS.ACME.Email = strings.TrimSpace(request.FormValue("acme_email"))
-		candidate.EncryptedDNS.ACME.Domains = formLines(request.FormValue("acme_domains"))
-		candidate.EncryptedDNS.ACME.DirectoryURL = strings.TrimSpace(request.FormValue("acme_directory_url"))
-		candidate.EncryptedDNS.ACME.DNSProvider = strings.TrimSpace(request.FormValue("acme_dns_provider"))
-		candidate.EncryptedDNS.ACME.DNSZone = strings.TrimSpace(request.FormValue("acme_dns_zone"))
-		candidate.EncryptedDNS.ACME.StorageDirectory = strings.TrimSpace(request.FormValue("acme_storage_dir"))
-		candidate.EncryptedDNS.ACME.RenewBefore = config.Duration{Duration: acmeRenewBefore}
-		candidate.QueryLog.Enabled = request.FormValue("query_log_enabled") == "true"
-		candidate.QueryLog.Retention = config.Duration{Duration: queryLogRetention}
-		candidate.ServerLog.Enabled = request.FormValue("server_log_enabled") == "true"
-		candidate.ServerLog.Level = strings.ToLower(strings.TrimSpace(request.FormValue("server_log_level")))
-		candidate.ServerLog.Retention = config.Duration{Duration: serverLogRetention}
-		candidate.Statistics.Retention = config.Duration{Duration: statisticsRetention}
-		candidate.Blocking.UpdateInterval.Duration = time.Duration(blockingUpdateHours) * time.Hour
-		candidate.Blocking.ResponseType = blockingResponseType
-		candidate.Blocking.ResponseTTL = uint32(blockingResponseTTL)
-		candidate.Blocking.CustomAddresses = formLines(request.FormValue("blocking_custom_addresses"))
-		candidate.Blocking.BypassClients = formLines(request.FormValue("blocking_bypass_clients"))
-		candidate.Blocking.AllowTXTReport = request.FormValue("blocking_allow_txt_report") == "true"
+		applyEncryptedDNSSettings(request, &candidate.EncryptedDNS, form)
+		applyLogAndBlockingSettings(request, candidate, form)
 		return nil
 	})
 	if err != nil {
@@ -293,6 +78,274 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 	server.blockLists.Schedule(time.Now().Add(server.config.Current().Config.Blocking.UpdateInterval.Duration))
 	server.logger.Info("settings updated", "client", requestClientIP(request), "revision", server.config.Current().Revision)
 	server.renderSettingsMutation(writer, request, http.StatusOK, "Settings saved and applied", "")
+}
+
+// settingsForm holds the Settings fields that are checked before the
+// configuration is edited.
+type settingsForm struct {
+	queryLogRetention       time.Duration
+	serverLogRetention      time.Duration
+	statisticsRetention     time.Duration
+	blockingUpdateHours     int
+	blockingResponseType    string
+	blockingResponseTTL     uint32
+	cacheMinimumTTL         uint32
+	cacheMaximumTTL         uint32
+	cacheNegativeTTL        uint32
+	cacheFailureTTL         uint32
+	cacheStaleTTL           uint32
+	cacheStaleAnswerTTL     uint32
+	cacheStaleResetTTL      uint32
+	cacheStaleMaxWait       time.Duration
+	cachePrefetchMinimumTTL uint32
+	cachePrefetchTriggerTTL uint32
+	cachePrefetchSample     time.Duration
+	cachePrefetchHits       uint32
+	certificateMode         string
+	acmeRenewBefore         time.Duration
+}
+
+// parseSettingsForm reads the Settings fields in form order and returns the
+// first problem as a message for the person editing them.
+func parseSettingsForm(request *http.Request) (settingsForm, error) {
+	var form settingsForm
+	var err error
+	if form.queryLogRetention, err = parsePositiveDurationSetting(request.FormValue("query_log_retention"), "query log retention"); err != nil {
+		return form, err
+	}
+	if form.serverLogRetention, err = parsePositiveDurationSetting(request.FormValue("server_log_retention"), "server log retention"); err != nil {
+		return form, err
+	}
+	if form.statisticsRetention, err = parsePositiveDurationSetting(request.FormValue("statistics_retention"), "statistics retention"); err != nil {
+		return form, err
+	}
+	form.blockingUpdateHours, err = strconv.Atoi(request.FormValue("blocking_update_hours"))
+	if err != nil || form.blockingUpdateHours < 1 || form.blockingUpdateHours > 8760 {
+		return form, errors.New("Block-list update interval must be between 1 and 8760 hours.")
+	}
+	form.blockingResponseType = strings.TrimSpace(request.FormValue("blocking_response_type"))
+	if form.blockingResponseType != "zero" && form.blockingResponseType != "nxdomain" && form.blockingResponseType != "custom" {
+		return form, errors.New("Blocking response type is invalid.")
+	}
+	blockingResponseTTL, err := strconv.ParseUint(request.FormValue("blocking_response_ttl"), 10, 32)
+	if err != nil {
+		return form, errors.New("Blocking response TTL must be a non-negative number.")
+	}
+	form.blockingResponseTTL = uint32(blockingResponseTTL)
+	if err := form.parseCache(request); err != nil {
+		return form, err
+	}
+	form.certificateMode = strings.ToLower(strings.TrimSpace(request.FormValue("certificate_mode")))
+	if form.certificateMode == "" {
+		form.certificateMode = "manual"
+	}
+	if form.certificateMode != "manual" && form.certificateMode != "acme" {
+		return form, errors.New("Certificate mode must be manual or managed ACME.")
+	}
+	form.acmeRenewBefore = 30 * 24 * time.Hour
+	if form.certificateMode == "acme" {
+		if form.acmeRenewBefore, err = durationfmt.Parse(request.FormValue("acme_renew_before")); err != nil {
+			return form, errors.New("ACME renewal window is invalid.")
+		}
+	}
+	return form, nil
+}
+
+func (form *settingsForm) parseCache(request *http.Request) error {
+	var err error
+	if form.cacheMinimumTTL, err = parseUint32Setting(request.FormValue("cache_minimum_ttl"), "minimum cache TTL", true); err != nil {
+		return err
+	}
+	form.cacheMaximumTTL, err = parseUint32Setting(request.FormValue("cache_maximum_ttl"), "maximum cache TTL", false)
+	if err != nil || form.cacheMinimumTTL > form.cacheMaximumTTL {
+		return errors.New("Maximum cache TTL must be positive and no smaller than the minimum cache TTL.")
+	}
+	if form.cacheNegativeTTL, err = parseUint32Setting(request.FormValue("cache_negative_ttl"), "negative cache TTL", true); err != nil {
+		return err
+	}
+	if form.cacheFailureTTL, err = parseUint32Setting(request.FormValue("cache_failure_ttl"), "failure cache TTL", true); err != nil {
+		return err
+	}
+	if form.cacheStaleTTL, err = parseUint32Setting(request.FormValue("cache_stale_ttl"), "maximum stale age", false); err != nil {
+		return err
+	}
+	if form.cacheStaleAnswerTTL, err = parseUint32Setting(request.FormValue("cache_stale_answer_ttl"), "stale answer TTL", false); err != nil {
+		return err
+	}
+	if form.cacheStaleResetTTL, err = parseUint32Setting(request.FormValue("cache_stale_reset_ttl"), "stale retry TTL", false); err != nil {
+		return err
+	}
+	staleMaxWaitMS, err := strconv.ParseInt(strings.TrimSpace(request.FormValue("cache_stale_max_wait_ms")), 10, 64)
+	if err != nil || staleMaxWaitMS < 1 || staleMaxWaitMS > 60_000 {
+		return errors.New("Stale max wait must be between 1 and 60000 milliseconds.")
+	}
+	form.cacheStaleMaxWait = time.Duration(staleMaxWaitMS) * time.Millisecond
+	if form.cachePrefetchMinimumTTL, err = parseUint32Setting(request.FormValue("cache_prefetch_minimum_ttl"), "prefetch eligibility TTL", true); err != nil {
+		return err
+	}
+	if form.cachePrefetchTriggerTTL, err = parseUint32Setting(request.FormValue("cache_prefetch_trigger_ttl"), "prefetch trigger TTL", true); err != nil {
+		return err
+	}
+	form.cachePrefetchSample, err = durationfmt.Parse(request.FormValue("cache_prefetch_sample_interval"))
+	if err != nil || form.cachePrefetchSample <= 0 || form.cachePrefetchSample > 24*time.Hour {
+		return errors.New("Prefetch sample interval must be a positive duration no greater than 24h.")
+	}
+	if form.cachePrefetchHits, err = parseUint32Setting(request.FormValue("cache_prefetch_hits_per_hour"), "prefetch hits per hour", false); err != nil {
+		return err
+	}
+	return nil
+}
+
+// saveACMECredentials stores the DNS provider credentials typed into the
+// managed-certificate fields, if any, before the settings that use them are
+// saved. The status is the response code for a returned error.
+func (server *Server) saveACMECredentials(request *http.Request) (int, error) {
+	if server.certificates == nil {
+		return http.StatusServiceUnavailable, errors.New("Certificate automation service is unavailable.")
+	}
+	provider := strings.ToLower(strings.TrimSpace(request.FormValue("acme_dns_provider")))
+	credentials := certificateCredentialsFromForm(request, provider)
+	if credentials != (certificates.Credentials{}) {
+		if err := server.certificates.PutCredentials(request.Context(), provider, credentials); err != nil {
+			return http.StatusUnprocessableEntity, err
+		}
+	}
+	return http.StatusOK, nil
+}
+
+func (server *Server) applyPasskeySetting(request *http.Request, candidate *config.Config) error {
+	if !request.PostForm.Has("passkeys_present") {
+		return nil
+	}
+	disabled := request.FormValue("passkeys_enabled") != "true"
+	if disabled {
+		validator, ok := server.auth.(interface {
+			ValidatePasskeyDisable(context.Context, string) error
+		})
+		if !ok {
+			return errors.New("passkey settings are unavailable")
+		}
+		issuer := ""
+		if candidate.OIDC.Enabled {
+			issuer = candidate.OIDC.Issuer
+		}
+		if err := validator.ValidatePasskeyDisable(request.Context(), issuer); err != nil {
+			return err
+		}
+	}
+	candidate.Security.PasskeysDisabled = disabled
+	return nil
+}
+
+func applyResolverSettings(request *http.Request, candidate *config.Config, form settingsForm) error {
+	dnsListeners := formLines(request.FormValue("dns_listen"))
+	resolverMode := strings.ToLower(strings.TrimSpace(request.FormValue("resolver_mode")))
+	if resolverMode == "" {
+		resolverMode = candidate.Resolver.Mode
+	}
+	forwarders := formLines(request.FormValue("forwarders"))
+	if resolverMode != "forward" && resolverMode != "recursive" {
+		return errors.New("resolution mode must be iterative recursion or forwarding")
+	}
+	if len(dnsListeners) == 0 || (resolverMode == "forward" && len(forwarders) == 0) {
+		return errors.New("DNS listeners are required, and forwarding mode requires at least one forwarder")
+	}
+	resolverTimeout, err := durationfmt.Parse(request.FormValue("resolver_timeout"))
+	if err != nil {
+		return errors.New("resolver timeout is invalid")
+	}
+	resolverRetries, err := strconv.Atoi(strings.TrimSpace(request.FormValue("resolver_retries")))
+	if err != nil || resolverRetries < 1 || resolverRetries > 10 {
+		return errors.New("resolver retries must be a whole number between 1 and 10")
+	}
+	resolverRetryTimeout, err := durationfmt.Parse(request.FormValue("resolver_retry_timeout"))
+	if err != nil || resolverRetryTimeout <= 0 {
+		return errors.New("resolver retry timeout is invalid")
+	}
+	cacheSize, err := strconv.Atoi(request.FormValue("cache_size"))
+	if err != nil || cacheSize <= 0 {
+		return errors.New("cache size must be positive")
+	}
+	candidate.Server.DNSListen = dnsListeners
+	candidate.Server.HTTPSListen = strings.TrimSpace(request.FormValue("https_listen"))
+	resolver := &candidate.Resolver
+	resolver.Mode = resolverMode
+	if request.Form.Has("max_concurrent") {
+		total, err := strconv.Atoi(request.FormValue("max_concurrent"))
+		if err != nil || total < 1 || total > 65536 {
+			return errors.New("maximum concurrent resolutions must be between 1 and 65536")
+		}
+		perClient, err := strconv.Atoi(request.FormValue("max_concurrent_per_client"))
+		if err != nil || perClient < 1 || perClient > total {
+			return errors.New("per-client concurrent resolutions must be between 1 and the total limit")
+		}
+		resolver.MaxConcurrent = total
+		resolver.MaxConcurrentPerClient = perClient
+	}
+	if request.Form.Has("recursion") {
+		resolver.Recursion = request.FormValue("recursion")
+		resolver.RecursionClients = formLines(request.FormValue("recursion_clients"))
+	}
+	resolver.Forwarders = forwarders
+	resolver.RootHints = formLines(request.FormValue("root_hints"))
+	resolver.Timeout = config.Duration{Duration: resolverTimeout}
+	resolver.Retries = resolverRetries
+	resolver.RetryTimeout = config.Duration{Duration: resolverRetryTimeout}
+	resolver.CacheSize = cacheSize
+	applyCacheSettings(request, resolver, form)
+	resolver.DNSSECValidation = request.FormValue("dnssec_validation") == "true"
+	resolver.QNAMEMinimization = request.FormValue("qname_minimization") == "true"
+	resolver.DNSSECTrustAnchorUpdates = request.FormValue("trust_anchor_updates") == "true"
+	return nil
+}
+
+func applyCacheSettings(request *http.Request, resolver *config.Resolver, form settingsForm) {
+	resolver.CacheMinimumTTL = form.cacheMinimumTTL
+	resolver.CacheMaximumTTL = form.cacheMaximumTTL
+	resolver.CacheNegativeTTL = form.cacheNegativeTTL
+	resolver.CacheFailureTTL = form.cacheFailureTTL
+	resolver.SaveCache = request.FormValue("save_cache") == "true"
+	resolver.ServeStale = request.FormValue("serve_stale") == "true"
+	resolver.CacheStaleTTL = form.cacheStaleTTL
+	resolver.CacheStaleAnswerTTL = form.cacheStaleAnswerTTL
+	resolver.CacheStaleResetTTL = form.cacheStaleResetTTL
+	resolver.CacheStaleMaxWait.Duration = form.cacheStaleMaxWait
+	resolver.CachePrefetchMinimumTTL = form.cachePrefetchMinimumTTL
+	resolver.CachePrefetchTriggerTTL = form.cachePrefetchTriggerTTL
+	resolver.CachePrefetchSample.Duration = form.cachePrefetchSample
+	resolver.CachePrefetchHitsPerHour = form.cachePrefetchHits
+}
+
+func applyEncryptedDNSSettings(request *http.Request, encrypted *config.EncryptedDNS, form settingsForm) {
+	encrypted.DoTListen = formLines(request.FormValue("dot_listen"))
+	encrypted.DoHListen = formLines(request.FormValue("doh_listen"))
+	encrypted.DoQListen = formLines(request.FormValue("doq_listen"))
+	encrypted.CertificateMode = form.certificateMode
+	encrypted.CertificateFile = strings.TrimSpace(request.FormValue("certificate_file"))
+	encrypted.PrivateKeyFile = strings.TrimSpace(request.FormValue("private_key_file"))
+	encrypted.MinimumVersion = strings.TrimSpace(request.FormValue("minimum_tls_version"))
+	encrypted.ACME.Email = strings.TrimSpace(request.FormValue("acme_email"))
+	encrypted.ACME.Domains = formLines(request.FormValue("acme_domains"))
+	encrypted.ACME.DirectoryURL = strings.TrimSpace(request.FormValue("acme_directory_url"))
+	encrypted.ACME.DNSProvider = strings.TrimSpace(request.FormValue("acme_dns_provider"))
+	encrypted.ACME.DNSZone = strings.TrimSpace(request.FormValue("acme_dns_zone"))
+	encrypted.ACME.StorageDirectory = strings.TrimSpace(request.FormValue("acme_storage_dir"))
+	encrypted.ACME.RenewBefore = config.Duration{Duration: form.acmeRenewBefore}
+}
+
+func applyLogAndBlockingSettings(request *http.Request, candidate *config.Config, form settingsForm) {
+	candidate.QueryLog.Enabled = request.FormValue("query_log_enabled") == "true"
+	candidate.QueryLog.Retention = config.Duration{Duration: form.queryLogRetention}
+	candidate.ServerLog.Enabled = request.FormValue("server_log_enabled") == "true"
+	candidate.ServerLog.Level = strings.ToLower(strings.TrimSpace(request.FormValue("server_log_level")))
+	candidate.ServerLog.Retention = config.Duration{Duration: form.serverLogRetention}
+	candidate.Statistics.Retention = config.Duration{Duration: form.statisticsRetention}
+	candidate.Blocking.UpdateInterval.Duration = time.Duration(form.blockingUpdateHours) * time.Hour
+	candidate.Blocking.ResponseType = form.blockingResponseType
+	candidate.Blocking.ResponseTTL = form.blockingResponseTTL
+	candidate.Blocking.CustomAddresses = formLines(request.FormValue("blocking_custom_addresses"))
+	candidate.Blocking.BypassClients = formLines(request.FormValue("blocking_bypass_clients"))
+	candidate.Blocking.AllowTXTReport = request.FormValue("blocking_allow_txt_report") == "true"
 }
 
 func certificateCredentialsFromForm(request *http.Request, provider string) certificates.Credentials {
