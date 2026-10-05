@@ -2540,7 +2540,7 @@ func TestResolveUpstreamWithValidationSurvivesEmptyUpstreamResult(t *testing.T) 
 
 	request := new(dns.Msg)
 	request.SetQuestion("example.com.", dns.TypeA)
-	response, state, err := handler.resolveUpstream(request, runtime, []string{"udp://127.0.0.1:53"})
+	response, state, err := handler.resolveUpstreamWithinTimeout(request, runtime, []string{"udp://127.0.0.1:53"})
 	if response != nil {
 		t.Fatalf("empty upstream result returned a response: %+v", response)
 	}

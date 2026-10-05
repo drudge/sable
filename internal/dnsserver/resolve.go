@@ -26,7 +26,7 @@ func (handler *Handler) DNSSECTrustAnchorQuery(ctx context.Context, name string,
 	message.CheckingDisabled = true
 	message.SetEdns0(1232, true)
 	forwarders, _ := runtime.forwardersFor(name)
-	return handler.resolveNetworkContext(ctx, message, runtime, forwarders)
+	return handler.resolveNetwork(ctx, message, runtime, forwarders)
 }
 
 // ReverseLookup resolves the PTR name for an address the way a client query
@@ -124,7 +124,7 @@ func (handler *Handler) lookupUnrecorded(ctx context.Context, runtime *Runtime, 
 		return response, nil
 	}
 	forwarders, _ := runtime.forwardersFor(name)
-	response, err := handler.resolveNetworkContext(ctx, request, runtime, forwarders)
+	response, err := handler.resolveNetwork(ctx, request, runtime, forwarders)
 	if err != nil {
 		return nil, fmt.Errorf("resolve %s: %w", name, err)
 	}
@@ -243,12 +243,8 @@ func (handler *Handler) resolve(request *dns.Msg, runtime *Runtime) resolution {
 	return handler.resolveRequest(request, questionName(request), runtime, "", true)
 }
 
-func (handler *Handler) resolveForClient(request *dns.Msg, runtime *Runtime, clientIP string) resolution {
-	return handler.resolveNameForClient(request, questionName(request), runtime, clientIP)
-}
-
-// resolveNameForClient is resolveForClient for a caller that already holds the
-// normalized question name.
+// resolveNameForClient resolves request for a network client. name is its
+// question name as questionName returns it.
 func (handler *Handler) resolveNameForClient(request *dns.Msg, name string, runtime *Runtime, clientIP string) resolution {
 	var attached []netip.Prefix
 	if networks := handler.attached.Load(); networks != nil {
@@ -266,23 +262,19 @@ func (handler *Handler) resolveRequest(request *dns.Msg, name string, runtime *R
 		}
 	}()
 	if len(request.Question) == 0 {
-		return resolution{response: errorResponse(request, dns.RcodeFormatError), source: querylog.SourceError,
-			decision: querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverError}}
+		return unevaluatedResolution(errorResponse(request, dns.RcodeFormatError), querylog.SourceError, querylog.ResolverError)
 	}
 	if response, found := handler.resolveANAME(request, name, runtime, clientIP); found {
 		handler.authoritativeAnswers.Add(1)
-		return resolution{response: response, source: querylog.SourceAuthoritative,
-			decision: querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverAuthoritative}}
+		return unevaluatedResolution(response, querylog.SourceAuthoritative, querylog.ResolverAuthoritative)
 	}
 	if response, found := runtime.authoritativeResponseFor(request, name); found {
 		handler.authoritativeAnswers.Add(1)
-		return resolution{response: response, source: querylog.SourceAuthoritative,
-			decision: querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverAuthoritative}}
+		return unevaluatedResolution(response, querylog.SourceAuthoritative, querylog.ResolverAuthoritative)
 	}
 	if response, found := runtime.localResponseFor(request, name); found {
 		handler.localAnswers.Add(1)
-		return resolution{response: response, source: querylog.SourceLocal,
-			decision: querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverLocal}}
+		return unevaluatedResolution(response, querylog.SourceLocal, querylog.ResolverLocal)
 	}
 
 	// Authoritative and local answers remain public, but neither fresh nor cached
@@ -335,7 +327,7 @@ func (handler *Handler) resolveRequest(request *dns.Msg, name string, runtime *R
 		result = handler.resolveWithStaleWait(request, name, runtime, forwarders, clientIP, release)
 	} else {
 		defer release()
-		result = handler.resolveShared(request, name, runtime, forwarders, true, clientIP)
+		result = handler.resolveShared(context.Background(), request, name, runtime, forwarders, true, clientIP)
 	}
 	result.decision.Policy = policy
 	result.decision.PolicyRule = policyRule
@@ -352,11 +344,11 @@ func (handler *Handler) resolveRequest(request *dns.Msg, name string, runtime *R
 // recursionNotAllowed refuses a client the recursion policy leaves out, and
 // says so in the query log, apart from a refusal for load or an RD=0 miss.
 func recursionNotAllowed(request *dns.Msg) resolution {
-	return resolution{response: errorResponse(request, dns.RcodeRefused), source: querylog.SourceError, decision: querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverNotAllowed}}
+	return unevaluatedResolution(errorResponse(request, dns.RcodeRefused), querylog.SourceError, querylog.ResolverNotAllowed)
 }
 
 func recursionRefused(request *dns.Msg) resolution {
-	return resolution{response: errorResponse(request, dns.RcodeRefused), source: querylog.SourceError, decision: querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverError}}
+	return unevaluatedResolution(errorResponse(request, dns.RcodeRefused), querylog.SourceError, querylog.ResolverError)
 }
 
 // resolveShared coalesces concurrent identical cache misses so only one upstream
@@ -367,16 +359,12 @@ func recursionRefused(request *dns.Msg) resolution {
 // Only the leader runs the resolution, so a failure is logged against the client
 // that started it. Followers asking the same question at the same moment share
 // that outcome without appearing in the line.
-func (handler *Handler) resolveShared(request *dns.Msg, name string, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
-	return handler.resolveSharedContext(context.Background(), request, name, runtime, forwarders, staleFallback, clientIP)
-}
-
-func (handler *Handler) resolveSharedContext(ctx context.Context, request *dns.Msg, name string, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
+func (handler *Handler) resolveShared(ctx context.Context, request *dns.Msg, name string, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
 	arrived := time.Now()
 	key := coalesceKeyFor(request, name)
 	key.runtime = runtime
 	result, follower, shared := handler.inflight.doContext(ctx, key, func() resolution {
-		return handler.resolveLiveUpstreamContext(ctx, request, runtime, forwarders, staleFallback, clientIP)
+		return handler.resolveLiveUpstream(ctx, request, runtime, forwarders, staleFallback, clientIP, runtime.timeout)
 	})
 	if follower && result.stillRunning {
 		// The client that started the lookup stopped waiting, but this one
@@ -384,7 +372,7 @@ func (handler *Handler) resolveSharedContext(ctx context.Context, request *dns.M
 		// recursive lookup for the rest of its own time instead of ending
 		// with the first.
 		if wait := runtime.timeout - time.Since(arrived); wait > 0 {
-			result = handler.resolveLiveUpstreamWaiting(ctx, request, runtime, forwarders, staleFallback, clientIP, wait)
+			result = handler.resolveLiveUpstream(ctx, request, runtime, forwarders, staleFallback, clientIP, wait)
 		}
 	}
 	if result.response == nil {
@@ -504,7 +492,7 @@ func (handler *Handler) resolveWithStaleWait(request *dns.Msg, name string, runt
 		defer handler.backgroundWG.Done()
 		// Keep the permit until work finishes, even after a stale answer returns.
 		defer release()
-		result <- handler.resolveSharedContext(handler.backgroundContext, request.Copy(), name, runtime, forwarders, false, clientIP)
+		result <- handler.resolveShared(handler.backgroundContext, request.Copy(), name, runtime, forwarders, false, clientIP)
 	}()
 	timer := time.NewTimer(runtime.staleMaxWait)
 	defer timer.Stop()
@@ -518,21 +506,16 @@ func (handler *Handler) resolveWithStaleWait(request *dns.Msg, name string, runt
 		if response, found := runtime.cache.GetStale(request); found {
 			handler.cacheHits.Add(1)
 			prepareResponseForClient(response, request)
-			return resolution{response: response, source: querylog.SourceCache,
-				decision: querylog.Decision{Cache: querylog.CacheStale, Resolver: querylog.ResolverCache}}
+			return staleResolution(response)
 		}
 		return <-result
 	}
 }
 
-func (handler *Handler) resolveLiveUpstreamContext(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
-	return handler.resolveLiveUpstreamWaiting(ctx, request, runtime, forwarders, staleFallback, clientIP, runtime.timeout)
-}
-
-// resolveLiveUpstreamWaiting resolves a cache miss, waiting up to wait for the
+// resolveLiveUpstream resolves a cache miss, waiting up to wait for the
 // network.
-func (handler *Handler) resolveLiveUpstreamWaiting(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string, wait time.Duration) resolution {
-	response, validation, validationErr := handler.resolveUpstreamWaiting(ctx, request, runtime, forwarders, wait)
+func (handler *Handler) resolveLiveUpstream(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string, wait time.Duration) resolution {
+	response, validation, validationErr := handler.resolveUpstream(ctx, request, runtime, forwarders, wait)
 	decision := querylog.Decision{Resolver: resolverDecision(runtime, forwarders), DNSSEC: dnssecDecision(validation)}
 	if validation == validationBogus {
 		handler.dnssecBogus.Add(1)
@@ -614,7 +597,7 @@ func (handler *Handler) prefetch(request *dns.Msg, runtime *Runtime) {
 		defer handler.backgroundWG.Done()
 		defer release()
 		forwarders, _ := runtime.forwardersFor(request.Question[0].Name)
-		response, validation, err := handler.resolveUpstreamContext(handler.backgroundContext, request, runtime, forwarders)
+		response, validation, err := handler.resolveUpstream(handler.backgroundContext, request, runtime, forwarders, runtime.timeout)
 		if err != nil || response == nil || !runtime.cacheUpstreamAnswer(request, response, validation) {
 			runtime.cache.CancelPrefetch(request)
 		}
@@ -651,8 +634,7 @@ func (handler *Handler) staleResponse(request *dns.Msg, runtime *Runtime) (resol
 	}
 	handler.cacheHits.Add(1)
 	prepareResponseForClient(response, request)
-	return resolution{response: response, source: querylog.SourceCache,
-		decision: querylog.Decision{Cache: querylog.CacheStale, Resolver: querylog.ResolverCache}}, true
+	return staleResolution(response), true
 }
 
 func (handler *Handler) resolveANAME(request *dns.Msg, name string, runtime *Runtime, clientIP string) (*dns.Msg, bool) {
@@ -684,7 +666,7 @@ func (handler *Handler) resolveANAME(request *dns.Msg, name string, runtime *Run
 		}
 		var err error
 		var validation validationState
-		targetResponse, validation, err = handler.resolveUpstream(targetRequest, runtime, forwarders)
+		targetResponse, validation, err = handler.resolveUpstream(context.Background(), targetRequest, runtime, forwarders, runtime.timeout)
 		if err != nil {
 			handler.upstreamErrors.Add(1)
 			handler.logUpstreamFailure(request, clientIP, "ANAME target resolution failed",
@@ -767,4 +749,18 @@ func (handler *Handler) writeResponse(writer dns.ResponseWriter, request, respon
 	if err := writer.WriteMsg(response); err != nil {
 		handler.failures.Add(1)
 	}
+}
+
+// unevaluatedResolution is an answer given before policy ran: a malformed
+// request, an authoritative or local answer, or a refusal.
+func unevaluatedResolution(response *dns.Msg, source querylog.Source, resolver querylog.ResolverDecision) resolution {
+	return resolution{response: response, source: source,
+		decision: querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: resolver}}
+}
+
+// staleResolution is an expired cache answer served while upstream fails or
+// catches up.
+func staleResolution(response *dns.Msg) resolution {
+	return resolution{response: response, source: querylog.SourceCache,
+		decision: querylog.Decision{Cache: querylog.CacheStale, Resolver: querylog.ResolverCache}}
 }

@@ -221,9 +221,10 @@ func (group *ListenerGroup) open(target listenerTarget) (*activeListener, error)
 	case listenerDNSUDP:
 		return group.openUDP(target)
 	case listenerDNSTCP:
-		return group.openTCP(target)
+		return group.openStream(target, "tcp", group.handler, nil)
 	case listenerDoT:
-		return group.openDoT(target)
+		return group.openStream(target, "tcp-tls", protocolHandler{handler: group.handler, protocol: "TLS"},
+			group.tlsConfig(target.minimumTLS, []string{"dot"}))
 	case listenerDoH:
 		return group.openDoH(target)
 	case listenerDoQ:
@@ -302,15 +303,24 @@ func (group *ListenerGroup) tuneUDPSocket(address string, connection net.PacketC
 	}
 }
 
-func (group *ListenerGroup) openTCP(target listenerTarget) (*activeListener, error) {
-	listener, err := net.Listen("tcp", target.address)
-	if err != nil {
-		return nil, fmt.Errorf("listen tcp %s: %w", target.address, err)
+// openStream opens a TCP-framed DNS listener, plain or, given a TLS
+// configuration, DNS over TLS. Both share the stream connection slots.
+func (group *ListenerGroup) openStream(target listenerTarget, network string, handler dns.Handler, tlsConfig *tls.Config) (*activeListener, error) {
+	label := "tcp"
+	if tlsConfig != nil {
+		label = "dot"
 	}
-	listener = limitListener(listener, group.streamSlots)
+	socket, err := net.Listen("tcp", target.address)
+	if err != nil {
+		return nil, fmt.Errorf("listen %s %s: %w", label, target.address, err)
+	}
+	listener := limitListener(socket, group.streamSlots)
+	if tlsConfig != nil {
+		listener = tls.NewListener(listener, tlsConfig)
+	}
 	server := &dns.Server{
-		Net:           "tcp",
-		Handler:       group.handler,
+		Net:           network,
+		Handler:       handler,
 		Listener:      listener,
 		ReadTimeout:   dnsReadTimeout,
 		WriteTimeout:  dnsWriteTimeout,
@@ -323,31 +333,6 @@ func (group *ListenerGroup) openTCP(target listenerTarget) (*activeListener, err
 		target:     target,
 		dnsServers: []*dns.Server{server},
 		sockets:    []io.Closer{listener},
-		started:    started,
-	}, nil
-}
-
-func (group *ListenerGroup) openDoT(target listenerTarget) (*activeListener, error) {
-	listener, err := net.Listen("tcp", target.address)
-	if err != nil {
-		return nil, fmt.Errorf("listen dot %s: %w", target.address, err)
-	}
-	tlsListener := tls.NewListener(limitListener(listener, group.streamSlots), group.tlsConfig(target.minimumTLS, []string{"dot"}))
-	server := &dns.Server{
-		Net:           "tcp-tls",
-		Handler:       protocolHandler{handler: group.handler, protocol: "TLS"},
-		Listener:      tlsListener,
-		ReadTimeout:   dnsReadTimeout,
-		WriteTimeout:  dnsWriteTimeout,
-		TsigProvider:  tsigProvider(group.handler),
-		MsgAcceptFunc: acceptRequestHeader,
-	}
-	started := make(chan struct{})
-	server.NotifyStartedFunc = func() { close(started) }
-	return &activeListener{
-		target:     target,
-		dnsServers: []*dns.Server{server},
-		sockets:    []io.Closer{tlsListener},
 		started:    started,
 	}, nil
 }

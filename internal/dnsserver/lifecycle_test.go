@@ -125,7 +125,7 @@ func TestResolveUpstreamRetainsRuntimeTimeout(t *testing.T) {
 	}
 	request := new(dns.Msg)
 	request.SetQuestion("timeout.example.", dns.TypeA)
-	_, _, _ = handler.resolveUpstream(request, runtime, runtime.forwarders)
+	_, _, _ = handler.resolveUpstreamWithinTimeout(request, runtime, runtime.forwarders)
 	select {
 	case bounded := <-deadlineSeen:
 		if !bounded {

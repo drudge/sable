@@ -95,12 +95,12 @@ func resolverDecisionForSource(source querylog.Source) querylog.ResolverDecision
 	}
 }
 
+// queryProtocol names the transport a query arrived on. Writers Sable owns
+// (DoT, DoH, DoQ) say so themselves; plain UDP and TCP come straight from
+// miekg/dns, so their socket's network names them without a per-query wrapper.
 func queryProtocol(writer dns.ResponseWriter) string {
 	if marked, ok := writer.(interface{ QueryProtocol() string }); ok {
 		return marked.QueryProtocol()
-	}
-	if _, ok := writer.(*dohResponseWriter); ok {
-		return "HTTPS"
 	}
 	if address := writer.LocalAddr(); address != nil {
 		network := strings.ToLower(address.Network())
