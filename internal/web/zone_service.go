@@ -226,39 +226,11 @@ func (service zoneService) CreateZone(ctx context.Context, who actor, input zone
 }
 
 func (service zoneService) newZone(ctx context.Context, zones []zonemodel.Zone, name string, input zoneCreate) (zonemodel.Zone, error) {
-	zoneType := strings.ToLower(strings.TrimSpace(input.Type))
-	if zoneType == "" {
-		zoneType = "primary"
-	}
-	// The two catalog roles are one zone type that differs only in whether
-	// the catalog is transferred from somewhere else, but they are separate
-	// choices in the form because they behave nothing alike.
-	consumeCatalog := zoneType == catalogConsumerFormType
-	if consumeCatalog {
-		zoneType = "catalog"
-	}
-	if zoneType != "primary" && zoneType != "secondary" && zoneType != "stub" &&
-		zoneType != "forwarder" && zoneType != "alias" && zoneType != "catalog" {
-		return zonemodel.Zone{}, errors.New("unsupported zone type")
-	}
-	primaryNSValue := strings.TrimSpace(input.PrimaryNS)
-	if primaryNSValue == "" {
-		// RFC 9432 recommends an apex NS of "invalid." because a catalog
-		// zone is only ever transferred, never resolved.
-		primaryNSValue = "ns1." + name
-		if zoneType == "catalog" {
-			primaryNSValue = "invalid."
-		}
-	}
-	primaryNS, err := dnsname.Normalize(primaryNSValue)
+	zoneType, consumeCatalog, err := newZoneType(input.Type)
 	if err != nil {
-		return zonemodel.Zone{}, fmt.Errorf("primary name server: %w", err)
+		return zonemodel.Zone{}, err
 	}
-	responsibleValue := strings.TrimSpace(input.Responsible)
-	if responsibleValue == "" {
-		responsibleValue = "hostmaster@" + name
-	}
-	responsible, err := soaResponsibleName(responsibleValue)
+	primaryNS, responsible, err := newZoneApex(name, zoneType, input)
 	if err != nil {
 		return zonemodel.Zone{}, err
 	}
@@ -285,17 +257,9 @@ func (service zoneService) newZone(ctx context.Context, zones []zonemodel.Zone, 
 		// when the catalog reconciles this zone against its source.
 		zone.Records = []zonemodel.Record{soa}
 	case "forwarder":
-		protocol := strings.ToLower(strings.TrimSpace(input.ForwarderProtocol))
-		if protocol == "" {
-			protocol = "udp"
-		}
-		priority := strings.TrimSpace(input.ForwarderPriority)
-		if priority == "" {
-			priority = "0"
-		}
-		forwarder, err := forwarding.NewRecord(protocol, priority, input.ForwarderAddress)
+		forwarder, err := newZoneForwarder(input)
 		if err != nil {
-			return zonemodel.Zone{}, fmt.Errorf("forwarder: %w", err)
+			return zonemodel.Zone{}, err
 		}
 		zone.Records = []zonemodel.Record{soa, {Name: "@", Type: "FWD", TTL: ttl, Value: forwarder.String()}}
 	case "catalog":
@@ -303,41 +267,115 @@ func (service zoneService) newZone(ctx context.Context, zones []zonemodel.Zone, 
 		if !consumeCatalog {
 			break
 		}
-		// A subscribed catalog is transferred exactly like a secondary, so
-		// its first transfer happens here and the operator sees a bad
-		// address or a rejected TSIG key immediately.
-		protocol := strings.ToLower(strings.TrimSpace(input.PrimaryProtocol))
-		if protocol == "" {
-			protocol = "tcp"
-		}
-		if protocol != "tcp" && protocol != "tls" {
-			return zonemodel.Zone{}, errors.New("catalog zone transfer protocol must be TCP or DNS-over-TLS")
-		}
-		if err := service.transferNewZone(ctx, &zone, protocol, input.PrimaryServers); err != nil {
+		if err := service.subscribeNewCatalog(ctx, &zone, input); err != nil {
 			return zonemodel.Zone{}, err
 		}
-		if _, err := zonemodel.ParseCatalog(name, zone.Records); err != nil {
-			return zonemodel.Zone{}, fmt.Errorf("the transferred zone is not a usable catalog: %w", err)
-		}
 	case "secondary", "stub":
-		protocol := strings.ToLower(strings.TrimSpace(input.PrimaryProtocol))
-		if protocol == "" {
-			protocol = "tcp"
-			if zoneType == "stub" {
-				protocol = "udp"
-			}
-		}
-		if zoneType == "secondary" && protocol != "tcp" && protocol != "tls" {
-			return zonemodel.Zone{}, errors.New("secondary zone transfer protocol must be TCP or DNS-over-TLS")
-		}
-		if zoneType == "stub" && protocol != "udp" && protocol != "tcp" && protocol != "tls" {
-			return zonemodel.Zone{}, errors.New("stub zone primary protocol must be UDP, TCP, or DNS-over-TLS")
-		}
-		if err := service.transferNewZone(ctx, &zone, protocol, input.PrimaryServers); err != nil {
+		if err := service.transferNewSecondary(ctx, &zone, input); err != nil {
 			return zonemodel.Zone{}, err
 		}
 	}
 	return zone, nil
+}
+
+// newZoneType normalizes the zone type a create form or API call asked for.
+// The two catalog roles are one zone type that differs only in whether the
+// catalog is transferred from somewhere else, but they are separate choices in
+// the form because they behave nothing alike.
+func newZoneType(value string) (zoneType string, consumeCatalog bool, err error) {
+	zoneType = strings.ToLower(strings.TrimSpace(value))
+	if zoneType == "" {
+		zoneType = "primary"
+	}
+	consumeCatalog = zoneType == catalogConsumerFormType
+	if consumeCatalog {
+		zoneType = "catalog"
+	}
+	if zoneType != "primary" && zoneType != "secondary" && zoneType != "stub" &&
+		zoneType != "forwarder" && zoneType != "alias" && zoneType != "catalog" {
+		return "", false, errors.New("unsupported zone type")
+	}
+	return zoneType, consumeCatalog, nil
+}
+
+// newZoneApex returns the SOA primary name server and responsible mailbox for
+// a new zone, defaulting both from the zone name.
+func newZoneApex(name, zoneType string, input zoneCreate) (primaryNS, responsible string, err error) {
+	primaryNSValue := strings.TrimSpace(input.PrimaryNS)
+	if primaryNSValue == "" {
+		// RFC 9432 recommends an apex NS of "invalid." because a catalog
+		// zone is only ever transferred, never resolved.
+		primaryNSValue = "ns1." + name
+		if zoneType == "catalog" {
+			primaryNSValue = "invalid."
+		}
+	}
+	primaryNS, err = dnsname.Normalize(primaryNSValue)
+	if err != nil {
+		return "", "", fmt.Errorf("primary name server: %w", err)
+	}
+	responsibleValue := strings.TrimSpace(input.Responsible)
+	if responsibleValue == "" {
+		responsibleValue = "hostmaster@" + name
+	}
+	responsible, err = soaResponsibleName(responsibleValue)
+	if err != nil {
+		return "", "", err
+	}
+	return primaryNS, responsible, nil
+}
+
+func newZoneForwarder(input zoneCreate) (forwarding.Record, error) {
+	protocol := strings.ToLower(strings.TrimSpace(input.ForwarderProtocol))
+	if protocol == "" {
+		protocol = "udp"
+	}
+	priority := strings.TrimSpace(input.ForwarderPriority)
+	if priority == "" {
+		priority = "0"
+	}
+	forwarder, err := forwarding.NewRecord(protocol, priority, input.ForwarderAddress)
+	if err != nil {
+		return forwarding.Record{}, fmt.Errorf("forwarder: %w", err)
+	}
+	return forwarder, nil
+}
+
+// subscribeNewCatalog transfers a subscribed catalog zone exactly like a
+// secondary, so its first transfer happens at creation and the operator sees a
+// bad address or a rejected TSIG key immediately.
+func (service zoneService) subscribeNewCatalog(ctx context.Context, zone *zonemodel.Zone, input zoneCreate) error {
+	protocol := strings.ToLower(strings.TrimSpace(input.PrimaryProtocol))
+	if protocol == "" {
+		protocol = "tcp"
+	}
+	if protocol != "tcp" && protocol != "tls" {
+		return errors.New("catalog zone transfer protocol must be TCP or DNS-over-TLS")
+	}
+	if err := service.transferNewZone(ctx, zone, protocol, input.PrimaryServers); err != nil {
+		return err
+	}
+	if _, err := zonemodel.ParseCatalog(zone.Name, zone.Records); err != nil {
+		return fmt.Errorf("the transferred zone is not a usable catalog: %w", err)
+	}
+	return nil
+}
+
+func (service zoneService) transferNewSecondary(ctx context.Context, zone *zonemodel.Zone, input zoneCreate) error {
+	protocol := strings.ToLower(strings.TrimSpace(input.PrimaryProtocol))
+	if protocol == "" {
+		protocol = "tcp"
+		if zone.Type == "stub" {
+			protocol = "udp"
+		}
+	}
+	if zone.Type == "secondary" && protocol != "tcp" && protocol != "tls" {
+		return errors.New("secondary zone transfer protocol must be TCP or DNS-over-TLS")
+	}
+	if zone.Type == "stub" && protocol != "udp" && protocol != "tcp" && protocol != "tls" {
+		return errors.New("stub zone primary protocol must be UDP, TCP, or DNS-over-TLS")
+	}
+	return service.transferNewZone(ctx, zone, protocol, input.PrimaryServers)
 }
 
 // transferNewZone fills a new secondary, stub, or subscribed catalog zone

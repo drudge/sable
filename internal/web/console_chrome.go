@@ -111,36 +111,45 @@ func (server *Server) commandPaletteEntities(request *http.Request, snapshot con
 			}
 		}
 	}
-
 	if view.CanCluster && view.CanWriteCluster && server.cluster != nil {
-		state := server.cluster.Snapshot()
-		if !state.Initialized {
-			add(pages.CommandEntityView{
-				ID: "command-action-initialize-cluster", Label: "Initialize Cluster", Description: "Create a cluster with this server as primary", Icon: "server-crash", Kind: "Action",
-				Keywords: "create setup primary replication", Route: "/cluster", Dialog: "initialize-cluster-dialog",
-			})
-		} else {
-			add(pages.CommandEntityView{
-				ID: "command-action-configure-node", Label: "Configure Node", Description: "Edit this node's cluster identity and HTTPS endpoint", Icon: "server-cog", Kind: "Action",
-				Keywords: "cluster local node settings identity endpoint", Route: "/cluster", Dialog: "cluster-settings-dialog",
-			})
-			if state.LocalRole == cluster.RolePrimary && state.NetworkReady {
-				add(pages.CommandEntityView{
-					ID: "command-action-add-replica", Label: "Add Replica", Description: "Create an enrollment token for a new replica", Icon: "server-plus", Kind: "Action",
-					Keywords: "cluster node enroll token secondary", Route: "/cluster", Dialog: "enrollment-token-dialog",
-				})
-			}
-			if command, ok := server.clusterUpdateCommand(request); ok {
-				add(command)
-			}
-		}
+		server.addClusterCommands(request, add)
 	}
+	if view.CanSettings {
+		server.addIntegrationCommands(request, snapshot.Config, view, add)
+	}
+	return entities
+}
 
-	if !view.CanSettings {
-		return entities
+func (server *Server) addClusterCommands(request *http.Request, add func(pages.CommandEntityView)) {
+	state := server.cluster.Snapshot()
+	if !state.Initialized {
+		add(pages.CommandEntityView{
+			ID: "command-action-initialize-cluster", Label: "Initialize Cluster", Description: "Create a cluster with this server as primary", Icon: "server-crash", Kind: "Action",
+			Keywords: "create setup primary replication", Route: "/cluster", Dialog: "initialize-cluster-dialog",
+		})
+		return
 	}
-	dynamicDNSSettings := snapshot.Config.DynamicDNS
-	dynamicDNSPublishers := dynamicDNSSettings.ConfiguredPublishers()
+	add(pages.CommandEntityView{
+		ID: "command-action-configure-node", Label: "Configure Node", Description: "Edit this node's cluster identity and HTTPS endpoint", Icon: "server-cog", Kind: "Action",
+		Keywords: "cluster local node settings identity endpoint", Route: "/cluster", Dialog: "cluster-settings-dialog",
+	})
+	if state.LocalRole == cluster.RolePrimary && state.NetworkReady {
+		add(pages.CommandEntityView{
+			ID: "command-action-add-replica", Label: "Add Replica", Description: "Create an enrollment token for a new replica", Icon: "server-plus", Kind: "Action",
+			Keywords: "cluster node enroll token secondary", Route: "/cluster", Dialog: "enrollment-token-dialog",
+		})
+	}
+	if command, ok := server.clusterUpdateCommand(request); ok {
+		add(command)
+	}
+}
+
+// addIntegrationCommands lists the Dynamic DNS, UniFi, and SSO integrations
+// that are running or configured. Operators who can change them get the
+// setup action; everyone else gets a link to the integration's card.
+func (server *Server) addIntegrationCommands(request *http.Request, configuration config.Config, view pages.DashboardView, add func(pages.CommandEntityView)) {
+	canSetUp := view.CanWriteSettings && !view.ControlPlaneReadOnly
+	dynamicDNSPublishers := configuration.DynamicDNS.ConfiguredPublishers()
 	if server.dynamicDNS != nil || len(dynamicDNSPublishers) > 0 {
 		keywords := []string{"dynamic dns", "ddns", "integration", "public address", "a aaaa"}
 		for _, publisher := range dynamicDNSPublishers {
@@ -153,7 +162,7 @@ func (server *Server) commandPaletteEntities(request *http.Request, snapshot con
 			ID: "command-entity-integration-dynamic-dns", Label: "View Dynamic DNS", Description: "Open public address publication status", Icon: "cloud-sync", Kind: "Integration",
 			Keywords: strings.Join(keywords, " "), Route: "/integrations", Focus: "#dynamic-dns-card",
 		}
-		if view.CanWriteSettings && !view.ControlPlaneReadOnly {
+		if canSetUp {
 			entity.Label = "Set Up Dynamic DNS"
 			if len(dynamicDNSPublishers) > 0 {
 				entity.Label = "Edit Dynamic DNS Setup"
@@ -163,7 +172,7 @@ func (server *Server) commandPaletteEntities(request *http.Request, snapshot con
 		}
 		add(entity)
 	}
-	unifiSettings := snapshot.Config.UniFi
+	unifiSettings := configuration.UniFi
 	unifiConfigured := unifiSettings.ControllerURL != "" || len(unifiSettings.Networks) > 0
 	if server.unifi != nil || unifiConfigured {
 		entity := pages.CommandEntityView{
@@ -171,7 +180,7 @@ func (server *Server) commandPaletteEntities(request *http.Request, snapshot con
 			Keywords: strings.Join([]string{"unifi", "integration", "host", "sync", unifiSettings.ControllerURL, unifiSettings.Site}, " "),
 			Route:    "/integrations", Focus: "#unifi-card",
 		}
-		if view.CanWriteSettings && !view.ControlPlaneReadOnly {
+		if canSetUp {
 			entity.Label = "Set Up UniFi Sync"
 			if unifiConfigured {
 				entity.Label = "Edit UniFi Setup"
@@ -181,7 +190,7 @@ func (server *Server) commandPaletteEntities(request *http.Request, snapshot con
 		}
 		add(entity)
 	}
-	oidcSettings := snapshot.Config.OIDC
+	oidcSettings := configuration.OIDC
 	oidcConfigured := oidcSettings.Issuer != "" || oidcSettings.Enabled
 	if server.ssoAdmin != nil || oidcConfigured {
 		keywords := []string{"sso", "oidc", "integration", oidcSettings.Issuer, oidcSettings.ClientID}
@@ -202,7 +211,6 @@ func (server *Server) commandPaletteEntities(request *http.Request, snapshot con
 		}
 		add(entity)
 	}
-	return entities
 }
 
 func commandZoneDescription(zoneType string) string {
