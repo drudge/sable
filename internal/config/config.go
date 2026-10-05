@@ -677,25 +677,85 @@ func (configuration Config) Validate() error {
 	var validationErrors []error
 	validationErrors = append(validationErrors, validateClients(configuration.Clients))
 	validationErrors = append(validationErrors, validateAlerts(configuration.Alerts))
-	validationErrors = append(validationErrors, validateAddress("server.http_listen", configuration.Server.HTTPListen))
-	if configuration.Server.HTTPSListen != "" {
-		validationErrors = append(validationErrors, validateAddress("server.https_listen", configuration.Server.HTTPSListen))
+	validationErrors = append(validationErrors, configuration.Server.validateAddresses()...)
+	validationErrors = append(validationErrors, configuration.Resolver.validateUpstreams()...)
+	validationErrors = append(validationErrors, validateTSIGKeys(configuration.TSIGKeys)...)
+	validationErrors = append(validationErrors, validateRoutes(configuration.Resolver.Routes)...)
+	validationErrors = append(validationErrors, validateHosts(configuration.Resolver.Hosts)...)
+	if len(configuration.Server.DNSListen) == 0 {
+		validationErrors = append(validationErrors, errors.New("server.dns_listen must contain at least one address"))
 	}
-	for index, address := range configuration.Server.DNSListen {
+	validationErrors = append(validationErrors, configuration.Resolver.validate()...)
+	if configuration.Server.ShutdownTimeout.Duration <= 0 {
+		validationErrors = append(validationErrors, errors.New("server.shutdown_timeout must be positive"))
+	}
+	if configuration.Reload.Debounce.Duration <= 0 {
+		validationErrors = append(validationErrors, errors.New("config.debounce must be positive"))
+	}
+	validationErrors = append(validationErrors, configuration.Database.validate()...)
+	validationErrors = append(validationErrors, configuration.QueryLog.validate()...)
+	validationErrors = append(validationErrors, configuration.ServerLog.validate()...)
+	if configuration.Statistics.Retention.Duration <= 0 {
+		validationErrors = append(validationErrors, errors.New("statistics.retention must be positive"))
+	}
+	validationErrors = append(validationErrors, configuration.Backup.validate()...)
+	validationErrors = append(validationErrors, configuration.Updates.validate()...)
+	validationErrors = append(validationErrors, configuration.validateEncryptedDNS()...)
+	validationErrors = append(validationErrors, configuration.Security.validate()...)
+	if configuration.Cluster.DataDirectory == "" {
+		validationErrors = append(validationErrors, errors.New("cluster.data_dir is required"))
+	}
+	if err := ValidateClusterAdvertiseURL(configuration.Cluster.AdvertiseURL); err != nil {
+		validationErrors = append(validationErrors, err)
+	}
+	if configuration.Security.Enabled && !configuration.Security.SecureCookies && !isLoopbackListener(configuration.Server.HTTPListen) {
+		validationErrors = append(validationErrors, errors.New("security.secure_cookies must be true when server.http_listen is not loopback"))
+	}
+	validationErrors = append(validationErrors, configuration.Blocking.validate()...)
+	validationErrors = append(validationErrors, configuration.DynamicDNS.validate()...)
+	validationErrors = append(validationErrors, configuration.MCP.validate()...)
+	validationErrors = append(validationErrors, configuration.UniFi.validate()...)
+	validationErrors = append(validationErrors, configuration.OIDC.validate()...)
+	for _, problem := range configuration.Insights.Findings.Problems() {
+		validationErrors = append(validationErrors, problem)
+	}
+	if configuration.OIDC.Enabled && strings.TrimSpace(configuration.OIDC.RedirectURL) == "" {
+		if err := validateProviderURL("oidc.redirect_url", configuration.OIDCRedirectURL(), true); err != nil {
+			validationErrors = append(validationErrors, fmt.Errorf(
+				"%w (derived from the advertised address; set oidc.redirect_url or cluster.advertise_url)", err))
+		}
+	}
+	return errors.Join(validationErrors...)
+}
+
+func (settings Server) validateAddresses() []error {
+	var validationErrors []error
+	validationErrors = append(validationErrors, validateAddress("server.http_listen", settings.HTTPListen))
+	if settings.HTTPSListen != "" {
+		validationErrors = append(validationErrors, validateAddress("server.https_listen", settings.HTTPSListen))
+	}
+	for index, address := range settings.DNSListen {
 		validationErrors = append(validationErrors, validateAddress(fmt.Sprintf("server.dns_listen[%d]", index), address))
 	}
-	for index, address := range configuration.Resolver.Forwarders {
+	return validationErrors
+}
+
+// validateUpstreams checks where the resolver sends queries and the trust
+// anchors it validates their answers with.
+func (settings Resolver) validateUpstreams() []error {
+	var validationErrors []error
+	for index, address := range settings.Forwarders {
 		validationErrors = append(validationErrors, validateAddress(fmt.Sprintf("resolver.forwarders[%d]", index), address))
 	}
-	for index, address := range configuration.Resolver.RootHints {
+	for index, address := range settings.RootHints {
 		validationErrors = append(validationErrors, validateRootHint(fmt.Sprintf("resolver.root_hints[%d]", index), address))
 	}
-	for index, anchor := range configuration.Resolver.DNSSECTrustAnchors {
+	for index, anchor := range settings.DNSSECTrustAnchors {
 		if _, err := parseDNSSECTrustAnchor(anchor); err != nil {
 			validationErrors = append(validationErrors, fmt.Errorf("resolver.dnssec_trust_anchors[%d]: %w", index, err))
 		}
 	}
-	for index, anchor := range configuration.Resolver.DNSSECNegativeTrustAnchors {
+	for index, anchor := range settings.DNSSECNegativeTrustAnchors {
 		if anchor == "." {
 			continue
 		}
@@ -703,16 +763,21 @@ func (configuration Config) Validate() error {
 			validationErrors = append(validationErrors, fmt.Errorf("resolver.dnssec_negative_trust_anchors[%d]: %w", index, err))
 		}
 	}
-	tsigKeys := make(map[string]struct{}, len(configuration.TSIGKeys))
-	for index, key := range configuration.TSIGKeys {
+	return validationErrors
+}
+
+func validateTSIGKeys(keys []TSIGKey) []error {
+	var validationErrors []error
+	seen := make(map[string]struct{}, len(keys))
+	for index, key := range keys {
 		field := fmt.Sprintf("tsig_keys[%d]", index)
 		if key.Name == "" || key.Name == "." {
 			validationErrors = append(validationErrors, fmt.Errorf("%s.name is required", field))
 		}
-		if _, duplicate := tsigKeys[key.Name]; duplicate {
+		if _, duplicate := seen[key.Name]; duplicate {
 			validationErrors = append(validationErrors, fmt.Errorf("duplicate TSIG key %q", key.Name))
 		}
-		tsigKeys[key.Name] = struct{}{}
+		seen[key.Name] = struct{}{}
 		if key.Algorithm != dns.HmacSHA256 && key.Algorithm != dns.HmacSHA384 && key.Algorithm != dns.HmacSHA512 {
 			validationErrors = append(validationErrors, fmt.Errorf("%s.algorithm must be hmac-sha256, hmac-sha384, or hmac-sha512", field))
 		}
@@ -725,8 +790,13 @@ func (configuration Config) Validate() error {
 			}
 		}
 	}
-	seenRouteDomains := make(map[string]struct{}, len(configuration.Resolver.Routes))
-	for index, route := range configuration.Resolver.Routes {
+	return validationErrors
+}
+
+func validateRoutes(routes []ForwardRoute) []error {
+	var validationErrors []error
+	seenDomains := make(map[string]struct{}, len(routes))
+	for index, route := range routes {
 		field := fmt.Sprintf("resolver.routes[%d]", index)
 		if route.Domain == "" {
 			validationErrors = append(validationErrors, fmt.Errorf("%s.domain is required", field))
@@ -737,10 +807,10 @@ func (configuration Config) Validate() error {
 		if len(route.Forwarders) == 0 {
 			validationErrors = append(validationErrors, fmt.Errorf("%s.forwarders must contain at least one address", field))
 		}
-		if _, duplicate := seenRouteDomains[route.Domain]; duplicate {
+		if _, duplicate := seenDomains[route.Domain]; duplicate {
 			validationErrors = append(validationErrors, fmt.Errorf("duplicate conditional forwarding domain %q", route.Domain))
 		}
-		seenRouteDomains[route.Domain] = struct{}{}
+		seenDomains[route.Domain] = struct{}{}
 		for forwarderIndex, address := range route.Forwarders {
 			validationErrors = append(validationErrors, validateAddress(
 				fmt.Sprintf("%s.forwarders[%d]", field, forwarderIndex),
@@ -748,8 +818,13 @@ func (configuration Config) Validate() error {
 			))
 		}
 	}
-	seenHostNames := make(map[string]struct{}, len(configuration.Resolver.Hosts))
-	for index, host := range configuration.Resolver.Hosts {
+	return validationErrors
+}
+
+func validateHosts(hosts []HostOverride) []error {
+	var validationErrors []error
+	seenNames := make(map[string]struct{}, len(hosts))
+	for index, host := range hosts {
 		field := fmt.Sprintf("resolver.hosts[%d]", index)
 		if host.Name == "" {
 			validationErrors = append(validationErrors, fmt.Errorf("%s.name is required", field))
@@ -757,10 +832,10 @@ func (configuration Config) Validate() error {
 		if _, err := dnsname.Normalize(host.Name); err != nil {
 			validationErrors = append(validationErrors, fmt.Errorf("%s.name: %w", field, err))
 		}
-		if _, duplicate := seenHostNames[host.Name]; duplicate {
+		if _, duplicate := seenNames[host.Name]; duplicate {
 			validationErrors = append(validationErrors, fmt.Errorf("duplicate local host override %q", host.Name))
 		}
-		seenHostNames[host.Name] = struct{}{}
+		seenNames[host.Name] = struct{}{}
 		if len(host.Addresses) == 0 {
 			validationErrors = append(validationErrors, fmt.Errorf("%s.addresses must contain at least one IP address", field))
 		}
@@ -776,191 +851,224 @@ func (configuration Config) Validate() error {
 			validationErrors = append(validationErrors, fmt.Errorf("%s.ttl must be positive", field))
 		}
 	}
-	if len(configuration.Server.DNSListen) == 0 {
-		validationErrors = append(validationErrors, errors.New("server.dns_listen must contain at least one address"))
-	}
-	if configuration.Resolver.Mode != "forward" && configuration.Resolver.Mode != "recursive" {
+	return validationErrors
+}
+
+// validate checks the resolver's mode, limits, timeouts and cache settings.
+func (settings Resolver) validate() []error {
+	var validationErrors []error
+	if settings.Mode != "forward" && settings.Mode != "recursive" {
 		validationErrors = append(validationErrors, errors.New("resolver.mode must be forward or recursive"))
 	}
-	if _, err := clientaccess.Compile(configuration.Resolver.Recursion, configuration.Resolver.RecursionClients); err != nil {
+	if _, err := clientaccess.Compile(settings.Recursion, settings.RecursionClients); err != nil {
 		validationErrors = append(validationErrors, fmt.Errorf("resolver: %w", err))
 	}
-	if configuration.Resolver.Mode == "forward" && len(configuration.Resolver.Forwarders) == 0 {
+	if settings.Mode == "forward" && len(settings.Forwarders) == 0 {
 		validationErrors = append(validationErrors, errors.New("resolver.forwarders must contain at least one address in forward mode"))
 	}
-	if configuration.Resolver.MaxConcurrent < 1 || configuration.Resolver.MaxConcurrent > 65536 || configuration.Resolver.MaxConcurrentPerClient < 1 || configuration.Resolver.MaxConcurrentPerClient > configuration.Resolver.MaxConcurrent {
+	if settings.MaxConcurrent < 1 || settings.MaxConcurrent > 65536 || settings.MaxConcurrentPerClient < 1 || settings.MaxConcurrentPerClient > settings.MaxConcurrent {
 		validationErrors = append(validationErrors, errors.New("resolver.max_concurrent must be between 1 and 65536; max_concurrent_per_client must be between 1 and max_concurrent"))
 	}
-	if configuration.Resolver.Timeout.Duration <= 0 {
+	if settings.Timeout.Duration <= 0 {
 		validationErrors = append(validationErrors, errors.New("resolver.timeout must be positive"))
 	}
-	if configuration.Resolver.Retries < 1 || configuration.Resolver.Retries > 10 {
+	if settings.Retries < 1 || settings.Retries > 10 {
 		validationErrors = append(validationErrors, errors.New("resolver.retries must be between 1 and 10"))
 	}
-	if configuration.Resolver.RetryTimeout.Duration <= 0 {
+	if settings.RetryTimeout.Duration <= 0 {
 		validationErrors = append(validationErrors, errors.New("resolver.retry_timeout must be positive"))
 	}
-	if configuration.Resolver.CacheSize <= 0 {
+	return append(validationErrors, settings.validateCache()...)
+}
+
+func (settings Resolver) validateCache() []error {
+	var validationErrors []error
+	if settings.CacheSize <= 0 {
 		validationErrors = append(validationErrors, errors.New("resolver.cache_size must be positive"))
 	}
-	if configuration.Resolver.CacheMaximumTTL == 0 {
+	if settings.CacheMaximumTTL == 0 {
 		validationErrors = append(validationErrors, errors.New("resolver.cache_maximum_ttl must be positive"))
 	}
-	if configuration.Resolver.CacheMinimumTTL > configuration.Resolver.CacheMaximumTTL {
+	if settings.CacheMinimumTTL > settings.CacheMaximumTTL {
 		validationErrors = append(validationErrors, errors.New("resolver.cache_minimum_ttl must not exceed cache_maximum_ttl"))
 	}
-	if configuration.Resolver.ServeStale && configuration.Resolver.CacheStaleTTL == 0 {
+	if settings.ServeStale && settings.CacheStaleTTL == 0 {
 		validationErrors = append(validationErrors, errors.New("resolver.cache_stale_ttl must be positive when serve_stale is enabled"))
 	}
-	if configuration.Resolver.ServeStale && configuration.Resolver.CacheStaleAnswerTTL == 0 {
+	if settings.ServeStale && settings.CacheStaleAnswerTTL == 0 {
 		validationErrors = append(validationErrors, errors.New("resolver.cache_stale_answer_ttl must be positive when serve_stale is enabled"))
 	}
-	if configuration.Resolver.ServeStale && configuration.Resolver.CacheStaleResetTTL == 0 {
+	if settings.ServeStale && settings.CacheStaleResetTTL == 0 {
 		validationErrors = append(validationErrors, errors.New("resolver.cache_stale_reset_ttl must be positive when serve_stale is enabled"))
 	}
-	if configuration.Resolver.ServeStale && configuration.Resolver.CacheStaleMaxWait.Duration <= 0 {
+	if settings.ServeStale && settings.CacheStaleMaxWait.Duration <= 0 {
 		validationErrors = append(validationErrors, errors.New("resolver.cache_stale_max_wait must be positive when serve_stale is enabled"))
 	}
-	if configuration.Resolver.CachePrefetchSample.Duration <= 0 || configuration.Resolver.CachePrefetchSample.Duration > 24*time.Hour {
+	if settings.CachePrefetchSample.Duration <= 0 || settings.CachePrefetchSample.Duration > 24*time.Hour {
 		validationErrors = append(validationErrors, errors.New("resolver.cache_prefetch_sample_interval must be between 1ns and 24h"))
 	}
-	if configuration.Resolver.CachePrefetchTriggerTTL > 0 && configuration.Resolver.CachePrefetchHitsPerHour == 0 {
+	if settings.CachePrefetchTriggerTTL > 0 && settings.CachePrefetchHitsPerHour == 0 {
 		validationErrors = append(validationErrors, errors.New("resolver.cache_prefetch_hits_per_hour must be positive when prefetching is enabled"))
 	}
-	if configuration.Server.ShutdownTimeout.Duration <= 0 {
-		validationErrors = append(validationErrors, errors.New("server.shutdown_timeout must be positive"))
+	return validationErrors
+}
+
+func (settings Database) validate() []error {
+	var validationErrors []error
+	if settings.Driver != "sqlite" && settings.Driver != "postgres" {
+		validationErrors = append(validationErrors, fmt.Errorf("database.driver must be sqlite or postgres, got %q", settings.Driver))
 	}
-	if configuration.Reload.Debounce.Duration <= 0 {
-		validationErrors = append(validationErrors, errors.New("config.debounce must be positive"))
-	}
-	if configuration.Database.Driver != "sqlite" && configuration.Database.Driver != "postgres" {
-		validationErrors = append(validationErrors, fmt.Errorf("database.driver must be sqlite or postgres, got %q", configuration.Database.Driver))
-	}
-	if configuration.Database.DSN == "" {
+	if settings.DSN == "" {
 		validationErrors = append(validationErrors, errors.New("database.dsn is required"))
 	}
-	if configuration.QueryLog.BufferSize <= 0 {
+	return validationErrors
+}
+
+func (settings QueryLog) validate() []error {
+	var validationErrors []error
+	if settings.BufferSize <= 0 {
 		validationErrors = append(validationErrors, errors.New("query_log.buffer_size must be positive"))
 	}
-	if configuration.QueryLog.BatchSize <= 0 || configuration.QueryLog.BatchSize > configuration.QueryLog.BufferSize {
+	if settings.BatchSize <= 0 || settings.BatchSize > settings.BufferSize {
 		validationErrors = append(validationErrors, errors.New("query_log.batch_size must be positive and no larger than buffer_size"))
 	}
-	if configuration.QueryLog.FlushInterval.Duration <= 0 {
+	if settings.FlushInterval.Duration <= 0 {
 		validationErrors = append(validationErrors, errors.New("query_log.flush_interval must be positive"))
 	}
-	if configuration.QueryLog.Retention.Duration <= 0 {
+	if settings.Retention.Duration <= 0 {
 		validationErrors = append(validationErrors, errors.New("query_log.retention must be positive"))
 	}
-	if configuration.ServerLog.BufferSize <= 0 {
+	return validationErrors
+}
+
+func (settings ServerLog) validate() []error {
+	var validationErrors []error
+	if settings.BufferSize <= 0 {
 		validationErrors = append(validationErrors, errors.New("server_log.buffer_size must be positive"))
 	}
-	if configuration.ServerLog.BatchSize <= 0 || configuration.ServerLog.BatchSize > configuration.ServerLog.BufferSize {
+	if settings.BatchSize <= 0 || settings.BatchSize > settings.BufferSize {
 		validationErrors = append(validationErrors, errors.New("server_log.batch_size must be positive and no larger than buffer_size"))
 	}
-	if configuration.ServerLog.FlushInterval.Duration <= 0 {
+	if settings.FlushInterval.Duration <= 0 {
 		validationErrors = append(validationErrors, errors.New("server_log.flush_interval must be positive"))
 	}
-	if configuration.ServerLog.Retention.Duration <= 0 {
+	if settings.Retention.Duration <= 0 {
 		validationErrors = append(validationErrors, errors.New("server_log.retention must be positive"))
 	}
-	if !validServerLogLevel(configuration.ServerLog.Level) {
-		validationErrors = append(validationErrors, fmt.Errorf("server_log.level must be debug, info, warn, or error, got %q", configuration.ServerLog.Level))
+	if !validServerLogLevel(settings.Level) {
+		validationErrors = append(validationErrors, fmt.Errorf("server_log.level must be debug, info, warn, or error, got %q", settings.Level))
 	}
-	if configuration.Statistics.Retention.Duration <= 0 {
-		validationErrors = append(validationErrors, errors.New("statistics.retention must be positive"))
-	}
-	if configuration.Backup.Directory == "" {
+	return validationErrors
+}
+
+func (settings Backup) validate() []error {
+	var validationErrors []error
+	if settings.Directory == "" {
 		validationErrors = append(validationErrors, errors.New("backup.directory is required"))
 	}
-	if configuration.Backup.Interval.Duration < time.Hour {
+	if settings.Interval.Duration < time.Hour {
 		validationErrors = append(validationErrors, errors.New("backup.interval must be at least 1h"))
 	}
-	if _, err := time.Parse("15:04", configuration.Backup.RunAt); err != nil {
+	if _, err := time.Parse("15:04", settings.RunAt); err != nil {
 		validationErrors = append(validationErrors, errors.New("backup.run_at must use HH:MM local time"))
 	}
-	if configuration.Backup.RetentionCount < 1 || configuration.Backup.RetentionCount > 1000 {
+	if settings.RetentionCount < 1 || settings.RetentionCount > 1000 {
 		validationErrors = append(validationErrors, errors.New("backup.retention_count must be between 1 and 1000"))
 	}
-	validationErrors = append(validationErrors, configuration.Updates.validate()...)
-	for index, address := range configuration.EncryptedDNS.DoTListen {
+	return validationErrors
+}
+
+// validateEncryptedDNS checks the encrypted listeners and their certificate.
+// It is a Config method because listener conflicts and the HTTPS console
+// listener live outside the encrypted_dns section.
+func (configuration Config) validateEncryptedDNS() []error {
+	var validationErrors []error
+	encrypted := configuration.EncryptedDNS
+	for index, address := range encrypted.DoTListen {
 		validationErrors = append(validationErrors, validateAddress(fmt.Sprintf("encrypted_dns.dot_listen[%d]", index), address))
 	}
-	for index, address := range configuration.EncryptedDNS.DoHListen {
+	for index, address := range encrypted.DoHListen {
 		validationErrors = append(validationErrors, validateAddress(fmt.Sprintf("encrypted_dns.doh_listen[%d]", index), address))
 	}
-	for index, address := range configuration.EncryptedDNS.DoQListen {
+	for index, address := range encrypted.DoQListen {
 		validationErrors = append(validationErrors, validateAddress(fmt.Sprintf("encrypted_dns.doq_listen[%d]", index), address))
 	}
 	validationErrors = append(validationErrors, validateTCPListenerConflicts(configuration))
 	validationErrors = append(validationErrors, validateUDPListenerConflicts(configuration))
-	if configuration.EncryptedDNS.CertificateMode != "manual" && configuration.EncryptedDNS.CertificateMode != "acme" {
+	if encrypted.CertificateMode != "manual" && encrypted.CertificateMode != "acme" {
 		validationErrors = append(validationErrors, errors.New("encrypted_dns.certificate_mode must be manual or acme"))
 	}
-	if (configuration.EncryptedDNS.encryptedListenerCount() > 0 || configuration.Server.HTTPSListen != "") && configuration.EncryptedDNS.CertificateMode == "manual" {
-		if configuration.EncryptedDNS.CertificateFile == "" {
+	if (encrypted.encryptedListenerCount() > 0 || configuration.Server.HTTPSListen != "") && encrypted.CertificateMode == "manual" {
+		if encrypted.CertificateFile == "" {
 			validationErrors = append(validationErrors, errors.New("encrypted_dns.certificate_file is required for encrypted listeners"))
 		}
-		if configuration.EncryptedDNS.PrivateKeyFile == "" {
+		if encrypted.PrivateKeyFile == "" {
 			validationErrors = append(validationErrors, errors.New("encrypted_dns.private_key_file is required for encrypted listeners"))
 		}
 	}
-	if configuration.EncryptedDNS.CertificateMode == "acme" {
-		acmeConfiguration := configuration.EncryptedDNS.ACME
-		if len(acmeConfiguration.Domains) == 0 {
-			validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.domains requires at least one domain"))
-		}
-		for index, domain := range acmeConfiguration.Domains {
-			name := strings.TrimPrefix(domain, "*.")
-			if name == "" || name == "." {
-				validationErrors = append(validationErrors, fmt.Errorf("encrypted_dns.acme.domains[%d] is invalid", index))
-			} else if _, err := dnsname.Normalize(name); err != nil {
-				validationErrors = append(validationErrors, fmt.Errorf("encrypted_dns.acme.domains[%d]: %w", index, err))
-			}
-		}
-		if acmeConfiguration.Email == "" || !strings.Contains(acmeConfiguration.Email, "@") {
-			validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.email must be a valid contact email"))
-		}
-		if directory, err := url.Parse(acmeConfiguration.DirectoryURL); err != nil || directory.Scheme != "https" || directory.Host == "" {
-			validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.directory_url must be an HTTPS URL"))
-		}
-		if !slices.Contains([]string{"cloudflare", "porkbun", "namecheap", "godaddy", "digitalocean", "hetzner", "rfc2136", "route53", "ovh"}, acmeConfiguration.DNSProvider) {
-			validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.dns_provider is not supported"))
-		}
-		if acmeConfiguration.StorageDirectory == "" {
-			validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.storage_dir is required"))
-		}
-		if acmeConfiguration.RenewBefore.Duration < 24*time.Hour || acmeConfiguration.RenewBefore.Duration > 60*24*time.Hour {
-			validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.renew_before must be between 1d and 60d"))
-		}
+	if encrypted.CertificateMode == "acme" {
+		validationErrors = append(validationErrors, encrypted.ACME.validate()...)
 	}
-	if configuration.EncryptedDNS.MinimumVersion != "1.2" && configuration.EncryptedDNS.MinimumVersion != "1.3" {
+	if encrypted.MinimumVersion != "1.2" && encrypted.MinimumVersion != "1.3" {
 		validationErrors = append(validationErrors, errors.New("encrypted_dns.minimum_tls_version must be 1.2 or 1.3"))
 	}
-	if configuration.Security.SessionTTL.Duration <= 0 {
+	return validationErrors
+}
+
+func (settings ACME) validate() []error {
+	var validationErrors []error
+	if len(settings.Domains) == 0 {
+		validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.domains requires at least one domain"))
+	}
+	for index, domain := range settings.Domains {
+		name := strings.TrimPrefix(domain, "*.")
+		if name == "" || name == "." {
+			validationErrors = append(validationErrors, fmt.Errorf("encrypted_dns.acme.domains[%d] is invalid", index))
+		} else if _, err := dnsname.Normalize(name); err != nil {
+			validationErrors = append(validationErrors, fmt.Errorf("encrypted_dns.acme.domains[%d]: %w", index, err))
+		}
+	}
+	if settings.Email == "" || !strings.Contains(settings.Email, "@") {
+		validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.email must be a valid contact email"))
+	}
+	if directory, err := url.Parse(settings.DirectoryURL); err != nil || directory.Scheme != "https" || directory.Host == "" {
+		validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.directory_url must be an HTTPS URL"))
+	}
+	if !slices.Contains([]string{"cloudflare", "porkbun", "namecheap", "godaddy", "digitalocean", "hetzner", "rfc2136", "route53", "ovh"}, settings.DNSProvider) {
+		validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.dns_provider is not supported"))
+	}
+	if settings.StorageDirectory == "" {
+		validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.storage_dir is required"))
+	}
+	if settings.RenewBefore.Duration < 24*time.Hour || settings.RenewBefore.Duration > 60*24*time.Hour {
+		validationErrors = append(validationErrors, errors.New("encrypted_dns.acme.renew_before must be between 1d and 60d"))
+	}
+	return validationErrors
+}
+
+func (settings Security) validate() []error {
+	var validationErrors []error
+	if settings.SessionTTL.Duration <= 0 {
 		validationErrors = append(validationErrors, errors.New("security.session_ttl must be positive"))
 	}
-	if configuration.Security.APITokenTTL.Duration <= 0 {
+	if settings.APITokenTTL.Duration <= 0 {
 		validationErrors = append(validationErrors, errors.New("security.api_token_ttl must be positive"))
 	}
-	if configuration.Security.SecretKeyFile == "" {
+	if settings.SecretKeyFile == "" {
 		validationErrors = append(validationErrors, errors.New("security.secret_key_file is required"))
 	}
-	if configuration.Cluster.DataDirectory == "" {
-		validationErrors = append(validationErrors, errors.New("cluster.data_dir is required"))
-	}
-	if err := ValidateClusterAdvertiseURL(configuration.Cluster.AdvertiseURL); err != nil {
-		validationErrors = append(validationErrors, err)
-	}
-	if configuration.Security.Enabled && !configuration.Security.SecureCookies && !isLoopbackListener(configuration.Server.HTTPListen) {
-		validationErrors = append(validationErrors, errors.New("security.secure_cookies must be true when server.http_listen is not loopback"))
-	}
-	seenBlockLists := make(map[string]struct{}, len(configuration.Blocking.Lists))
-	for index, domain := range configuration.Blocking.Domains {
+	return validationErrors
+}
+
+func (settings Blocking) validate() []error {
+	var validationErrors []error
+	for index, domain := range settings.Domains {
 		if _, err := dnsname.Normalize(strings.TrimPrefix(domain, "*.")); err != nil {
 			validationErrors = append(validationErrors, fmt.Errorf("blocking.domains[%d]: %w", index, err))
 		}
 	}
-	for index, list := range configuration.Blocking.Lists {
+	seenLists := make(map[string]struct{}, len(settings.Lists))
+	for index, list := range settings.Lists {
 		field := fmt.Sprintf("blocking.lists[%d]", index)
 		if list.Name == "" {
 			validationErrors = append(validationErrors, fmt.Errorf("%s.name is required", field))
@@ -976,51 +1084,45 @@ func (configuration Config) Validate() error {
 		if err := blockcompiler.ValidateFormat(list.Format); err != nil {
 			validationErrors = append(validationErrors, fmt.Errorf("%s.format: %w", field, err))
 		}
-		if _, duplicate := seenBlockLists[list.Name]; duplicate {
+		if _, duplicate := seenLists[list.Name]; duplicate {
 			validationErrors = append(validationErrors, fmt.Errorf("duplicate block list name %q", list.Name))
 		}
-		seenBlockLists[list.Name] = struct{}{}
+		seenLists[list.Name] = struct{}{}
 	}
-	for index, domain := range configuration.Blocking.AllowedDomains {
+	for index, domain := range settings.AllowedDomains {
 		if _, err := dnsname.Normalize(strings.TrimPrefix(domain, "*.")); err != nil {
 			validationErrors = append(validationErrors, fmt.Errorf("blocking.allowed_domains[%d]: %w", index, err))
 		}
 	}
-	if configuration.Blocking.UpdateInterval.Duration <= 0 {
+	return append(validationErrors, settings.validateResponse()...)
+}
+
+// validateResponse checks how blocked queries are answered and who skips
+// blocking.
+func (settings Blocking) validateResponse() []error {
+	var validationErrors []error
+	if settings.UpdateInterval.Duration <= 0 {
 		validationErrors = append(validationErrors, errors.New("blocking.update_interval must be positive"))
 	}
-	if configuration.Blocking.ResponseType != "nxdomain" && configuration.Blocking.ResponseType != "zero" && configuration.Blocking.ResponseType != "custom" {
+	if settings.ResponseType != "nxdomain" && settings.ResponseType != "zero" && settings.ResponseType != "custom" {
 		validationErrors = append(validationErrors, errors.New("blocking.response_type must be nxdomain, zero, or custom"))
 	}
-	if configuration.Blocking.ResponseType == "custom" && len(configuration.Blocking.CustomAddresses) == 0 {
+	if settings.ResponseType == "custom" && len(settings.CustomAddresses) == 0 {
 		validationErrors = append(validationErrors, errors.New("blocking.custom_addresses must not be empty for a custom response"))
 	}
-	for index, address := range configuration.Blocking.CustomAddresses {
+	for index, address := range settings.CustomAddresses {
 		if parsed, err := netip.ParseAddr(address); err != nil || parsed.Zone() != "" {
 			validationErrors = append(validationErrors, fmt.Errorf("blocking.custom_addresses[%d] must be an IP address", index))
 		}
 	}
-	for index, client := range configuration.Blocking.BypassClients {
+	for index, client := range settings.BypassClients {
 		if _, err := netip.ParsePrefix(client); err != nil {
 			if address, addressErr := netip.ParseAddr(client); addressErr != nil || address.Zone() != "" {
 				validationErrors = append(validationErrors, fmt.Errorf("blocking.bypass_clients[%d] must be an IP address or CIDR network", index))
 			}
 		}
 	}
-	validationErrors = append(validationErrors, configuration.DynamicDNS.validate()...)
-	validationErrors = append(validationErrors, configuration.MCP.validate()...)
-	validationErrors = append(validationErrors, configuration.UniFi.validate()...)
-	validationErrors = append(validationErrors, configuration.OIDC.validate()...)
-	for _, problem := range configuration.Insights.Findings.Problems() {
-		validationErrors = append(validationErrors, problem)
-	}
-	if configuration.OIDC.Enabled && strings.TrimSpace(configuration.OIDC.RedirectURL) == "" {
-		if err := validateProviderURL("oidc.redirect_url", configuration.OIDCRedirectURL(), true); err != nil {
-			validationErrors = append(validationErrors, fmt.Errorf(
-				"%w (derived from the advertised address; set oidc.redirect_url or cluster.advertise_url)", err))
-		}
-	}
-	return errors.Join(validationErrors...)
+	return validationErrors
 }
 
 func validServerLogLevel(level string) bool {
@@ -1287,46 +1389,12 @@ func (configuration *Config) normalize() {
 	configuration.Backup.RunAt = strings.TrimSpace(configuration.Backup.RunAt)
 	configuration.Server.HTTPSListen = strings.TrimSpace(configuration.Server.HTTPSListen)
 	configuration.Server.DNSListen = uniqueTrimmed(configuration.Server.DNSListen)
-	configuration.Resolver.Recursion = strings.ToLower(strings.TrimSpace(configuration.Resolver.Recursion))
-	if configuration.Resolver.Recursion == "" {
-		configuration.Resolver.Recursion = "private"
-	}
-	configuration.Resolver.RecursionClients = uniqueTrimmed(configuration.Resolver.RecursionClients)
-	configuration.Resolver.Forwarders = uniqueTrimmed(configuration.Resolver.Forwarders)
-	configuration.Resolver.Mode = strings.ToLower(strings.TrimSpace(configuration.Resolver.Mode))
-	if configuration.Resolver.Mode == "" {
-		configuration.Resolver.Mode = "forward"
-	}
-	configuration.Resolver.RootHints = uniqueTrimmed(configuration.Resolver.RootHints)
-	configuration.EncryptedDNS.DoTListen = uniqueTrimmed(configuration.EncryptedDNS.DoTListen)
-	configuration.EncryptedDNS.DoHListen = uniqueTrimmed(configuration.EncryptedDNS.DoHListen)
-	configuration.EncryptedDNS.DoQListen = uniqueTrimmed(configuration.EncryptedDNS.DoQListen)
-	configuration.EncryptedDNS.CertificateMode = strings.ToLower(strings.TrimSpace(configuration.EncryptedDNS.CertificateMode))
-	if configuration.EncryptedDNS.CertificateMode == "" {
-		configuration.EncryptedDNS.CertificateMode = defaultCertificateMode
-	}
-	configuration.EncryptedDNS.CertificateFile = strings.TrimSpace(configuration.EncryptedDNS.CertificateFile)
-	configuration.EncryptedDNS.PrivateKeyFile = strings.TrimSpace(configuration.EncryptedDNS.PrivateKeyFile)
-	configuration.EncryptedDNS.MinimumVersion = strings.TrimSpace(configuration.EncryptedDNS.MinimumVersion)
-	configuration.EncryptedDNS.ACME.Email = strings.TrimSpace(configuration.EncryptedDNS.ACME.Email)
-	configuration.EncryptedDNS.ACME.Domains = uniqueTrimmed(configuration.EncryptedDNS.ACME.Domains)
-	configuration.EncryptedDNS.ACME.DirectoryURL = strings.TrimSpace(configuration.EncryptedDNS.ACME.DirectoryURL)
-	configuration.EncryptedDNS.ACME.DNSProvider = strings.ToLower(strings.TrimSpace(configuration.EncryptedDNS.ACME.DNSProvider))
-	configuration.EncryptedDNS.ACME.DNSZone = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(configuration.EncryptedDNS.ACME.DNSZone)), ".")
-	configuration.EncryptedDNS.ACME.StorageDirectory = strings.TrimSpace(configuration.EncryptedDNS.ACME.StorageDirectory)
-	if configuration.EncryptedDNS.ACME.DirectoryURL == "" {
-		configuration.EncryptedDNS.ACME.DirectoryURL = defaultACMEDirectoryURL
-	}
+	configuration.Resolver.normalize()
+	configuration.EncryptedDNS.normalize()
 	// A hand-written enabled = true means the server was set up.
 	configuration.MCP.Configured = configuration.MCP.Configured || configuration.MCP.Enabled
 	configuration.MCP.Tools = normalizeMCPTools(configuration.MCP.Tools)
 	configuration.MCP.Group = strings.TrimSpace(configuration.MCP.Group)
-	if configuration.EncryptedDNS.ACME.StorageDirectory == "" {
-		configuration.EncryptedDNS.ACME.StorageDirectory = defaultACMEStorageDir
-	}
-	if configuration.EncryptedDNS.ACME.RenewBefore.Duration == 0 {
-		configuration.EncryptedDNS.ACME.RenewBefore.Duration = defaultACMERenewBefore
-	}
 	configuration.normalizeDynamicDNS()
 	configuration.normalizeUniFi()
 	configuration.normalizeInsights()
@@ -1335,87 +1403,137 @@ func (configuration *Config) normalize() {
 	configuration.Cluster.NodeName = strings.TrimSpace(configuration.Cluster.NodeName)
 	configuration.Cluster.AdvertiseURL = strings.TrimRight(strings.TrimSpace(configuration.Cluster.AdvertiseURL), "/")
 	configuration.Cluster.TrustAnchorFile = strings.TrimSpace(configuration.Cluster.TrustAnchorFile)
-	for index := range configuration.TSIGKeys {
-		key := &configuration.TSIGKeys[index]
-		key.Name = strings.ToLower(dns.Fqdn(strings.TrimSpace(key.Name)))
-		key.Algorithm = canonicalTSIGAlgorithm(key.Algorithm)
-		key.Secret = strings.TrimSpace(key.Secret)
+	normalizeTSIGKeys(configuration.TSIGKeys)
+	configuration.Blocking.normalize()
+}
+
+func (settings *Resolver) normalize() {
+	settings.Recursion = strings.ToLower(strings.TrimSpace(settings.Recursion))
+	if settings.Recursion == "" {
+		settings.Recursion = "private"
 	}
-	slices.SortFunc(configuration.TSIGKeys, func(left, right TSIGKey) int {
-		return strings.Compare(left.Name, right.Name)
-	})
-	for index := range configuration.Resolver.Routes {
-		route := &configuration.Resolver.Routes[index]
+	settings.RecursionClients = uniqueTrimmed(settings.RecursionClients)
+	settings.Forwarders = uniqueTrimmed(settings.Forwarders)
+	settings.Mode = strings.ToLower(strings.TrimSpace(settings.Mode))
+	if settings.Mode == "" {
+		settings.Mode = "forward"
+	}
+	settings.RootHints = uniqueTrimmed(settings.RootHints)
+	settings.DNSSECTrustAnchors = uniqueTrimmed(settings.DNSSECTrustAnchors)
+	settings.DNSSECNegativeTrustAnchors = uniqueDomainsAllowRoot(settings.DNSSECNegativeTrustAnchors)
+	for index := range settings.Routes {
+		route := &settings.Routes[index]
 		route.Domain = normalizeDomain(route.Domain)
 		route.Forwarders = uniqueTrimmed(route.Forwarders)
 	}
-	configuration.Resolver.DNSSECTrustAnchors = uniqueTrimmed(configuration.Resolver.DNSSECTrustAnchors)
-	configuration.Resolver.DNSSECNegativeTrustAnchors = uniqueDomainsAllowRoot(configuration.Resolver.DNSSECNegativeTrustAnchors)
-	slices.SortFunc(configuration.Resolver.Routes, func(left, right ForwardRoute) int {
+	slices.SortFunc(settings.Routes, func(left, right ForwardRoute) int {
 		return strings.Compare(left.Domain, right.Domain)
 	})
-	for index := range configuration.Resolver.Hosts {
-		host := &configuration.Resolver.Hosts[index]
+	for index := range settings.Hosts {
+		host := &settings.Hosts[index]
 		host.Name = normalizeDomain(host.Name)
 		host.Addresses = uniqueAddresses(host.Addresses)
 		if host.TTL == 0 {
 			host.TTL = defaultHostTTL
 		}
 	}
-	slices.SortFunc(configuration.Resolver.Hosts, func(left, right HostOverride) int {
+	slices.SortFunc(settings.Hosts, func(left, right HostOverride) int {
 		return strings.Compare(left.Name, right.Name)
 	})
+}
 
-	normalizedDomains := make([]string, 0, len(configuration.Blocking.Domains))
-	for _, domain := range configuration.Blocking.Domains {
-		normalized := normalizePolicyDomain(domain)
-		if normalized != "" {
-			normalizedDomains = append(normalizedDomains, normalized)
-		}
+func (settings *EncryptedDNS) normalize() {
+	settings.DoTListen = uniqueTrimmed(settings.DoTListen)
+	settings.DoHListen = uniqueTrimmed(settings.DoHListen)
+	settings.DoQListen = uniqueTrimmed(settings.DoQListen)
+	settings.CertificateMode = strings.ToLower(strings.TrimSpace(settings.CertificateMode))
+	if settings.CertificateMode == "" {
+		settings.CertificateMode = defaultCertificateMode
 	}
-	slices.Sort(normalizedDomains)
-	configuration.Blocking.Domains = slices.Compact(normalizedDomains)
-	normalizedAllowed := make([]string, 0, len(configuration.Blocking.AllowedDomains))
-	for _, domain := range configuration.Blocking.AllowedDomains {
-		normalized := normalizePolicyDomain(domain)
-		if normalized != "" {
-			normalizedAllowed = append(normalizedAllowed, normalized)
-		}
+	settings.CertificateFile = strings.TrimSpace(settings.CertificateFile)
+	settings.PrivateKeyFile = strings.TrimSpace(settings.PrivateKeyFile)
+	settings.MinimumVersion = strings.TrimSpace(settings.MinimumVersion)
+	acme := &settings.ACME
+	acme.Email = strings.TrimSpace(acme.Email)
+	acme.Domains = uniqueTrimmed(acme.Domains)
+	acme.DirectoryURL = strings.TrimSpace(acme.DirectoryURL)
+	acme.DNSProvider = strings.ToLower(strings.TrimSpace(acme.DNSProvider))
+	acme.DNSZone = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(acme.DNSZone)), ".")
+	acme.StorageDirectory = strings.TrimSpace(acme.StorageDirectory)
+	if acme.DirectoryURL == "" {
+		acme.DirectoryURL = defaultACMEDirectoryURL
 	}
-	slices.Sort(normalizedAllowed)
-	configuration.Blocking.AllowedDomains = slices.Compact(normalizedAllowed)
-	configuration.Blocking.ResponseType = strings.ToLower(strings.TrimSpace(configuration.Blocking.ResponseType))
-	if configuration.Blocking.ResponseType == "" {
-		configuration.Blocking.ResponseType = "nxdomain"
+	if acme.StorageDirectory == "" {
+		acme.StorageDirectory = defaultACMEStorageDir
 	}
-	if configuration.Blocking.UpdateInterval.Duration == 0 {
-		configuration.Blocking.UpdateInterval.Duration = defaultBlockListUpdate
+	if acme.RenewBefore.Duration == 0 {
+		acme.RenewBefore.Duration = defaultACMERenewBefore
 	}
-	configuration.Blocking.CustomAddresses = uniqueAddresses(configuration.Blocking.CustomAddresses)
-	configuration.Blocking.BypassClients = uniqueTrimmed(configuration.Blocking.BypassClients)
-	for index := range configuration.Blocking.Lists {
-		list := &configuration.Blocking.Lists[index]
-		list.Name = strings.TrimSpace(list.Name)
-		list.Path = strings.TrimSpace(list.Path)
-		list.URL = strings.TrimSpace(list.URL)
-		if list.Path == "" && list.URL != "" {
-			list.Path = blockcompiler.CachePath(list.URL)
-		}
-		list.Format = strings.ToLower(strings.TrimSpace(list.Format))
-		if list.Format == "" {
+}
+
+func normalizeTSIGKeys(keys []TSIGKey) {
+	for index := range keys {
+		key := &keys[index]
+		key.Name = strings.ToLower(dns.Fqdn(strings.TrimSpace(key.Name)))
+		key.Algorithm = canonicalTSIGAlgorithm(key.Algorithm)
+		key.Secret = strings.TrimSpace(key.Secret)
+	}
+	slices.SortFunc(keys, func(left, right TSIGKey) int {
+		return strings.Compare(left.Name, right.Name)
+	})
+}
+
+func (settings *Blocking) normalize() {
+	settings.Domains = normalizePolicyDomains(settings.Domains)
+	settings.AllowedDomains = normalizePolicyDomains(settings.AllowedDomains)
+	settings.ResponseType = strings.ToLower(strings.TrimSpace(settings.ResponseType))
+	if settings.ResponseType == "" {
+		settings.ResponseType = "nxdomain"
+	}
+	if settings.UpdateInterval.Duration == 0 {
+		settings.UpdateInterval.Duration = defaultBlockListUpdate
+	}
+	settings.CustomAddresses = uniqueAddresses(settings.CustomAddresses)
+	settings.BypassClients = uniqueTrimmed(settings.BypassClients)
+	for index := range settings.Lists {
+		settings.Lists[index].normalize()
+	}
+	slices.SortFunc(settings.Lists, func(left, right BlockList) int {
+		return strings.Compare(left.Name, right.Name)
+	})
+}
+
+func (list *BlockList) normalize() {
+	list.Name = strings.TrimSpace(list.Name)
+	list.Path = strings.TrimSpace(list.Path)
+	list.URL = strings.TrimSpace(list.URL)
+	if list.Path == "" && list.URL != "" {
+		list.Path = blockcompiler.CachePath(list.URL)
+	}
+	list.Format = strings.ToLower(strings.TrimSpace(list.Format))
+	if list.Format == "" {
+		list.Format = string(blockcompiler.FormatAuto)
+	}
+	if list.URL == "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/hosts/pro.txt" {
+		// Keep the cached hosts file usable until the replacement AdBlock list downloads.
+		list.URL = blockcompiler.HageziProURL
+		if list.Format == string(blockcompiler.FormatHosts) {
 			list.Format = string(blockcompiler.FormatAuto)
 		}
-		if list.URL == "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/hosts/pro.txt" {
-			// Keep the cached hosts file usable until the replacement AdBlock list downloads.
-			list.URL = blockcompiler.HageziProURL
-			if list.Format == string(blockcompiler.FormatHosts) {
-				list.Format = string(blockcompiler.FormatAuto)
-			}
+	}
+}
+
+// normalizePolicyDomains normalizes, sorts and deduplicates block or allow
+// list domains, dropping any that normalize to nothing.
+func normalizePolicyDomains(domains []string) []string {
+	normalized := make([]string, 0, len(domains))
+	for _, domain := range domains {
+		if domain := normalizePolicyDomain(domain); domain != "" {
+			normalized = append(normalized, domain)
 		}
 	}
-	slices.SortFunc(configuration.Blocking.Lists, func(left, right BlockList) int {
-		return strings.Compare(left.Name, right.Name)
-	})
+	slices.Sort(normalized)
+	return slices.Compact(normalized)
 }
 
 // ValidateTSIGSecret reports whether a shared secret is usable. The console and
