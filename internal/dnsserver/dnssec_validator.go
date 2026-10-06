@@ -899,6 +899,12 @@ func provesNoData(records []dns.RR, name string, recordType uint16) bool {
 			if normalizeFQDN(typed.Hdr.Name) == name && lacksType(typed.TypeBitMap, recordType) {
 				return true
 			}
+			// An empty non-terminal owns no NSEC. One covering it whose next
+			// name sits below it shows it exists with no records at all
+			// (RFC 4035 section 3.1.3.2). ARIN's 207.192.in-addr.arpa is one.
+			if nsecCovers(typed, name) && nsecProvesNameExists(typed, name) && !nsecDelegatesAbove(typed, name) {
+				return true
+			}
 		case *dns.NSEC3:
 			if typed.Match(name) && lacksType(typed.TypeBitMap, recordType) {
 				return true
