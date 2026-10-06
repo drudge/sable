@@ -9,6 +9,7 @@ import (
 
 	blockcompiler "github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/dnsserver"
+	"github.com/drudge/sable/internal/procstats"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/version"
 )
@@ -55,6 +56,7 @@ func (server *Server) metrics(writer http.ResponseWriter, _ *http.Request) {
 	writeDNSLatencyMetrics(&output, dnsStats.Latency)
 	writeClusterNodeMetrics(&output, cluster.nodes)
 	writeBlockListSourceMetrics(&output, blockListStatus.Sources)
+	writeProcessMetrics(&output, procstats.Read())
 
 	writer.Header().Set("Content-Type", prometheusContentType)
 	writer.WriteHeader(http.StatusOK)
@@ -208,6 +210,48 @@ func writeDNSLatencyMetrics(output *strings.Builder, histograms []dnsserver.DNSL
 		fmt.Fprintf(output, "%s_sum{%s} %s\n", metricName, labels, strconv.FormatFloat(time.Duration(histogram.SumNanoseconds).Seconds(), 'g', -1, 64))
 		fmt.Fprintf(output, "%s_count{%s} %d\n", metricName, labels, histogram.Count)
 	}
+}
+
+// writeProcessMetrics uses the names of the Prometheus Go client's process
+// and Go collectors, so stock Go dashboards and alerts work unchanged.
+func writeProcessMetrics(output *strings.Builder, stats procstats.Stats) {
+	type sample struct {
+		name, help, metricType string
+		value                  float64
+	}
+	metrics := []sample{}
+	if stats.HasCPU {
+		metrics = append(metrics, sample{"process_cpu_seconds_total", "Total user and system CPU time spent in seconds.", "counter", stats.CPUSeconds})
+	}
+	if stats.HasResident {
+		metrics = append(metrics, sample{"process_resident_memory_bytes", "Resident memory size in bytes.", "gauge", float64(stats.ResidentBytes)})
+	}
+	lastGC := 0.0
+	if !stats.LastGC.IsZero() {
+		lastGC = float64(stats.LastGC.UnixNano()) / 1e9
+	}
+	metrics = append(metrics,
+		sample{"go_goroutines", "Number of goroutines that currently exist.", "gauge", float64(stats.Goroutines)},
+		sample{"go_sched_gomaxprocs_threads", "The current runtime.GOMAXPROCS setting.", "gauge", float64(stats.GOMAXPROCS)},
+		sample{"go_memstats_alloc_bytes", "Number of heap bytes allocated and still in use.", "gauge", float64(stats.HeapAllocBytes)},
+		sample{"go_memstats_heap_alloc_bytes", "Number of heap bytes allocated and still in use.", "gauge", float64(stats.HeapAllocBytes)},
+		sample{"go_memstats_heap_inuse_bytes", "Number of heap bytes that are in use.", "gauge", float64(stats.HeapInuseBytes)},
+		sample{"go_memstats_heap_idle_bytes", "Number of heap bytes waiting to be used.", "gauge", float64(stats.HeapIdleBytes)},
+		sample{"go_memstats_heap_released_bytes", "Number of heap bytes released to the OS.", "gauge", float64(stats.HeapReleasedBytes)},
+		sample{"go_memstats_heap_sys_bytes", "Number of heap bytes obtained from the system.", "gauge", float64(stats.HeapSysBytes)},
+		sample{"go_memstats_heap_objects", "Number of currently allocated objects.", "gauge", float64(stats.HeapObjects)},
+		sample{"go_memstats_sys_bytes", "Number of bytes obtained from the system.", "gauge", float64(stats.SysBytes)},
+		sample{"go_memstats_next_gc_bytes", "Number of heap bytes when the next garbage collection will take place.", "gauge", float64(stats.NextGCBytes)},
+		sample{"go_memstats_last_gc_time_seconds", "Number of seconds since 1970 of last garbage collection.", "gauge", lastGC},
+	)
+	for _, metric := range metrics {
+		fmt.Fprintf(output, "# HELP %s %s\n# TYPE %s %s\n%s %s\n", metric.name, metric.help, metric.name, metric.metricType, metric.name, strconv.FormatFloat(metric.value, 'f', -1, 64))
+	}
+	// A summary with no quantiles: the total pause time and cycle count.
+	fmt.Fprintln(output, "# HELP go_gc_duration_seconds A summary of the wall-time pause (stop-the-world) duration in garbage collection cycles.")
+	fmt.Fprintln(output, "# TYPE go_gc_duration_seconds summary")
+	fmt.Fprintf(output, "go_gc_duration_seconds_sum %s\n", strconv.FormatFloat(stats.GCPauseSeconds, 'g', -1, 64))
+	fmt.Fprintf(output, "go_gc_duration_seconds_count %d\n", stats.GCCycles)
 }
 
 func blockListSourceMetricValue(name string, source blockcompiler.SourceHealth) uint64 {

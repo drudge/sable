@@ -125,7 +125,9 @@ Watch at least:
 - `sable_dnssec_bogus_total` and trust-anchor state;
 - `sable_cluster_nodes_connected`, `sable_cluster_nodes_synchronized`, and
   `sable_cluster_node_replication_lag_generations` in a cluster;
-- cache occupancy and hit/miss counters for workload changes.
+- cache occupancy and hit/miss counters for workload changes;
+- `process_resident_memory_bytes`, `go_memstats_heap_inuse_bytes`, and
+  `rate(process_cpu_seconds_total[5m])` for memory and CPU use.
 
 Counters describe the local process. Cluster membership gauges report the
 local node's current view of all members; Sable does not yet aggregate every

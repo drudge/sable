@@ -1434,6 +1434,12 @@ domain or client labels. Cluster metrics expose aggregate membership/current
 generation status plus connected, synchronized, and generation-lag gauges for
 each enrolled node.
 
+Process metrics use the Prometheus Go client's names, so stock Go dashboards
+work unchanged: `process_cpu_seconds_total`, `process_resident_memory_bytes`
+(Linux only), `go_goroutines`, `go_sched_gomaxprocs_threads`, the
+`go_memstats_*` heap and system memory gauges, and `go_gc_duration_seconds`,
+a summary of total garbage-collection pause time and cycle count.
+
 Assign `metrics.read` on the API surface to a group, create a token using that
 group, and send it as `Authorization: Bearer sable_pat_...`. The
 [operations guide](operations.md) includes health, log, metric, update, and

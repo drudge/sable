@@ -12,6 +12,7 @@ import (
 	"github.com/drudge/sable/internal/dnsprovider"
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/dynamicdns"
+	"github.com/drudge/sable/internal/procstats"
 	"github.com/drudge/sable/internal/update"
 	"github.com/drudge/sable/internal/version"
 )
@@ -137,6 +138,11 @@ func TestMCPGetStats(t *testing.T) {
 		cache["hits"] != float64(4) || cache["hit_ratio"] != 0.667 || stats["responses"].(map[string]any)["nxdomain"] != float64(3) {
 		t.Fatalf("counts = %v", stats)
 	}
+	process := stats["process"].(map[string]any)
+	memory := process["memory"].(map[string]any)
+	if process["goroutines"].(float64) < 1 || memory["heap_inuse_bytes"].(float64) <= 0 || process["cpu"].(map[string]any)["cores"].(float64) < 1 {
+		t.Fatalf("process = %v", process)
+	}
 	// Who asked and what was blocked come from the query log.
 	if stats["top_blocked"] != nil || stats["clients"] != nil || !strings.Contains(stats["note"].(string), "logs.read") {
 		t.Fatalf("metrics.read alone = %v", stats)
@@ -150,6 +156,25 @@ func TestMCPGetStats(t *testing.T) {
 	}
 	if _, failure := callMCPToolForTest(t, server, "sable_pat_blocking", "get_stats", map[string]any{}); !strings.Contains(failure, "metrics.read") {
 		t.Fatalf("without metrics.read = %q", failure)
+	}
+}
+
+func TestMCPProcess(t *testing.T) {
+	t.Parallel()
+	started := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+	lastGC := started.Add(90 * time.Second)
+	process := mcpProcess(procstats.Stats{
+		CPUSeconds: 30, HasCPU: true, ResidentBytes: 64 << 20, HasResident: true, NumCPU: 4,
+		GCCycles: 3, GCPauseSeconds: 0.0012345, LastGC: lastGC,
+	}, started, started.Add(10*time.Minute))
+	if *process.CPU.Seconds != 30 || *process.CPU.AveragePercent != 5 || *process.Memory.ResidentBytes != 64<<20 ||
+		process.GC.PauseTotalMS != 1.235 || !process.GC.LastAt.Equal(lastGC) {
+		t.Fatalf("process = %+v", process)
+	}
+	// What the platform cannot report is left out, not zero.
+	unknown := mcpProcess(procstats.Stats{}, time.Time{}, started)
+	if unknown.CPU.Seconds != nil || unknown.CPU.AveragePercent != nil || unknown.Memory.ResidentBytes != nil || unknown.GC.LastAt != nil {
+		t.Fatalf("unknown = %+v", unknown)
 	}
 }
 
