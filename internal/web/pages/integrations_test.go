@@ -372,3 +372,21 @@ func openingTags(html, kind, needle string) []string {
 	}
 	return tags
 }
+
+// The integration cards are in alphabetical order by title, so a new
+// integration has an obvious place and operators can scan for one.
+func TestIntegrationCardsAreAlphabetical(t *testing.T) {
+	html := render(t, IntegrationsContent(IntegrationsPageView{SSO: SSOAppView{Available: true}}))
+	titles := []string{"Dynamic DNS", "MCP Server", "Single Sign-On", "UniFi Host Sync"}
+	last := -1
+	for _, title := range titles {
+		position := strings.Index(html, ">"+title+"<")
+		if position < 0 {
+			t.Fatalf("integration card %q is missing", title)
+		}
+		if position < last {
+			t.Errorf("integration card %q is out of alphabetical order", title)
+		}
+		last = position
+	}
+}
