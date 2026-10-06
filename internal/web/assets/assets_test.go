@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -15,7 +16,7 @@ import (
 func TestAppleTouchIconHasOpaqueBlackSafeArea(t *testing.T) {
 	t.Parallel()
 
-	icon, err := png.Decode(bytes.NewReader(manifest["sable-icon-180.png"].content))
+	icon, err := png.Decode(strings.NewReader(manifest["sable-icon-180.png"].content))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +74,7 @@ func TestFingerprintURLServesImmutableCompressedAsset(t *testing.T) {
 	if err := reader.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(decompressed, manifest["app.js"].content) {
+	if string(decompressed) != manifest["app.js"].content {
 		t.Fatal("compressed response does not expand to app.js")
 	}
 }
@@ -126,7 +127,7 @@ func TestGzipQualityZeroKeepsIdentityRepresentation(t *testing.T) {
 	if response.Header().Get("Content-Encoding") != "" {
 		t.Fatalf("Content-Encoding = %q, want identity", response.Header().Get("Content-Encoding"))
 	}
-	if !bytes.Equal(response.Body.Bytes(), manifest["app.css"].content) {
+	if response.Body.String() != manifest["app.css"].content {
 		t.Fatal("identity response does not match app.css")
 	}
 }
@@ -134,7 +135,7 @@ func TestGzipQualityZeroKeepsIdentityRepresentation(t *testing.T) {
 func TestStylesheetLoadsFingerprintedFonts(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	for _, name := range []string{"inter-latin.woff2", "inter-extra.woff2"} {
 		path := URL(name)
 		if !strings.Contains(stylesheet, `url("`+path+`")`) || strings.Contains(stylesheet, `url("`+name+`")`) {
@@ -160,7 +161,7 @@ func TestStylesheetLoadsFingerprintedFonts(t *testing.T) {
 func TestVendoredHTMXVersion(t *testing.T) {
 	t.Parallel()
 
-	if content := string(manifest["htmx.min.js"].content); !strings.Contains(content, `version="4.0.0"`) {
+	if content := manifest["htmx.min.js"].content; !strings.Contains(content, `version="4.0.0"`) {
 		t.Fatal("vendored htmx asset is not version 4.0.0")
 	}
 }
@@ -168,7 +169,7 @@ func TestVendoredHTMXVersion(t *testing.T) {
 func TestAccessibilityInteractionAssets(t *testing.T) {
 	t.Parallel()
 
-	script := string(manifest["app.js"].content)
+	script := manifest["app.js"].content
 	for _, expected := range []string{
 		"const tabFromKey", "setupDialogAccessibility", "setupScrollableRegion",
 		"Live log updates paused", "data-chart-keyboard-status", "sidebar-mobile-open",
@@ -180,7 +181,7 @@ func TestAccessibilityInteractionAssets(t *testing.T) {
 		}
 	}
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	for _, expected := range []string{".skip-links", ".command-palette", ":focus-visible", "prefers-reduced-motion", "forced-colors"} {
 		if !strings.Contains(stylesheet, expected) {
 			t.Errorf("application stylesheet does not contain accessibility rule %q", expected)
@@ -191,7 +192,7 @@ func TestAccessibilityInteractionAssets(t *testing.T) {
 func TestSharedFileDropzoneAssets(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	for _, expected := range []string{
 		"border: 1px solid var(--dropzone-border)",
 		".file-dropzone.is-dragging",
@@ -203,7 +204,7 @@ func TestSharedFileDropzoneAssets(t *testing.T) {
 		}
 	}
 
-	script := string(manifest["app.js"].content)
+	script := manifest["app.js"].content
 	for _, expected := range []string{
 		`event.target.closest("[data-file-dropzone]")`,
 		`dropzone.querySelector("[data-file-dropzone-input]")`,
@@ -222,7 +223,7 @@ func TestSharedFileDropzoneAssets(t *testing.T) {
 func TestSidebarTracksTheVisibleMobileViewport(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	if !strings.Contains(stylesheet, "height: 100vh;\n  height: 100dvh;") {
 		t.Fatal("sidebar does not provide a legacy viewport fallback followed by a dynamic viewport height")
 	}
@@ -234,7 +235,7 @@ func TestSidebarTracksTheVisibleMobileViewport(t *testing.T) {
 func TestSidebarNavigationScrollsWithACueAtEverySize(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	if strings.Contains(stylesheet, ".sidebar .nav { overflow-y: hidden; }") {
 		t.Error("desktop sidebar navigation cannot scroll, so a short window cuts off its last items")
 	}
@@ -254,7 +255,7 @@ func TestSidebarNavigationScrollsWithACueAtEverySize(t *testing.T) {
 func TestSidebarNavigationItemsHaveSeparation(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	if !strings.Contains(stylesheet, ".nav-item + .nav-item { margin-top: var(--space-1); }") {
 		t.Fatal("adjacent sidebar navigation items do not have visual separation")
 	}
@@ -263,7 +264,7 @@ func TestSidebarNavigationItemsHaveSeparation(t *testing.T) {
 func TestSidebarListFitsALaptopHeightWindow(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	for _, expected := range []string{
 		".sidebar-header { padding: var(--space-2) 0.375rem var(--space-1); }",
 		".nav-group { padding: var(--space-1) 0; }",
@@ -281,7 +282,7 @@ func TestSidebarListFitsALaptopHeightWindow(t *testing.T) {
 func TestPhoneMenuScrimBlursLikeDialogBackdrops(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	for _, expected := range []string{
 		"dialog[open]::backdrop {\n  -webkit-backdrop-filter: blur(4px);\n  backdrop-filter: blur(4px);\n}",
 		".sidebar-scrim { position: fixed; inset: 0; z-index: 20; background: rgb(0 0 0 / 0.55); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }",
@@ -296,12 +297,12 @@ func TestPhoneMenuScrimBlursLikeDialogBackdrops(t *testing.T) {
 func TestFrontmostNotificationKeepsItsFullCardHeight(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	if !strings.Contains(stylesheet, ".notification-stack > .toast-region:last-child {\n    height: var(--notification-expanded-card-height, var(--notification-collapsed-card-height));\n  }") {
 		t.Error("frontmost notification should keep its natural height")
 	}
 
-	script := string(manifest["app.js"].content)
+	script := manifest["app.js"].content
 	if !strings.Contains(script, "const frontCardHeight = expandedHeights.at(-1) || collapsedCardHeight;") {
 		t.Error("notification stack should size itself around the frontmost card")
 	}
@@ -313,7 +314,7 @@ func TestFrontmostNotificationKeepsItsFullCardHeight(t *testing.T) {
 func TestSidebarHoverAndActiveBorders(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	for _, expected := range []string{
 		"border: 1px solid transparent",
 		".nav-item:hover { border-color: var(--border); }",
@@ -328,7 +329,7 @@ func TestSidebarHoverAndActiveBorders(t *testing.T) {
 func TestOutlineButtonsShareIconButtonHoverTreatment(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	if !strings.Contains(stylesheet, ".button.outline:hover { background: var(--accent); color: var(--accent-foreground); opacity: 1; }") {
 		t.Fatal("outline buttons do not use the accent hover treatment")
 	}
@@ -337,7 +338,7 @@ func TestOutlineButtonsShareIconButtonHoverTreatment(t *testing.T) {
 func TestOperationalMetricCardsUseCompactResponsiveLayout(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	for _, expected := range []string{
 		".operational-metric { display: flex; min-width: 0; min-height: 4.5rem; align-items: center;",
 		".operational-metric-row { display: flex; width: 100%;",
@@ -353,7 +354,7 @@ func TestOperationalMetricCardsUseCompactResponsiveLayout(t *testing.T) {
 func TestNativeSelectOptionsRemainReadableOnLightPopups(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	if !strings.Contains(stylesheet, "select option, select optgroup { background-color: #fff; color: #171717; }") {
 		t.Fatal("native select options do not override inherited dark-theme text")
 	}
@@ -362,14 +363,14 @@ func TestNativeSelectOptionsRemainReadableOnLightPopups(t *testing.T) {
 func TestStyledSelectOwnsItsThemeAndKeyboardBehavior(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	for _, expected := range []string{".styled-select-trigger", ".styled-select-popover", `.styled-select[data-side="top"]`, ".styled-select-option.placeholder", "background: var(--popover)", "position: fixed", "inset: auto", "margin: 0"} {
 		if !strings.Contains(stylesheet, expected) {
 			t.Errorf("application stylesheet does not contain styled select rule %q", expected)
 		}
 	}
 
-	script := string(manifest["app.js"].content)
+	script := manifest["app.js"].content
 	for _, expected := range []string{"setupStyledSelect", "positionFloatingPopover", `popover.setAttribute("popover", "manual")`, "popover.showPopover()", `document.addEventListener("scroll", repositionPopover, true)`, `option.hasAttribute("data-placeholder")`, "MutationObserver", `role", "combobox`, `role", "listbox`, `event.key === "ArrowDown"`, `event.key === "Escape"`} {
 		if !strings.Contains(script, expected) {
 			t.Errorf("application script does not contain styled select behavior %q", expected)
@@ -380,7 +381,7 @@ func TestStyledSelectOwnsItsThemeAndKeyboardBehavior(t *testing.T) {
 func TestCustomControlTriggersMatchTextFields(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	for _, selector := range []string{"\n.styled-select-trigger {", "\n.range-trigger {", "\n.resolver-trigger {"} {
 		_, afterSelector, found := strings.Cut(stylesheet, selector)
 		if !found {
@@ -415,13 +416,13 @@ func TestCustomControlTriggersMatchTextFields(t *testing.T) {
 func TestRangeCalendarUsesStyledMonthAndYearSelects(t *testing.T) {
 	t.Parallel()
 
-	script := string(manifest["app.js"].content)
+	script := manifest["app.js"].content
 	for _, expected := range []string{"sableSyncStyledSelect", "monthSelect.sableSyncStyledSelect?.()", "yearSelect.sableSyncStyledSelect?.()", `event.key !== "Escape" || event.defaultPrevented`} {
 		if !strings.Contains(script, expected) {
 			t.Errorf("range calendar does not synchronize styled select behavior %q", expected)
 		}
 	}
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	if !strings.Contains(stylesheet, ".calendar-dropdowns .styled-select-trigger") {
 		t.Error("range calendar does not size its styled select triggers")
 	}
@@ -433,7 +434,7 @@ func TestRangeCalendarUsesStyledMonthAndYearSelects(t *testing.T) {
 func TestStyledTimePickerOwnsItsThemeAndKeyboardBehavior(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	for _, expected := range []string{".styled-time-trigger", ".styled-time-entry", ".styled-time-toggle", ".styled-time-popover", ".styled-time-columns", `.styled-time[data-side="top"]`} {
 		if !strings.Contains(stylesheet, expected) {
 			t.Errorf("application stylesheet does not contain styled time rule %q", expected)
@@ -443,7 +444,7 @@ func TestStyledTimePickerOwnsItsThemeAndKeyboardBehavior(t *testing.T) {
 		t.Error("open settings time picker remains clipped by its card")
 	}
 
-	script := string(manifest["app.js"].content)
+	script := manifest["app.js"].content
 	for _, expected := range []string{"setupStyledTime", "uses24HourTime", "parseTimeEntry", "selectTimeSegment", "moveTimeSegment", "typeTimeDigit", "positionAnchoredPopover", `event.key === "ArrowDown"`, `event.key === "Escape"`} {
 		if !strings.Contains(script, expected) {
 			t.Errorf("application script does not contain styled time behavior %q", expected)
@@ -454,7 +455,7 @@ func TestStyledTimePickerOwnsItsThemeAndKeyboardBehavior(t *testing.T) {
 func TestStyledTimePickerMatchesTextFieldGeometryAndSurface(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	_, afterSelector, found := strings.Cut(stylesheet, ".styled-time-trigger {")
 	if !found {
 		t.Fatal("application stylesheet does not define the styled time trigger")
@@ -483,7 +484,7 @@ func TestStyledTimePickerMatchesTextFieldGeometryAndSurface(t *testing.T) {
 func TestCertificateChoiceInputsCannotCreateHorizontalOverflow(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	selector := ".certificate-mode-control input, .cluster-certificate-choices > label > input {"
 	_, afterSelector, found := strings.Cut(stylesheet, selector)
 	if !found {
@@ -503,7 +504,7 @@ func TestCertificateChoiceInputsCannotCreateHorizontalOverflow(t *testing.T) {
 func TestIntegrationActionsStackAcrossNarrowCards(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	for _, expected := range []string{
 		"@media (max-width: 960px)",
 		".integration-card-actions { align-items: stretch; flex-direction: column-reverse; }",
@@ -519,7 +520,7 @@ func TestIntegrationActionsStackAcrossNarrowCards(t *testing.T) {
 func TestOpenZoneActionMenuStacksAboveSiblingButtons(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	if !strings.Contains(stylesheet, ".zone-action-menu[open] { z-index: 30; }") {
 		t.Error("open zone action menu does not stack above closed sibling menus")
 	}
@@ -528,7 +529,7 @@ func TestOpenZoneActionMenuStacksAboveSiblingButtons(t *testing.T) {
 func TestDialogFooterButtonsCenterFullWidthMobileLabels(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	if !strings.Contains(stylesheet, ".dialog-footer .button { display: inline-flex; align-items: center; justify-content: center;") {
 		t.Error("dialog footer buttons do not center their contents when expanded on mobile")
 	}
@@ -537,7 +538,7 @@ func TestDialogFooterButtonsCenterFullWidthMobileLabels(t *testing.T) {
 func TestSettingsTabsFormTwoRowsOfFiveOnPhones(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	for _, expected := range []string{
 		"@media (max-width: 960px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 4 * .25rem) / 5); } }",
 		"@media (max-width: 374px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 3 * .25rem) / 4); } }",
@@ -551,7 +552,7 @@ func TestSettingsTabsFormTwoRowsOfFiveOnPhones(t *testing.T) {
 func TestPhoneDialogFootersKeepTheCloseButtonAtTheBottom(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	_, phone, found := strings.Cut(stylesheet, "@media (max-width: 639px)")
 	for _, expected := range []string{
 		".dialog-footer { flex-direction: column-reverse; }",
@@ -570,7 +571,7 @@ func TestPhoneDialogFootersKeepTheCloseButtonAtTheBottom(t *testing.T) {
 func TestMobileBackupActionsCenterButtonContents(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	if !strings.Contains(stylesheet, ".backup-local-actions .button { justify-content: center;") {
 		t.Error("mobile backup action buttons do not center their icon and label")
 	}
@@ -579,7 +580,7 @@ func TestMobileBackupActionsCenterButtonContents(t *testing.T) {
 func TestQueryLogToolbarUsesAvailableCompactWidth(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	for _, expected := range []string{
 		"@media (min-width: 561px) and (max-width: 960px)",
 		".query-logs-toolbar { align-items: center; flex-direction: row; }",
@@ -594,7 +595,7 @@ func TestQueryLogToolbarUsesAvailableCompactWidth(t *testing.T) {
 func TestQueryLogFilterCaretUsesSplitButtonAlignment(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	for _, expected := range []string{
 		".filters-toggle { gap: .4rem; overflow: hidden; padding-right: 0; }",
 		".filters-toggle .button-caret { display: grid; width: 2.15rem; align-self: stretch; flex: 0 0 2.15rem; place-items: center;",
@@ -609,7 +610,7 @@ func TestQueryLogFilterCaretUsesSplitButtonAlignment(t *testing.T) {
 func TestQueryLogFiltersAnimateFromToolbar(t *testing.T) {
 	t.Parallel()
 
-	script := string(manifest["app.js"].content)
+	script := manifest["app.js"].content
 	for _, expected := range []string{
 		"const animateFiltersPanel = (open) =>",
 		"const fullHeight = filtersPanel.scrollHeight",
@@ -627,7 +628,7 @@ func TestQueryLogFiltersAnimateFromToolbar(t *testing.T) {
 func TestMobileLogTabsSpanAvailableWidth(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	_, mobileStyles, found := strings.Cut(stylesheet, "@media (max-width: 700px)")
 	if !found || !strings.Contains(mobileStyles, ".logs-tab-list { width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }") {
 		t.Error("mobile log tabs do not span the available content width")
@@ -637,7 +638,7 @@ func TestMobileLogTabsSpanAvailableWidth(t *testing.T) {
 func TestAdministrationMobileRowsKeepChevronAtRightEdge(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	if !strings.Contains(stylesheet, ".admin-mobile-row { display: flex; width: 100%;") {
 		t.Error("administration mobile rows do not use the flex layout required to align their chevron")
 	}
@@ -646,7 +647,7 @@ func TestAdministrationMobileRowsKeepChevronAtRightEdge(t *testing.T) {
 func TestAdministrationMobileRowsUseTrailingStatusAndGroupTags(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	for _, expected := range []string{
 		".admin-mobile-user-row > div.admin-mobile-user-copy { grid-template-columns: minmax(0, 1fr); gap: .35rem; }",
 		".admin-mobile-user-meta { display: flex; min-width: 0; flex-wrap: wrap; align-items: center;",
@@ -665,7 +666,7 @@ func TestAdministrationMobileRowsUseTrailingStatusAndGroupTags(t *testing.T) {
 func TestAdministrationMobileTabsUseBalancedRows(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	_, mobileStyles, found := strings.Cut(stylesheet, "@media (max-width: 700px)")
 	for _, expected := range []string{
 		".admin-tab-list { display: grid; width: 100%; grid-template-columns: repeat(6, minmax(0, 1fr));",
@@ -681,7 +682,7 @@ func TestAdministrationMobileTabsUseBalancedRows(t *testing.T) {
 func TestAdministrationMobileGroupAlignsMemberBadgeWithChevron(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := string(manifest["app.css"].content)
+	stylesheet := manifest["app.css"].content
 	for _, expected := range []string{
 		".admin-mobile-group-row > div.admin-mobile-group-copy { grid-template-columns: minmax(0, 1fr); gap: .35rem; }",
 		".admin-mobile-user-trailing, .admin-mobile-group-trailing { display: flex; flex: 0 0 auto; align-items: center;",
@@ -689,6 +690,37 @@ func TestAdministrationMobileGroupAlignsMemberBadgeWithChevron(t *testing.T) {
 	} {
 		if !strings.Contains(stylesheet, expected) {
 			t.Errorf("mobile group rows do not align the member badge with the chevron: missing %q", expected)
+		}
+	}
+}
+
+// loadManifest runs at package init in every process, CLI subcommands
+// included, so it must stay cheap. Compression waits for the first request.
+func TestLoadingTheManifestAllocatesLittle(t *testing.T) {
+	const budget = 1 << 20
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	loadManifest()
+	runtime.ReadMemStats(&after)
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > budget {
+		t.Fatalf("loadManifest allocated %d bytes, want at most %d", allocated, budget)
+	}
+}
+
+func TestAlreadyCompressedAssetsAreServedAsIs(t *testing.T) {
+	for _, name := range []string{"inter-latin.woff2", "sable-headshot.png"} {
+		request := httptest.NewRequest(http.MethodGet, URL(name), nil)
+		request.Header.Set("Accept-Encoding", "gzip")
+		response := httptest.NewRecorder()
+		Handler().ServeHTTP(response, request)
+		if got := response.Header().Get("Content-Encoding"); got != "" {
+			t.Errorf("%s Content-Encoding = %q, want none", name, got)
+		}
+		if got := response.Header().Get("Vary"); got != "" {
+			t.Errorf("%s Vary = %q, want none", name, got)
+		}
+		if response.Body.String() != manifest[name].content {
+			t.Errorf("%s body differs from the embedded file", name)
 		}
 	}
 }
