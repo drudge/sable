@@ -159,15 +159,10 @@ func (store *Store) upsertSpans(ctx context.Context, executor interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }, table string, keys, values []string, rows [][]any) error {
 	columns := append(append(append([]string(nil), keys...), values...), "first_seen", "last_seen")
-	arguments := make([]any, 0, len(rows)*len(columns))
+	builder := store.newSQLBuilder()
 	tuples := make([]string, 0, len(rows))
 	for _, row := range rows {
-		placeholders := make([]string, len(row))
-		for index := range row {
-			placeholders[index] = store.placeholder(len(arguments) + index + 1)
-		}
-		arguments = append(arguments, row...)
-		tuples = append(tuples, "("+strings.Join(placeholders, ", ")+")")
+		tuples = append(tuples, builder.Values(row...))
 	}
 	updates := make([]string, 0, len(values)+2)
 	for _, column := range values {
@@ -179,7 +174,7 @@ func (store *Store) upsertSpans(ctx context.Context, executor interface {
 	)
 	statement := "INSERT INTO " + table + " (" + strings.Join(columns, ", ") + ") VALUES " + strings.Join(tuples, ", ") +
 		" ON CONFLICT (" + strings.Join(keys, ", ") + ") DO UPDATE SET " + strings.Join(updates, ", ")
-	if _, err := executor.ExecContext(ctx, statement, arguments...); err != nil {
+	if _, err := executor.ExecContext(ctx, statement, builder.Args()...); err != nil {
 		return fmt.Errorf("upsert %s: %w", table, err)
 	}
 	return nil
@@ -688,20 +683,16 @@ func (store *Store) ClientHourlyActivity(ctx context.Context, since, until time.
 	if store.driver == "postgres" {
 		hour = "TO_CHAR(bucket_start, 'YYYY-MM-DD HH24')"
 	}
-	var arguments []any
-	bind := func(value any) string {
-		arguments = append(arguments, value)
-		return store.placeholder(len(arguments))
-	}
+	builder := store.newSQLBuilder()
 	arms := make([]string, 0, len(spans))
 	for _, span := range spans {
 		arms = append(arms, "SELECT value, "+hour+" AS hour, hits FROM "+span.table+
-			" WHERE dimension = "+bind(queryLogRollupClient)+" AND bucket_start >= "+bind(span.start)+" AND bucket_start < "+bind(span.end))
+			" WHERE dimension = "+builder.Bind(queryLogRollupClient)+" AND bucket_start >= "+builder.Bind(span.start)+" AND bucket_start < "+builder.Bind(span.end))
 	}
 	rows, err := store.database.QueryContext(ctx, `
 SELECT value, hour, CAST(SUM(hits) AS BIGINT)
 FROM (`+strings.Join(arms, "\n    UNION ALL\n    ")+`) AS hourly
-GROUP BY value, hour`, arguments...)
+GROUP BY value, hour`, builder.Args()...)
 	if err != nil {
 		return nil, fmt.Errorf("read client hourly activity: %w", err)
 	}

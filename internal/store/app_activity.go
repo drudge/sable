@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -104,21 +105,17 @@ func (store *Store) countAppRollups(ctx context.Context, dimensions []string, st
 	if err != nil || len(spans) == 0 {
 		return err
 	}
-	var arguments []any
-	bind := func(value any) string {
-		arguments = append(arguments, value)
-		return store.placeholder(len(arguments))
-	}
+	builder := store.newSQLBuilder()
 	arms := make([]string, 0, len(spans))
 	for _, span := range spans {
 		arms = append(arms, "SELECT dimension, value, hits FROM "+span.table+
-			" WHERE "+store.dimensionCondition(dimensions, bind)+
-			" AND bucket_start >= "+bind(span.start)+" AND bucket_start < "+bind(span.end))
+			" WHERE "+store.dimensionCondition(dimensions, builder.Bind)+
+			" AND bucket_start >= "+builder.Bind(span.start)+" AND bucket_start < "+builder.Bind(span.end))
 	}
 	rows, err := store.database.QueryContext(ctx, `
 SELECT dimension, value, CAST(SUM(hits) AS BIGINT)
 FROM (`+strings.Join(arms, "\n    UNION ALL\n    ")+`) AS rolled
-GROUP BY dimension, value`, arguments...)
+GROUP BY dimension, value`, builder.Args()...)
 	if err != nil {
 		return fmt.Errorf("read app rollups: %w", err)
 	}
@@ -402,10 +399,7 @@ func (store *Store) BackfillAppRollups(ctx context.Context) (bool, error) {
 			filled, end = true, start
 		}
 	}
-	if _, err := store.database.ExecContext(ctx,
-		"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholders(2)+") ON CONFLICT(key) DO NOTHING",
-		appBackfilledKey, time.Now().UTC().Format(time.RFC3339Nano),
-	); err != nil {
+	if _, err := store.setMetaIfAbsent(ctx, store.database, appBackfilledKey, metaTime(time.Now())); err != nil {
 		return filled, fmt.Errorf("record %s: %w", appBackfilledKey, err)
 	}
 	return filled, nil
@@ -443,28 +437,22 @@ WHERE occurred_at >= `+store.placeholder(1)+` AND occurred_at < `+store.placehol
 	}
 	rollups := sortedRollups(counts)
 
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin app backfill: %w", err)
-	}
-	defer func() { _ = transaction.Rollback() }()
-	for index := 0; index < len(rollups); index += queryLogRollupInsertRows {
-		if err := store.replaceQueryLogRollups(ctx, transaction, rollups[index:min(index+queryLogRollupInsertRows, len(rollups))]); err != nil {
-			return err
+	if err := store.withTx(ctx, "app backfill", func(transaction *sql.Tx) error {
+		for index := 0; index < len(rollups); index += queryLogRollupInsertRows {
+			if err := store.replaceQueryLogRollups(ctx, transaction, rollups[index:min(index+queryLogRollupInsertRows, len(rollups))]); err != nil {
+				return err
+			}
 		}
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit app backfill: %w", err)
+		return nil
+	}); err != nil {
+		return err
 	}
 	if err := store.resumTierDimensions(ctx, appRollupDimensions, start, end); err != nil {
 		return err
 	}
 	// The marker moves only once the tiers hold the chunk too, so a read never
 	// takes an hour or day from before it that was summed without it.
-	if _, err := store.database.ExecContext(ctx,
-		"UPDATE sable_metadata SET value = "+store.placeholder(1)+" WHERE key = "+store.placeholder(2),
-		start.UTC().Format(time.RFC3339Nano), appRollupSinceKey,
-	); err != nil {
+	if err := store.updateMeta(ctx, store.database, appRollupSinceKey, metaTime(start)); err != nil {
 		return fmt.Errorf("move %s: %w", appRollupSinceKey, err)
 	}
 	return nil

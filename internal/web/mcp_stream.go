@@ -106,7 +106,7 @@ var _ configurationWatcher = (*config.Manager)(nil)
 // primary, changes what tools/list returns.
 func (server *Server) mcpEvents(writer http.ResponseWriter, request *http.Request) {
 	if !server.config.Current().Config.MCP.Enabled {
-		writeJSON(writer, http.StatusNotFound, map[string]string{"error": mcpDisabledMessage})
+		apiError(writer, http.StatusNotFound, mcpDisabledMessage)
 		return
 	}
 	if requested := request.Header.Get(mcpProtocolHeader); requested != "" && !slices.Contains(mcpProtocols, requested) {

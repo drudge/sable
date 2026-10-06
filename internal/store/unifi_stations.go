@@ -56,18 +56,9 @@ func (store *Store) RecordUniFiReading(ctx context.Context, inventory unifi.Inve
 		return nil
 	}
 	readAt = readAt.UTC().Truncate(time.Second)
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin UniFi reading: %w", err)
-	}
-	if err := store.recordUniFiReading(ctx, transaction, inventory, readAt); err != nil {
-		_ = transaction.Rollback()
-		return err
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit UniFi reading: %w", err)
-	}
-	return nil
+	return store.withTx(ctx, "UniFi reading", func(transaction *sql.Tx) error {
+		return store.recordUniFiReading(ctx, transaction, inventory, readAt)
+	})
 }
 
 func (store *Store) recordUniFiReading(ctx context.Context, transaction *sql.Tx, inventory unifi.Inventory, readAt time.Time) error {

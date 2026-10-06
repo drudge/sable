@@ -316,9 +316,7 @@ func appDeviceViews(clients map[string]querylog.AppCounts, report deviceReport) 
 }
 
 func (server *Server) renderAppDrawer(writer http.ResponseWriter, request *http.Request, view pages.InsightAppDrawerView) {
-	if err := pages.InsightAppDrawer(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render insights app", "error", err)
-	}
+	server.render(writer, request, pages.InsightAppDrawer(view))
 }
 
 // deviceAddressDetail names a device's addresses under its label: its one

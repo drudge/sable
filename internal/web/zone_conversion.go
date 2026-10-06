@@ -16,15 +16,15 @@ const conversionSyncTimeout = 30 * time.Second
 func (server *Server) reviewZoneConversion(writer http.ResponseWriter, request *http.Request) {
 	current := findZone(server.zones.Current().Zones, normalizeZoneName(request.URL.Query().Get("zone")))
 	if current == nil {
-		writeJSON(writer, http.StatusNotFound, map[string]string{"error": "zone was not found"})
+		apiError(writer, http.StatusNotFound, "zone was not found")
 		return
 	}
 	if !server.authorizeZoneRequest(request, auth.PermissionZonesRead, *current) {
-		writeJSON(writer, http.StatusForbidden, map[string]string{"error": "permission denied"})
+		apiError(writer, http.StatusForbidden, "permission denied")
 		return
 	}
 	if err := zonemodel.CheckPrimaryConversion(*current); err != nil {
-		writeJSON(writer, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		apiError(writer, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	writeJSON(writer, http.StatusOK, map[string]any{

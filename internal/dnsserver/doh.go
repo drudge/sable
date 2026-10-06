@@ -164,10 +164,11 @@ func (writer *dohResponseWriter) Write(wire []byte) (int, error) {
 	return len(wire), nil
 }
 
-func (writer *dohResponseWriter) Close() error        { return nil }
-func (writer *dohResponseWriter) TsigStatus() error   { return writer.tsigStatus }
-func (writer *dohResponseWriter) TsigTimersOnly(bool) {}
-func (writer *dohResponseWriter) Hijack()             {}
+func (writer *dohResponseWriter) Close() error          { return nil }
+func (writer *dohResponseWriter) TsigStatus() error     { return writer.tsigStatus }
+func (writer *dohResponseWriter) TsigTimersOnly(bool)   {}
+func (writer *dohResponseWriter) Hijack()               {}
+func (writer *dohResponseWriter) QueryProtocol() string { return "HTTPS" }
 
 func (writer *dohResponseWriter) pack() ([]byte, error) {
 	if len(writer.wire) == 0 {

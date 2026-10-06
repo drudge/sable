@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 )
@@ -36,42 +37,31 @@ func (store *Store) BackfillClientSightings(ctx context.Context) (bool, error) {
 		}
 	}
 
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return false, err
-	}
-	defer func() { _ = transaction.Rollback() }()
-	if !oldest.IsZero() {
-		for _, fill := range []struct{ table, keys, groups string }{
-			{"sable_client_seen", "client_key", "client_ip_key"},
-			{"sable_client_domain_seen", "client_key, name_key", "client_ip_key, name_key"},
-		} {
-			// The WHERE clause also settles SQLite's parse of an upsert fed by a
-			// SELECT, which otherwise reads ON CONFLICT as a join constraint.
-			statement := "INSERT INTO " + fill.table + " (" + fill.keys + ", first_seen, last_seen) " +
-				"SELECT " + fill.groups + ", MIN(occurred_at), MAX(occurred_at) FROM sable_query_log " +
-				"WHERE client_ip_key <> '' AND occurred_at < " + store.placeholder(1) + " GROUP BY " + fill.groups +
-				" ON CONFLICT (" + fill.keys + ") DO UPDATE SET " +
-				"first_seen = CASE WHEN excluded.first_seen < " + fill.table + ".first_seen THEN excluded.first_seen ELSE " + fill.table + ".first_seen END, " +
-				"last_seen = CASE WHEN excluded.last_seen > " + fill.table + ".last_seen THEN excluded.last_seen ELSE " + fill.table + ".last_seen END"
-			if _, err := transaction.ExecContext(ctx, statement, since.UTC()); err != nil {
-				return false, fmt.Errorf("backfill %s: %w", fill.table, err)
+	err = store.withTx(ctx, "client sighting backfill", func(transaction *sql.Tx) error {
+		if !oldest.IsZero() {
+			for _, fill := range []struct{ table, keys, groups string }{
+				{"sable_client_seen", "client_key", "client_ip_key"},
+				{"sable_client_domain_seen", "client_key, name_key", "client_ip_key, name_key"},
+			} {
+				// The WHERE clause also settles SQLite's parse of an upsert fed by a
+				// SELECT, which otherwise reads ON CONFLICT as a join constraint.
+				statement := "INSERT INTO " + fill.table + " (" + fill.keys + ", first_seen, last_seen) " +
+					"SELECT " + fill.groups + ", MIN(occurred_at), MAX(occurred_at) FROM sable_query_log " +
+					"WHERE client_ip_key <> '' AND occurred_at < " + store.placeholder(1) + " GROUP BY " + fill.groups +
+					" ON CONFLICT (" + fill.keys + ") DO UPDATE SET " +
+					"first_seen = CASE WHEN excluded.first_seen < " + fill.table + ".first_seen THEN excluded.first_seen ELSE " + fill.table + ".first_seen END, " +
+					"last_seen = CASE WHEN excluded.last_seen > " + fill.table + ".last_seen THEN excluded.last_seen ELSE " + fill.table + ".last_seen END"
+				if _, err := transaction.ExecContext(ctx, statement, since.UTC()); err != nil {
+					return fmt.Errorf("backfill %s: %w", fill.table, err)
+				}
+			}
+			if err := store.updateMeta(ctx, transaction, clientSeenSinceKey, metaTime(oldest)); err != nil {
+				return fmt.Errorf("move %s: %w", clientSeenSinceKey, err)
 			}
 		}
-		if _, err := transaction.ExecContext(ctx,
-			"UPDATE sable_metadata SET value = "+store.placeholder(1)+" WHERE key = "+store.placeholder(2),
-			oldest.UTC().Format(time.RFC3339Nano), clientSeenSinceKey,
-		); err != nil {
-			return false, fmt.Errorf("move %s: %w", clientSeenSinceKey, err)
-		}
-	}
-	if _, err := transaction.ExecContext(ctx,
-		"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholders(2)+") ON CONFLICT(key) DO NOTHING",
-		clientSeenBackfilledKey, time.Now().UTC().Format(time.RFC3339Nano),
-	); err != nil {
-		return false, fmt.Errorf("record %s: %w", clientSeenBackfilledKey, err)
-	}
-	if err := transaction.Commit(); err != nil {
+		return store.skipClientSightingBackfill(ctx, transaction)
+	})
+	if err != nil {
 		return false, err
 	}
 	return !oldest.IsZero(), nil

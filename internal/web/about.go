@@ -19,9 +19,7 @@ func (server *Server) aboutPage(writer http.ResponseWriter, request *http.Reques
 		ScrapeConfig: prometheusScrapeConfig(request),
 		Update:       server.updateView(request, server.updateStatus()),
 	}
-	if err := pages.AboutPage(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render about page", "error", err)
-	}
+	server.render(writer, request, pages.AboutPage(view))
 }
 
 // thirdPartyLicense renders the license files of one piece of third-party
@@ -32,9 +30,7 @@ func (server *Server) thirdPartyLicense(writer http.ResponseWriter, request *htt
 		http.NotFound(writer, request)
 		return
 	}
-	if err := pages.ThirdPartyLicenseText(notice).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render third-party license", "error", err)
-	}
+	server.render(writer, request, pages.ThirdPartyLicenseText(notice))
 }
 
 func prometheusScrapeConfig(request *http.Request) string {

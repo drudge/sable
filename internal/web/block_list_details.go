@@ -18,9 +18,7 @@ import (
 func (server *Server) blockListPanel(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	view := server.blockListDrawerView(request, request.URL.Query().Get("name"))
-	if err := pages.BlockListDrawer(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render block list panel", "error", err)
-	}
+	server.render(writer, request, pages.BlockListDrawer(view))
 }
 
 // blockListDrawerView describes one configured list: what the Blocking page
@@ -124,11 +122,8 @@ func (server *Server) renderBlockListRefresh(writer http.ResponseWriter, request
 	page := server.blockingView(request, "", "", "lists")
 	page.OutOfBand = true
 	writeFragmentStatus(writer, status)
-	if err := pages.BlockListDrawer(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render block list panel", "error", err)
+	if !server.render(writer, request, pages.BlockListDrawer(view)) {
 		return
 	}
-	if err := pages.BlockingContent(page).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render blocking page", "error", err)
-	}
+	server.render(writer, request, pages.BlockingContent(page))
 }

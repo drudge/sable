@@ -292,31 +292,25 @@ func scanAuditRecords(rows *sql.Rows, capacity int) ([]auth.AuditRecord, error) 
 }
 
 func (store *Store) CreateUser(ctx context.Context, username, displayName, email, passwordHash string, roles []string, now time.Time) (auth.ManagedUser, error) {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return auth.ManagedUser{}, fmt.Errorf("begin user creation: %w", err)
-	}
-	defer transaction.Rollback()
 	var user auth.ManagedUser
-	err = transaction.QueryRowContext(ctx, `
+	if err := store.withTx(ctx, "user creation", func(transaction *sql.Tx) error {
+		err := transaction.QueryRowContext(ctx, `
 INSERT INTO sable_users (username, password_hash, created_at)
 VALUES (`+store.placeholders(3)+`) RETURNING id`, username, passwordHash, now.UTC()).Scan(&user.ID)
-	if err != nil {
-		return auth.ManagedUser{}, fmt.Errorf("create user %q: %w", username, err)
-	}
-	if displayName == "" {
-		displayName = username
-	}
-	if _, err := transaction.ExecContext(ctx, `
+		if err != nil {
+			return fmt.Errorf("create user %q: %w", username, err)
+		}
+		if displayName == "" {
+			displayName = username
+		}
+		if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_user_profiles (user_id, display_name, email, disabled, updated_at)
 VALUES (`+store.placeholders(5)+`)`, user.ID, displayName, email, false, now.UTC()); err != nil {
-		return auth.ManagedUser{}, fmt.Errorf("create profile for %q: %w", username, err)
-	}
-	if err := store.replaceUserRoles(ctx, transaction, user.ID, roles); err != nil {
+			return fmt.Errorf("create profile for %q: %w", username, err)
+		}
+		return store.replaceUserRoles(ctx, transaction, user.ID, roles)
+	}); err != nil {
 		return auth.ManagedUser{}, err
-	}
-	if err := transaction.Commit(); err != nil {
-		return auth.ManagedUser{}, fmt.Errorf("commit user creation: %w", err)
 	}
 	user.Username, user.DisplayName, user.Email, user.Roles = username, displayName, email, append([]string(nil), roles...)
 	user.CreatedAt, user.UpdatedAt = now.UTC(), now.UTC()
@@ -324,69 +318,60 @@ VALUES (`+store.placeholders(5)+`)`, user.ID, displayName, email, false, now.UTC
 }
 
 func (store *Store) UpdateUserProfile(ctx context.Context, userID int64, username, displayName, email string, now time.Time) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin user profile update: %w", err)
-	}
-	defer transaction.Rollback()
-	result, err := transaction.ExecContext(ctx,
-		"UPDATE sable_users SET username = "+store.placeholder(1)+" WHERE id = "+store.placeholder(2), username, userID)
-	if err != nil {
-		return fmt.Errorf("update username: %w", err)
-	}
-	updated, _ := result.RowsAffected()
-	if updated != 1 {
-		return auth.ErrNotFound
-	}
-	result, err = transaction.ExecContext(ctx, `
+	return store.withTx(ctx, "user profile update", func(transaction *sql.Tx) error {
+		result, err := transaction.ExecContext(ctx,
+			"UPDATE sable_users SET username = "+store.placeholder(1)+" WHERE id = "+store.placeholder(2), username, userID)
+		if err != nil {
+			return fmt.Errorf("update username: %w", err)
+		}
+		updated, _ := result.RowsAffected()
+		if updated != 1 {
+			return auth.ErrNotFound
+		}
+		result, err = transaction.ExecContext(ctx, `
 UPDATE sable_user_profiles
 SET display_name = `+store.placeholder(1)+`, email = `+store.placeholder(2)+`, updated_at = `+store.placeholder(3)+`
 WHERE user_id = `+store.placeholder(4), displayName, email, now.UTC(), userID)
-	if err != nil {
-		return fmt.Errorf("update user profile: %w", err)
-	}
-	updated, _ = result.RowsAffected()
-	if updated != 1 {
-		return auth.ErrNotFound
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit user profile update: %w", err)
-	}
-	return nil
+		if err != nil {
+			return fmt.Errorf("update user profile: %w", err)
+		}
+		updated, _ = result.RowsAffected()
+		if updated != 1 {
+			return auth.ErrNotFound
+		}
+		return nil
+	})
 }
 
 func (store *Store) SetUserRoles(ctx context.Context, userID int64, roles []string, now time.Time) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin role assignment: %w", err)
-	}
-	defer transaction.Rollback()
-	if err := store.replaceUserRoles(ctx, transaction, userID, roles); err != nil {
-		return err
-	}
-	if err := store.ensureAdministratorRemains(ctx, transaction); err != nil {
-		return err
-	}
-	var hasWebAccess bool
-	if err := transaction.QueryRowContext(ctx, `
+	return store.withTx(ctx, "role assignment", func(transaction *sql.Tx) error {
+		if err := store.replaceUserRoles(ctx, transaction, userID, roles); err != nil {
+			return err
+		}
+		if err := store.ensureAdministratorRemains(ctx, transaction); err != nil {
+			return err
+		}
+		var hasWebAccess bool
+		if err := transaction.QueryRowContext(ctx, `
 SELECT EXISTS (
     SELECT 1 FROM sable_user_roles AS memberships
     JOIN sable_role_grants AS grants ON grants.role_id = memberships.role_id
     WHERE memberships.user_id = `+store.placeholder(1)+` AND grants.surface = `+store.placeholder(2)+`
 )`, userID, auth.SurfaceWeb).Scan(&hasWebAccess); err != nil {
-		return fmt.Errorf("inspect user Web UI access: %w", err)
-	}
-	if !hasWebAccess {
-		if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_sessions WHERE user_id = "+store.placeholder(1), userID); err != nil {
-			return fmt.Errorf("revoke API-only user sessions: %w", err)
+			return fmt.Errorf("inspect user Web UI access: %w", err)
 		}
-	}
-	if _, err := transaction.ExecContext(ctx,
-		"UPDATE sable_user_profiles SET updated_at = "+store.placeholder(1)+" WHERE user_id = "+store.placeholder(2), now.UTC(), userID,
-	); err != nil {
-		return fmt.Errorf("update user role timestamp: %w", err)
-	}
-	return transaction.Commit()
+		if !hasWebAccess {
+			if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_sessions WHERE user_id = "+store.placeholder(1), userID); err != nil {
+				return fmt.Errorf("revoke API-only user sessions: %w", err)
+			}
+		}
+		if _, err := transaction.ExecContext(ctx,
+			"UPDATE sable_user_profiles SET updated_at = "+store.placeholder(1)+" WHERE user_id = "+store.placeholder(2), now.UTC(), userID,
+		); err != nil {
+			return fmt.Errorf("update user role timestamp: %w", err)
+		}
+		return nil
+	})
 }
 
 func (store *Store) replaceUserRoles(ctx context.Context, transaction *sql.Tx, userID int64, roles []string) error {
@@ -409,30 +394,27 @@ SELECT `+store.placeholder(1)+`, id FROM sable_roles WHERE name = `+store.placeh
 }
 
 func (store *Store) SetUserDisabled(ctx context.Context, userID int64, disabled bool, now time.Time) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin user status update: %w", err)
-	}
-	defer transaction.Rollback()
-	result, err := transaction.ExecContext(ctx, `
+	return store.withTx(ctx, "user status update", func(transaction *sql.Tx) error {
+		result, err := transaction.ExecContext(ctx, `
 UPDATE sable_user_profiles SET disabled = `+store.placeholder(1)+`, updated_at = `+store.placeholder(2)+`
 WHERE user_id = `+store.placeholder(3), disabled, now.UTC(), userID)
-	if err != nil {
-		return fmt.Errorf("update user status: %w", err)
-	}
-	updated, _ := result.RowsAffected()
-	if updated != 1 {
-		return auth.ErrNotFound
-	}
-	if disabled {
-		if err := store.ensureAdministratorRemains(ctx, transaction); err != nil {
-			return err
+		if err != nil {
+			return fmt.Errorf("update user status: %w", err)
 		}
-		if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_sessions WHERE user_id = "+store.placeholder(1), userID); err != nil {
-			return fmt.Errorf("revoke disabled user sessions: %w", err)
+		updated, _ := result.RowsAffected()
+		if updated != 1 {
+			return auth.ErrNotFound
 		}
-	}
-	return transaction.Commit()
+		if disabled {
+			if err := store.ensureAdministratorRemains(ctx, transaction); err != nil {
+				return err
+			}
+			if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_sessions WHERE user_id = "+store.placeholder(1), userID); err != nil {
+				return fmt.Errorf("revoke disabled user sessions: %w", err)
+			}
+		}
+		return nil
+	})
 }
 
 func (store *Store) SetUserPassword(ctx context.Context, userID int64, passwordHash string, now time.Time) error {
@@ -444,59 +426,47 @@ func (store *Store) SetUserPasswordAndLogin(ctx context.Context, userID int64, p
 }
 
 func (store *Store) setUserPassword(ctx context.Context, userID int64, passwordHash string, now time.Time, enable bool) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin password reset: %w", err)
-	}
-	defer transaction.Rollback()
-	result, err := transaction.ExecContext(ctx,
-		"UPDATE sable_users SET password_hash = "+store.placeholder(1)+" WHERE id = "+store.placeholder(2), passwordHash, userID)
-	if err != nil {
-		return fmt.Errorf("reset user password: %w", err)
-	}
-	updated, _ := result.RowsAffected()
-	if updated != 1 {
-		return auth.ErrNotFound
-	}
-	if _, err := transaction.ExecContext(ctx,
-		"UPDATE sable_user_profiles SET updated_at = "+store.placeholder(1)+" WHERE user_id = "+store.placeholder(2), now.UTC(), userID); err != nil {
-		return fmt.Errorf("update password timestamp: %w", err)
-	}
-	if enable {
-		if _, err := transaction.ExecContext(ctx, "UPDATE sable_user_profiles SET password_login = TRUE WHERE user_id = "+store.placeholder(1), userID); err != nil {
-			return err
+	return store.withTx(ctx, "password reset", func(transaction *sql.Tx) error {
+		result, err := transaction.ExecContext(ctx,
+			"UPDATE sable_users SET password_hash = "+store.placeholder(1)+" WHERE id = "+store.placeholder(2), passwordHash, userID)
+		if err != nil {
+			return fmt.Errorf("reset user password: %w", err)
 		}
-	}
-	if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_sessions WHERE user_id = "+store.placeholder(1), userID); err != nil {
-		return fmt.Errorf("revoke password-reset sessions: %w", err)
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit password reset: %w", err)
-	}
-	return nil
+		updated, _ := result.RowsAffected()
+		if updated != 1 {
+			return auth.ErrNotFound
+		}
+		if _, err := transaction.ExecContext(ctx,
+			"UPDATE sable_user_profiles SET updated_at = "+store.placeholder(1)+" WHERE user_id = "+store.placeholder(2), now.UTC(), userID); err != nil {
+			return fmt.Errorf("update password timestamp: %w", err)
+		}
+		if enable {
+			if _, err := transaction.ExecContext(ctx, "UPDATE sable_user_profiles SET password_login = TRUE WHERE user_id = "+store.placeholder(1), userID); err != nil {
+				return err
+			}
+		}
+		if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_sessions WHERE user_id = "+store.placeholder(1), userID); err != nil {
+			return fmt.Errorf("revoke password-reset sessions: %w", err)
+		}
+		return nil
+	})
 }
 
 func (store *Store) DeleteUser(ctx context.Context, userID int64) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin user deletion: %w", err)
-	}
-	defer transaction.Rollback()
-	result, err := transaction.ExecContext(ctx, "DELETE FROM sable_users WHERE id = "+store.placeholder(1), userID)
-	if err != nil {
-		return fmt.Errorf("delete user: %w", err)
-	}
-	deleted, _ := result.RowsAffected()
-	if deleted != 1 {
-		return auth.ErrNotFound
-	}
-	if err := store.ensureAdministratorRemains(ctx, transaction); err != nil {
-		return err
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit user deletion: %w", err)
-	}
-	return nil
+	return store.withTx(ctx, "user deletion", func(transaction *sql.Tx) error {
+		result, err := transaction.ExecContext(ctx, "DELETE FROM sable_users WHERE id = "+store.placeholder(1), userID)
+		if err != nil {
+			return fmt.Errorf("delete user: %w", err)
+		}
+		deleted, _ := result.RowsAffected()
+		if deleted != 1 {
+			return auth.ErrNotFound
+		}
+		if err := store.ensureAdministratorRemains(ctx, transaction); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func (store *Store) ensureAdministratorRemains(ctx context.Context, transaction *sql.Tx) error {
@@ -517,62 +487,56 @@ WHERE roles.name = 'Administrator'`).Scan(&count)
 }
 
 func (store *Store) CreateRole(ctx context.Context, name, description string, grants []auth.Grant, now time.Time) (auth.Role, error) {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return auth.Role{}, fmt.Errorf("begin role creation: %w", err)
-	}
-	defer transaction.Rollback()
 	role := auth.Role{Name: name, Description: description, Grants: append([]auth.Grant(nil), grants...)}
-	err = transaction.QueryRowContext(ctx, `
+	if err := store.withTx(ctx, "role creation", func(transaction *sql.Tx) error {
+		err := transaction.QueryRowContext(ctx, `
 INSERT INTO sable_roles (name, description, built_in, created_at)
 VALUES (`+store.placeholders(4)+`) RETURNING id`, name, description, false, now.UTC()).Scan(&role.ID)
-	if err != nil {
-		return auth.Role{}, fmt.Errorf("create role %q: %w", name, err)
-	}
-	for _, grant := range grants {
-		if _, err := transaction.ExecContext(ctx, `
+		if err != nil {
+			return fmt.Errorf("create role %q: %w", name, err)
+		}
+		for _, grant := range grants {
+			if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_role_grants (role_id, permission, surface, resource_type, resource_id)
 VALUES (`+store.placeholders(5)+`)`, role.ID, grant.Permission, grant.Surface, grant.ResourceType, grant.ResourceID); err != nil {
-			return auth.Role{}, fmt.Errorf("assign role grant %q: %w", grant.Permission, err)
+				return fmt.Errorf("assign role grant %q: %w", grant.Permission, err)
+			}
+			if !slices.Contains(role.Permissions, grant.Permission) {
+				role.Permissions = append(role.Permissions, grant.Permission)
+			}
 		}
-		if !slices.Contains(role.Permissions, grant.Permission) {
-			role.Permissions = append(role.Permissions, grant.Permission)
-		}
-	}
-	if err := transaction.Commit(); err != nil {
-		return auth.Role{}, fmt.Errorf("commit role creation: %w", err)
+		return nil
+	}); err != nil {
+		return auth.Role{}, err
 	}
 	return role, nil
 }
 
 func (store *Store) SetRoleGrants(ctx context.Context, roleID int64, grants []auth.Grant, _ time.Time) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin role grant update: %w", err)
-	}
-	defer transaction.Rollback()
-	var builtIn bool
-	if err := transaction.QueryRowContext(ctx,
-		"SELECT built_in FROM sable_roles WHERE id = "+store.placeholder(1), roleID,
-	).Scan(&builtIn); errors.Is(err, sql.ErrNoRows) {
-		return auth.ErrNotFound
-	} else if err != nil {
-		return fmt.Errorf("inspect role: %w", err)
-	}
-	if builtIn {
-		return errors.New("built-in groups cannot be changed")
-	}
-	if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_role_grants WHERE role_id = "+store.placeholder(1), roleID); err != nil {
-		return fmt.Errorf("clear role grants: %w", err)
-	}
-	for _, grant := range grants {
-		if _, err := transaction.ExecContext(ctx, `
+	return store.withTx(ctx, "role grant update", func(transaction *sql.Tx) error {
+		var builtIn bool
+		if err := transaction.QueryRowContext(ctx,
+			"SELECT built_in FROM sable_roles WHERE id = "+store.placeholder(1), roleID,
+		).Scan(&builtIn); errors.Is(err, sql.ErrNoRows) {
+			return auth.ErrNotFound
+		} else if err != nil {
+			return fmt.Errorf("inspect role: %w", err)
+		}
+		if builtIn {
+			return errors.New("built-in groups cannot be changed")
+		}
+		if _, err := transaction.ExecContext(ctx, "DELETE FROM sable_role_grants WHERE role_id = "+store.placeholder(1), roleID); err != nil {
+			return fmt.Errorf("clear role grants: %w", err)
+		}
+		for _, grant := range grants {
+			if _, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_role_grants (role_id, permission, surface, resource_type, resource_id)
 VALUES (`+store.placeholders(5)+`)`, roleID, grant.Permission, grant.Surface, grant.ResourceType, grant.ResourceID); err != nil {
-			return fmt.Errorf("assign role grant %q: %w", grant.Permission, err)
+				return fmt.Errorf("assign role grant %q: %w", grant.Permission, err)
+			}
 		}
-	}
-	return transaction.Commit()
+		return nil
+	})
 }
 
 func (store *Store) DeleteRole(ctx context.Context, roleID int64) error {

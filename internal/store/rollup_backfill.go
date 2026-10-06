@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sort"
 	"time"
@@ -65,10 +66,7 @@ func (store *Store) BackfillBlockedClientRollups(ctx context.Context) (bool, err
 			filled, end = true, start
 		}
 	}
-	if _, err := store.database.ExecContext(ctx,
-		"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholders(2)+") ON CONFLICT(key) DO NOTHING",
-		blockedClientBackfilledKey, time.Now().UTC().Format(time.RFC3339Nano),
-	); err != nil {
+	if _, err := store.setMetaIfAbsent(ctx, store.database, blockedClientBackfilledKey, metaTime(time.Now())); err != nil {
 		return filled, fmt.Errorf("record %s: %w", blockedClientBackfilledKey, err)
 	}
 	return filled, nil
@@ -115,24 +113,15 @@ WHERE source = `+store.placeholder(1)+` AND occurred_at >= `+store.placeholder(2
 		return rollups[left].value < rollups[right].value
 	})
 
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin blocked client backfill: %w", err)
-	}
-	defer func() { _ = transaction.Rollback() }()
-	for index := 0; index < len(rollups); index += queryLogRollupInsertRows {
-		if err := store.replaceQueryLogRollups(ctx, transaction, rollups[index:min(index+queryLogRollupInsertRows, len(rollups))]); err != nil {
-			return err
+	return store.withTx(ctx, "blocked client backfill", func(transaction *sql.Tx) error {
+		for index := 0; index < len(rollups); index += queryLogRollupInsertRows {
+			if err := store.replaceQueryLogRollups(ctx, transaction, rollups[index:min(index+queryLogRollupInsertRows, len(rollups))]); err != nil {
+				return err
+			}
 		}
-	}
-	if _, err := transaction.ExecContext(ctx,
-		"UPDATE sable_metadata SET value = "+store.placeholder(1)+" WHERE key = "+store.placeholder(2),
-		start.UTC().Format(time.RFC3339Nano), blockedClientRollupSinceKey,
-	); err != nil {
-		return fmt.Errorf("move %s: %w", blockedClientRollupSinceKey, err)
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit blocked client backfill: %w", err)
-	}
-	return nil
+		if err := store.updateMeta(ctx, transaction, blockedClientRollupSinceKey, metaTime(start)); err != nil {
+			return fmt.Errorf("move %s: %w", blockedClientRollupSinceKey, err)
+		}
+		return nil
+	})
 }

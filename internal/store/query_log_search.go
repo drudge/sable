@@ -89,7 +89,7 @@ func (store *Store) checkQueryLogSearch(ctx context.Context) error {
 	).Scan(&indexedThrough); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("find the newest indexed row: %w", err)
 	}
-	after, through, pending, err := queryLogSearchPendingIn(ctx, store.database)
+	after, through, pending, err := store.queryLogSearchPending(ctx)
 	if err != nil {
 		return err
 	}
@@ -100,10 +100,7 @@ func (store *Store) checkQueryLogSearch(ctx context.Context) error {
 			wantAfter, wantThrough = min(after, wantAfter), max(through, wantThrough)
 		}
 		if !pending || wantAfter != after || wantThrough != through {
-			if _, err := store.database.ExecContext(ctx,
-				"INSERT INTO sable_metadata (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-				queryLogSearchPendingKey, formatQueryLogSearchRange(wantAfter, wantThrough),
-			); err != nil {
+			if err := store.setMeta(ctx, store.database, queryLogSearchPendingKey, formatQueryLogSearchRange(wantAfter, wantThrough)); err != nil {
 				return fmt.Errorf("record query log rows to index: %w", err)
 			}
 		}
@@ -113,18 +110,13 @@ func (store *Store) checkQueryLogSearch(ctx context.Context) error {
 	return nil
 }
 
-type queryRower interface {
-	QueryRowContext(ctx context.Context, query string, arguments ...any) *sql.Row
-}
-
-func queryLogSearchPendingIn(ctx context.Context, database queryRower) (int64, int64, bool, error) {
-	var raw string
-	err := database.QueryRowContext(ctx, "SELECT value FROM sable_metadata WHERE key = ?", queryLogSearchPendingKey).Scan(&raw)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, 0, false, nil
-	}
+func (store *Store) queryLogSearchPending(ctx context.Context) (int64, int64, bool, error) {
+	raw, found, err := store.getMeta(ctx, store.database, queryLogSearchPendingKey)
 	if err != nil {
 		return 0, 0, false, fmt.Errorf("read %s: %w", queryLogSearchPendingKey, err)
+	}
+	if !found {
+		return 0, 0, false, nil
 	}
 	afterText, throughText, found := strings.Cut(raw, ":")
 	after, afterErr := strconv.ParseInt(afterText, 10, 64)
@@ -166,7 +158,7 @@ func (store *Store) BuildQueryLogSearch(ctx context.Context) (bool, error) {
 }
 
 func (store *Store) indexPendingQueryLog(ctx context.Context) (bool, error) {
-	after, through, pending, err := queryLogSearchPendingIn(ctx, store.database)
+	after, through, pending, err := store.queryLogSearchPending(ctx)
 	if err != nil || !pending {
 		return false, err
 	}
@@ -187,7 +179,7 @@ func (store *Store) indexPendingQueryLog(ctx context.Context) (bool, error) {
 		}
 		through = below
 	}
-	if _, err := store.database.ExecContext(ctx, "DELETE FROM sable_metadata WHERE key = ?", queryLogSearchPendingKey); err != nil {
+	if err := store.deleteMeta(ctx, store.database, queryLogSearchPendingKey); err != nil {
 		return true, fmt.Errorf("finish query log search index: %w", err)
 	}
 	store.searchIndexed.Store(true)
@@ -198,26 +190,18 @@ func (store *Store) indexPendingQueryLog(ctx context.Context) (bool, error) {
 // and records that the pending range now ends at below. Entries already in
 // the range, left by a pass a downgrade interrupted, are replaced.
 func (store *Store) indexPendingRange(ctx context.Context, after, below, through int64) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin query log search batch: %w", err)
-	}
-	defer transaction.Rollback()
-	if _, err := transaction.ExecContext(ctx, "DELETE FROM "+queryLogSearchTable+" WHERE rowid > ? AND rowid <= ?", below, through); err != nil {
-		return fmt.Errorf("replace indexed query log rows: %w", err)
-	}
-	if _, err := transaction.ExecContext(ctx, queryLogSearchInsert, below, through); err != nil {
-		return fmt.Errorf("index query log rows: %w", err)
-	}
-	if _, err := transaction.ExecContext(ctx,
-		"UPDATE sable_metadata SET value = ? WHERE key = ?", formatQueryLogSearchRange(after, below), queryLogSearchPendingKey,
-	); err != nil {
-		return fmt.Errorf("record query log search progress: %w", err)
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit query log search batch: %w", err)
-	}
-	return nil
+	return store.withTx(ctx, "query log search batch", func(transaction *sql.Tx) error {
+		if _, err := transaction.ExecContext(ctx, "DELETE FROM "+queryLogSearchTable+" WHERE rowid > ? AND rowid <= ?", below, through); err != nil {
+			return fmt.Errorf("replace indexed query log rows: %w", err)
+		}
+		if _, err := transaction.ExecContext(ctx, queryLogSearchInsert, below, through); err != nil {
+			return fmt.Errorf("index query log rows: %w", err)
+		}
+		if err := store.updateMeta(ctx, transaction, queryLogSearchPendingKey, formatQueryLogSearchRange(after, below)); err != nil {
+			return fmt.Errorf("record query log search progress: %w", err)
+		}
+		return nil
+	})
 }
 
 // clearPrunedQueryLogSearch deletes the index entries of rows the log no
@@ -227,9 +211,8 @@ func (store *Store) clearPrunedQueryLogSearch(ctx context.Context) error {
 	if err := store.database.QueryRowContext(ctx, "SELECT MIN(id) FROM sable_query_log").Scan(&oldest); err != nil {
 		return fmt.Errorf("find the oldest query log row: %w", err)
 	}
-	var raw string
-	err := store.database.QueryRowContext(ctx, "SELECT value FROM sable_metadata WHERE key = ?", queryLogSearchClearedKey).Scan(&raw)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	raw, _, err := store.getMeta(ctx, store.database, queryLogSearchClearedKey)
+	if err != nil {
 		return fmt.Errorf("read %s: %w", queryLogSearchClearedKey, err)
 	}
 	cleared, _ := strconv.ParseInt(raw, 10, 64)
@@ -260,25 +243,18 @@ func (store *Store) clearPrunedQueryLogSearch(ctx context.Context) error {
 			return err
 		}
 		next := min(cleared+queryLogSearchBatch, keepFrom)
-		transaction, err := store.database.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("begin clearing pruned query log search entries: %w", err)
-		}
-		if _, err := transaction.ExecContext(ctx,
-			"DELETE FROM "+queryLogSearchTable+" WHERE rowid >= ? AND rowid < ?", cleared, next,
-		); err != nil {
-			transaction.Rollback()
-			return fmt.Errorf("clear pruned query log search entries: %w", err)
-		}
-		if _, err := transaction.ExecContext(ctx,
-			"INSERT INTO sable_metadata (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-			queryLogSearchClearedKey, strconv.FormatInt(next, 10),
-		); err != nil {
-			transaction.Rollback()
-			return fmt.Errorf("record cleared query log search entries: %w", err)
-		}
-		if err := transaction.Commit(); err != nil {
-			return fmt.Errorf("commit clearing pruned query log search entries: %w", err)
+		if err := store.withTx(ctx, "clearing pruned query log search entries", func(transaction *sql.Tx) error {
+			if _, err := transaction.ExecContext(ctx,
+				"DELETE FROM "+queryLogSearchTable+" WHERE rowid >= ? AND rowid < ?", cleared, next,
+			); err != nil {
+				return fmt.Errorf("clear pruned query log search entries: %w", err)
+			}
+			if err := store.setMeta(ctx, transaction, queryLogSearchClearedKey, strconv.FormatInt(next, 10)); err != nil {
+				return fmt.Errorf("record cleared query log search entries: %w", err)
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
 		cleared = next
 	}

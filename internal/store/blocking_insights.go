@@ -135,21 +135,17 @@ func (store *Store) blockedSourceActivity(ctx context.Context, since, until time
 		return nil, time.Time{}, err
 	}
 	if len(spans) > 0 {
-		var arguments []any
-		bind := func(value any) string {
-			arguments = append(arguments, value)
-			return store.placeholder(len(arguments))
-		}
+		builder := store.newSQLBuilder()
 		arms := make([]string, 0, len(spans))
 		for _, span := range spans {
 			arms = append(arms, "SELECT dimension, value, hits FROM "+span.table+
-				" WHERE "+store.dimensionCondition([]string{queryLogRollupBlockedSource, queryLogRollupBlockedSoleSource}, bind)+
-				" AND bucket_start >= "+bind(span.start)+" AND bucket_start < "+bind(span.end))
+				" WHERE "+store.dimensionCondition([]string{queryLogRollupBlockedSource, queryLogRollupBlockedSoleSource}, builder.Bind)+
+				" AND bucket_start >= "+builder.Bind(span.start)+" AND bucket_start < "+builder.Bind(span.end))
 		}
 		rows, err := store.database.QueryContext(ctx, `
 SELECT dimension, value, CAST(SUM(hits) AS BIGINT)
 FROM (`+strings.Join(arms, "\n    UNION ALL\n    ")+`) AS rolled
-GROUP BY dimension, value`, arguments...)
+GROUP BY dimension, value`, builder.Args()...)
 		if err != nil {
 			return nil, time.Time{}, fmt.Errorf("read blocked source rollups: %w", err)
 		}
@@ -311,40 +307,73 @@ func (store *Store) summarizeRollupDimension(
 ) (rollupSummary, error) {
 	summary := rollupSummary{ranks: map[string]uint64{}}
 	since, until = since.UTC(), until.UTC()
-	coverage, covered, err := store.queryLogRollupStart(ctx)
+	fullStart, fullEnd, err := store.rollupSummaryRange(ctx, since, until, dimension)
 	if err != nil {
 		return summary, err
 	}
-	if covered && dimension.since != nil {
-		began, found, err := dimension.since(ctx)
-		if err != nil {
-			return summary, err
-		}
-		covered = found
-		coverage = maxTime(coverage, began.UTC().Truncate(time.Minute))
-	}
-
-	// With no usable rollups the whole window is one raw range and the rollup
-	// range is empty.
-	fullStart, fullEnd := until, until
-	if covered {
-		fullStart = ceilMinute(maxTime(since, coverage.Add(time.Minute)))
-		fullEnd = until.Truncate(time.Minute)
-		if !fullStart.Before(fullEnd) {
-			fullStart, fullEnd = until, until
-		}
-	}
-
 	spans, err := store.rollupSpans(ctx, fullStart, fullEnd, dayRollupTier.size)
 	if err != nil {
 		return summary, err
 	}
+	statement, arguments := store.rollupSummaryStatement(since, until, fullStart, fullEnd, spans, dimension, limit, filter)
 
-	var arguments []any
-	bind := func(value any) string {
-		arguments = append(arguments, value)
-		return store.placeholder(len(arguments))
+	rows, err := store.database.QueryContext(ctx, statement, arguments...)
+	if err != nil {
+		return summary, fmt.Errorf("summarize query log %s: %w", dimension.name, err)
 	}
+	defer rows.Close()
+	for rows.Next() {
+		var value sql.NullString
+		var hits, distinct, total uint64
+		if err := rows.Scan(&value, &hits, &distinct, &total); err != nil {
+			return summary, fmt.Errorf("scan query log %s summary: %w", dimension.name, err)
+		}
+		summary.distinct, summary.total = distinct, total
+		summary.ranks[value.String] += hits
+	}
+	if err := rows.Err(); err != nil {
+		return summary, fmt.Errorf("iterate query log %s summary: %w", dimension.name, err)
+	}
+	return summary, nil
+}
+
+// rollupSummaryRange returns the whole minutes of [since, until] the rollups
+// cover for a dimension. With no usable rollups the range is empty at until, so
+// the whole window is read from the raw log.
+func (store *Store) rollupSummaryRange(ctx context.Context, since, until time.Time, dimension rollupDimension) (time.Time, time.Time, error) {
+	coverage, covered, err := store.queryLogRollupStart(ctx)
+	if err != nil {
+		return until, until, err
+	}
+	if covered && dimension.since != nil {
+		began, found, err := dimension.since(ctx)
+		if err != nil {
+			return until, until, err
+		}
+		covered = found
+		coverage = maxTime(coverage, began.UTC().Truncate(time.Minute))
+	}
+	if !covered {
+		return until, until, nil
+	}
+	fullStart := ceilMinute(maxTime(since, coverage.Add(time.Minute)))
+	fullEnd := until.Truncate(time.Minute)
+	if !fullStart.Before(fullEnd) {
+		return until, until, nil
+	}
+	return fullStart, fullEnd, nil
+}
+
+// rollupSummaryStatement builds the query that adds the raw edges of the window
+// to the rollup spans in [fullStart, fullEnd) and ranks the combined values.
+func (store *Store) rollupSummaryStatement(
+	since, until, fullStart, fullEnd time.Time,
+	spans []rollupSpan,
+	dimension rollupDimension,
+	limit int,
+	filter *rollupValueFilter,
+) (string, []any) {
+	builder := store.newSQLBuilder()
 	var statement strings.Builder
 	// The raw edges are read by time even when a filter names clients or
 	// domains: those indexes would walk the named values' whole history.
@@ -352,13 +381,13 @@ func (store *Store) summarizeRollupDimension(
 WITH boundary AS (
     SELECT ` + dimension.column + ` AS value
     FROM sable_query_log` + store.queryLogTimeIndex() + `
-    WHERE ((occurred_at >= ` + bind(since) + ` AND occurred_at < ` + bind(fullStart) + `)
-        OR (occurred_at >= ` + bind(fullEnd) + ` AND occurred_at <= ` + bind(until) + `))`)
+    WHERE ((occurred_at >= ` + builder.Bind(since) + ` AND occurred_at < ` + builder.Bind(fullStart) + `)
+        OR (occurred_at >= ` + builder.Bind(fullEnd) + ` AND occurred_at <= ` + builder.Bind(until) + `))`)
 	if dimension.only != "" {
-		statement.WriteString(` AND source = ` + bind(string(dimension.only)))
+		statement.WriteString(` AND source = ` + builder.Bind(string(dimension.only)))
 	}
 	if filter != nil {
-		statement.WriteString(` AND ` + store.rollupValueCondition(dimension.column, *filter, bind))
+		statement.WriteString(` AND ` + store.rollupValueCondition(dimension.column, *filter, builder.Bind))
 	}
 	statement.WriteString(`
 ), combined (value, hits) AS (`)
@@ -366,9 +395,9 @@ WITH boundary AS (
 		statement.WriteString(`
     SELECT value, hits
     FROM ` + span.table + `
-    WHERE dimension = ` + bind(dimension.name) + ` AND bucket_start >= ` + bind(span.start) + ` AND bucket_start < ` + bind(span.end))
+    WHERE dimension = ` + builder.Bind(dimension.name) + ` AND bucket_start >= ` + builder.Bind(span.start) + ` AND bucket_start < ` + builder.Bind(span.end))
 		if filter != nil {
-			statement.WriteString(` AND ` + store.rollupValueCondition("value", *filter, bind))
+			statement.WriteString(` AND ` + store.rollupValueCondition("value", *filter, builder.Bind))
 		}
 		statement.WriteString(`
     UNION ALL`)
@@ -390,26 +419,8 @@ WITH boundary AS (
 )
 SELECT value, hits, distinct_values, total_hits
 FROM ranked
-WHERE position <= ` + bind(max(1, limit)))
-
-	rows, err := store.database.QueryContext(ctx, statement.String(), arguments...)
-	if err != nil {
-		return summary, fmt.Errorf("summarize query log %s: %w", dimension.name, err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var value sql.NullString
-		var hits, distinct, total uint64
-		if err := rows.Scan(&value, &hits, &distinct, &total); err != nil {
-			return summary, fmt.Errorf("scan query log %s summary: %w", dimension.name, err)
-		}
-		summary.distinct, summary.total = distinct, total
-		summary.ranks[value.String] += hits
-	}
-	if err := rows.Err(); err != nil {
-		return summary, fmt.Errorf("iterate query log %s summary: %w", dimension.name, err)
-	}
-	return summary, nil
+WHERE position <= ` + builder.Bind(max(1, limit)))
+	return statement.String(), builder.Args()
 }
 
 // rollupValueCondition matches a column against exact names and the strict
@@ -450,15 +461,12 @@ func (store *Store) blockedSourceRollupSince(ctx context.Context) (time.Time, bo
 }
 
 func (store *Store) rollupMarker(ctx context.Context, key string) (time.Time, bool, error) {
-	var raw string
-	err := store.database.QueryRowContext(ctx,
-		"SELECT value FROM sable_metadata WHERE key = "+store.placeholder(1), key,
-	).Scan(&raw)
-	if errors.Is(err, sql.ErrNoRows) {
-		return time.Time{}, false, nil
-	}
+	raw, found, err := store.getMeta(ctx, store.database, key)
 	if err != nil {
 		return time.Time{}, false, fmt.Errorf("read %s: %w", key, err)
+	}
+	if !found {
+		return time.Time{}, false, nil
 	}
 	since, err := time.Parse(time.RFC3339Nano, raw)
 	if err != nil {
@@ -472,12 +480,9 @@ func (store *Store) rollupMarker(ctx context.Context, key string) (time.Time, bo
 // first migration wins, so a marker never moves forward over data written
 // with it.
 func (store *Store) migrateActivityMarkers(ctx context.Context) error {
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := metaTime(time.Now())
 	for _, key := range []string{blockedClientRollupSinceKey, blockedSourceRollupSinceKey, clientSeenSinceKey, appRollupSinceKey, appFailedSinceKey} {
-		if _, err := store.database.ExecContext(ctx,
-			"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholders(2)+") ON CONFLICT(key) DO NOTHING",
-			key, now,
-		); err != nil {
+		if _, err := store.setMetaIfAbsent(ctx, store.database, key, now); err != nil {
 			return fmt.Errorf("record %s: %w", key, err)
 		}
 	}

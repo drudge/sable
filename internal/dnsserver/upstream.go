@@ -30,7 +30,7 @@ func (handler *Handler) exchangeContext(ctx context.Context, request *dns.Msg, r
 			if runtime.mode == "recursive" {
 				defaults = nil
 			}
-			response, err = handler.resolveNetworkContext(attemptContext, request, runtime, defaults)
+			response, err = handler.resolveNetwork(attemptContext, request, runtime, defaults)
 		} else {
 			response, err = handler.exchangeWithRetries(attemptContext, request, forwarder, runtime.retryTimeout, runtime.retries)
 		}
@@ -227,19 +227,11 @@ func (handler *Handler) exchangeWithRetries(ctx context.Context, request *dns.Ms
 	return nil, lastErr
 }
 
-func (handler *Handler) resolveUpstream(request *dns.Msg, runtime *Runtime, forwarders []string) (*dns.Msg, validationState, error) {
-	return handler.resolveUpstreamContext(context.Background(), request, runtime, forwarders)
-}
-
-func (handler *Handler) resolveUpstreamContext(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string) (*dns.Msg, validationState, error) {
-	return handler.resolveUpstreamWaiting(ctx, request, runtime, forwarders, runtime.timeout)
-}
-
-// resolveUpstreamWaiting resolves and validates a request, waiting up to wait.
-// A recursive lookup runs on apart from the wait; see resolveRecursiveWaiting.
-func (handler *Handler) resolveUpstreamWaiting(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, wait time.Duration) (*dns.Msg, validationState, error) {
+// resolveUpstream resolves and validates a request, waiting up to wait.
+// A recursive lookup runs on apart from the wait; see resolveRecursive.
+func (handler *Handler) resolveUpstream(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, wait time.Duration) (*dns.Msg, validationState, error) {
 	if len(forwarders) == 0 && runtime.mode == "recursive" && len(request.Question) == 1 {
-		return handler.resolveRecursiveWaiting(ctx, request, runtime, wait)
+		return handler.resolveRecursive(ctx, request, runtime, wait)
 	}
 	return handler.fetchAndValidate(ctx, request, runtime, forwarders, wait)
 }
@@ -259,7 +251,7 @@ func (handler *Handler) fetchUpstream(ctx context.Context, request *dns.Msg, run
 	if runtime.dnssec != nil {
 		request = dnssecUpstreamRequest(request)
 	}
-	return handler.resolveNetworkContext(networkContext, request, runtime, forwarders)
+	return handler.resolveNetwork(networkContext, request, runtime, forwarders)
 }
 
 // validateUpstream validates a fetched answer to request. It has its own
@@ -286,7 +278,7 @@ func (handler *Handler) validateUpstream(ctx context.Context, request *dns.Msg, 
 		message.CheckingDisabled = true
 		message.SetEdns0(1232, true)
 		queryForwarders, _ := runtime.forwardersFor(name)
-		return handler.resolveNetworkContext(ctx, message, runtime, queryForwarders)
+		return handler.resolveNetwork(ctx, message, runtime, queryForwarders)
 	}
 	state, validationErr := runtime.dnssec.validate(validationContext, response, request.Question[0], query)
 	return response, state, validationErr

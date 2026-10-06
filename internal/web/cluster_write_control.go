@@ -18,12 +18,10 @@ func (server *Server) refuseReplicaWrite(writer http.ResponseWriter, request *ht
 	server.logger.Warn("rejected control-plane write on replica", "path", request.URL.Path, "client", requestClientIP(request))
 	switch {
 	case tokenRequest(request.URL.Path):
-		writeJSON(writer, http.StatusConflict, map[string]string{"error": replicaWriteMessage})
+		apiError(writer, http.StatusConflict, replicaWriteMessage)
 	case request.Header.Get("HX-Request") == "true":
 		writer.WriteHeader(http.StatusConflict)
-		if err := pages.Toast(replicaWriteMessage, "error").Render(request.Context(), writer); err != nil {
-			server.logger.Error("render replica write rejection", "error", err)
-		}
+		server.render(writer, request, pages.Toast(replicaWriteMessage, "error"))
 	default:
 		http.Error(writer, replicaWriteMessage, http.StatusConflict)
 	}

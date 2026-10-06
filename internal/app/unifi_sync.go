@@ -355,16 +355,7 @@ type desiredZone struct {
 // mapped zone should contain. Skipped entries are reported so the console can
 // explain a device that produced no record.
 func desiredUniFiRecords(settings config.UniFi, inventory unifi.Inventory) (map[string]*desiredZone, []string, error) {
-	zones := make(map[string]*desiredZone)
-	var skipped []string
-	ensure := func(name string, ttl uint32) *desiredZone {
-		existing, found := zones[name]
-		if !found {
-			existing = &desiredZone{name: name, ttl: ttl}
-			zones[name] = existing
-		}
-		return existing
-	}
+	plan := unifiRecordPlan{settings: settings, zones: make(map[string]*desiredZone)}
 	hostsByNetwork := make(map[string][]unifi.Host, len(inventory.Networks))
 	for _, host := range inventory.Hosts {
 		hostsByNetwork[host.NetworkID] = append(hostsByNetwork[host.NetworkID], host)
@@ -376,86 +367,118 @@ func desiredUniFiRecords(settings config.UniFi, inventory unifi.Inventory) (map[
 		}
 		network, known := inventory.NetworkByID(mapping.ID)
 		if !known {
-			skipped = append(skipped, fmt.Sprintf("network %s is mapped but the controller no longer reports it", mapping.DisplayName()))
+			plan.skip("network %s is mapped but the controller no longer reports it", mapping.DisplayName())
 			continue
 		}
-		forward := ensure(mapping.Zone, mapping.TTL)
-		reverseZones := make(map[netip.Prefix]string)
-		if mapping.Reverse {
-			for _, subnet := range network.Subnets {
-				name, err := dnsname.ReverseZone(subnet)
-				if err != nil {
-					skipped = append(skipped, fmt.Sprintf("subnet %s has no reverse zone: %v", subnet, err))
-					continue
-				}
-				reverseZones[subnet] = name
-				ensure(name, mapping.TTL)
-			}
-		}
-		for _, host := range hostsByNetwork[mapping.ID] {
-			if host.Reserved && !settings.SyncsReservations() {
-				continue
-			}
-			if !host.Reserved && !settings.SyncsActiveClients() {
-				continue
-			}
-			fqdn, err := template.Render(host.Hostname, network.Name, mapping.Zone)
-			if err != nil {
-				skipped = append(skipped, fmt.Sprintf("%s (%s): %v", host.Hostname, host.Address, err))
-				continue
-			}
-			recordType := "A"
-			if host.Address.Is6() {
-				recordType = "AAAA"
-			}
-			forward.records = append(forward.records, zone.Record{
-				Name: unifi.RelativeOwner(fqdn, mapping.Zone), Type: recordType,
-				Value: host.Address.String(), TTL: mapping.TTL, Source: zone.SourceUniFi,
-			})
-			if !mapping.Reverse {
-				continue
-			}
-			for _, address := range hostAddresses(host) {
-				reverseZoneName, ok := reverseZoneFor(reverseZones, address)
-				if !ok {
-					// The controller declares IPv4 subnets ahead of time, but
-					// the IPv6 prefixes clients actually use arrive by
-					// delegation and rotate, so their /64 reverse zones are
-					// derived from the addresses in use. An IPv4 address
-					// outside every declared subnet stays unpublished.
-					if !address.Is6() {
-						continue
-					}
-					prefix, err := address.Prefix(64)
-					if err != nil {
-						continue
-					}
-					name, err := dnsname.ReverseZone(prefix)
-					if err != nil {
-						skipped = append(skipped, fmt.Sprintf("%s (%s): %v", host.Hostname, address, err))
-						continue
-					}
-					reverseZones[prefix] = name
-					ensure(name, mapping.TTL)
-					reverseZoneName = name
-				}
-				reverseName, err := dnsname.ReverseName(address)
-				if err != nil {
-					skipped = append(skipped, fmt.Sprintf("%s (%s): %v", host.Hostname, address, err))
-					continue
-				}
-				zones[reverseZoneName].records = append(zones[reverseZoneName].records, zone.Record{
-					Name: unifi.RelativeOwner(reverseName, reverseZoneName), Type: "PTR",
-					Value: fqdn + ".", TTL: mapping.TTL, Source: zone.SourceUniFi,
-				})
-			}
-		}
+		plan.addNetwork(mapping, network, template, hostsByNetwork[mapping.ID])
 	}
-	for _, entry := range zones {
+	for _, entry := range plan.zones {
 		entry.records = dedupeUniFiRecords(entry.records)
 	}
-	sort.Strings(skipped)
-	return zones, skipped, nil
+	sort.Strings(plan.skipped)
+	return plan.zones, plan.skipped, nil
+}
+
+// unifiRecordPlan accumulates the records each zone should hold, and the
+// entries that produced none, as desiredUniFiRecords walks the inventory.
+type unifiRecordPlan struct {
+	settings config.UniFi
+	zones    map[string]*desiredZone
+	skipped  []string
+}
+
+func (plan *unifiRecordPlan) ensure(name string, ttl uint32) *desiredZone {
+	existing, found := plan.zones[name]
+	if !found {
+		existing = &desiredZone{name: name, ttl: ttl}
+		plan.zones[name] = existing
+	}
+	return existing
+}
+
+func (plan *unifiRecordPlan) skip(format string, arguments ...any) {
+	plan.skipped = append(plan.skipped, fmt.Sprintf(format, arguments...))
+}
+
+// addNetwork adds the forward record for each synced host on one mapped
+// network, and its reverse records when the mapping asks for them.
+func (plan *unifiRecordPlan) addNetwork(mapping config.UniFiNetwork, network unifi.Network, template unifi.Template, hosts []unifi.Host) {
+	forward := plan.ensure(mapping.Zone, mapping.TTL)
+	reverseZones := make(map[netip.Prefix]string)
+	if mapping.Reverse {
+		for _, subnet := range network.Subnets {
+			name, err := dnsname.ReverseZone(subnet)
+			if err != nil {
+				plan.skip("subnet %s has no reverse zone: %v", subnet, err)
+				continue
+			}
+			reverseZones[subnet] = name
+			plan.ensure(name, mapping.TTL)
+		}
+	}
+	for _, host := range hosts {
+		if host.Reserved && !plan.settings.SyncsReservations() {
+			continue
+		}
+		if !host.Reserved && !plan.settings.SyncsActiveClients() {
+			continue
+		}
+		fqdn, err := template.Render(host.Hostname, network.Name, mapping.Zone)
+		if err != nil {
+			plan.skip("%s (%s): %v", host.Hostname, host.Address, err)
+			continue
+		}
+		recordType := "A"
+		if host.Address.Is6() {
+			recordType = "AAAA"
+		}
+		forward.records = append(forward.records, zone.Record{
+			Name: unifi.RelativeOwner(fqdn, mapping.Zone), Type: recordType,
+			Value: host.Address.String(), TTL: mapping.TTL, Source: zone.SourceUniFi,
+		})
+		if mapping.Reverse {
+			plan.addReverse(mapping, reverseZones, host, fqdn)
+		}
+	}
+}
+
+// addReverse adds a PTR record for each of host's addresses that falls in a
+// reverse zone the network publishes.
+func (plan *unifiRecordPlan) addReverse(mapping config.UniFiNetwork, reverseZones map[netip.Prefix]string, host unifi.Host, fqdn string) {
+	for _, address := range hostAddresses(host) {
+		reverseZoneName, ok := reverseZoneFor(reverseZones, address)
+		if !ok {
+			// The controller declares IPv4 subnets ahead of time, but
+			// the IPv6 prefixes clients actually use arrive by
+			// delegation and rotate, so their /64 reverse zones are
+			// derived from the addresses in use. An IPv4 address
+			// outside every declared subnet stays unpublished.
+			if !address.Is6() {
+				continue
+			}
+			prefix, err := address.Prefix(64)
+			if err != nil {
+				continue
+			}
+			name, err := dnsname.ReverseZone(prefix)
+			if err != nil {
+				plan.skip("%s (%s): %v", host.Hostname, address, err)
+				continue
+			}
+			reverseZones[prefix] = name
+			plan.ensure(name, mapping.TTL)
+			reverseZoneName = name
+		}
+		reverseName, err := dnsname.ReverseName(address)
+		if err != nil {
+			plan.skip("%s (%s): %v", host.Hostname, address, err)
+			continue
+		}
+		plan.zones[reverseZoneName].records = append(plan.zones[reverseZoneName].records, zone.Record{
+			Name: unifi.RelativeOwner(reverseName, reverseZoneName), Type: "PTR",
+			Value: fqdn + ".", TTL: mapping.TTL, Source: zone.SourceUniFi,
+		})
+	}
 }
 
 // hostAddresses lists every address a host publishes reverse records for: the

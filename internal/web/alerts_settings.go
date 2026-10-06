@@ -313,9 +313,7 @@ func (server *Server) alertDestinationFormPanel(writer http.ResponseWriter, requ
 	}
 	_, push := server.alertPushStore()
 	writeFragmentStatus(writer, http.StatusOK)
-	if err := pages.AlertDestinationForm(alertDestinationFormView(configuration, destination, push)).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render alert destination form", "error", err)
-	}
+	server.render(writer, request, pages.AlertDestinationForm(alertDestinationFormView(configuration, destination, push)))
 }
 
 // draftAlertDestination reads the dialog's form, filling in the secrets saved
@@ -458,53 +456,8 @@ func (server *Server) saveAlertDestination(writer http.ResponseWriter, request *
 		server.renderAlertDestinationProblem(writer, request, http.StatusConflict, alertSentence(errAlertBrowsersTaken))
 		return
 	}
-	previous, hadPrevious := server.alertSecrets.Secrets(ctx, destination.ID)
-	if err := server.alertSecrets.Put(ctx, destination.ID, alerts.SecretsOf(destination)); err != nil {
-		server.logger.Error("store alert destination secrets", "destination", destination.Label(), "error", err)
-		server.renderAlertDestinationProblem(writer, request, http.StatusInternalServerError, "Sable could not store its secrets: "+err.Error()+".")
-		return
-	}
-	stripped := alerts.Strip(destination)
-	err = editor.Update(ctx, func(candidate *config.Config) error {
-		// The checks run again here, against what is saved now, in case
-		// another change landed since the form was read.
-		destinations := slices.Clone(candidate.Alerts.Destinations)
-		index := slices.IndexFunc(destinations, hasAlertDestinationID(stripped.ID))
-		others := destinations
-		if index >= 0 && draft.existing {
-			others = slices.Delete(slices.Clone(destinations), index, index+1)
-		}
-		switch {
-		case draft.existing && index < 0:
-			return errAlertDestinationGone
-		case stripped.Format == config.AlertFormatBrowser && slices.ContainsFunc(others, isBrowserDestination):
-			return errAlertBrowsersTaken
-		case !draft.existing && index >= 0:
-			return errors.New("another destination was added at the same moment; save again")
-		case draft.existing:
-			destinations[index] = stripped
-		default:
-			destinations = append(destinations, stripped)
-		}
-		candidate.Alerts.Destinations = destinations
-		return nil
-	})
-	if err != nil {
-		// Put back what the vault held, so a destination that stays as it was
-		// keeps its secrets, and a new one that was never added leaves none.
-		if hadPrevious {
-			err = errors.Join(err, server.alertSecrets.Put(ctx, destination.ID, previous))
-		} else {
-			err = errors.Join(err, server.alertSecrets.Forget(ctx, destination.ID))
-		}
-		status := http.StatusUnprocessableEntity
-		switch {
-		case errors.Is(err, errAlertDestinationGone):
-			status = http.StatusNotFound
-		case errors.Is(err, errAlertBrowsersTaken):
-			status = http.StatusConflict
-		}
-		server.renderAlertDestinationProblem(writer, request, status, alertSentence(err))
+	if status, problem := server.commitAlertDestination(ctx, editor, destination, draft.existing); problem != "" {
+		server.renderAlertDestinationProblem(writer, request, status, problem)
 		return
 	}
 	label := destination.Label()
@@ -524,6 +477,65 @@ func (server *Server) saveAlertDestination(writer http.ResponseWriter, request *
 		message += " Alerts are paused."
 	}
 	server.renderAlertsPanel(writer, request, console, http.StatusOK, message, "")
+}
+
+// commitAlertDestination stores a destination's secrets in the vault and the
+// rest in sable.toml. When the configuration change fails it puts back what
+// the vault held and returns the status and sentence to show.
+func (server *Server) commitAlertDestination(ctx context.Context, editor settingsEditor, destination config.AlertDestination, existing bool) (int, string) {
+	previous, hadPrevious := server.alertSecrets.Secrets(ctx, destination.ID)
+	if err := server.alertSecrets.Put(ctx, destination.ID, alerts.SecretsOf(destination)); err != nil {
+		server.logger.Error("store alert destination secrets", "destination", destination.Label(), "error", err)
+		return http.StatusInternalServerError, "Sable could not store its secrets: " + err.Error() + "."
+	}
+	stripped := alerts.Strip(destination)
+	err := editor.Update(ctx, func(candidate *config.Config) error {
+		return placeAlertDestination(candidate, stripped, existing)
+	})
+	if err == nil {
+		return http.StatusOK, ""
+	}
+	// Put back what the vault held, so a destination that stays as it was
+	// keeps its secrets, and a new one that was never added leaves none.
+	if hadPrevious {
+		err = errors.Join(err, server.alertSecrets.Put(ctx, destination.ID, previous))
+	} else {
+		err = errors.Join(err, server.alertSecrets.Forget(ctx, destination.ID))
+	}
+	status := http.StatusUnprocessableEntity
+	switch {
+	case errors.Is(err, errAlertDestinationGone):
+		status = http.StatusNotFound
+	case errors.Is(err, errAlertBrowsersTaken):
+		status = http.StatusConflict
+	}
+	return status, alertSentence(err)
+}
+
+// placeAlertDestination adds a destination to the configuration or replaces
+// the saved one with its ID. The checks run again here, against what is saved
+// now, in case another change landed since the form was read.
+func placeAlertDestination(candidate *config.Config, stripped config.AlertDestination, existing bool) error {
+	destinations := slices.Clone(candidate.Alerts.Destinations)
+	index := slices.IndexFunc(destinations, hasAlertDestinationID(stripped.ID))
+	others := destinations
+	if index >= 0 && existing {
+		others = slices.Delete(slices.Clone(destinations), index, index+1)
+	}
+	switch {
+	case existing && index < 0:
+		return errAlertDestinationGone
+	case stripped.Format == config.AlertFormatBrowser && slices.ContainsFunc(others, isBrowserDestination):
+		return errAlertBrowsersTaken
+	case !existing && index >= 0:
+		return errors.New("another destination was added at the same moment; save again")
+	case existing:
+		destinations[index] = stripped
+	default:
+		destinations = append(destinations, stripped)
+	}
+	candidate.Alerts.Destinations = destinations
+	return nil
 }
 
 // removeAlertDestination stops sending to a destination, and forgets its
@@ -649,9 +661,7 @@ func (server *Server) previewAlertDestination(writer http.ResponseWriter, reques
 		preview = alertPreview(draft, server.alertLinks(snapshot))
 	}
 	writeFragmentStatus(writer, http.StatusOK)
-	if err := pages.AlertPreviewPanel(preview).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render alert preview", "error", err)
-	}
+	server.render(writer, request, pages.AlertPreviewPanel(preview))
 }
 
 // alertPreview lays a sample alert out the way a draft would send it, with
@@ -799,7 +809,7 @@ func (server *Server) alertBrowserPushKey(writer http.ResponseWriter, request *h
 	}
 	writer.Header().Set("Cache-Control", "no-store")
 	if _, available := server.alertPushStore(); !available {
-		writeJSON(writer, http.StatusNotFound, map[string]string{"error": "Browser alerts are not available on this server."})
+		apiError(writer, http.StatusNotFound, "Browser alerts are not available on this server.")
 		return
 	}
 	key, err := server.pushKeys.PushKey(request.Context())
@@ -809,7 +819,7 @@ func (server *Server) alertBrowserPushKey(writer http.ResponseWriter, request *h
 	}
 	if err != nil {
 		server.logger.Error("read push key", "error", err)
-		writeJSON(writer, http.StatusInternalServerError, map[string]string{"error": "Sable could not read its push key."})
+		apiError(writer, http.StatusInternalServerError, "Sable could not read its push key.")
 		return
 	}
 	writeJSON(writer, http.StatusOK, map[string]string{"key": public})
@@ -918,9 +928,7 @@ func (server *Server) renderAlertsPanel(writer http.ResponseWriter, request *htt
 	view := server.alertsView(request.Context(), console)
 	view.Message, view.Error = message, problem
 	writeFragmentStatus(writer, status)
-	if err := pages.SettingsAlertsPanel(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render alerts", "error", err)
-	}
+	server.render(writer, request, pages.SettingsAlertsPanel(view))
 }
 
 // renderAlertDestinationProblem says in the open dialog why a destination was
@@ -929,9 +937,7 @@ func (server *Server) renderAlertDestinationProblem(writer http.ResponseWriter, 
 	writer.Header().Set("HX-Retarget", "#alert-destination-notice")
 	writer.Header().Set("HX-Reswap", "innerHTML")
 	writeFragmentStatus(writer, status)
-	if err := pages.ToastSticky(problem, "error").Render(request.Context(), writer); err != nil {
-		server.logger.Error("render alert destination problem", "error", err)
-	}
+	server.render(writer, request, pages.ToastSticky(problem, "error"))
 }
 
 // alertPushStore is where browsers that turn alerts on are kept, and whether

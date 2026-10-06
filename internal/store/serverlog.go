@@ -33,32 +33,25 @@ func (store *Store) WriteServerLogEntries(ctx context.Context, entries []serverl
 	if len(entries) == 0 {
 		return nil
 	}
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin server log batch: %w", err)
-	}
-	statement, err := transaction.PrepareContext(ctx, store.serverLogInsert())
-	if err != nil {
-		_ = transaction.Rollback()
-		return fmt.Errorf("prepare server log insert: %w", err)
-	}
-	defer statement.Close()
-	for _, entry := range entries {
-		if _, err := statement.ExecContext(
-			ctx,
-			entry.OccurredAt.UTC(),
-			int64(entry.Level),
-			entry.Message,
-			encodeServerLogAttributes(entry.Attributes),
-		); err != nil {
-			_ = transaction.Rollback()
-			return fmt.Errorf("insert server log entry: %w", err)
+	return store.withTx(ctx, "server log batch", func(transaction *sql.Tx) error {
+		statement, err := transaction.PrepareContext(ctx, store.serverLogInsert())
+		if err != nil {
+			return fmt.Errorf("prepare server log insert: %w", err)
 		}
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit server log batch: %w", err)
-	}
-	return nil
+		defer statement.Close()
+		for _, entry := range entries {
+			if _, err := statement.ExecContext(
+				ctx,
+				entry.OccurredAt.UTC(),
+				int64(entry.Level),
+				entry.Message,
+				encodeServerLogAttributes(entry.Attributes),
+			); err != nil {
+				return fmt.Errorf("insert server log entry: %w", err)
+			}
+		}
+		return nil
+	})
 }
 
 func (store *Store) PruneServerLogEntries(ctx context.Context, before time.Time) error {

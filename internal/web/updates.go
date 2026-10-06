@@ -44,7 +44,7 @@ func (server *Server) automaticUpdateCheck(writer http.ResponseWriter, request *
 		writer.WriteHeader(http.StatusNoContent)
 		return
 	}
-	_ = pages.UpdateNotification(server.updateView(request, status)).Render(request.Context(), writer)
+	server.render(writer, request, pages.UpdateNotification(server.updateView(request, status)))
 }
 
 func (server *Server) updatePreferences(writer http.ResponseWriter, request *http.Request) {
@@ -64,13 +64,13 @@ func (server *Server) updatePreferences(writer http.ResponseWriter, request *htt
 		view := server.settingsUpdatePreferencesView(request)
 		view.Error = err.Error()
 		writeFragmentStatus(writer, http.StatusUnprocessableEntity)
-		_ = pages.SettingsUpdatePreferences(view).Render(request.Context(), writer)
+		server.render(writer, request, pages.SettingsUpdatePreferences(view))
 		return
 	}
 	server.recordControlPlaneAudit(request, "update.preferences", "changed update preferences")
 	view := server.settingsUpdatePreferencesView(request)
 	view.Message = "Update preferences saved."
-	_ = pages.SettingsUpdatePreferences(view).Render(request.Context(), writer)
+	server.render(writer, request, pages.SettingsUpdatePreferences(view))
 }
 
 func (server *Server) settingsUpdatePreferencesView(request *http.Request) pages.SettingsUpdatePreferencesView {
@@ -115,7 +115,7 @@ func (server *Server) checkForUpdates(writer http.ResponseWriter, request *http.
 func (server *Server) checkForUpdatesCommand(writer http.ResponseWriter, request *http.Request) {
 	if server.updates == nil {
 		writeFragmentStatus(writer, http.StatusNotImplemented)
-		_ = pages.Toast("Updates are unavailable on this server.", "error").Render(request.Context(), writer)
+		server.render(writer, request, pages.Toast("Updates are unavailable on this server.", "error"))
 		return
 	}
 	includePreRelease := server.config.Current().Config.Updates.PreRelease
@@ -145,13 +145,13 @@ func (server *Server) renderUpdateCheckResult(writer http.ResponseWriter, reques
 	case view.Busy || errors.Is(checkErr, update.ErrUpdateInProgress):
 		message = "An update check is already in progress."
 	case view.Available:
-		_ = pages.UpdateNotification(view).Render(request.Context(), writer)
+		server.render(writer, request, pages.UpdateNotification(view))
 		return
 	case view.UpToDate:
 		message = "Sable is up to date."
 	}
 	writeFragmentStatus(writer, responseStatus)
-	_ = pages.Toast(message, variant).Render(request.Context(), writer)
+	server.render(writer, request, pages.Toast(message, variant))
 }
 
 // installUpdate replaces the installed executable with the newest release.
@@ -228,9 +228,7 @@ func (server *Server) renderUpdatePanel(
 	if request.FormValue("notification") == "true" {
 		component = pages.UpdateNotification(view)
 	}
-	if err := component.Render(request.Context(), writer); err != nil {
-		server.logger.Error("render update panel", "error", err)
-	}
+	server.render(writer, request, component)
 }
 
 func (server *Server) updateView(request *http.Request, status update.Status) pages.UpdateView {

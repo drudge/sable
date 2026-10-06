@@ -326,7 +326,7 @@ func (server *Server) createAPIToken(writer http.ResponseWriter, request *http.R
 	}
 	if err := request.ParseForm(); err != nil {
 		writer.WriteHeader(http.StatusBadRequest)
-		_ = pages.APITokenResult("", "", "Invalid token form.").Render(request.Context(), writer)
+		server.render(writer, request, pages.APITokenResult("", "", "Invalid token form."))
 		return
 	}
 	principal, _ := request.Context().Value(principalContextKey{}).(auth.Principal)
@@ -335,7 +335,7 @@ func (server *Server) createAPIToken(writer http.ResponseWriter, request *http.R
 		parsed, err := formID(value)
 		if err != nil {
 			writer.WriteHeader(http.StatusUnprocessableEntity)
-			_ = pages.APITokenResult("", "", err.Error()).Render(request.Context(), writer)
+			server.render(writer, request, pages.APITokenResult("", "", err.Error()))
 			return
 		}
 		ownerID = parsed
@@ -343,7 +343,7 @@ func (server *Server) createAPIToken(writer http.ResponseWriter, request *http.R
 	expiration, err := apiTokenExpiration(request.FormValue("expiration"))
 	if err != nil {
 		writer.WriteHeader(http.StatusUnprocessableEntity)
-		_ = pages.APITokenResult("", "", err.Error()).Render(request.Context(), writer)
+		server.render(writer, request, pages.APITokenResult("", "", err.Error()))
 		return
 	}
 	token, expires, err := server.auth.CreateAPIToken(
@@ -353,7 +353,7 @@ func (server *Server) createAPIToken(writer http.ResponseWriter, request *http.R
 	)
 	if err != nil {
 		writer.WriteHeader(http.StatusUnprocessableEntity)
-		_ = pages.APITokenResult("", "", err.Error()).Render(request.Context(), writer)
+		server.render(writer, request, pages.APITokenResult("", "", err.Error()))
 		return
 	}
 	writer.Header().Set("HX-Trigger", "apiTokensChanged")
@@ -361,7 +361,7 @@ func (server *Server) createAPIToken(writer http.ResponseWriter, request *http.R
 	if !expires.IsZero() {
 		expiresLabel = pages.FormatDateTime(expires, requestTimeDisplay(request))
 	}
-	_ = pages.APITokenResult(token, expiresLabel, "").Render(request.Context(), writer)
+	server.render(writer, request, pages.APITokenResult(token, expiresLabel, ""))
 }
 
 func apiTokenExpiration(value string) (auth.APITokenExpiration, error) {
@@ -436,7 +436,7 @@ func (server *Server) authenticationFailure(writer http.ResponseWriter, request 
 		writer.Header().Set("WWW-Authenticate", `Bearer realm="sable"`)
 	}
 	if tokenRequest(request.URL.Path) {
-		writeJSON(writer, status, map[string]string{"error": http.StatusText(status)})
+		apiError(writer, status, http.StatusText(status))
 		return
 	}
 	if redirect != "" {
@@ -550,9 +550,7 @@ func (server *Server) renderAuthPage(
 		}
 		returnTo = validatedReturnTarget(rawReturnTo, request.Host)
 	}
-	if err := pages.AuthPage(setup, errorMessage, token, returnTo, ssoLabel, server.passkeysEnabled()).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render authentication page", "error", err)
-	}
+	server.render(writer, request, pages.AuthPage(setup, errorMessage, token, returnTo, ssoLabel, server.passkeysEnabled()))
 }
 
 func (server *Server) requestOriginAllowed(request *http.Request) bool {

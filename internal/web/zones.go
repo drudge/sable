@@ -47,9 +47,7 @@ func (server *Server) zonesPage(writer http.ResponseWriter, request *http.Reques
 		selected = request.URL.Query().Get("zone")
 	}
 	view := server.zonesView(request, "", "", selected)
-	if err := pages.ZonesPage(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render zones page", "error", err)
-	}
+	server.render(writer, request, pages.ZonesPage(view))
 }
 
 // catalogConsumerFormType is the value the create dialog submits for a catalog
@@ -66,20 +64,22 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 	readable := func(zone zonemodel.Zone) bool {
 		return !server.securityEnabled || auth.Authorize(principal, auth.PermissionZonesRead, auth.ResourceZone, zone.ID)
 	}
-	tsigKeys := server.tsigKeyNames(request.Context())
-	aliasSources := make([]string, 0, len(zones))
-	catalogTargets := make([]string, 0, len(zones))
+	choices := zonePageChoices{
+		tsigKeys:       server.tsigKeyNames(request.Context()),
+		aliasSources:   make([]string, 0, len(zones)),
+		catalogTargets: make([]string, 0, len(zones)),
+	}
 	for _, zone := range zones {
 		if !readable(zone) {
 			continue
 		}
 		if zonemodel.IsProducerCatalog(zone) {
-			catalogTargets = append(catalogTargets, zone.Name)
+			choices.catalogTargets = append(choices.catalogTargets, zone.Name)
 		}
 		if zone.Type != "primary" && zone.Type != "secondary" {
 			continue
 		}
-		aliasSources = append(aliasSources, zone.Name)
+		choices.aliasSources = append(choices.aliasSources, zone.Name)
 	}
 	// A selected zone renders on its own, so a record change reads that one
 	// zone's DNSSEC keys and history however many zones there are.
@@ -87,69 +87,13 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 		selected = ""
 	}
 	_, historyAvailable := server.zones.(zoneRevisionStore)
-	catalogs := newZoneCatalogIndex(zones)
+	choices.catalogs = newZoneCatalogIndex(zones)
 	views := make([]pages.ZoneView, 0, len(zones))
 	for _, zone := range zones {
 		if !readable(zone) || (selected != "" && zone.Name != selected) {
 			continue
 		}
-		zoneView := pages.ZoneView{
-			ID:   zone.ID,
-			Name: zone.Name, Type: zone.Type, DefaultTTL: zone.DefaultTTL, Disabled: zone.Disabled,
-			ShowFullRecordNames: console.ShowFullRecordNames,
-			ZoneTransfer:        zone.ZoneTransfer, TransferACL: append([]string(nil), zone.TransferACL...), Notify: append([]string(nil), zone.Notify...),
-			PrimaryServers: append([]string(nil), zone.PrimaryServers...), PrimaryProtocol: zone.PrimaryProtocol,
-			AliasZone: zone.AliasZone, AliasSources: aliasZoneChoices(aliasSources, zone),
-			CatalogZone: zone.CatalogZone, CatalogGroup: zone.CatalogGroup, CatalogMemberID: zone.CatalogMemberID,
-			CatalogTargets:        catalogZoneChoices(catalogTargets, zone),
-			CatalogRole:           catalogRoleLabel(zone),
-			CatalogManager:        catalogs.manager(zone),
-			CatalogMembers:        catalogs.members(zone),
-			AwaitingFirstTransfer: zonemodel.AwaitingFirstTransfer(zone),
-			TSIGKey:               zone.TSIGKey, TSIGKeys: tsigKeys, DynamicUpdates: zone.DynamicUpdates,
-			DNSSECValidationDisabled: zone.DNSSECValidationDisabled,
-			DNSSEC:                   zone.DNSSEC, DNSSECAlgorithm: zone.DNSSECAlgorithm,
-			DNSSECDenial: zone.DNSSECDenial, NSEC3Iterations: zone.NSEC3Iterations, NSEC3Salt: zone.NSEC3Salt,
-			ZSKLifetime: durationOr(zone.ZSKLifetime.Duration, 30*24*time.Hour), KSKLifetime: durationOr(zone.KSKLifetime.Duration, 365*24*time.Hour),
-			KeyPrepublish: durationOr(zone.KeyPrepublish.Duration, 24*time.Hour), KeyRetireAfter: durationOr(zone.KeyRetireAfter.Duration, 7*24*time.Hour),
-			Records:              make([]pages.ZoneRecordView, 0, len(zone.Records)),
-			CanSettings:          server.zoneAuthorized(principal, auth.PermissionZonesSettings, zone),
-			CanRecords:           server.zoneAuthorized(principal, auth.PermissionZonesRecords, zone),
-			CanTransfer:          server.zoneAuthorized(principal, auth.PermissionZonesTransfer, zone),
-			CanDNSSEC:            server.zoneAuthorized(principal, auth.PermissionZonesDNSSEC, zone),
-			CanImport:            server.zoneAuthorized(principal, auth.PermissionZonesImport, zone),
-			CanExport:            server.zoneAuthorized(principal, auth.PermissionZonesExport, zone),
-			CanDelete:            server.zoneAuthorized(principal, auth.PermissionZonesDelete, zone),
-			CanCreate:            !server.securityEnabled || auth.Authorize(principal, auth.PermissionZonesCreate, "", ""),
-			CanManagePermissions: console.CanAdministration,
-		}
-		zoneView.Revision = zone.Revision
-		if zone.Type == "secondary" || zone.Type == zonemodel.TypeSecondaryForwarder {
-			zoneView.ConversionFingerprint = zonemodel.ConversionFingerprint(zone)
-			zoneView.ConversionSerial = conversionSerial(zone)
-			if err := zonemodel.CheckPrimaryConversion(zone); err != nil {
-				zoneView.ConversionError = err.Error()
-			}
-		}
-		server.populateZoneDNSSECView(request.Context(), zone, &zoneView, console.TimeDisplay)
-		for _, record := range zone.Records {
-			expiryTTL := uint32(0)
-			if record.ExpiresAt.After(time.Now()) {
-				remaining := time.Until(record.ExpiresAt).Seconds()
-				if remaining > 0 {
-					expiryTTL = uint32(remaining + 0.999)
-				}
-			}
-			zoneView.Records = append(zoneView.Records, pages.ZoneRecordView{
-				ID: zonemodel.RecordID(record), Name: record.Name, Type: record.Type, Value: record.Value, TTL: record.TTL,
-				Comments: record.Comments, Disabled: record.Disabled, ExpiryTTL: expiryTTL,
-				// Managed hides a record's editor entirely; DNSSEC material is the
-				// only thing that qualifies. Integration-owned records still open,
-				// read-only, so their contents can be inspected.
-				Managed:     strings.HasPrefix(record.Comments, "sable:dnssec"),
-				SourceLabel: zoneRecordSourceLabel(record.Source),
-			})
-		}
+		zoneView := server.zonePageZone(request.Context(), console, principal, zone, choices)
 		switch {
 		case selected != "":
 			server.loadZoneHistory(request, &zoneView, console.TimeDisplay)
@@ -163,9 +107,86 @@ func (server *Server) zonesView(request *http.Request, message, errorMessage, se
 	return pages.ZonesPageView{
 		Console: console, Zones: views, Selected: selected, Message: message, Error: errorMessage,
 		CanCreate:    !server.securityEnabled || auth.Authorize(principal, auth.PermissionZonesCreate, "", ""),
-		AliasSources: aliasSources,
-		TSIGKeys:     tsigKeys,
+		AliasSources: choices.aliasSources,
+		TSIGKeys:     choices.tsigKeys,
 	}
+}
+
+// zonePageChoices holds what every zone on the Zones page offers to pick from,
+// limited to the zones the operator can read.
+type zonePageChoices struct {
+	tsigKeys       []string
+	aliasSources   []string
+	catalogTargets []string
+	catalogs       zoneCatalogIndex
+}
+
+// zonePageZone renders one zone, its records, and its DNSSEC state for the
+// Zones page, along with what the operator may do to it.
+func (server *Server) zonePageZone(ctx context.Context, console pages.DashboardView, principal auth.Principal, zone zonemodel.Zone, choices zonePageChoices) pages.ZoneView {
+	zoneView := pages.ZoneView{
+		ID:   zone.ID,
+		Name: zone.Name, Type: zone.Type, DefaultTTL: zone.DefaultTTL, Disabled: zone.Disabled,
+		ShowFullRecordNames: console.ShowFullRecordNames,
+		ZoneTransfer:        zone.ZoneTransfer, TransferACL: append([]string(nil), zone.TransferACL...), Notify: append([]string(nil), zone.Notify...),
+		PrimaryServers: append([]string(nil), zone.PrimaryServers...), PrimaryProtocol: zone.PrimaryProtocol,
+		AliasZone: zone.AliasZone, AliasSources: aliasZoneChoices(choices.aliasSources, zone),
+		CatalogZone: zone.CatalogZone, CatalogGroup: zone.CatalogGroup, CatalogMemberID: zone.CatalogMemberID,
+		CatalogTargets:        catalogZoneChoices(choices.catalogTargets, zone),
+		CatalogRole:           catalogRoleLabel(zone),
+		CatalogManager:        choices.catalogs.manager(zone),
+		CatalogMembers:        choices.catalogs.members(zone),
+		AwaitingFirstTransfer: zonemodel.AwaitingFirstTransfer(zone),
+		TSIGKey:               zone.TSIGKey, TSIGKeys: choices.tsigKeys, DynamicUpdates: zone.DynamicUpdates,
+		DNSSECValidationDisabled: zone.DNSSECValidationDisabled,
+		DNSSEC:                   zone.DNSSEC, DNSSECAlgorithm: zone.DNSSECAlgorithm,
+		DNSSECDenial: zone.DNSSECDenial, NSEC3Iterations: zone.NSEC3Iterations, NSEC3Salt: zone.NSEC3Salt,
+		ZSKLifetime: durationOr(zone.ZSKLifetime.Duration, 30*24*time.Hour), KSKLifetime: durationOr(zone.KSKLifetime.Duration, 365*24*time.Hour),
+		KeyPrepublish: durationOr(zone.KeyPrepublish.Duration, 24*time.Hour), KeyRetireAfter: durationOr(zone.KeyRetireAfter.Duration, 7*24*time.Hour),
+		CanSettings:          server.zoneAuthorized(principal, auth.PermissionZonesSettings, zone),
+		CanRecords:           server.zoneAuthorized(principal, auth.PermissionZonesRecords, zone),
+		CanTransfer:          server.zoneAuthorized(principal, auth.PermissionZonesTransfer, zone),
+		CanDNSSEC:            server.zoneAuthorized(principal, auth.PermissionZonesDNSSEC, zone),
+		CanImport:            server.zoneAuthorized(principal, auth.PermissionZonesImport, zone),
+		CanExport:            server.zoneAuthorized(principal, auth.PermissionZonesExport, zone),
+		CanDelete:            server.zoneAuthorized(principal, auth.PermissionZonesDelete, zone),
+		CanCreate:            !server.securityEnabled || auth.Authorize(principal, auth.PermissionZonesCreate, "", ""),
+		CanManagePermissions: console.CanAdministration,
+	}
+	zoneView.Revision = zone.Revision
+	if zone.Type == "secondary" || zone.Type == zonemodel.TypeSecondaryForwarder {
+		zoneView.ConversionFingerprint = zonemodel.ConversionFingerprint(zone)
+		zoneView.ConversionSerial = conversionSerial(zone)
+		if err := zonemodel.CheckPrimaryConversion(zone); err != nil {
+			zoneView.ConversionError = err.Error()
+		}
+	}
+	server.populateZoneDNSSECView(ctx, zone, &zoneView, console.TimeDisplay)
+	zoneView.Records = zonePageRecords(zone.Records)
+	return zoneView
+}
+
+func zonePageRecords(records []zonemodel.Record) []pages.ZoneRecordView {
+	views := make([]pages.ZoneRecordView, 0, len(records))
+	for _, record := range records {
+		expiryTTL := uint32(0)
+		if record.ExpiresAt.After(time.Now()) {
+			remaining := time.Until(record.ExpiresAt).Seconds()
+			if remaining > 0 {
+				expiryTTL = uint32(remaining + 0.999)
+			}
+		}
+		views = append(views, pages.ZoneRecordView{
+			ID: zonemodel.RecordID(record), Name: record.Name, Type: record.Type, Value: record.Value, TTL: record.TTL,
+			Comments: record.Comments, Disabled: record.Disabled, ExpiryTTL: expiryTTL,
+			// Managed hides a record's editor entirely; DNSSEC material is the
+			// only thing that qualifies. Integration-owned records still open,
+			// read-only, so their contents can be inspected.
+			Managed:     strings.HasPrefix(record.Comments, "sable:dnssec"),
+			SourceLabel: zoneRecordSourceLabel(record.Source),
+		})
+	}
+	return views
 }
 
 // loadZoneHistory fills a zone's recent revisions. A zone source without

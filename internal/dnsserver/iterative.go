@@ -295,13 +295,7 @@ func normalizeRootHints(configured []string) ([]string, error) {
 	return slices.Compact(result), nil
 }
 
-func (handler *Handler) resolveNetwork(request *dns.Msg, runtime *Runtime, forwarders []string) (*dns.Msg, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), runtime.timeout)
-	defer cancel()
-	return handler.resolveNetworkContext(ctx, request, runtime, forwarders)
-}
-
-func (handler *Handler) resolveNetworkContext(
+func (handler *Handler) resolveNetwork(
 	ctx context.Context,
 	request *dns.Msg,
 	runtime *Runtime,
@@ -339,84 +333,106 @@ func (handler *Handler) resolveIterativeQuestion(
 	if depth > maximumIterativeDepth {
 		return nil, errors.New("iterative resolution exceeded the maximum delegation depth")
 	}
-	servers := append([]string(nil), runtime.rootHints...)
-	closestZone := ""
-	// DS records belong to the parent side of a delegation, even when the
-	// child authority was cached by an earlier lookup.
-	cacheName := question.Name
+	walk := iterativeWalk{
+		handler: handler, runtime: runtime, budget: budget, depth: depth,
+		servers: append([]string(nil), runtime.rootHints...),
+		// DS records belong to the parent side of a delegation, even when the
+		// child authority was cached by an earlier lookup.
+		cacheName: question.Name,
+	}
 	if question.Qtype == dns.TypeDS {
-		cacheName = parentFQDN(question.Name)
+		walk.cacheName = parentFQDN(question.Name)
 	}
-	if zone, cachedServers, found := runtime.delegations.get(cacheName, time.Now()); found {
-		closestZone, servers = zone, cachedServers
+	if zone, cachedServers, found := runtime.delegations.get(walk.cacheName, time.Now()); found {
+		walk.closestZone, walk.servers = zone, cachedServers
 	}
-	visited := make(map[string]struct{})
-	walked := runtime.walkedNames(cacheName, closestZone)
+	walk.walked = runtime.walkedNames(walk.cacheName, walk.closestZone)
+	// Without minimization every server is asked for the full name, and
+	// referrals are followed as they come.
+	if runtime.qnameMinimization {
+		if err := walk.minimize(ctx, question.Name); err != nil {
+			return nil, err
+		}
+	}
+	return walk.answer(ctx, question)
+}
 
-	// Query only successive delegation names until the closest authority is
-	// reached. The final owner and record type are withheld from parent zones.
-	candidates := minimizedDelegationNames(question.Name)
-	if !runtime.qnameMinimization {
-		// Every server is asked for the full name, and referrals are followed
-		// as they come.
-		candidates = nil
-	}
-minimizing:
-	for _, candidate := range candidates {
-		if closestZone != "" && (candidate == dns.Fqdn(closestZone) || strings.HasSuffix(dns.Fqdn(closestZone), candidate)) {
+// iterativeWalk is one question's descent from the root, or from the closest
+// cached delegation, to the servers that answer it.
+type iterativeWalk struct {
+	handler *Handler
+	runtime *Runtime
+	budget  *iterativeBudget
+	depth   int
+	// servers answer for closestZone, the deepest zone reached so far.
+	servers     []string
+	closestZone string
+	cacheName   string
+	// walked is the deepest name already known to sit inside closestZone.
+	walked string
+	// visited holds every zone a referral led to. It is made on the first
+	// referral, so an answer from cached servers allocates nothing for it.
+	visited map[string]struct{}
+}
+
+// minimize queries only successive delegation names until the closest
+// authority is reached, so the final owner and record type are withheld from
+// parent zones.
+func (walk *iterativeWalk) minimize(ctx context.Context, name string) error {
+	runtime := walk.runtime
+	for _, candidate := range minimizedDelegationNames(name) {
+		if walk.closestZone != "" && (candidate == dns.Fqdn(walk.closestZone) || strings.HasSuffix(dns.Fqdn(walk.closestZone), candidate)) {
 			continue
 		}
 		// A name already found inside the closest zone, and every name above
 		// it, needs no second look.
-		if walked != "" && dns.IsSubDomain(candidate, walked) {
+		if walk.walked != "" && dns.IsSubDomain(candidate, walk.walked) {
 			continue
 		}
-		response, err := handler.exchangeIterative(ctx, iterativeQuery(candidate, dns.TypeNS), servers, runtime, budget)
+		response, err := walk.handler.exchangeIterative(ctx, iterativeQuery(candidate, dns.TypeNS), walk.servers, runtime, walk.budget)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		zone, names, referral := referralFrom(response, question.Name)
+		zone, names, referral := referralFrom(response, name)
 		// Only a delegation below the servers already reached moves the search
 		// on. Some servers, such as Amazon Route 53, list their own zone's name
 		// servers beside every answer, including a wildcard CNAME they give for
 		// an intermediate name, and that is an answer about this zone, not a
 		// referral away from it.
-		if !referral || len(response.Answer) > 0 || !belowZone(zone, closestZone) {
+		if !referral || len(response.Answer) > 0 || !belowZone(zone, walk.closestZone) {
 			switch {
 			case aliasedAt(response, candidate):
 				// The zone answers for this name itself, so it answers for
 				// the full name too: ask it that now instead of label by label.
-				break minimizing
+				return nil
 			case response.Rcode == dns.RcodeSuccess && len(response.Answer) == 0:
 				// No delegation here, only more of the same zone.
-				runtime.recordWalked(candidate, closestZone, noCutTTL(response))
+				runtime.recordWalked(candidate, walk.closestZone, noCutTTL(response))
 			case response.Authoritative && apexAt(response, candidate):
 				// The servers answer for the zone below themselves, as the
 				// uk servers do for co.uk. Remembering that saves asking
 				// again for every name under it.
-				closestZone = candidate
-				runtime.delegations.set(candidate, servers, apexTTL(response, candidate), time.Now())
-				walked = runtime.walkedNames(cacheName, closestZone)
+				walk.closestZone = candidate
+				runtime.delegations.set(candidate, walk.servers, apexTTL(response, candidate), time.Now())
+				walk.walked = runtime.walkedNames(walk.cacheName, walk.closestZone)
 			}
 			continue
 		}
-		if _, duplicate := visited[zone]; duplicate {
-			return nil, fmt.Errorf("iterative resolution encountered a referral loop at %s", dns.Fqdn(zone))
+		if err := walk.follow(ctx, response, zone, names); err != nil {
+			return err
 		}
-		visited[zone] = struct{}{}
-		servers, err = handler.referralServers(ctx, closestZone, zone, names, response.Extra, runtime, budget, depth+1)
-		if err != nil {
-			return nil, err
-		}
-		closestZone = zone
-		runtime.delegations.set(zone, servers, referralTTL(response), time.Now())
-		walked = runtime.walkedNames(cacheName, closestZone)
+		walk.walked = runtime.walkedNames(walk.cacheName, walk.closestZone)
 	}
+	return nil
+}
 
+// answer asks the closest servers the full question, following referrals and
+// CNAME targets until an authority answers it.
+func (walk *iterativeWalk) answer(ctx context.Context, question dns.Question) (*dns.Msg, error) {
 	var cnameChain []dns.RR
 	current := question
 	for hops := 0; hops <= maximumIterativeDepth; hops++ {
-		response, err := handler.exchangeIterative(ctx, iterativeQuery(current.Name, current.Qtype), servers, runtime, budget)
+		response, err := walk.handler.exchangeIterative(ctx, iterativeQuery(current.Name, current.Qtype), walk.servers, walk.runtime, walk.budget)
 		if err != nil {
 			return nil, err
 		}
@@ -426,7 +442,7 @@ minimizing:
 			// zone, but the target is looked up next and brings them itself,
 			// so keeping them here would list them twice.
 			cnameChain = append(cnameChain, aliasRecords(response, current.Name)...)
-			targetResponse, resolveErr := handler.resolveIterativeQuestion(ctx, dns.Question{Name: target, Qtype: current.Qtype, Qclass: current.Qclass}, runtime, budget, depth+1)
+			targetResponse, resolveErr := walk.handler.resolveIterativeQuestion(ctx, dns.Question{Name: target, Qtype: current.Qtype, Qclass: current.Qclass}, walk.runtime, walk.budget, walk.depth+1)
 			if resolveErr != nil {
 				return nil, resolveErr
 			}
@@ -434,7 +450,7 @@ minimizing:
 			return targetResponse, nil
 		}
 		if iterativeTerminal(response) {
-			scrubOutOfBailiwick(response, closestZone)
+			scrubOutOfBailiwick(response, walk.closestZone)
 			if len(cnameChain) > 0 {
 				response.Answer = append(cnameChain, response.Answer...)
 			}
@@ -444,18 +460,30 @@ minimizing:
 		if !referral {
 			return nil, fmt.Errorf("authority returned neither an answer nor a referral for %s", dns.Fqdn(current.Name))
 		}
-		if _, duplicate := visited[zone]; duplicate {
-			return nil, fmt.Errorf("iterative resolution encountered a referral loop at %s", dns.Fqdn(zone))
-		}
-		visited[zone] = struct{}{}
-		servers, err = handler.referralServers(ctx, closestZone, zone, names, response.Extra, runtime, budget, depth+1)
-		if err != nil {
+		if err := walk.follow(ctx, response, zone, names); err != nil {
 			return nil, err
 		}
-		closestZone = zone
-		runtime.delegations.set(zone, servers, referralTTL(response), time.Now())
 	}
 	return nil, errors.New("iterative resolution exceeded the maximum alias depth")
+}
+
+// follow moves the walk down a referral to zone, refusing a zone it has
+// already been referred to.
+func (walk *iterativeWalk) follow(ctx context.Context, response *dns.Msg, zone string, names []string) error {
+	if _, duplicate := walk.visited[zone]; duplicate {
+		return fmt.Errorf("iterative resolution encountered a referral loop at %s", dns.Fqdn(zone))
+	}
+	if walk.visited == nil {
+		walk.visited = make(map[string]struct{})
+	}
+	walk.visited[zone] = struct{}{}
+	servers, err := walk.handler.referralServers(ctx, walk.closestZone, zone, names, response.Extra, walk.runtime, walk.budget, walk.depth+1)
+	if err != nil {
+		return err
+	}
+	walk.servers, walk.closestZone = servers, zone
+	walk.runtime.delegations.set(zone, servers, referralTTL(response), time.Now())
+	return nil
 }
 
 // authorityAttemptTimeout is how long an authoritative server is waited on
@@ -891,12 +919,12 @@ func recursiveFinishBudget(runtime *Runtime) time.Duration {
 	return max(4*runtime.timeout, 8*time.Second)
 }
 
-// resolveRecursiveWaiting resolves and validates a recursive request, waiting
+// resolveRecursive resolves and validates a recursive request, waiting
 // no longer than wait. The lookup itself runs on apart from the wait, up to
 // recursiveFinishBudget, and a second client asking the same question
 // meanwhile waits on the same lookup. A lookup that every client stopped
 // waiting for caches its own answer when it finishes.
-func (handler *Handler) resolveRecursiveWaiting(ctx context.Context, request *dns.Msg, runtime *Runtime, wait time.Duration) (*dns.Msg, validationState, error) {
+func (handler *Handler) resolveRecursive(ctx context.Context, request *dns.Msg, runtime *Runtime, wait time.Duration) (*dns.Msg, validationState, error) {
 	// Clients share a lookup whenever they would send the same question
 	// upstream, which with validation on ignores their DO and CD bits.
 	upstreamRequest := request

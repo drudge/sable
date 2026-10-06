@@ -209,22 +209,18 @@ func (store *Store) queryMixedLogInsights(
 	if err != nil {
 		return err
 	}
-	var arguments []any
-	bind := func(value any) string {
-		arguments = append(arguments, value)
-		return store.placeholder(len(arguments))
-	}
+	builder := store.newSQLBuilder()
 	// A zero since or until leaves that side of the raw edges open.
 	// SQLite placeholders are positional, so each value is bound in the
 	// order it appears in the query.
 	before := ""
 	if !since.IsZero() {
-		before = `occurred_at >= ` + bind(since.UTC()) + ` AND `
+		before = `occurred_at >= ` + builder.Bind(since.UTC()) + ` AND `
 	}
-	before += `occurred_at < ` + bind(fullStart.UTC())
-	after := `occurred_at >= ` + bind(fullEnd.UTC())
+	before += `occurred_at < ` + builder.Bind(fullStart.UTC())
+	after := `occurred_at >= ` + builder.Bind(fullEnd.UTC())
 	if !until.IsZero() {
-		after += ` AND occurred_at <= ` + bind(until.UTC())
+		after += ` AND occurred_at <= ` + builder.Bind(until.UTC())
 	}
 	boundary := `
 WITH boundary AS (
@@ -238,11 +234,11 @@ WITH boundary AS (
 		rolled.WriteString(`
     SELECT dimension, value, hits
     FROM ` + span.table + `
-    WHERE ` + store.dimensionCondition(dashboardRollupDimensions, bind) + `
-      AND bucket_start >= ` + bind(span.start) + ` AND bucket_start < ` + bind(span.end) + `
+    WHERE ` + store.dimensionCondition(dashboardRollupDimensions, builder.Bind) + `
+      AND bucket_start >= ` + builder.Bind(span.start) + ` AND bucket_start < ` + builder.Bind(span.end) + `
     UNION ALL`)
 	}
-	blocked, limit := bind(string(querylog.SourceBlocked)), bind(maximumInsightRanks)
+	blocked, limit := builder.Bind(string(querylog.SourceBlocked)), builder.Bind(maximumInsightRanks)
 	rows, err := store.database.QueryContext(ctx, boundary+rolled.String()+`
     SELECT '`+queryLogRollupClient+`', client_ip_key, COUNT(*) FROM boundary GROUP BY client_ip_key
     UNION ALL
@@ -269,7 +265,7 @@ WITH boundary AS (
 )
 SELECT dimension, value, hits
 FROM ranked
-WHERE position <= `+limit, arguments...)
+WHERE position <= `+limit, builder.Args()...)
 	if err != nil {
 		return fmt.Errorf("read query log rollups: %w", err)
 	}

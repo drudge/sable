@@ -269,9 +269,7 @@ func (server *Server) alertWatchFormPanel(writer http.ResponseWriter, request *h
 	writeFragmentStatus(writer, http.StatusOK)
 	form := alertWatchFormView(watch, known, console.CanLogs)
 	form.InsightsOff = !server.insightsEnabled()
-	if err := pages.AlertWatchForm(form).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render alert watch form", "error", err)
-	}
+	server.render(writer, request, pages.AlertWatchForm(form))
 }
 
 // watchDeviceForClient names the device behind a client address the way
@@ -486,9 +484,7 @@ func (server *Server) renderAlertWatchProblem(writer http.ResponseWriter, reques
 	writer.Header().Set("HX-Retarget", "#alert-watch-notice")
 	writer.Header().Set("HX-Reswap", "innerHTML")
 	writeFragmentStatus(writer, status)
-	if err := pages.ToastSticky(problem, "error").Render(request.Context(), writer); err != nil {
-		server.logger.Error("render alert watch problem", "error", err)
-	}
+	server.render(writer, request, pages.ToastSticky(problem, "error"))
 }
 
 // newAlertWatchID names a new watch with sixteen random hex characters that

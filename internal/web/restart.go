@@ -6,7 +6,7 @@ import "net/http"
 // cluster change or an installed update.
 func (server *Server) restartServer(writer http.ResponseWriter, request *http.Request) {
 	if server.updateStatus().ClusterUpdate {
-		writeJSON(writer, http.StatusConflict, map[string]string{"error": "A rolling update controls this node. Stop the rollout before requesting a separate restart."})
+		apiError(writer, http.StatusConflict, "A rolling update controls this node. Stop the rollout before requesting a separate restart.")
 		return
 	}
 	if server.restart == nil {

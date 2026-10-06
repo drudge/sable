@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -234,55 +233,38 @@ func (store *Store) compactBuckets(ctx context.Context, tier rollupTier, start, 
 		}
 		rollups = append(rollups, summed...)
 	}
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin %s compaction: %w", tier.table, err)
-	}
-	defer func() { _ = transaction.Rollback() }()
-	var arguments []any
-	bind := func(value any) string {
-		arguments = append(arguments, value)
-		return store.placeholder(len(arguments))
-	}
-	statement := "DELETE FROM " + tier.table + " WHERE " + store.dimensionCondition(queryLogRollupDimensions, bind) +
-		" AND bucket_start >= " + bind(start) + " AND bucket_start < " + bind(end)
-	if _, err := transaction.ExecContext(ctx, statement, arguments...); err != nil {
-		return fmt.Errorf("clear %s: %w", tier.table, err)
-	}
-	for index := 0; index < len(rollups); index += queryLogRollupInsertRows {
-		if err := store.insertTierRows(ctx, transaction, tier.table, rollups[index:min(index+queryLogRollupInsertRows, len(rollups))]); err != nil {
-			return err
+	return store.withTx(ctx, tier.table+" compaction", func(transaction *sql.Tx) error {
+		builder := store.newSQLBuilder()
+		statement := "DELETE FROM " + tier.table + " WHERE " + store.dimensionCondition(queryLogRollupDimensions, builder.Bind) +
+			" AND bucket_start >= " + builder.Bind(start) + " AND bucket_start < " + builder.Bind(end)
+		if _, err := transaction.ExecContext(ctx, statement, builder.Args()...); err != nil {
+			return fmt.Errorf("clear %s: %w", tier.table, err)
 		}
-	}
-	for _, marker := range []struct {
-		key    string
-		moment time.Time
-	}{{tier.fromKey, from}, {tier.untilKey, until}} {
-		if _, err := transaction.ExecContext(ctx,
-			"INSERT INTO sable_metadata (key, value) VALUES ("+store.placeholders(2)+") ON CONFLICT (key) DO UPDATE SET value = excluded.value",
-			marker.key, marker.moment.UTC().Format(time.RFC3339Nano),
-		); err != nil {
-			return fmt.Errorf("record %s: %w", marker.key, err)
+		for index := 0; index < len(rollups); index += queryLogRollupInsertRows {
+			if err := store.insertTierRows(ctx, transaction, tier.table, rollups[index:min(index+queryLogRollupInsertRows, len(rollups))]); err != nil {
+				return err
+			}
 		}
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit %s compaction: %w", tier.table, err)
-	}
-	return nil
+		for _, marker := range []struct {
+			key    string
+			moment time.Time
+		}{{tier.fromKey, from}, {tier.untilKey, until}} {
+			if err := store.setMeta(ctx, transaction, marker.key, metaTime(marker.moment)); err != nil {
+				return fmt.Errorf("record %s: %w", marker.key, err)
+			}
+		}
+		return nil
+	})
 }
 
 // sumRollups totals one bucket's worth of a finer table by dimension and value.
 func (store *Store) sumRollups(ctx context.Context, table string, dimensions []string, start, end time.Time) ([]queryLogRollup, error) {
-	var arguments []any
-	bind := func(value any) string {
-		arguments = append(arguments, value)
-		return store.placeholder(len(arguments))
-	}
+	builder := store.newSQLBuilder()
 	statement := "SELECT dimension, value, CAST(SUM(hits) AS BIGINT) FROM " + table +
-		" WHERE " + store.dimensionCondition(dimensions, bind) +
-		" AND bucket_start >= " + bind(start) + " AND bucket_start < " + bind(end) +
+		" WHERE " + store.dimensionCondition(dimensions, builder.Bind) +
+		" AND bucket_start >= " + builder.Bind(start) + " AND bucket_start < " + builder.Bind(end) +
 		" GROUP BY dimension, value"
-	rows, err := store.database.QueryContext(ctx, statement, arguments...)
+	rows, err := store.database.QueryContext(ctx, statement, builder.Args()...)
 	if err != nil {
 		return nil, fmt.Errorf("sum %s: %w", table, err)
 	}
@@ -321,29 +303,21 @@ func (store *Store) resumTierDimensions(ctx context.Context, dimensions []string
 			}
 			rollups = append(rollups, summed...)
 		}
-		transaction, err := store.database.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("begin %s resum: %w", tier.table, err)
-		}
-		var arguments []any
-		bind := func(value any) string {
-			arguments = append(arguments, value)
-			return store.placeholder(len(arguments))
-		}
-		statement := "DELETE FROM " + tier.table + " WHERE " + store.dimensionCondition(dimensions, bind) +
-			" AND bucket_start >= " + bind(first) + " AND bucket_start < " + bind(last)
-		if _, err := transaction.ExecContext(ctx, statement, arguments...); err != nil {
-			_ = transaction.Rollback()
-			return fmt.Errorf("clear %s: %w", tier.table, err)
-		}
-		for index := 0; index < len(rollups); index += queryLogRollupInsertRows {
-			if err := store.insertTierRows(ctx, transaction, tier.table, rollups[index:min(index+queryLogRollupInsertRows, len(rollups))]); err != nil {
-				_ = transaction.Rollback()
-				return err
+		if err := store.withTx(ctx, tier.table+" resum", func(transaction *sql.Tx) error {
+			builder := store.newSQLBuilder()
+			statement := "DELETE FROM " + tier.table + " WHERE " + store.dimensionCondition(dimensions, builder.Bind) +
+				" AND bucket_start >= " + builder.Bind(first) + " AND bucket_start < " + builder.Bind(last)
+			if _, err := transaction.ExecContext(ctx, statement, builder.Args()...); err != nil {
+				return fmt.Errorf("clear %s: %w", tier.table, err)
 			}
-		}
-		if err := transaction.Commit(); err != nil {
-			return fmt.Errorf("commit %s resum: %w", tier.table, err)
+			for index := 0; index < len(rollups); index += queryLogRollupInsertRows {
+				if err := store.insertTierRows(ctx, transaction, tier.table, rollups[index:min(index+queryLogRollupInsertRows, len(rollups))]); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -355,14 +329,12 @@ func (store *Store) insertTierRows(ctx context.Context, transaction interface {
 	if len(rollups) == 0 {
 		return nil
 	}
-	arguments := make([]any, 0, len(rollups)*4)
+	builder := store.newSQLBuilder()
 	values := make([]string, 0, len(rollups))
 	for _, rollup := range rollups {
-		values = append(values, "("+store.placeholder(len(arguments)+1)+", "+store.placeholder(len(arguments)+2)+", "+
-			store.placeholder(len(arguments)+3)+", "+store.placeholder(len(arguments)+4)+")")
-		arguments = append(arguments, rollup.dimension, rollup.bucket, rollup.value, rollup.hits)
+		values = append(values, builder.Values(rollup.dimension, rollup.bucket, rollup.value, rollup.hits))
 	}
-	if _, err := transaction.ExecContext(ctx, "INSERT INTO "+table+" (dimension, bucket_start, value, hits) VALUES "+strings.Join(values, ", "), arguments...); err != nil {
+	if _, err := transaction.ExecContext(ctx, "INSERT INTO "+table+" (dimension, bucket_start, value, hits) VALUES "+strings.Join(values, ", "), builder.Args()...); err != nil {
 		return fmt.Errorf("write %s: %w", table, err)
 	}
 	return nil
@@ -378,13 +350,9 @@ func (store *Store) pruneRollupTiers(ctx context.Context, through time.Time) err
 		if err := store.moveTierStart(ctx, tier, through.UTC().Truncate(tier.size).Add(tier.size)); err != nil {
 			return err
 		}
-		var arguments []any
-		bind := func(value any) string {
-			arguments = append(arguments, value)
-			return store.placeholder(len(arguments))
-		}
-		condition := store.dimensionCondition(queryLogRollupDimensions, bind) + " AND bucket_start <= " + bind(through)
-		if err := store.deleteInChunks(ctx, tier.table, condition, arguments...); err != nil {
+		builder := store.newSQLBuilder()
+		condition := store.dimensionCondition(queryLogRollupDimensions, builder.Bind) + " AND bucket_start <= " + builder.Bind(through)
+		if err := store.deleteInChunks(ctx, tier.table, condition, builder.Args()...); err != nil {
 			return fmt.Errorf("prune %s: %w", tier.table, err)
 		}
 	}
@@ -394,32 +362,24 @@ func (store *Store) pruneRollupTiers(ctx context.Context, through time.Time) err
 // moveTierStart moves a tier's coverage bounds up to first where they sit
 // before it.
 func (store *Store) moveTierStart(ctx context.Context, tier rollupTier, first time.Time) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin %s prune: %w", tier.table, err)
-	}
-	defer transaction.Rollback()
-	for _, key := range []string{tier.fromKey, tier.untilKey} {
-		var raw string
-		err := transaction.QueryRowContext(ctx, "SELECT value FROM sable_metadata WHERE key = "+store.placeholder(1), key).Scan(&raw)
-		if errors.Is(err, sql.ErrNoRows) {
-			continue
+	return store.withTx(ctx, tier.table+" prune", func(transaction *sql.Tx) error {
+		for _, key := range []string{tier.fromKey, tier.untilKey} {
+			raw, found, err := store.getMeta(ctx, transaction, key)
+			if err != nil {
+				return fmt.Errorf("read %s: %w", key, err)
+			}
+			if !found {
+				continue
+			}
+			if moment, err := time.Parse(time.RFC3339Nano, raw); err == nil && !moment.Before(first) {
+				continue
+			}
+			if err := store.updateMeta(ctx, transaction, key, first.Format(time.RFC3339Nano)); err != nil {
+				return fmt.Errorf("move %s: %w", key, err)
+			}
 		}
-		if err != nil {
-			return fmt.Errorf("read %s: %w", key, err)
-		}
-		if moment, err := time.Parse(time.RFC3339Nano, raw); err == nil && !moment.Before(first) {
-			continue
-		}
-		if _, err := transaction.ExecContext(ctx, "UPDATE sable_metadata SET value = "+store.placeholder(1)+" WHERE key = "+store.placeholder(2),
-			first.Format(time.RFC3339Nano), key); err != nil {
-			return fmt.Errorf("move %s: %w", key, err)
-		}
-	}
-	if err := transaction.Commit(); err != nil {
-		return fmt.Errorf("commit %s prune: %w", tier.table, err)
-	}
-	return nil
+		return nil
+	})
 }
 
 func ceilTime(value time.Time, size time.Duration) time.Time {

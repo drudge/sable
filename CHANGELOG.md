@@ -8,6 +8,32 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.0-beta.2] - 2026-10-06
+
+Sable 1.7.0-beta.2 is a code-health release on top of 1.7.0-beta.1. The DNS
+server, console, store, cluster sync, and startup code were split into
+smaller, named steps, and the console and database code now use shared helpers for
+rendering, API errors, JSON, and database transactions. Behavior is meant to
+be unchanged, so this beta is here to shake out anything the refactor missed.
+Please report anything that acts differently from 1.7.0-beta.1.
+
+### Upgrading
+
+Coming from 1.6.x, also read the 1.7.0-beta.1 upgrade notes below. Nothing new
+is needed going from 1.7.0-beta.1 to 1.7.0-beta.2.
+
+### Console
+
+- Log every console page that fails to render, unless the browser has already
+  gone away. Many of those failures used to be dropped silently.
+- Answer "DNSSEC status is unavailable" when a zone's DNSSEC status can't be
+  read, and log the cause, instead of returning the internal error text.
+
+### Clustering
+
+- Reject unknown fields when creating an enrollment token, the same way every
+  other cluster API endpoint does.
+
 ## [1.7.0-beta.1] - 2026-10-05
 
 Sable 1.7.0-beta.1 makes the console and the DNS path lighter and more

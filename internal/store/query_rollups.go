@@ -180,21 +180,16 @@ func (store *Store) writeRollupRows(ctx context.Context, transaction *sql.Tx, ro
 	if len(rollups) == 0 {
 		return nil
 	}
-	arguments := make([]any, 0, len(rollups)*4)
+	builder := store.newSQLBuilder()
 	values := make([]string, 0, len(rollups))
 	for _, rollup := range rollups {
-		placeholders := make([]string, 4)
-		for index := range placeholders {
-			placeholders[index] = store.placeholder(len(arguments) + index + 1)
-		}
-		values = append(values, "("+strings.Join(placeholders, ", ")+")")
-		arguments = append(arguments, rollup.bucket, rollup.dimension, rollup.value, rollup.hits)
+		values = append(values, builder.Values(rollup.bucket, rollup.dimension, rollup.value, rollup.hits))
 	}
 	statement := `INSERT INTO sable_query_log_rollup (bucket_start, dimension, value, hits) VALUES ` +
 		strings.Join(values, ", ") + `
 ON CONFLICT (bucket_start, dimension, value) DO UPDATE
 SET hits = ` + hits
-	if _, err := transaction.ExecContext(ctx, statement, arguments...); err != nil {
+	if _, err := transaction.ExecContext(ctx, statement, builder.Args()...); err != nil {
 		return fmt.Errorf("upsert query log rollups: %w", err)
 	}
 	return nil

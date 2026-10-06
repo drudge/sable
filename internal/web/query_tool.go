@@ -57,60 +57,19 @@ func (server *Server) dnsClientPage(writer http.ResponseWriter, request *http.Re
 			}
 		}
 	}
-	if err := pages.DNSClientPage(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render DNS client", "error", err)
-	}
+	server.render(writer, request, pages.DNSClientPage(view))
 }
 
 func (server *Server) query(writer http.ResponseWriter, request *http.Request) {
 	if err := request.ParseForm(); err != nil {
 		writeFragmentStatus(writer, http.StatusBadRequest)
-		_ = pages.QueryResult(pages.QueryView{Error: err.Error()}).Render(request.Context(), writer)
+		server.render(writer, request, pages.QueryResult(pages.QueryView{Error: err.Error()}))
 		return
 	}
-	resolver := request.FormValue("resolver")
-	var queryServer resolvedDNSServer
-	var dohTLSConfig *tls.Config
-	var err error
-	if strings.HasPrefix(strings.TrimSpace(resolver), clusterResolverPrefix) {
-		if server.cluster == nil {
-			err = fmt.Errorf("cluster DNS resolver is unavailable")
-		} else {
-			queryServer, err = resolveClusterDNSClientServer(
-				resolver,
-				server.cluster.Snapshot(),
-				request.FormValue("local_server"),
-				request.FormValue("transport"),
-			)
-			if err == nil && request.FormValue("transport") == "doh" {
-				nodeID := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(resolver), clusterResolverPrefix))
-				dohTLSConfig, err = server.cluster.TLSConfigForNode(nodeID)
-			}
-		}
-	} else {
-		localServer := request.FormValue("local_server")
-		var localDoH resolvedDNSServer
-		if request.FormValue("transport") == "doh" &&
-			(strings.TrimSpace(resolver) == "this-server" || strings.TrimSpace(resolver) == "recursive-resolver") {
-			localDoH = server.localDoHServer(request)
-			localServer = localDoH.address
-		}
-		queryServer, err = resolveDNSClientServer(
-			resolver,
-			request.FormValue("server"),
-			request.FormValue("custom_name"),
-			request.FormValue("custom_ip"),
-			localServer,
-			request.FormValue("transport"),
-		)
-		if err == nil && localDoH.address != "" {
-			queryServer.dialIP = localDoH.dialIP
-			dohTLSConfig = server.localDoHTLSConfig(queryServer.address)
-		}
-	}
+	queryServer, dohTLSConfig, err := server.queryToolServer(request)
 	if err != nil {
 		writeFragmentStatus(writer, http.StatusUnprocessableEntity)
-		_ = pages.QueryResult(pages.QueryView{Error: err.Error()}).Render(request.Context(), writer)
+		server.render(writer, request, pages.QueryResult(pages.QueryView{Error: err.Error()}))
 		return
 	}
 	queryRequest := dnsclient.Request{
@@ -128,9 +87,59 @@ func (server *Server) query(writer http.ResponseWriter, request *http.Request) {
 	result, err := dnsclient.Query(request.Context(), queryRequest)
 	if err != nil {
 		writeFragmentStatus(writer, http.StatusUnprocessableEntity)
-		_ = pages.QueryResult(pages.QueryView{Error: err.Error()}).Render(request.Context(), writer)
+		server.render(writer, request, pages.QueryResult(pages.QueryView{Error: err.Error()}))
 		return
 	}
+	view := queryResultView(queryRequest, result)
+	view.JSON = queryResultJSON(view)
+	server.render(writer, request, pages.QueryResult(view))
+}
+
+// queryToolServer resolves the server the DNS client form picked: a cluster
+// node, this server, or another resolver. DoH to a cluster node or to this
+// server also returns the TLS configuration that trusts it.
+func (server *Server) queryToolServer(request *http.Request) (resolvedDNSServer, *tls.Config, error) {
+	resolver := request.FormValue("resolver")
+	if strings.HasPrefix(strings.TrimSpace(resolver), clusterResolverPrefix) {
+		if server.cluster == nil {
+			return resolvedDNSServer{}, nil, fmt.Errorf("cluster DNS resolver is unavailable")
+		}
+		queryServer, err := resolveClusterDNSClientServer(
+			resolver,
+			server.cluster.Snapshot(),
+			request.FormValue("local_server"),
+			request.FormValue("transport"),
+		)
+		if err != nil || request.FormValue("transport") != "doh" {
+			return queryServer, nil, err
+		}
+		nodeID := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(resolver), clusterResolverPrefix))
+		dohTLSConfig, err := server.cluster.TLSConfigForNode(nodeID)
+		return queryServer, dohTLSConfig, err
+	}
+	localServer := request.FormValue("local_server")
+	var localDoH resolvedDNSServer
+	if request.FormValue("transport") == "doh" &&
+		(strings.TrimSpace(resolver) == "this-server" || strings.TrimSpace(resolver) == "recursive-resolver") {
+		localDoH = server.localDoHServer(request)
+		localServer = localDoH.address
+	}
+	queryServer, err := resolveDNSClientServer(
+		resolver,
+		request.FormValue("server"),
+		request.FormValue("custom_name"),
+		request.FormValue("custom_ip"),
+		localServer,
+		request.FormValue("transport"),
+	)
+	if err != nil || localDoH.address == "" {
+		return queryServer, nil, err
+	}
+	queryServer.dialIP = localDoH.dialIP
+	return queryServer, server.localDoHTLSConfig(queryServer.address), nil
+}
+
+func queryResultView(queryRequest dnsclient.Request, result dnsclient.Result) pages.QueryView {
 	question := dns.Fqdn(queryRequest.Name)
 	if len(result.Response.Question) > 0 {
 		question = result.Response.Question[0].Name
@@ -148,7 +157,7 @@ func (server *Server) query(writer http.ResponseWriter, request *http.Request) {
 	if result.Response.Truncated {
 		flags = append(flags, "TC")
 	}
-	view := pages.QueryView{
+	return pages.QueryView{
 		Success:    true,
 		Question:   question,
 		RecordType: strings.ToUpper(queryRequest.Type),
@@ -163,8 +172,6 @@ func (server *Server) query(writer http.ResponseWriter, request *http.Request) {
 		Additional: recordViews(result.Response.Extra),
 		Response:   result.Response.String(),
 	}
-	view.JSON = queryResultJSON(view)
-	_ = pages.QueryResult(view).Render(request.Context(), writer)
 }
 
 // localDoHServer turns the console hostname the operator is already using into

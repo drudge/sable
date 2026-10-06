@@ -66,25 +66,22 @@ func (store *Store) SavePasskey(ctx context.Context, key auth.Passkey) error {
 	if err != nil {
 		return err
 	}
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer transaction.Rollback()
-	if err := store.lockSignInMethods(ctx, transaction); err != nil {
-		return err
-	}
-	var count int
-	if err := transaction.QueryRowContext(ctx, "SELECT COUNT(*) FROM sable_passkeys WHERE user_id = "+store.placeholder(1), key.UserID).Scan(&count); err != nil {
-		return err
-	}
-	if count >= auth.MaximumPasskeys {
-		return errors.New("maximum number of passkeys reached")
-	}
-	if _, err := transaction.ExecContext(ctx, "INSERT INTO sable_passkeys (id, user_id, data) VALUES ("+store.placeholders(3)+")", key.ID, key.UserID, string(data)); err != nil {
-		return err
-	}
-	return transaction.Commit()
+	return store.withTx(ctx, "passkey save", func(transaction *sql.Tx) error {
+		if err := store.lockSignInMethods(ctx, transaction); err != nil {
+			return err
+		}
+		var count int
+		if err := transaction.QueryRowContext(ctx, "SELECT COUNT(*) FROM sable_passkeys WHERE user_id = "+store.placeholder(1), key.UserID).Scan(&count); err != nil {
+			return err
+		}
+		if count >= auth.MaximumPasskeys {
+			return errors.New("maximum number of passkeys reached")
+		}
+		if _, err := transaction.ExecContext(ctx, "INSERT INTO sable_passkeys (id, user_id, data) VALUES ("+store.placeholders(3)+")", key.ID, key.UserID, string(data)); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func (store *Store) UpdatePasskey(ctx context.Context, key auth.Passkey, credential webauthn.Credential, now time.Time) error {
@@ -112,43 +109,40 @@ func (store *Store) UpdatePasskey(ctx context.Context, key auth.Passkey, credent
 }
 
 func (store *Store) DeletePasskey(ctx context.Context, userID int64, id string) error {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer transaction.Rollback()
-	if err := store.lockSignInMethods(ctx, transaction); err != nil {
-		return err
-	}
-	var password bool
-	if err := transaction.QueryRowContext(ctx, "SELECT password_login FROM sable_user_profiles WHERE user_id = "+store.placeholder(1), userID).Scan(&password); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return auth.ErrNotFound
-		}
-		return err
-	}
-	result, err := transaction.ExecContext(ctx, "DELETE FROM sable_passkeys WHERE user_id = "+store.placeholder(1)+" AND id = "+store.placeholder(2), userID, id)
-	if err != nil {
-		return err
-	}
-	count, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if count != 1 {
-		return auth.ErrNotFound
-	}
-	if !password {
-		var remaining int
-		if err := transaction.QueryRowContext(ctx, "SELECT COUNT(*) FROM sable_passkeys WHERE user_id = "+store.placeholder(1), userID).Scan(&remaining); err != nil {
+	return store.withTx(ctx, "passkey deletion", func(transaction *sql.Tx) error {
+		if err := store.lockSignInMethods(ctx, transaction); err != nil {
 			return err
 		}
-		// Requiring another local method also covers an unavailable OIDC provider.
-		if remaining == 0 {
-			return errors.New("keep at least one passkey while password sign-in is disabled")
+		var password bool
+		if err := transaction.QueryRowContext(ctx, "SELECT password_login FROM sable_user_profiles WHERE user_id = "+store.placeholder(1), userID).Scan(&password); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return auth.ErrNotFound
+			}
+			return err
 		}
-	}
-	return transaction.Commit()
+		result, err := transaction.ExecContext(ctx, "DELETE FROM sable_passkeys WHERE user_id = "+store.placeholder(1)+" AND id = "+store.placeholder(2), userID, id)
+		if err != nil {
+			return err
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if count != 1 {
+			return auth.ErrNotFound
+		}
+		if !password {
+			var remaining int
+			if err := transaction.QueryRowContext(ctx, "SELECT COUNT(*) FROM sable_passkeys WHERE user_id = "+store.placeholder(1), userID).Scan(&remaining); err != nil {
+				return err
+			}
+			// Requiring another local method also covers an unavailable OIDC provider.
+			if remaining == 0 {
+				return errors.New("keep at least one passkey while password sign-in is disabled")
+			}
+		}
+		return nil
+	})
 }
 
 func (store *Store) passkeysInTransaction(ctx context.Context, transaction *sql.Tx) (map[string]auth.Passkey, error) {

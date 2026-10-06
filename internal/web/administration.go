@@ -62,13 +62,13 @@ func (server *Server) administrationTokens(writer http.ResponseWriter, request *
 			view := pages.AdministrationPageView{
 				Tokens: snapshot.Tokens, CanManageUsers: auth.HasPermission(principal, auth.PermissionUsersWrite),
 			}
-			_ = pages.UserTokensFragment(view, user).Render(request.Context(), writer)
+			server.render(writer, request, pages.UserTokensFragment(view, user))
 			return
 		}
 		http.Error(writer, "User not found.", http.StatusNotFound)
 		return
 	}
-	_ = pages.TokensPanelFragment(pages.AdministrationPageView{Tokens: snapshot.Tokens}).Render(request.Context(), writer)
+	server.render(writer, request, pages.TokensPanelFragment(pages.AdministrationPageView{Tokens: snapshot.Tokens}))
 }
 
 func (server *Server) createUser(writer http.ResponseWriter, request *http.Request) {
@@ -302,10 +302,10 @@ func (server *Server) renderAdministration(writer http.ResponseWriter, request *
 		writer.WriteHeader(status)
 	}
 	if request.Header.Get("HX-Request") == "true" {
-		_ = pages.AdministrationContent(view).Render(request.Context(), writer)
+		server.render(writer, request, pages.AdministrationContent(view))
 		return
 	}
-	_ = pages.AdministrationPage(view).Render(request.Context(), writer)
+	server.render(writer, request, pages.AdministrationPage(view))
 }
 
 func controlPageTab(request *http.Request, fallback string, allowed ...string) string {

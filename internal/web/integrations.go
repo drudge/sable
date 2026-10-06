@@ -51,9 +51,7 @@ func (server *Server) integrationsPage(writer http.ResponseWriter, request *http
 		}
 		view.SSO.Wizard = server.newSSOWizard(request)
 	}
-	if err := pages.IntegrationsPage(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render integrations page", "error", err)
-	}
+	server.render(writer, request, pages.IntegrationsPage(view))
 }
 
 func (server *Server) integrationsView(request *http.Request, message, errorMessage string) pages.IntegrationsPageView {
@@ -167,20 +165,16 @@ func unifiStatusView(status unifi.Status, display pages.TimeDisplay) pages.UniFi
 
 func (server *Server) unifiStatusPanel(writer http.ResponseWriter, request *http.Request) {
 	view := server.integrationsView(request, "", "")
-	if err := pages.UniFiStatusPanel(view.UniFi).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render UniFi status", "error", err)
+	if !server.render(writer, request, pages.UniFiStatusPanel(view.UniFi)) {
 		return
 	}
 	// The action row and the mapping table live outside the polled fragment, so
 	// they ride along as out-of-band swaps to keep Sync Now and the per-network
 	// host counts in step with the run state.
-	if err := pages.UniFiCardActions(view.UniFi, true).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render UniFi actions", "error", err)
+	if !server.render(writer, request, pages.UniFiCardActions(view.UniFi, true)) {
 		return
 	}
-	if err := pages.UniFiMappingTable(view.UniFi, true).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render UniFi mappings", "error", err)
-	}
+	server.render(writer, request, pages.UniFiMappingTable(view.UniFi, true))
 }
 
 func (server *Server) syncUniFiNow(writer http.ResponseWriter, request *http.Request) {
@@ -298,9 +292,7 @@ func (server *Server) removeSourcedRecords(request *http.Request, source string)
 func (server *Server) renderIntegrationsMutation(writer http.ResponseWriter, request *http.Request, status int, message, errorMessage string) {
 	view := server.integrationsView(request, message, errorMessage)
 	writeFragmentStatus(writer, status)
-	if err := pages.IntegrationsContent(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render integrations content", "error", err)
-	}
+	server.render(writer, request, pages.IntegrationsContent(view))
 }
 
 // unifiSettingsFromWizard turns the wizard's accumulated choices into the
@@ -811,9 +803,7 @@ func (server *Server) renderWizard(writer http.ResponseWriter, request *http.Req
 	view := server.integrationsView(request, "", "")
 	view.UniFi.Wizard = wizard
 	writeFragmentStatus(writer, status)
-	if err := pages.IntegrationsContent(view).Render(request.Context(), writer); err != nil {
-		server.logger.Error("render UniFi setup wizard", "error", err)
-	}
+	server.render(writer, request, pages.IntegrationsContent(view))
 }
 
 // zoneRecordSourceLabel names the integration that owns a record so the zone
