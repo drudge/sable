@@ -8,15 +8,20 @@ that experiment instead of relying on manually configured servers.
 
 The default managed mode:
 
-1. Pins the official Technitium image to `technitium/dns-server:15.4.0`.
+1. Pins the official Technitium image to `technitium/dns-server:15.6.0`.
 2. Cross-compiles the current Sable source and builds a minimal temporary image.
 3. Applies the same Docker CPU and memory limits to both products.
 4. Creates fresh containers and empty state directories for every trial.
 5. Configures both as UDP forwarding resolvers using the same upstream, with
    blocking, query logging, and cache persistence off. Sable's cache TTL,
    serve-stale, prefetch, and 10,000-entry settings are explicitly aligned to
-   the Technitium 15.4 fresh-install profile. The harness also authenticates to
-   Technitium's settings API, disables its default per-client QPM limits for
+   the Technitium 15.6 fresh-install profile. One difference remains:
+   Technitium 15.5 removed Auto Prefetch, its background renewal of popular
+   names, and keeps only client-triggered prefetch. Sable's prefetch also
+   renews popular entries in the background and has no separate switch for
+   that. Technitium 15.4.0 (with Auto Prefetch) and 15.6.0 (without) measured
+   within 0.3% of each other on this workload. The harness also authenticates
+   to Technitium's settings API, disables its default per-client QPM limits for
    parity with Sable, reads the settings back, and preserves that response.
 6. Waits for DNS readiness and verifies matching RCODEs for positive, negative,
    and IPv6 probes before load begins.
