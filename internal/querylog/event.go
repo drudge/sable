@@ -72,8 +72,9 @@ type Decision struct {
 	Policy     PolicyDecision `json:"policy,omitempty"`
 	PolicyRule string         `json:"policy_rule,omitempty"`
 	// PolicySources names the block lists that contain PolicyRule, or the
-	// custom blocked domains, when a query was blocked. More than one source
-	// can list the same rule, and every one is recorded.
+	// custom blocked domains, when a query was blocked. When a block list's
+	// exception allowed it, it names the lists that carry the exception. More
+	// than one source can list the same rule, and every one is recorded.
 	PolicySources []string         `json:"policy_sources,omitempty"`
 	Cache         CacheDecision    `json:"cache,omitempty"`
 	Resolver      ResolverDecision `json:"resolver,omitempty"`

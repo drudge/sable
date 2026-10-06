@@ -316,6 +316,7 @@ func compileRuntime(configuration config.Config, configuredZones []zone.Zone, ba
 		blockListStats = append(blockListStats, dnsserver.BlockListStats{
 			Name: source.Name, Path: source.Path, Lines: source.Lines,
 			Accepted: source.Accepted, Invalid: source.Invalid,
+			Exceptions: source.Exceptions, Unsupported: source.Unsupported,
 		})
 	}
 	routes := make([]dnsserver.ForwardingRoute, 0, len(configuration.Resolver.Routes))
@@ -360,6 +361,9 @@ func compileRuntime(configuration config.Config, configuredZones []zone.Zone, ba
 		BlockedDomains:             compiledBlocking.Domains,
 		BlockedDomainOwners:        compiledBlocking.Owners,
 		BlockedDomainOwnerSets:     compiledBlocking.OwnerSets,
+		ExceptionDomains:           compiledBlocking.Exceptions,
+		ExceptionDomainOwners:      compiledBlocking.ExceptionOwners,
+		ImportantBlockedDomains:    compiledBlocking.Important,
 		AllowedDomains:             configuration.Blocking.AllowedDomains,
 		BlockLists:                 blockListStats,
 		BlockingType:               configuration.Blocking.ResponseType,

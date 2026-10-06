@@ -705,8 +705,12 @@ format = "auto"
 
 Relative list paths resolve from the directory containing `sable.toml`.
 Supported formats are `auto`, `domains`, `hosts`, and `adblock`. Auto mode
-accepts mixed domain, hosts-file, and common Adblock domain-rule syntax.
-Exceptions and cosmetic Adblock rules are ignored. Unicode names normalize to
+accepts mixed domain, hosts-file, and Adblock host rules. An Adblock rule
+counts only when it names a whole host (`||host^`, optionally followed by `|`
+or `$important`); rules with paths, wildcards, regular expressions, other
+modifiers, or cosmetic selectors are counted as unsupported and skipped.
+`@@||host^` exceptions unblock the host and its subdomains on every list,
+except for `$important` rules and `blocking.domains`. Unicode names normalize to
 IDNA and all accepted names are deduplicated before the atomic policy swap.
 
 Remote HTTP(S) subscriptions are cached under `data/blocklists` unless an

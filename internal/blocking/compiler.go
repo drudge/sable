@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/url"
 	"os"
@@ -38,7 +39,27 @@ type SourceStats struct {
 	Lines    int    `json:"lines"`
 	Accepted int    `json:"accepted"`
 	Invalid  int    `json:"invalid"`
+	// Exceptions counts the list's @@ rules, which unblock a host on every
+	// list.
+	Exceptions int `json:"exceptions,omitempty"`
+	// Unsupported counts adblock rules a DNS server can't apply: paths,
+	// wildcards, regular expressions, modifiers other than $important, and
+	// cosmetic rules.
+	Unsupported int `json:"unsupported,omitempty"`
 }
+
+// RuleKind says what a host rule from a block list does.
+type RuleKind uint8
+
+const (
+	RuleBlock RuleKind = iota
+	// RuleImportantBlock is an adblock ||host^$important rule, which an
+	// exception from another list doesn't lift.
+	RuleImportantBlock
+	// RuleException is an adblock @@||host^ rule, which unblocks the host and
+	// its subdomains on every list.
+	RuleException
+)
 
 // CustomSourceName labels the domains an operator blocked by hand rather than
 // through a block list.
@@ -49,8 +70,16 @@ type Result struct {
 	// Owners runs parallel to Domains and indexes OwnerSets, naming every
 	// source that contributed each domain. Sets are shared, so a million
 	// domains drawn from three lists hold a handful of small slices.
-	Owners    []uint32      `json:"-"`
-	OwnerSets [][]string    `json:"-"`
+	Owners    []uint32   `json:"-"`
+	OwnerSets [][]string `json:"-"`
+	// Exceptions are the hosts that @@ rules unblock, with their subdomains,
+	// whichever list blocks them. ExceptionOwners runs parallel and indexes
+	// OwnerSets, naming the lists that carry each exception.
+	Exceptions      []string `json:"-"`
+	ExceptionOwners []uint32 `json:"-"`
+	// Important lists the blocks an exception doesn't lift: $important rules,
+	// and the operator's own blocked domains, which win over any list.
+	Important []string      `json:"-"`
 	Sources   []SourceStats `json:"sources"`
 }
 
@@ -96,12 +125,33 @@ func Compile(baseDirectory string, inlineDomains []string, sources []Source) (Re
 		}
 		domains[normalized] = owners.add(domains[normalized], CustomSourceName)
 	}
+	var important map[string]struct{}
+	if len(inlineDomains) > 0 {
+		important = make(map[string]struct{}, len(inlineDomains))
+		for domain := range domains {
+			important[domain] = struct{}{}
+		}
+	}
 	result := Result{Sources: make([]SourceStats, 0, len(sources))}
+	var exceptions map[string]uint32
 	for _, source := range sources {
 		if err := ValidateFormat(string(source.Format)); err != nil {
 			return Result{}, fmt.Errorf("block list %q: %w", source.Name, err)
 		}
-		stats, err := ReadSource(baseDirectory, source, func(domain string) {
+		stats, err := ReadSourceRules(baseDirectory, source, func(domain string, kind RuleKind) {
+			switch kind {
+			case RuleException:
+				if exceptions == nil {
+					exceptions = make(map[string]uint32)
+				}
+				exceptions[domain] = owners.add(exceptions[domain], source.Name)
+				return
+			case RuleImportantBlock:
+				if important == nil {
+					important = make(map[string]struct{})
+				}
+				important[domain] = struct{}{}
+			}
 			domains[domain] = owners.add(domains[domain], source.Name)
 		})
 		if err != nil {
@@ -119,6 +169,16 @@ func Compile(baseDirectory string, inlineDomains []string, sources []Source) (Re
 		result.Owners[index] = domains[domain]
 	}
 	result.OwnerSets = owners.sets
+	if len(exceptions) > 0 {
+		result.Exceptions = slices.Sorted(maps.Keys(exceptions))
+		result.ExceptionOwners = make([]uint32, len(result.Exceptions))
+		for index, domain := range result.Exceptions {
+			result.ExceptionOwners[index] = exceptions[domain]
+		}
+	}
+	if len(important) > 0 {
+		result.Important = slices.Sorted(maps.Keys(important))
+	}
 	return result, nil
 }
 
@@ -131,12 +191,22 @@ func SourcePath(baseDirectory, path string) string {
 	return filepath.Clean(path)
 }
 
-// ReadSource streams every domain one block list contributes, normalized
-// exactly as the compiled policy stores it. The compiler and anything that
-// analyzes a list's contents share this reader so their notion of a list's
-// domains cannot drift apart. A domain can be visited more than once when the
-// list repeats it.
+// ReadSource streams every domain one block list blocks, normalized exactly
+// as the compiled policy stores it. The compiler and anything that analyzes a
+// list's contents share this reader so their notion of a list's domains cannot
+// drift apart. A domain can be visited more than once when the list repeats
+// it. Exceptions are counted but not visited.
 func ReadSource(baseDirectory string, source Source, visit func(string)) (SourceStats, error) {
+	return ReadSourceRules(baseDirectory, source, func(domain string, kind RuleKind) {
+		if kind != RuleException {
+			visit(domain)
+		}
+	})
+}
+
+// ReadSourceRules streams every host rule one block list contributes, blocks
+// and exceptions alike, normalized as ReadSource normalizes them.
+func ReadSourceRules(baseDirectory string, source Source, visit func(string, RuleKind)) (SourceStats, error) {
 	path := SourcePath(baseDirectory, source.Path)
 	file, err := os.Open(path)
 	if err != nil {
@@ -149,25 +219,38 @@ func ReadSource(baseDirectory string, source Source, visit func(string)) (Source
 	scanner.Buffer(make([]byte, 64*1024), maximumBlockListLineBytes)
 	for scanner.Scan() {
 		stats.Lines++
-		parsed, recognized := parseLine(scanner.Text(), source.Format)
-		if !recognized {
+		kind, parsed := parseLine(scanner.Text(), source.Format)
+		switch kind {
+		case lineSkipped:
+			continue
+		case lineUnsupported:
+			stats.Unsupported++
 			continue
 		}
 		if len(parsed) == 0 {
 			stats.Invalid++
 			continue
 		}
-		accepted := 0
+		rule := RuleBlock
+		switch kind {
+		case lineImportant:
+			rule = RuleImportantBlock
+		case lineException:
+			rule = RuleException
+		}
 		for _, candidate := range parsed {
 			domain, valid := normalizeDomain(candidate)
 			if !valid {
 				stats.Invalid++
 				continue
 			}
-			visit(domain)
-			accepted++
+			visit(domain, rule)
+			if rule == RuleException {
+				stats.Exceptions++
+			} else {
+				stats.Accepted++
+			}
 		}
-		stats.Accepted += accepted
 	}
 	if err := scanner.Err(); err != nil {
 		return SourceStats{}, fmt.Errorf("read block list %q: %w", source.Name, err)
@@ -175,10 +258,29 @@ func ReadSource(baseDirectory string, source Source, visit func(string)) (Source
 	return stats, nil
 }
 
-func parseLine(line string, format Format) ([]string, bool) {
+// lineKind says what one line of a block list holds.
+type lineKind uint8
+
+const (
+	// lineSkipped is blank, a comment, or a list header.
+	lineSkipped lineKind = iota
+	lineBlock
+	lineImportant
+	lineException
+	// lineUnsupported is an adblock rule DNS can't apply.
+	lineUnsupported
+)
+
+// parseLine returns the names a line blocks or unblocks. A recognized line
+// without names is invalid.
+func parseLine(line string, format Format) (lineKind, []string) {
 	line = strings.TrimSpace(strings.TrimPrefix(line, "\ufeff"))
+	// Elsewhere a leading # starts a comment, but an adblock list has none.
+	if format == FormatAdblock && strings.HasPrefix(line, "#") && isCosmeticRule(line) {
+		return lineUnsupported, nil
+	}
 	if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "!") {
-		return nil, false
+		return lineSkipped, nil
 	}
 	switch format {
 	case FormatAuto:
@@ -190,49 +292,127 @@ func parseLine(line string, format Format) ([]string, bool) {
 	case FormatAdblock:
 		return parseAdblockLine(line)
 	default:
-		return nil, false
+		return lineSkipped, nil
 	}
 }
 
-func parseAutomaticLine(line string) ([]string, bool) {
-	if strings.HasPrefix(line, "||") || strings.HasPrefix(line, "@@") || strings.Contains(line, "##") {
+func parseAutomaticLine(line string) (lineKind, []string) {
+	if strings.HasPrefix(line, "||") || strings.HasPrefix(line, "@@") {
 		return parseAdblockLine(line)
 	}
+	// Hosts lines come first, so a trailing "## comment" stays a comment.
 	fields := strings.Fields(stripInlineComment(line))
 	if len(fields) > 1 && net.ParseIP(fields[0]) != nil {
-		return fields[1:], true
+		return lineBlock, fields[1:]
+	}
+	if isAdblockHeader(line) {
+		return lineSkipped, nil
+	}
+	if isCosmeticRule(line) || hasAdblockSyntax(line) {
+		return lineUnsupported, nil
 	}
 	return parseDomainLine(line)
 }
 
-func parseDomainLine(line string) ([]string, bool) {
+func parseDomainLine(line string) (lineKind, []string) {
 	fields := strings.Fields(stripInlineComment(line))
 	if len(fields) == 0 {
-		return nil, false
+		return lineSkipped, nil
 	}
-	return fields[:1], true
+	return lineBlock, fields[:1]
 }
 
-func parseHostsLine(line string) ([]string, bool) {
+func parseHostsLine(line string) (lineKind, []string) {
 	fields := strings.Fields(stripInlineComment(line))
 	if len(fields) < 2 || net.ParseIP(fields[0]) == nil {
-		return nil, true
+		return lineBlock, nil
 	}
-	return fields[1:], true
+	return lineBlock, fields[1:]
 }
 
-func parseAdblockLine(line string) ([]string, bool) {
-	if strings.HasPrefix(line, "@@") || strings.Contains(line, "##") || strings.Contains(line, "#@#") {
-		return nil, false
+// parseAdblockLine accepts the host-only rules a DNS server can enforce:
+// ||host^, optionally followed by | or the $important modifier, and the same
+// shapes after @@ as exceptions. Anything with a path, a wildcard, a regular
+// expression, or another modifier is skipped as unsupported, as AdGuard Home,
+// Technitium, and Pi-hole skip it. Cutting such a rule down to its host would
+// block far more than the rule does: ||google.com/adsense/search/ads.js would
+// block google.com, and ||pl.ua^$badfilter, which cancels a rule, would block
+// a public suffix.
+func parseAdblockLine(line string) (lineKind, []string) {
+	if isCosmeticRule(line) {
+		return lineUnsupported, nil
 	}
-	if !strings.HasPrefix(line, "||") {
+	if isAdblockHeader(line) {
+		return lineSkipped, nil
+	}
+	kind := lineBlock
+	rule := line
+	if after, exception := strings.CutPrefix(rule, "@@"); exception {
+		kind, rule = lineException, after
+	}
+	host, anchored := strings.CutPrefix(rule, "||")
+	if !anchored {
+		if kind == lineException || hasAdblockSyntax(rule) {
+			return lineUnsupported, nil
+		}
+		// A bare name blocks that name, as a domain list does.
 		return parseDomainLine(line)
 	}
-	candidate := strings.TrimPrefix(line, "||")
-	if end := strings.IndexAny(candidate, "^$|/"); end >= 0 {
-		candidate = candidate[:end]
+	host, modifiers, separated := strings.Cut(host, "^")
+	// ||192.0.2.1^ filters answers by address, which a name list can't do.
+	if !separated || strings.ContainsAny(host, "*/|$^:?=&") || isAddress(host) {
+		return lineUnsupported, nil
 	}
-	return []string{candidate}, true
+	modifiers = strings.TrimPrefix(modifiers, "|")
+	switch {
+	case modifiers == "":
+	case strings.EqualFold(modifiers, "$important"):
+		if kind == lineBlock {
+			kind = lineImportant
+		}
+	default:
+		return lineUnsupported, nil
+	}
+	return kind, []string{host}
+}
+
+// isAddress reports an IPv4 address, or anything else made of digits and
+// dots; no top-level domain is numeric, so none of those is a host name. The
+// caller has already ruled out the colons of IPv6.
+func isAddress(host string) bool {
+	return host != "" && strings.Trim(host, "0123456789.") == ""
+}
+
+// isCosmeticRule reports element hiding, CSS, scriptlet, and HTML filtering
+// rules and their exceptions, which act on pages rather than names.
+func isCosmeticRule(line string) bool {
+	for index := strings.IndexByte(line, '#'); index >= 0 && index < len(line)-1; {
+		rest := line[index+1:]
+		rest = strings.TrimPrefix(rest, "@")
+		rest = strings.TrimLeft(rest, "?$%")
+		if strings.HasPrefix(rest, "#") {
+			return true
+		}
+		next := strings.IndexByte(line[index+1:], '#')
+		if next < 0 {
+			return false
+		}
+		index += next + 1
+	}
+	return false
+}
+
+// isAdblockHeader reports a filter list's version line, such as
+// [Adblock Plus 2.0].
+func isAdblockHeader(line string) bool {
+	return strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]")
+}
+
+// hasAdblockSyntax reports a line no domain or hosts entry could be: a
+// regular expression, an anchored URL, a separator, a modifier, or a query
+// string.
+func hasAdblockSyntax(line string) bool {
+	return strings.HasPrefix(line, "/") || strings.ContainsAny(line, "|^$?&=")
 }
 
 func stripInlineComment(line string) string {

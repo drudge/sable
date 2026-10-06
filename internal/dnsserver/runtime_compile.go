@@ -144,6 +144,10 @@ func (runtime *Runtime) compilePolicy(configuration RuntimeConfig) error {
 		}
 		blocked[normalized] = owner
 	}
+	exceptions, firmBlocked, err := compileExceptions(configuration)
+	if err != nil {
+		return err
+	}
 	allowedExact := make(map[string]struct{}, len(configuration.AllowedDomains))
 	allowedWildcard := make(map[string]struct{}, len(configuration.AllowedDomains))
 	for _, domain := range configuration.AllowedDomains {
@@ -192,6 +196,8 @@ func (runtime *Runtime) compilePolicy(configuration RuntimeConfig) error {
 	}
 	runtime.blocked = blocked
 	runtime.blockedOwners = configuration.BlockedDomainOwnerSets
+	runtime.exceptions = exceptions
+	runtime.firmBlocked = firmBlocked
 	runtime.allowedExact = allowedExact
 	runtime.allowedWildcard = allowedWildcard
 	runtime.blocking = configuration.Blocking
@@ -596,4 +602,35 @@ func upstreamSignature(forwarders []string, routes map[string][]string) string {
 		}
 	}
 	return signature.String()
+}
+
+// compileExceptions builds the hosts block lists unblock, and the blocks that
+// stay firm against them. Without exceptions neither map is built, so a policy
+// without them costs nothing more.
+func compileExceptions(configuration RuntimeConfig) (map[string]uint32, map[string]struct{}, error) {
+	if len(configuration.ExceptionDomains) == 0 {
+		return nil, nil, nil
+	}
+	attributed := len(configuration.ExceptionDomainOwners) == len(configuration.ExceptionDomains)
+	exceptions := make(map[string]uint32, len(configuration.ExceptionDomains))
+	for index, domain := range configuration.ExceptionDomains {
+		normalized, err := dnsname.Normalize(strings.TrimSpace(domain))
+		if err != nil {
+			return nil, nil, fmt.Errorf("invalid block-list exception %q: %w", domain, err)
+		}
+		owner := uint32(0)
+		if attributed && int(configuration.ExceptionDomainOwners[index]) < len(configuration.BlockedDomainOwnerSets) {
+			owner = configuration.ExceptionDomainOwners[index]
+		}
+		exceptions[normalized] = owner
+	}
+	firm := make(map[string]struct{}, len(configuration.ImportantBlockedDomains))
+	for _, domain := range configuration.ImportantBlockedDomains {
+		normalized, err := dnsname.Normalize(strings.TrimSpace(domain))
+		if err != nil {
+			return nil, nil, fmt.Errorf("invalid important blocked domain %q: %w", domain, err)
+		}
+		firm[normalized] = struct{}{}
+	}
+	return exceptions, firm, nil
 }

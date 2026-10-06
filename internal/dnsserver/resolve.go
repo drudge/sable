@@ -298,7 +298,7 @@ func (handler *Handler) resolveRequest(request *dns.Msg, name string, runtime *R
 			}
 		}
 		return resolution{response: response, source: querylog.SourceCache,
-			decision: querylog.Decision{Policy: policy, PolicyRule: policyRule, Cache: querylog.CacheHit, Resolver: querylog.ResolverCache}}
+			decision: querylog.Decision{Policy: policy, PolicyRule: policyRule, PolicySources: policySources, Cache: querylog.CacheHit, Resolver: querylog.ResolverCache}}
 	}
 	if !request.RecursionDesired {
 		return recursionRefused(request)
@@ -316,7 +316,7 @@ func (handler *Handler) resolveRequest(request *dns.Msg, name string, runtime *R
 		if zone, found := locallyServedZone(request.Question[0].Name); found {
 			handler.localAnswers.Add(1)
 			return resolution{response: locallyServedResponse(request, zone), source: querylog.SourceLocal,
-				decision: querylog.Decision{Policy: policy, PolicyRule: policyRule, Cache: querylog.CacheMiss, Resolver: querylog.ResolverLocallyServed}}
+				decision: querylog.Decision{Policy: policy, PolicyRule: policyRule, PolicySources: policySources, Cache: querylog.CacheMiss, Resolver: querylog.ResolverLocallyServed}}
 		}
 	}
 	release, admitted := handler.admission.acquire(clientIP, runtime.maxConcurrent, runtime.maxConcurrentPerClient)
@@ -331,6 +331,7 @@ func (handler *Handler) resolveRequest(request *dns.Msg, name string, runtime *R
 	}
 	result.decision.Policy = policy
 	result.decision.PolicyRule = policyRule
+	result.decision.PolicySources = policySources
 	if result.decision.Cache == "" {
 		result.decision.Cache = querylog.CacheMiss
 	}
