@@ -842,6 +842,9 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 		`sable_dns_response_duration_seconds_bucket{source="cache",protocol="udp",cache="hit",rcode="NOERROR",le="+Inf"} 2`,
 		`sable_dns_response_duration_seconds_sum{source="cache",protocol="udp",cache="hit",rcode="NOERROR"} 0.0015`,
 		`sable_dns_response_duration_seconds_count{source="cache",protocol="udp",cache="hit",rcode="NOERROR"} 2`,
+		"# TYPE go_goroutines gauge",
+		"# TYPE go_memstats_heap_inuse_bytes gauge",
+		"# TYPE go_gc_duration_seconds summary",
 	} {
 		if !strings.Contains(metricsResponse.Body.String(), expected) {
 			t.Errorf("metrics do not contain %q", expected)

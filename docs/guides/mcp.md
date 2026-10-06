@@ -28,7 +28,7 @@ You choose each tool in the first step of the setup wizard, and a token still ne
 | `search_queries` | Off | Each device's DNS lookups, by its exact address and part or all of a name | `logs.read` |
 | `search_server_logs` | Off | Sable's runtime log, by level, text, and time | `logs.read` |
 | `get_version` | On | Which version runs, whether a newer release is out, and the notes for every release since | `updates.read` |
-| `get_stats` | On | The dashboard's numbers for an hour, day, week, month, or year | `metrics.read` |
+| `get_stats` | On | The dashboard's numbers for an hour, day, week, month, or year, and the node's memory and CPU use | `metrics.read` |
 | `get_dynamic_dns` | On | Your public addresses, the records Dynamic DNS keeps up to date, and its last error | `settings.read` |
 | `sync_dynamic_dns` | Off | Updates the Dynamic DNS records now | `settings.write` |
 | `get_cluster_status` | On | Which node leads, which are online and caught up, their versions and problems, and any rolling update | `cluster.read` |
@@ -41,7 +41,7 @@ Insights findings, the query log, and the runtime log describe what each device 
 
 `get_version` follows the update channel in **About**. It uses the last saved release check unless the assistant passes `check`, and even then it asks GitHub at most once every 5 minutes. With `cluster.read`, it also lists what each node runs. It cannot install an update.
 
-`get_stats` gives the same query, blocking, cache, and response-code counts as the dashboard for the range asked. Where answers came from, upstream errors, DNSSEC results, and response times are counted only since the node started. It never says which device asked for what. The number of devices and the most blocked domains come from the query log, so they appear only when the token also has `logs.read`. On a cluster, the numbers are the connected node's.
+`get_stats` gives the same query, blocking, cache, and response-code counts as the dashboard for the range asked. Where answers came from, upstream errors, DNSSEC results, and response times are counted only since the node started. It never says which device asked for what. The number of devices and the most blocked domains come from the query log, so they appear only when the token also has `logs.read`. `process` gives the node's memory, CPU time, goroutines, open files, and garbage collection at the moment of the call. Its CPU percent is the average since the node started, where 100 means one core fully busy; for recent CPU use, graph `rate(process_cpu_seconds_total[5m])` from `/metrics`. Resident memory and open files are reported on Linux only. On a cluster, the numbers are the connected node's.
 
 `get_dynamic_dns` sends your public IP addresses to your assistant's AI provider whenever it calls the tool. Leave it off if you would rather not share them. Provider errors are shown the way **Integrations** shows them, and any stored credential that appears in one is blanked. Dynamic DNS runs only on the cluster primary, so a replica answers with a note to ask the primary, and `sync_dynamic_dns` refuses there.
 
