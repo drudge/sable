@@ -71,9 +71,7 @@ var blockListCatalog = []BlockListCatalogItem{
 	{"URLhaus Malicious URLs", "Malware distribution sites from abuse.ch", "https://urlhaus.abuse.ch/downloads/hostfile/", "malware"},
 	{"Phishing Army", "Community phishing domain blocklist", "https://phishing.army/download/phishing_army_blocklist.txt", "malware"},
 	{"EasyPrivacy", "Tracking and privacy protection", "https://easylist.to/easylist/easyprivacy.txt", "privacy"},
-	{"Fanboy Annoyances", "Banners, pop-ups, and social widgets", "https://easylist.to/easylist/fanboy-annoyance.txt", "privacy"},
 	{"Steven Black + Social", "Base list with social media sites blocked", "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/social/hosts", "social"},
-	{"Fanboy Social", "Social media tracking and widgets", "https://easylist.to/easylist/fanboy-social.txt", "social"},
 }
 
 // blockingTabs drives both the tab strip and the document title so the browser
@@ -378,7 +376,7 @@ func BlockingContent(view BlockingPageView) templ.Component {
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(view.UpdateHours))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 148, Col: 116}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 146, Col: 116}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
@@ -484,7 +482,7 @@ func BlockingStatus(view BlockingPageView) templ.Component {
 				var templ_7745c5c3_Var10 string
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.Enabled, "Disable", "Enable"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 162, Col: 382}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 160, Col: 382}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
@@ -584,7 +582,7 @@ func BlockingStatus(view BlockingPageView) templ.Component {
 			var templ_7745c5c3_Var14 string
 			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(view.Updating, "Updating block lists", "Update block lists"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 175, Col: 378}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 173, Col: 378}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var14)
 			if templ_7745c5c3_Err != nil {
@@ -605,7 +603,7 @@ func BlockingStatus(view BlockingPageView) templ.Component {
 			var templ_7745c5c3_Var15 string
 			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.Updating, "Updating…", "Update Block Lists"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 175, Col: 505}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 173, Col: 505}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 			if templ_7745c5c3_Err != nil {
@@ -623,7 +621,7 @@ func BlockingStatus(view BlockingPageView) templ.Component {
 				var templ_7745c5c3_Var16 string
 				templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(FormatShortDateTime(view.NextUpdate, view.Console.TimeDisplay, false))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 177, Col: 114}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 175, Col: 114}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 				if templ_7745c5c3_Err != nil {
@@ -692,7 +690,7 @@ func BlockListRow(list BlockListSourceView) templ.Component {
 		var templ_7745c5c3_Var18 string
 		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.ResolveAttributeValue("View details for " + list.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 187, Col: 150}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 185, Col: 150}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var18)
 		if templ_7745c5c3_Err != nil {
@@ -705,7 +703,7 @@ func BlockListRow(list BlockListSourceView) templ.Component {
 		var templ_7745c5c3_Var19 string
 		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(list.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 187, Col: 164}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 185, Col: 164}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 		if templ_7745c5c3_Err != nil {
@@ -718,7 +716,7 @@ func BlockListRow(list BlockListSourceView) templ.Component {
 		var templ_7745c5c3_Var20 string
 		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(list.URL != "", list.URL, list.ConfiguredPath))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 188, Col: 70}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 186, Col: 70}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
 		if templ_7745c5c3_Err != nil {
@@ -731,7 +729,7 @@ func BlockListRow(list BlockListSourceView) templ.Component {
 		var templ_7745c5c3_Var21 string
 		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(blockListLocation(list))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 188, Col: 98}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 186, Col: 98}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 		if templ_7745c5c3_Err != nil {
@@ -744,7 +742,7 @@ func BlockListRow(list BlockListSourceView) templ.Component {
 		var templ_7745c5c3_Var22 string
 		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(strings.ToUpper(list.Format))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 189, Col: 40}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 187, Col: 40}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 		if templ_7745c5c3_Err != nil {
@@ -757,7 +755,7 @@ func BlockListRow(list BlockListSourceView) templ.Component {
 		var templ_7745c5c3_Var23 string
 		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(formatNumber(uint64(list.Accepted)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 189, Col: 83}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 187, Col: 83}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 		if templ_7745c5c3_Err != nil {
@@ -770,7 +768,7 @@ func BlockListRow(list BlockListSourceView) templ.Component {
 		var templ_7745c5c3_Var24 string
 		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(formatNumber(uint64(list.Invalid)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 189, Col: 133}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 187, Col: 133}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 		if templ_7745c5c3_Err != nil {
@@ -788,7 +786,7 @@ func BlockListRow(list BlockListSourceView) templ.Component {
 			var templ_7745c5c3_Var25 string
 			templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.ResolveAttributeValue(list.HealthDetail)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 191, Col: 69}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 189, Col: 69}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var25)
 			if templ_7745c5c3_Err != nil {
@@ -809,7 +807,7 @@ func BlockListRow(list BlockListSourceView) templ.Component {
 			var templ_7745c5c3_Var26 string
 			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(list.HealthSummary)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 191, Col: 121}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 189, Col: 121}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 			if templ_7745c5c3_Err != nil {
@@ -832,7 +830,7 @@ func BlockListRow(list BlockListSourceView) templ.Component {
 			var templ_7745c5c3_Var27 templ.SafeURL
 			templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(list.URL))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 195, Col: 56}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 193, Col: 56}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 			if templ_7745c5c3_Err != nil {
@@ -845,7 +843,7 @@ func BlockListRow(list BlockListSourceView) templ.Component {
 			var templ_7745c5c3_Var28 string
 			templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.ResolveAttributeValue("Open " + list.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 195, Col: 124}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 193, Col: 124}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var28)
 			if templ_7745c5c3_Err != nil {
@@ -871,7 +869,7 @@ func BlockListRow(list BlockListSourceView) templ.Component {
 		var templ_7745c5c3_Var29 string
 		templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("{\"name\":%q}", list.Name))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 197, Col: 136}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 195, Col: 136}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var29)
 		if templ_7745c5c3_Err != nil {
@@ -884,7 +882,7 @@ func BlockListRow(list BlockListSourceView) templ.Component {
 		var templ_7745c5c3_Var30 string
 		templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.ResolveAttributeValue("Remove " + list.Name + " from the block lists?")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 197, Col: 250}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 195, Col: 250}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var30)
 		if templ_7745c5c3_Err != nil {
@@ -897,7 +895,7 @@ func BlockListRow(list BlockListSourceView) templ.Component {
 		var templ_7745c5c3_Var31 string
 		templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.ResolveAttributeValue("Remove " + list.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 197, Col: 367}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 195, Col: 367}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var31)
 		if templ_7745c5c3_Err != nil {
@@ -947,7 +945,7 @@ func DomainPanel(value string, domains []string, active string, allowed bool) te
 		var templ_7745c5c3_Var33 string
 		templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.ResolveAttributeValue("blocking-panel-" + value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 202, Col: 80}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 200, Col: 80}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var33)
 		if templ_7745c5c3_Err != nil {
@@ -960,7 +958,7 @@ func DomainPanel(value string, domains []string, active string, allowed bool) te
 		var templ_7745c5c3_Var34 string
 		templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.ResolveAttributeValue("blocking-tab-" + value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 202, Col: 140}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 200, Col: 140}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var34)
 		if templ_7745c5c3_Err != nil {
@@ -973,7 +971,7 @@ func DomainPanel(value string, domains []string, active string, allowed bool) te
 		var templ_7745c5c3_Var35 string
 		templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.ResolveAttributeValue(value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 202, Col: 170}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 200, Col: 170}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var35)
 		if templ_7745c5c3_Err != nil {
@@ -1004,7 +1002,7 @@ func DomainPanel(value string, domains []string, active string, allowed bool) te
 		var templ_7745c5c3_Var36 string
 		templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(allowed, "/ui/blocking/allowed/import", "/ui/blocking/domains/import"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 205, Col: 142}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 203, Col: 142}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var36)
 		if templ_7745c5c3_Err != nil {
@@ -1089,7 +1087,7 @@ func DomainPanel(value string, domains []string, active string, allowed bool) te
 			var templ_7745c5c3_Var39 string
 			templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.ResolveAttributeValue(domain)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 219, Col: 114}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 217, Col: 114}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var39)
 			if templ_7745c5c3_Err != nil {
@@ -1102,7 +1100,7 @@ func DomainPanel(value string, domains []string, active string, allowed bool) te
 			var templ_7745c5c3_Var40 string
 			templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.ResolveAttributeValue(value)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 219, Col: 141}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 217, Col: 141}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var40)
 			if templ_7745c5c3_Err != nil {
@@ -1123,7 +1121,7 @@ func DomainPanel(value string, domains []string, active string, allowed bool) te
 			var templ_7745c5c3_Var41 string
 			templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(domain)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 219, Col: 223}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 217, Col: 223}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 			if templ_7745c5c3_Err != nil {
@@ -1158,7 +1156,7 @@ func DomainPanel(value string, domains []string, active string, allowed bool) te
 			var templ_7745c5c3_Var44 string
 			templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(allowed, "allowed", "blocked"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 219, Col: 367}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 217, Col: 367}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 			if templ_7745c5c3_Err != nil {
@@ -1171,7 +1169,7 @@ func DomainPanel(value string, domains []string, active string, allowed bool) te
 			var templ_7745c5c3_Var45 string
 			templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(allowed, "/ui/blocking/allowed/delete", "/ui/blocking/domains/delete"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 219, Col: 512}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 217, Col: 512}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var45)
 			if templ_7745c5c3_Err != nil {
@@ -1184,7 +1182,7 @@ func DomainPanel(value string, domains []string, active string, allowed bool) te
 			var templ_7745c5c3_Var46 string
 			templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("{\"domain\":%q}", domain))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 219, Col: 563}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 217, Col: 563}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var46)
 			if templ_7745c5c3_Err != nil {
@@ -1197,7 +1195,7 @@ func DomainPanel(value string, domains []string, active string, allowed bool) te
 			var templ_7745c5c3_Var47 string
 			templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.ResolveAttributeValue("Remove " + domain + " from the " + domainPolicyKind(allowed) + " list?")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 219, Col: 701}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 217, Col: 701}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var47)
 			if templ_7745c5c3_Err != nil {
@@ -1210,7 +1208,7 @@ func DomainPanel(value string, domains []string, active string, allowed bool) te
 			var templ_7745c5c3_Var48 string
 			templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.ResolveAttributeValue("Remove " + domainPolicyKind(allowed) + " domain?")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 219, Col: 775}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 217, Col: 775}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var48)
 			if templ_7745c5c3_Err != nil {
@@ -1223,7 +1221,7 @@ func DomainPanel(value string, domains []string, active string, allowed bool) te
 			var templ_7745c5c3_Var49 string
 			templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.ResolveAttributeValue("Remove " + domain)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 219, Col: 845}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 217, Col: 845}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var49)
 			if templ_7745c5c3_Err != nil {
@@ -1253,7 +1251,7 @@ func DomainPanel(value string, domains []string, active string, allowed bool) te
 		var templ_7745c5c3_Var50 string
 		templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.ResolveAttributeValue(value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 223, Col: 62}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 221, Col: 62}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var50)
 		if templ_7745c5c3_Err != nil {
@@ -1266,7 +1264,7 @@ func DomainPanel(value string, domains []string, active string, allowed bool) te
 		var templ_7745c5c3_Var51 string
 		templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.JoinStringErrs(formatNumber(uint64(len(domains))))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 223, Col: 101}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 221, Col: 101}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var51))
 		if templ_7745c5c3_Err != nil {
@@ -1279,7 +1277,7 @@ func DomainPanel(value string, domains []string, active string, allowed bool) te
 		var templ_7745c5c3_Var52 string
 		templ_7745c5c3_Var52, templ_7745c5c3_Err = templ.JoinStringErrs(plural(len(domains), "domain", "domains"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 223, Col: 154}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 221, Col: 154}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var52))
 		if templ_7745c5c3_Err != nil {
@@ -1292,7 +1290,7 @@ func DomainPanel(value string, domains []string, active string, allowed bool) te
 		var templ_7745c5c3_Var53 string
 		templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.JoinStringErrs(domainPolicyKind(allowed))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 223, Col: 187}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 221, Col: 187}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var53))
 		if templ_7745c5c3_Err != nil {
@@ -1305,7 +1303,7 @@ func DomainPanel(value string, domains []string, active string, allowed bool) te
 		var templ_7745c5c3_Var54 string
 		templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.ResolveAttributeValue(value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 223, Col: 226}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 221, Col: 226}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var54)
 		if templ_7745c5c3_Err != nil {
@@ -1352,7 +1350,7 @@ func BlockingTab(tab tabOption, active string) templ.Component {
 		var templ_7745c5c3_Var57 string
 		templ_7745c5c3_Var57, templ_7745c5c3_Err = templ.ResolveAttributeValue("blocking-tab-" + tab.Value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 227, Col: 115}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 225, Col: 115}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var57)
 		if templ_7745c5c3_Err != nil {
@@ -1378,7 +1376,7 @@ func BlockingTab(tab tabOption, active string) templ.Component {
 		var templ_7745c5c3_Var59 string
 		templ_7745c5c3_Var59, templ_7745c5c3_Err = templ.ResolveAttributeValue(tab.Label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 227, Col: 192}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 225, Col: 192}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var59)
 		if templ_7745c5c3_Err != nil {
@@ -1391,7 +1389,7 @@ func BlockingTab(tab tabOption, active string) templ.Component {
 		var templ_7745c5c3_Var60 string
 		templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(tab.Value == active))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 227, Col: 242}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 225, Col: 242}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var60)
 		if templ_7745c5c3_Err != nil {
@@ -1404,7 +1402,7 @@ func BlockingTab(tab tabOption, active string) templ.Component {
 		var templ_7745c5c3_Var61 string
 		templ_7745c5c3_Var61, templ_7745c5c3_Err = templ.ResolveAttributeValue("blocking-panel-" + tab.Value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 227, Col: 290}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 225, Col: 290}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var61)
 		if templ_7745c5c3_Err != nil {
@@ -1417,7 +1415,7 @@ func BlockingTab(tab tabOption, active string) templ.Component {
 		var templ_7745c5c3_Var62 string
 		templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(tab.Value == active, "0", "-1"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 227, Col: 342}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 225, Col: 342}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var62)
 		if templ_7745c5c3_Err != nil {
@@ -1430,7 +1428,7 @@ func BlockingTab(tab tabOption, active string) templ.Component {
 		var templ_7745c5c3_Var63 string
 		templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.ResolveAttributeValue(tab.Value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 227, Col: 374}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 225, Col: 374}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var63)
 		if templ_7745c5c3_Err != nil {
@@ -1443,7 +1441,7 @@ func BlockingTab(tab tabOption, active string) templ.Component {
 		var templ_7745c5c3_Var64 string
 		templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.ResolveAttributeValue(tab.Label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 227, Col: 403}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 225, Col: 403}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var64)
 		if templ_7745c5c3_Err != nil {
@@ -1464,7 +1462,7 @@ func BlockingTab(tab tabOption, active string) templ.Component {
 		var templ_7745c5c3_Var65 string
 		templ_7745c5c3_Var65, templ_7745c5c3_Err = templ.JoinStringErrs(tab.Label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 227, Col: 438}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 225, Col: 438}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var65))
 		if templ_7745c5c3_Err != nil {
@@ -1528,7 +1526,7 @@ func BlockingGuide(color, title, description string) templ.Component {
 		var templ_7745c5c3_Var69 string
 		templ_7745c5c3_Var69, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 229, Col: 102}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 227, Col: 102}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var69))
 		if templ_7745c5c3_Err != nil {
@@ -1541,7 +1539,7 @@ func BlockingGuide(color, title, description string) templ.Component {
 		var templ_7745c5c3_Var70 string
 		templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.JoinStringErrs(description)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 229, Col: 132}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 227, Col: 132}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var70))
 		if templ_7745c5c3_Err != nil {
@@ -1605,7 +1603,7 @@ func AddBlockListDialog(existing []BlockListSourceView) templ.Component {
 				var templ_7745c5c3_Var74 string
 				templ_7745c5c3_Var74, templ_7745c5c3_Err = templ.ResolveAttributeValue("catalog-tab-" + category)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 235, Col: 67}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 233, Col: 67}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var74)
 				if templ_7745c5c3_Err != nil {
@@ -1631,7 +1629,7 @@ func AddBlockListDialog(existing []BlockListSourceView) templ.Component {
 				var templ_7745c5c3_Var76 string
 				templ_7745c5c3_Var76, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(category == "popular"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 235, Col: 173}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 233, Col: 173}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var76)
 				if templ_7745c5c3_Err != nil {
@@ -1644,7 +1642,7 @@ func AddBlockListDialog(existing []BlockListSourceView) templ.Component {
 				var templ_7745c5c3_Var77 string
 				templ_7745c5c3_Var77, templ_7745c5c3_Err = templ.ResolveAttributeValue("catalog-panel-" + category)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 235, Col: 219}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 233, Col: 219}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var77)
 				if templ_7745c5c3_Err != nil {
@@ -1657,7 +1655,7 @@ func AddBlockListDialog(existing []BlockListSourceView) templ.Component {
 				var templ_7745c5c3_Var78 string
 				templ_7745c5c3_Var78, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(category == "popular", "0", "-1"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 235, Col: 273}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 233, Col: 273}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var78)
 				if templ_7745c5c3_Err != nil {
@@ -1670,7 +1668,7 @@ func AddBlockListDialog(existing []BlockListSourceView) templ.Component {
 				var templ_7745c5c3_Var79 string
 				templ_7745c5c3_Var79, templ_7745c5c3_Err = templ.ResolveAttributeValue(category)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 235, Col: 303}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 233, Col: 303}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var79)
 				if templ_7745c5c3_Err != nil {
@@ -1683,7 +1681,7 @@ func AddBlockListDialog(existing []BlockListSourceView) templ.Component {
 				var templ_7745c5c3_Var80 string
 				templ_7745c5c3_Var80, templ_7745c5c3_Err = templ.JoinStringErrs(strings.ToUpper(category[:1]) + category[1:])
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 235, Col: 352}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 233, Col: 352}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var80))
 				if templ_7745c5c3_Err != nil {
@@ -1706,7 +1704,7 @@ func AddBlockListDialog(existing []BlockListSourceView) templ.Component {
 				var templ_7745c5c3_Var81 string
 				templ_7745c5c3_Var81, templ_7745c5c3_Err = templ.ResolveAttributeValue("catalog-panel-" + category)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 240, Col: 41}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 238, Col: 41}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var81)
 				if templ_7745c5c3_Err != nil {
@@ -1719,7 +1717,7 @@ func AddBlockListDialog(existing []BlockListSourceView) templ.Component {
 				var templ_7745c5c3_Var82 string
 				templ_7745c5c3_Var82, templ_7745c5c3_Err = templ.ResolveAttributeValue("catalog-tab-" + category)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 240, Col: 103}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 238, Col: 103}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var82)
 				if templ_7745c5c3_Err != nil {
@@ -1732,7 +1730,7 @@ func AddBlockListDialog(existing []BlockListSourceView) templ.Component {
 				var templ_7745c5c3_Var83 string
 				templ_7745c5c3_Var83, templ_7745c5c3_Err = templ.ResolveAttributeValue(category)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 240, Col: 135}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 238, Col: 135}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var83)
 				if templ_7745c5c3_Err != nil {
@@ -1860,7 +1858,7 @@ func CatalogRow(item BlockListCatalogItem, added bool) templ.Component {
 		var templ_7745c5c3_Var86 string
 		templ_7745c5c3_Var86, templ_7745c5c3_Err = templ.JoinStringErrs(item.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 265, Col: 54}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 263, Col: 54}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var86))
 		if templ_7745c5c3_Err != nil {
@@ -1873,7 +1871,7 @@ func CatalogRow(item BlockListCatalogItem, added bool) templ.Component {
 		var templ_7745c5c3_Var87 string
 		templ_7745c5c3_Var87, templ_7745c5c3_Err = templ.ResolveAttributeValue(item.Description)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 265, Col: 92}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 263, Col: 92}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var87)
 		if templ_7745c5c3_Err != nil {
@@ -1886,7 +1884,7 @@ func CatalogRow(item BlockListCatalogItem, added bool) templ.Component {
 		var templ_7745c5c3_Var88 string
 		templ_7745c5c3_Var88, templ_7745c5c3_Err = templ.JoinStringErrs(item.Description)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 265, Col: 113}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 263, Col: 113}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var88))
 		if templ_7745c5c3_Err != nil {
@@ -1899,7 +1897,7 @@ func CatalogRow(item BlockListCatalogItem, added bool) templ.Component {
 		var templ_7745c5c3_Var89 templ.SafeURL
 		templ_7745c5c3_Var89, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(item.URL))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 265, Col: 178}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 263, Col: 178}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var89))
 		if templ_7745c5c3_Err != nil {
@@ -1912,7 +1910,7 @@ func CatalogRow(item BlockListCatalogItem, added bool) templ.Component {
 		var templ_7745c5c3_Var90 string
 		templ_7745c5c3_Var90, templ_7745c5c3_Err = templ.ResolveAttributeValue("View " + item.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 265, Col: 246}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 263, Col: 246}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var90)
 		if templ_7745c5c3_Err != nil {
@@ -1943,7 +1941,7 @@ func CatalogRow(item BlockListCatalogItem, added bool) templ.Component {
 			var templ_7745c5c3_Var91 string
 			templ_7745c5c3_Var91, templ_7745c5c3_Err = templ.ResolveAttributeValue("Add " + item.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 269, Col: 93}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 267, Col: 93}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var91)
 			if templ_7745c5c3_Err != nil {
@@ -1956,7 +1954,7 @@ func CatalogRow(item BlockListCatalogItem, added bool) templ.Component {
 			var templ_7745c5c3_Var92 string
 			templ_7745c5c3_Var92, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("{\"name\":%q,\"url\":%q,\"format\":\"auto\"}", item.Name, item.URL))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 269, Col: 239}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 267, Col: 239}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var92)
 			if templ_7745c5c3_Err != nil {
@@ -2023,7 +2021,7 @@ func DomainDialog(id, title, endpoint, action, description string) templ.Compone
 			var templ_7745c5c3_Var95 string
 			templ_7745c5c3_Var95, templ_7745c5c3_Err = templ.ResolveAttributeValue(endpoint)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 276, Col: 55}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 274, Col: 55}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var95)
 			if templ_7745c5c3_Err != nil {
@@ -2321,7 +2319,7 @@ func BlockListDrawer(view BlockListDrawerView) templ.Component {
 				var templ_7745c5c3_Var104 string
 				templ_7745c5c3_Var104, templ_7745c5c3_Err = templ.JoinStringErrs(view.Error)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 359, Col: 96}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 357, Col: 96}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var104))
 				if templ_7745c5c3_Err != nil {
@@ -2432,7 +2430,7 @@ func BlockListDrawer(view BlockListDrawerView) templ.Component {
 					var templ_7745c5c3_Var106 string
 					templ_7745c5c3_Var106, templ_7745c5c3_Err = templ.JoinStringErrs(view.List.HealthSummary)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 385, Col: 39}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 383, Col: 39}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var106))
 					if templ_7745c5c3_Err != nil {
@@ -2445,7 +2443,7 @@ func BlockListDrawer(view BlockListDrawerView) templ.Component {
 					var templ_7745c5c3_Var107 string
 					templ_7745c5c3_Var107, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.LastError != "", view.LastError, "The last update attempt failed."))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 386, Col: 93}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 384, Col: 93}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var107))
 					if templ_7745c5c3_Err != nil {
@@ -2554,7 +2552,7 @@ func blockListFooter(view BlockListDrawerView) templ.Component {
 				var templ_7745c5c3_Var110 string
 				templ_7745c5c3_Var110, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("{\"name\":%q}", view.List.Name))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 408, Col: 198}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 406, Col: 198}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var110)
 				if templ_7745c5c3_Err != nil {
