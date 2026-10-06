@@ -168,6 +168,14 @@ func ClusterTest(ctx context.Context) error {
 	return run(ctx, nil, "go", "test", "-tags=integration", "-run", "^TestTwoNodeClusterReplicaEnrollmentAndSynchronization$", "-v", "./internal/app")
 }
 
+// CatalogSmoke downloads every catalog block list through Sable, recursive and
+// forwarding with DNSSEC validation on, and checks that each still yields its
+// usual domains and none blocks a sentinel such as google.com. It needs the
+// internet.
+func CatalogSmoke(ctx context.Context) error {
+	return run(ctx, nil, "go", "test", "-tags=catalog", "-count=1", "-run", "^TestCatalogListsSurviveSable$", "-v", "./internal/dnsserver")
+}
+
 // ReleaseSmoke builds the production-style single binary and exercises it as a
 // standalone DNS server and as both members of a two-node cluster.
 func ReleaseSmoke(ctx context.Context) error {
@@ -487,6 +495,9 @@ func ReleaseGate(ctx context.Context) error {
 		return err
 	}
 	if err := ReleaseSmoke(ctx); err != nil {
+		return err
+	}
+	if err := CatalogSmoke(ctx); err != nil {
 		return err
 	}
 	if err := ReleaseCheck(ctx); err != nil {

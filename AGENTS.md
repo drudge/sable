@@ -40,6 +40,7 @@ Use the mage targets. They set `GOEXPERIMENT=jsonv2`, so set it yourself when yo
 | `go tool templ generate -path internal/web/pages` | Regenerates templ components only |
 | `go tool mage verify` | Checks generated files, runs every test, and runs `go vet` |
 | `go tool mage race` | Runs the tests with the race detector |
+| `go tool mage catalogSmoke` | Downloads and compiles every catalog block list through Sable, with DNSSEC validation on (needs the internet) |
 | `go tool mage bench` | Runs the DNS, storage, and blocking benchmarks |
 | `go tool mage devDemo` | Runs the Vandelay demo with hot reload; open http://localhost:5381 |
 | `go tool mage dev` | Runs one server from your own `sable.toml` with hot reload; open http://localhost:5381 |
@@ -172,6 +173,7 @@ The query path in `internal/dnsserver` runs for every lookup. `ServeDNS` leads t
 | `zone_transfer.go` | AXFR, IXFR, NOTIFY, and secondary and stub zone refresh |
 
 - Keep new work off that path. Do analysis in the background, on data that's already stored.
+- Block lists are downloaded through Sable when it is the host's resolver, so a resolver, DNSSEC, or block-list parser change can break every subscription. Run `go tool mage catalogSmoke` for such a change, and never loosen a floor in `internal/dnsserver/testdata/catalog_floors.json` or drop a sentinel to make it pass. Raise floors when lists grow; a new catalog list needs a floor.
 - A change that has to touch the path must not add allocations. Show that with a benchmark (`go tool mage bench`).
 
 ## Configuration and clusters

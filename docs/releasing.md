@@ -64,8 +64,11 @@ without requiring Docker. `dockerSnapshot` creates local
 `ghcr.io/drudge/sable:<version>-snapshot-amd64` and
 `ghcr.io/drudge/sable:<version>-snapshot-arm64` images. The version defaults to
 `dev` and can be overridden with `VERSION`. `dockerSmoke` also starts the native
-image and checks its version output and HTTP health endpoint. `mage releaseGate`
-runs the complete pre-release gate used by CI.
+image and checks its version output and HTTP health endpoint. `catalogSmoke`
+downloads every catalog block list through Sable, recursive and forwarding with
+DNSSEC validation on, and fails when a list can't be fetched, yields far fewer
+domains than its floor, or blocks a sentinel such as google.com. `mage releaseGate`
+runs the complete pre-release gate used by CI, including `catalogSmoke`.
 
 ## Publishing
 
