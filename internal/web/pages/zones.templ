@@ -169,6 +169,11 @@ func zoneRecordDialogTitle(zone ZoneView, record ZoneRecordView) string {
 	return "Edit DNS Record"
 }
 
+// The record dialog's delete button asks first, naming the record it removes.
+func zoneRecordDeleteQuestion(zone ZoneView, record ZoneRecordView) string {
+	return "Delete the " + record.Type + " record for “" + zoneRecordOwner(zone, record) + "”? Sable removes it from the zone and advances the SOA serial."
+}
+
 func zoneRecordDialogSubtitle(zone ZoneView, record ZoneRecordView) string {
 	if record.SourceLabel != "" {
 		return "Published into " + zone.Name + " by " + record.SourceLabel
@@ -999,7 +1004,7 @@ templ EditZoneRecordDialog(zone ZoneView, record ZoneRecordView, id string) {
 			} else {
 				<footer class="dialog-footer edit-record-footer">
 					if record.Type != "SOA" {
-						@components.Button(components.ButtonProps{Label: "Delete Record", Icon: "trash", Destructive: true, Type: "submit", Class: "edit-record-delete", Attrs: templ.Attributes{"formaction": "/ui/zones/records/delete"}})
+						@components.Button(components.ButtonProps{Label: "Delete Record", Icon: "trash", Destructive: true, Type: "submit", Class: "edit-record-delete", Attrs: templ.Attributes{"formaction": "/ui/zones/records/delete", "hx-post": "/ui/zones/records/delete", "hx-target": "#zones-content", "hx-swap": "outerHTML", "hx-confirm": zoneRecordDeleteQuestion(zone, record), "data-confirm-title": "Delete this record?", "data-confirm-action": "Delete Record"}})
 					}
 					@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Attrs: templ.Attributes{"data-dialog-close": true}})@components.Button(components.ButtonProps{Label: "Update Record", Type: "submit"})
 				</footer>
@@ -1137,14 +1142,14 @@ templ ZoneSigningDNSSECDialog(zone ZoneView, id string) {
 									<div class="zone-dnssec-copy"><span>DS Record (SHA-256)</span>@ZoneCopyableText(id + "-ds-" + fmt.Sprint(index), key.DS, "dnssec-record-copy")</div>
 									<div class="zone-dnssec-actions">@components.Button(components.ButtonProps{Label: "Download DS", Icon: "download", Variant: components.ButtonOutline, Href: templ.SafeURL("/api/v1/zones/ds?zone=" + url.QueryEscape(zone.Name) + "&key_tag=" + fmt.Sprint(key.KeyTag))})
 										if (key.State == "active" && zone.DNSSECParentDSKeyTag != key.KeyTag) || key.State == "ready" {
-											@components.Button(components.ButtonProps{Label: "Confirm Parent DS", Icon: "check", Type: "submit", Attrs: templ.Attributes{"name": "key_tag", "value": fmt.Sprint(key.KeyTag), "formaction": "/ui/zones/dnssec/confirm-ds", "formmethod": "post"}})
+											@components.Button(components.ButtonProps{Label: "Confirm Parent DS", Icon: "check", Type: "submit", Attrs: templ.Attributes{"name": "key_tag", "value": fmt.Sprint(key.KeyTag), "formaction": "/ui/zones/dnssec/confirm-ds", "formmethod": "post", "hx-post": "/ui/zones/dnssec/confirm-ds", "hx-vals": fmt.Sprintf(`{"key_tag":"%d"}`, key.KeyTag), "hx-target": "#zones-content", "hx-swap": "outerHTML"}})
 										}
 									</div>
 								}
 							</section>
 						}
 					</div>
-					<div class="zone-dnssec-actions">@components.Button(components.ButtonProps{Label: "Roll ZSK", Icon: "refresh", Variant: components.ButtonOutline, Type: "submit", Attrs: templ.Attributes{"name": "role", "value": "zsk", "formaction": "/ui/zones/dnssec/rollover", "formmethod": "post"}})@components.Button(components.ButtonProps{Label: "Roll KSK", Icon: "refresh", Variant: components.ButtonOutline, Type: "submit", Attrs: templ.Attributes{"name": "role", "value": "ksk", "formaction": "/ui/zones/dnssec/rollover", "formmethod": "post"}})</div>
+					<div class="zone-dnssec-actions">@components.Button(components.ButtonProps{Label: "Roll ZSK", Icon: "refresh", Variant: components.ButtonOutline, Type: "submit", Attrs: templ.Attributes{"name": "role", "value": "zsk", "formaction": "/ui/zones/dnssec/rollover", "formmethod": "post", "hx-post": "/ui/zones/dnssec/rollover", "hx-vals": `{"role":"zsk"}`, "hx-target": "#zones-content", "hx-swap": "outerHTML"}})@components.Button(components.ButtonProps{Label: "Roll KSK", Icon: "refresh", Variant: components.ButtonOutline, Type: "submit", Attrs: templ.Attributes{"name": "role", "value": "ksk", "formaction": "/ui/zones/dnssec/rollover", "formmethod": "post", "hx-post": "/ui/zones/dnssec/rollover", "hx-vals": `{"role":"ksk"}`, "hx-target": "#zones-content", "hx-swap": "outerHTML"}})</div>
 				</section>
 				<div class="zone-dnssec-warning"><strong>Next action</strong><span>{ zone.DNSSECNextAction }</span></div>
 			} else if zone.DNSSECDS != "" {

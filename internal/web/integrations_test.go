@@ -753,7 +753,7 @@ func TestZoneEditorRefusesSynchronizedRecords(t *testing.T) {
 	if got := strings.Count(body, "Update Record"); got != 2 {
 		t.Errorf("update buttons = %d, want 2 (the SOA and NS records only)", got)
 	}
-	if got := strings.Count(body, "Delete Record"); got != 1 {
+	if got := strings.Count(body, "edit-record-delete"); got != 1 {
 		t.Errorf("delete buttons = %d, want 1 (the NS record only)", got)
 	}
 
