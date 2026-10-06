@@ -899,6 +899,12 @@ func provesNoData(records []dns.RR, name string, recordType uint16) bool {
 			if normalizeFQDN(typed.Hdr.Name) == name && lacksType(typed.TypeBitMap, recordType) {
 				return true
 			}
+			// An empty non-terminal owns no NSEC. One covering it whose next
+			// name sits below it shows it exists with no records at all
+			// (RFC 4035 section 3.1.3.2). ARIN's 207.192.in-addr.arpa is one.
+			if nsecCovers(typed, name) && nsecProvesNameExists(typed, name) && !nsecDelegatesAbove(typed, name) {
+				return true
+			}
 		case *dns.NSEC3:
 			if typed.Match(name) && lacksType(typed.TypeBitMap, recordType) {
 				return true
@@ -946,8 +952,11 @@ func provesWildcardNoData(records []dns.RR, name string, recordType uint16) bool
 
 func provesNameError(records []dns.RR, name string) bool {
 	name = normalizeFQDN(name)
+	if provesNSECNameError(records, name) {
+		return true
+	}
 	for closest := name; ; closest = parentFQDN(closest) {
-		if hasExactNSEC(records, closest) && provesClosestEncloser(records, name, closest) && coversDenialName(records, "*."+closest) {
+		if hasExactNSEC(records, closest) && !exactNSECDelegatesAbove(records, closest, name) && provesClosestEncloser(records, name, closest) && coversDenialName(records, "*."+closest) {
 			return true
 		}
 		if hasMatchingNSEC3(records, closest) && provesClosestEncloser(records, name, closest) && coversDenialName(records, "*."+closest) {
@@ -958,6 +967,66 @@ func provesNameError(records []dns.RR, name string) bool {
 		}
 	}
 	return false
+}
+
+// provesNSECNameError proves NXDOMAIN with NSEC the way RFC 4035 section
+// 5.4 does: the closest encloser is the longest ancestor of the name that the
+// covering NSEC's owner or next name also has, and the wildcard there must be
+// covered too. An empty non-terminal owns no NSEC, so this is the only way to
+// see one as the closest encloser. ARIN's 192.in-addr.arpa denies
+// 254.55.207.192.in-addr.arpa from the empty 207.192.in-addr.arpa.
+func provesNSECNameError(records []dns.RR, name string) bool {
+	for _, record := range records {
+		nsec, ok := record.(*dns.NSEC)
+		if !ok || !nsecCovers(nsec, name) || nsecProvesNameExists(nsec, name) || nsecDelegatesAbove(nsec, name) {
+			continue
+		}
+		owner, next := normalizeFQDN(nsec.Hdr.Name), normalizeFQDN(nsec.NextDomain)
+		closest := suffixDNSLabels(name, max(dns.CompareDomainName(name, owner), dns.CompareDomainName(name, next)))
+		if coversNSECName(records, wildcardFQDN(closest)) {
+			return true
+		}
+	}
+	return false
+}
+
+// nsecProvesNameExists reports an NSEC whose owner or next name sits below
+// name, which makes name an empty non-terminal rather than missing.
+func nsecProvesNameExists(nsec *dns.NSEC, name string) bool {
+	for _, other := range []string{normalizeFQDN(nsec.Hdr.Name), normalizeFQDN(nsec.NextDomain)} {
+		if other != name && dns.IsSubDomain(name, other) {
+			return true
+		}
+	}
+	return false
+}
+
+// nsecDelegatesAbove reports an NSEC owned by an ancestor of name that is a
+// delegation or a DNAME. Names below it belong to another zone or are
+// redirected, so its interval proves nothing about them.
+func nsecDelegatesAbove(nsec *dns.NSEC, name string) bool {
+	owner := normalizeFQDN(nsec.Hdr.Name)
+	if owner == name || !dns.IsSubDomain(owner, name) {
+		return false
+	}
+	return hasType(nsec.TypeBitMap, dns.TypeDNAME) || (hasType(nsec.TypeBitMap, dns.TypeNS) && !hasType(nsec.TypeBitMap, dns.TypeSOA))
+}
+
+// exactNSECDelegatesAbove reports a delegation or DNAME NSEC at closest,
+// which can't be the closest encloser of a name below it.
+func exactNSECDelegatesAbove(records []dns.RR, closest, name string) bool {
+	closest = normalizeFQDN(closest)
+	return slices.ContainsFunc(records, func(record dns.RR) bool {
+		nsec, ok := record.(*dns.NSEC)
+		return ok && normalizeFQDN(nsec.Hdr.Name) == closest && nsecDelegatesAbove(nsec, name)
+	})
+}
+
+func wildcardFQDN(closest string) string {
+	if closest = normalizeFQDN(closest); closest == "." {
+		return "*."
+	}
+	return "*." + closest
 }
 
 func provesClosestEncloser(records []dns.RR, name, closest string) bool {

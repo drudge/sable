@@ -79,6 +79,63 @@ func TestDNSSECValidatorAuthenticatesNSECNameErrorAndWildcard(t *testing.T) {
 	}
 }
 
+// ARIN denies 254.55.207.192.in-addr.arpa with one NSEC covering it and one
+// covering the wildcard. The closest encloser, 207.192.in-addr.arpa, is an
+// empty non-terminal: it owns no NSEC, and only the second record's next name
+// shows it exists (RFC 4035 section 5.4). Sable called this bogus.
+func TestDNSSECValidatorAcceptsNSECNameErrorBelowAnEmptyNonTerminal(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+	zone := newValidatorTestKey(t, "192.in-addr.arpa.")
+	validator := validatorWithAnchor(t, zone, now)
+	query := mapValidatorQuery(map[string]*dns.Msg{
+		validatorQueryKey("192.in-addr.arpa.", dns.TypeDNSKEY): validatorDNSKEYResponse(t, now, zone),
+	})
+	question := dns.Question{Name: "254.55.207.192.in-addr.arpa.", Qtype: dns.TypePTR, Qclass: dns.ClassINET}
+	nsec := func(owner, next string, types ...uint16) *dns.NSEC {
+		return &dns.NSEC{
+			Hdr:        dns.RR_Header{Name: owner, Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 10800},
+			NextDomain: next, TypeBitMap: append(types, dns.TypeRRSIG, dns.TypeNSEC),
+		}
+	}
+	response := func(proofs ...*dns.NSEC) *dns.Msg {
+		soa := validatorSOA("192.in-addr.arpa.")
+		missing := new(dns.Msg)
+		missing.SetQuestion(question.Name, question.Qtype)
+		missing.SetRcode(missing, dns.RcodeNameError)
+		missing.Authoritative = true
+		missing.Ns = append(missing.Ns, soa, signValidatorRRSet(t, now, zone, []dns.RR{soa}))
+		for _, proof := range proofs {
+			missing.Ns = append(missing.Ns, proof, signValidatorRRSet(t, now, zone, []dns.RR{proof}))
+		}
+		return missing
+	}
+	name := nsec("50.207.192.in-addr.arpa.", "56.207.192.in-addr.arpa.", dns.TypeNS)
+	wildcard := nsec("92.206.192.in-addr.arpa.", "103.207.192.in-addr.arpa.", dns.TypeNS)
+	if state, err := validator.validate(context.Background(), response(name, wildcard), question, query); err != nil || state != validationSecure {
+		t.Fatalf("ARIN NXDOMAIN validate() = %v, %v; want secure", state, err)
+	}
+	for label, proofs := range map[string][]*dns.NSEC{
+		"no wildcard cover": {name},
+		"no name cover":     {wildcard},
+		// Owned by 55.207.192.in-addr.arpa., a delegation: the name is in the
+		// child zone, and this zone can't deny it.
+		"delegation above the name": {
+			nsec("55.207.192.in-addr.arpa.", "56.207.192.in-addr.arpa.", dns.TypeNS),
+			wildcard,
+		},
+		// Its next name sits below the name, so the name exists.
+		"name is an empty non-terminal": {
+			nsec("50.207.192.in-addr.arpa.", "1.254.55.207.192.in-addr.arpa.", dns.TypeNS),
+			wildcard,
+		},
+	} {
+		if state, _ := validator.validate(context.Background(), response(proofs...), question, query); state != validationBogus {
+			t.Errorf("%s: NXDOMAIN validated as %v, want bogus", label, state)
+		}
+	}
+}
+
 // oisd.nl answers big.oisd.nl from *.oisd.nl with one NSEC3, at the
 // wildcard's own hash, covering the next closer name. The RRSIG labels field
 // already names the closest encloser, so nothing has to match oisd.nl itself
