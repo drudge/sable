@@ -164,16 +164,19 @@ func TestMCPProcess(t *testing.T) {
 	started := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
 	lastGC := started.Add(90 * time.Second)
 	process := mcpProcess(procstats.Stats{
-		CPUSeconds: 30, HasCPU: true, ResidentBytes: 64 << 20, HasResident: true, NumCPU: 4,
+		StartTime: started, CPUSeconds: 30, HasCPU: true, ResidentBytes: 64 << 20, HasMemory: true, NumCPU: 4,
+		OpenFDs: 40, HasOpenFDs: true, MaxFDs: 1024, HasMaxFDs: true, MemoryLimitBytes: 256 << 20,
 		GCCycles: 3, GCPauseSeconds: 0.0012345, LastGC: lastGC,
-	}, started, started.Add(10*time.Minute))
+	}, started.Add(10*time.Minute))
 	if *process.CPU.Seconds != 30 || *process.CPU.AveragePercent != 5 || *process.Memory.ResidentBytes != 64<<20 ||
-		process.GC.PauseTotalMS != 1.235 || !process.GC.LastAt.Equal(lastGC) {
+		*process.Memory.LimitBytes != 256<<20 || *process.OpenFDs != 40 || *process.MaxFDs != 1024 ||
+		process.GC.PauseTotalMS != 1.235 || !process.GC.LastAt.Equal(lastGC) || !process.StartedAt.Equal(started) {
 		t.Fatalf("process = %+v", process)
 	}
 	// What the platform cannot report is left out, not zero.
-	unknown := mcpProcess(procstats.Stats{}, time.Time{}, started)
-	if unknown.CPU.Seconds != nil || unknown.CPU.AveragePercent != nil || unknown.Memory.ResidentBytes != nil || unknown.GC.LastAt != nil {
+	unknown := mcpProcess(procstats.Stats{}, started)
+	if unknown.CPU.Seconds != nil || unknown.CPU.AveragePercent != nil || unknown.Memory.ResidentBytes != nil ||
+		unknown.Memory.LimitBytes != nil || unknown.OpenFDs != nil || unknown.MaxFDs != nil || unknown.GC.LastAt != nil {
 		t.Fatalf("unknown = %+v", unknown)
 	}
 }

@@ -58,8 +58,8 @@ var mcpServerTools = []mcpTool{
 		Description: "Give the dashboard's numbers for a period: queries, how many were blocked, cache hits, and " +
 			"response codes. It also gives what this node counted since it started: where answers came from, " +
 			"upstream errors, DNSSEC results, and response times. process gives the node's memory, CPU time, " +
-			"goroutines, and garbage collection right now; cpu.average_percent is since start, where 100 is one " +
-			"core fully busy. Counts only, never which device asked for what. " +
+			"goroutines, open files, and garbage collection right now; cpu.average_percent is since the process " +
+			"started, where 100 is one core fully busy. Counts only, never which device asked for what. " +
 			"Numbers are for the node the assistant is connected to.",
 		InputSchema: mcpObjectSchema(map[string]any{
 			"range": map[string]any{
@@ -318,7 +318,7 @@ func (server *Server) mcpGetStats(request *http.Request, arguments json.RawMessa
 			NoError: counted.NoError, NXDomain: counted.NXDomain, ServFail: counted.ServerFailures, Refused: counted.Refused,
 		},
 		"since_start": mcpSinceStart(current, now),
-		"process":     mcpProcess(procstats.Read(), current.StartedAt, now),
+		"process":     mcpProcess(procstats.Read(), now),
 	}
 	// Who asked and what was blocked come from the query log, which the
 	// dashboard shows only to those who may read it.
@@ -345,7 +345,11 @@ func (server *Server) mcpGetStats(request *http.Request, arguments json.RawMessa
 
 // mcpProcessStats is the node's own resource use, from procstats.
 type mcpProcessStats struct {
+	StartedAt  time.Time        `json:"started_at"`
 	Goroutines int              `json:"goroutines"`
+	Threads    int              `json:"threads"`
+	OpenFDs    *uint64          `json:"open_fds,omitempty"`
+	MaxFDs     *uint64          `json:"max_fds,omitempty"`
 	CPU        mcpProcessCPU    `json:"cpu"`
 	Memory     mcpProcessMemory `json:"memory"`
 	GC         mcpProcessGC     `json:"gc"`
@@ -366,20 +370,21 @@ type mcpProcessMemory struct {
 	HeapObjects       uint64  `json:"heap_objects"`
 	SysBytes          uint64  `json:"sys_bytes"`
 	NextGCBytes       uint64  `json:"next_gc_bytes"`
+	LimitBytes        *uint64 `json:"limit_bytes,omitempty"`
 }
 
 type mcpProcessGC struct {
-	Cycles       uint32     `json:"cycles"`
+	Cycles       int64      `json:"cycles"`
 	PauseTotalMS float64    `json:"pause_total_ms"`
 	LastAt       *time.Time `json:"last_at,omitempty"`
 }
 
 // mcpProcess leaves out what the platform cannot report rather than
 // reporting it as zero.
-func mcpProcess(stats procstats.Stats, startedAt, now time.Time) mcpProcessStats {
+func mcpProcess(stats procstats.Stats, now time.Time) mcpProcessStats {
 	process := mcpProcessStats{
-		Goroutines: stats.Goroutines,
-		CPU:        mcpProcessCPU{Cores: stats.NumCPU, GOMAXPROCS: stats.GOMAXPROCS},
+		StartedAt: stats.StartTime.UTC(), Goroutines: stats.Goroutines, Threads: stats.Threads,
+		CPU: mcpProcessCPU{Cores: stats.NumCPU, GOMAXPROCS: stats.GOMAXPROCS},
 		Memory: mcpProcessMemory{
 			HeapAllocBytes: stats.HeapAllocBytes, HeapInuseBytes: stats.HeapInuseBytes,
 			HeapReleasedBytes: stats.HeapReleasedBytes, HeapObjects: stats.HeapObjects,
@@ -390,13 +395,22 @@ func mcpProcess(stats procstats.Stats, startedAt, now time.Time) mcpProcessStats
 	if stats.HasCPU {
 		seconds := math.Round(stats.CPUSeconds*1e3) / 1e3
 		process.CPU.Seconds = &seconds
-		if uptime := now.Sub(startedAt).Seconds(); !startedAt.IsZero() && uptime > 0 {
+		if uptime := now.Sub(stats.StartTime).Seconds(); !stats.StartTime.IsZero() && uptime > 0 {
 			average := math.Round(stats.CPUSeconds/uptime*1e4) / 1e2
 			process.CPU.AveragePercent = &average
 		}
 	}
-	if stats.HasResident {
+	if stats.HasMemory {
 		process.Memory.ResidentBytes = &stats.ResidentBytes
+	}
+	if stats.MemoryLimitBytes > 0 {
+		process.Memory.LimitBytes = &stats.MemoryLimitBytes
+	}
+	if stats.HasOpenFDs {
+		process.OpenFDs = &stats.OpenFDs
+	}
+	if stats.HasMaxFDs {
+		process.MaxFDs = &stats.MaxFDs
 	}
 	if !stats.LastGC.IsZero() {
 		lastAt := stats.LastGC.UTC()

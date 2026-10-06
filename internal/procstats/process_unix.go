@@ -15,3 +15,11 @@ func cpuSeconds() (float64, bool) {
 	used := time.Duration(usage.Utime.Nano() + usage.Stime.Nano())
 	return used.Seconds(), true
 }
+
+func maxFDs() (uint64, bool) {
+	var limit syscall.Rlimit
+	if syscall.Getrlimit(syscall.RLIMIT_NOFILE, &limit) != nil {
+		return 0, false
+	}
+	return uint64(limit.Cur), true
+}

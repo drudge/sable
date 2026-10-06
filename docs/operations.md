@@ -127,7 +127,9 @@ Watch at least:
   `sable_cluster_node_replication_lag_generations` in a cluster;
 - cache occupancy and hit/miss counters for workload changes;
 - `process_resident_memory_bytes`, `go_memstats_heap_inuse_bytes`, and
-  `rate(process_cpu_seconds_total[5m])` for memory and CPU use.
+  `rate(process_cpu_seconds_total[5m])` for memory and CPU use;
+- `process_open_fds` against `process_max_fds`, since a resolver with TCP,
+  DoT, and DoH listeners fails once it runs out of file descriptors.
 
 Counters describe the local process. Cluster membership gauges report the
 local node's current view of all members; Sable does not yet aggregate every

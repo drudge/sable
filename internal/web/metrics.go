@@ -212,46 +212,77 @@ func writeDNSLatencyMetrics(output *strings.Builder, histograms []dnsserver.DNSL
 	}
 }
 
+// processSample is one unlabeled process or Go runtime series.
+type processSample struct {
+	name, help, metricType string
+	value                  float64
+}
+
 // writeProcessMetrics uses the names of the Prometheus Go client's process
-// and Go collectors, so stock Go dashboards and alerts work unchanged.
+// and Go collectors, so the usual Go dashboards and alerts find them.
 func writeProcessMetrics(output *strings.Builder, stats procstats.Stats) {
-	type sample struct {
-		name, help, metricType string
-		value                  float64
+	for _, metric := range processSamples(stats) {
+		fmt.Fprintf(output, "# HELP %s %s\n# TYPE %s %s\n%s %s\n", metric.name, metric.help, metric.name, metric.metricType, metric.name, prometheusFloat(metric.value))
 	}
-	metrics := []sample{}
-	if stats.HasCPU {
-		metrics = append(metrics, sample{"process_cpu_seconds_total", "Total user and system CPU time spent in seconds.", "counter", stats.CPUSeconds})
-	}
-	if stats.HasResident {
-		metrics = append(metrics, sample{"process_resident_memory_bytes", "Resident memory size in bytes.", "gauge", float64(stats.ResidentBytes)})
-	}
-	lastGC := 0.0
-	if !stats.LastGC.IsZero() {
-		lastGC = float64(stats.LastGC.UnixNano()) / 1e9
-	}
-	metrics = append(metrics,
-		sample{"go_goroutines", "Number of goroutines that currently exist.", "gauge", float64(stats.Goroutines)},
-		sample{"go_sched_gomaxprocs_threads", "The current runtime.GOMAXPROCS setting.", "gauge", float64(stats.GOMAXPROCS)},
-		sample{"go_memstats_alloc_bytes", "Number of heap bytes allocated and still in use.", "gauge", float64(stats.HeapAllocBytes)},
-		sample{"go_memstats_heap_alloc_bytes", "Number of heap bytes allocated and still in use.", "gauge", float64(stats.HeapAllocBytes)},
-		sample{"go_memstats_heap_inuse_bytes", "Number of heap bytes that are in use.", "gauge", float64(stats.HeapInuseBytes)},
-		sample{"go_memstats_heap_idle_bytes", "Number of heap bytes waiting to be used.", "gauge", float64(stats.HeapIdleBytes)},
-		sample{"go_memstats_heap_released_bytes", "Number of heap bytes released to the OS.", "gauge", float64(stats.HeapReleasedBytes)},
-		sample{"go_memstats_heap_sys_bytes", "Number of heap bytes obtained from the system.", "gauge", float64(stats.HeapSysBytes)},
-		sample{"go_memstats_heap_objects", "Number of currently allocated objects.", "gauge", float64(stats.HeapObjects)},
-		sample{"go_memstats_sys_bytes", "Number of bytes obtained from the system.", "gauge", float64(stats.SysBytes)},
-		sample{"go_memstats_next_gc_bytes", "Number of heap bytes when the next garbage collection will take place.", "gauge", float64(stats.NextGCBytes)},
-		sample{"go_memstats_last_gc_time_seconds", "Number of seconds since 1970 of last garbage collection.", "gauge", lastGC},
-	)
-	for _, metric := range metrics {
-		fmt.Fprintf(output, "# HELP %s %s\n# TYPE %s %s\n%s %s\n", metric.name, metric.help, metric.name, metric.metricType, metric.name, strconv.FormatFloat(metric.value, 'f', -1, 64))
-	}
-	// A summary with no quantiles: the total pause time and cycle count.
 	fmt.Fprintln(output, "# HELP go_gc_duration_seconds A summary of the wall-time pause (stop-the-world) duration in garbage collection cycles.")
 	fmt.Fprintln(output, "# TYPE go_gc_duration_seconds summary")
-	fmt.Fprintf(output, "go_gc_duration_seconds_sum %s\n", strconv.FormatFloat(stats.GCPauseSeconds, 'g', -1, 64))
+	if stats.GCCycles > 0 {
+		for index, rank := range procstats.GCPauseQuantileRanks {
+			fmt.Fprintf(output, "go_gc_duration_seconds{quantile=\"%s\"} %s\n", prometheusFloat(rank), prometheusFloat(stats.GCPauseQuantiles[index]))
+		}
+	}
+	fmt.Fprintf(output, "go_gc_duration_seconds_sum %s\n", prometheusFloat(stats.GCPauseSeconds))
 	fmt.Fprintf(output, "go_gc_duration_seconds_count %d\n", stats.GCCycles)
+}
+
+// processSamples leaves out what the platform cannot report rather than
+// reporting it as zero.
+func processSamples(stats procstats.Stats) []processSample {
+	samples := []processSample{
+		{"process_start_time_seconds", "Start time of the process since unix epoch in seconds.", "gauge", unixSeconds(stats.StartTime)},
+	}
+	optional := []struct {
+		reported bool
+		sample   processSample
+	}{
+		{stats.HasCPU, processSample{"process_cpu_seconds_total", "Total user and system CPU time spent in seconds.", "counter", stats.CPUSeconds}},
+		{stats.HasMemory, processSample{"process_resident_memory_bytes", "Resident memory size in bytes.", "gauge", float64(stats.ResidentBytes)}},
+		{stats.HasMemory, processSample{"process_virtual_memory_bytes", "Virtual memory size in bytes.", "gauge", float64(stats.VirtualBytes)}},
+		{stats.HasOpenFDs, processSample{"process_open_fds", "Number of open file descriptors.", "gauge", float64(stats.OpenFDs)}},
+		{stats.HasMaxFDs, processSample{"process_max_fds", "Maximum number of open file descriptors.", "gauge", float64(stats.MaxFDs)}},
+		{stats.MemoryLimitBytes > 0, processSample{"go_gc_gomemlimit_bytes", "Go runtime memory limit configured by the user (GOMEMLIMIT).", "gauge", float64(stats.MemoryLimitBytes)}},
+	}
+	for _, metric := range optional {
+		if metric.reported {
+			samples = append(samples, metric.sample)
+		}
+	}
+	return append(samples,
+		processSample{"go_goroutines", "Number of goroutines that currently exist.", "gauge", float64(stats.Goroutines)},
+		processSample{"go_threads", "Number of OS threads created.", "gauge", float64(stats.Threads)},
+		processSample{"go_sched_gomaxprocs_threads", "The current runtime.GOMAXPROCS setting.", "gauge", float64(stats.GOMAXPROCS)},
+		processSample{"go_memstats_alloc_bytes", "Number of heap bytes allocated and still in use.", "gauge", float64(stats.HeapAllocBytes)},
+		processSample{"go_memstats_heap_alloc_bytes", "Number of heap bytes allocated and still in use.", "gauge", float64(stats.HeapAllocBytes)},
+		processSample{"go_memstats_heap_inuse_bytes", "Number of heap bytes that are in use.", "gauge", float64(stats.HeapInuseBytes)},
+		processSample{"go_memstats_heap_idle_bytes", "Number of heap bytes waiting to be used.", "gauge", float64(stats.HeapIdleBytes)},
+		processSample{"go_memstats_heap_released_bytes", "Number of heap bytes released to the OS.", "gauge", float64(stats.HeapReleasedBytes)},
+		processSample{"go_memstats_heap_sys_bytes", "Number of heap bytes obtained from the system.", "gauge", float64(stats.HeapSysBytes)},
+		processSample{"go_memstats_heap_objects", "Number of currently allocated objects.", "gauge", float64(stats.HeapObjects)},
+		processSample{"go_memstats_sys_bytes", "Number of bytes obtained from the system.", "gauge", float64(stats.SysBytes)},
+		processSample{"go_memstats_next_gc_bytes", "Number of heap bytes when the next garbage collection will take place.", "gauge", float64(stats.NextGCBytes)},
+		processSample{"go_memstats_last_gc_time_seconds", "Number of seconds since 1970 of last garbage collection.", "gauge", unixSeconds(stats.LastGC)},
+	)
+}
+
+func unixSeconds(moment time.Time) float64 {
+	if moment.IsZero() {
+		return 0
+	}
+	return float64(moment.Unix()) + float64(moment.Nanosecond())/1e9
+}
+
+func prometheusFloat(value float64) string {
+	return strconv.FormatFloat(value, 'f', -1, 64)
 }
 
 func blockListSourceMetricValue(name string, source blockcompiler.SourceHealth) uint64 {

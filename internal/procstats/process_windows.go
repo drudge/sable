@@ -20,3 +20,6 @@ func cpuSeconds() (float64, bool) {
 func filetimeTicks(value syscall.Filetime) uint64 {
 	return uint64(value.HighDateTime)<<32 | uint64(value.LowDateTime)
 }
+
+// maxFDs has no Windows equivalent: handles have no per-process soft limit.
+func maxFDs() (uint64, bool) { return 0, false }
