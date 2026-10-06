@@ -8,6 +8,25 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.0-beta.5] - 2026-10-06
+
+Sable 1.7.0-beta.5 fixes console buttons that saved the form they sat in
+instead of doing their own job. Delete Record showed "Record updated" and left
+the record in place, and Roll ZSK, Roll KSK, and Confirm Parent DS saved the
+zone's DNSSEC settings instead.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.0-beta.4. Coming from 1.6.x, also read
+the 1.7.0-beta.1 upgrade notes below.
+
+### Console
+
+- Ask "Delete this record?" with the record's type and name when you click
+  Delete Record, and delete it when you confirm.
+- Make Roll ZSK, Roll KSK, and Confirm Parent DS in a zone's DNSSEC dialog act
+  on their key again instead of saving the DNSSEC settings.
+
 ## [1.7.0-beta.4] - 2026-10-06
 
 Sable 1.7.0-beta.4 fixes DNSSEC validation that rejected correctly signed
