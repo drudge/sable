@@ -8,6 +8,43 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.0-beta.4] - 2026-10-06
+
+Sable 1.7.0-beta.4 fixes DNSSEC validation that rejected correctly signed
+answers for names under an empty non-terminal, a name that has children but no
+records of its own. Reverse lookups in ARIN, APNIC, and LACNIC space failed
+this way, and so did the OISD block list refresh. Sable now also reports its
+own memory and CPU use in `/metrics` and the MCP `get_stats` tool.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.0-beta.3. Coming from 1.6.x, also read
+the 1.7.0-beta.1 upgrade notes below.
+
+### DNS
+
+- Accept an NSEC proof that a name doesn't exist when its closest existing
+  ancestor is an empty non-terminal, as RFC 4035 section 5.4 allows. Names such
+  as `254.55.207.192.in-addr.arpa` used to fail as DNSSEC Bogus with "NSEC/NSEC3
+  records do not prove NXDOMAIN".
+- Accept an NSEC proof that an empty non-terminal has no records of the asked
+  type, as RFC 4035 section 3.1.3.2 allows, instead of failing it as Bogus.
+- Stop accepting a parent zone's NSEC at a delegation or DNAME as proof that a
+  name in the child zone doesn't exist.
+- Check DNSSEC denial proofs against 37 real signed answers on every build, so a
+  new way of building them is caught before release.
+
+### Monitoring
+
+- Add process metrics to `/metrics` under the standard Prometheus Go client
+  names: `process_cpu_seconds_total`, `process_resident_memory_bytes`,
+  `process_virtual_memory_bytes`, `process_open_fds`, `process_max_fds`,
+  `process_start_time_seconds`, `go_goroutines`, `go_threads`,
+  `go_memstats_*`, and `go_gc_duration_seconds`. Collecting them doesn't stop
+  the world.
+- Add a `process` object with memory, CPU, and garbage collector figures to the
+  MCP `get_stats` result.
+
 ## [1.7.0-beta.3] - 2026-10-06
 
 Sable 1.7.0-beta.3 fixes block lists that blocked far more than their authors
