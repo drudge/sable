@@ -8,6 +8,65 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.0-beta.3] - 2026-10-06
+
+Sable 1.7.0-beta.3 fixes block lists that blocked far more than their authors
+meant, and DNSSEC validation that rejected correctly signed wildcard answers.
+Adblock-style lists now apply only the host rules a DNS server can enforce and
+honor their exception rules. Answers synthesized from a wildcard in a signed
+zone, such as the hosts that serve the OISD lists, validate again. The console
+also starts lighter.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.0-beta.2. Coming from 1.6.x, also read
+the 1.7.0-beta.1 upgrade notes below.
+
+- Adblock-style lists such as EasyList, EasyPrivacy, and AdGuard DNS Filter
+  block fewer domains after the upgrade. Rules with a path, a wildcard, a
+  regular expression, or a modifier other than `$important` used to be cut
+  down to their host, so `||google.com/adsense/…` blocked all of google.com.
+  They're now skipped and counted as unsupported rules. Sites that those rules
+  broke resolve again.
+- `@@||host^` exception rules now unblock that host and its subdomains on
+  every list. Your own blocked domains and `$important` rules still win, and
+  your allowed domains are still checked first.
+- Fanboy Social and Fanboy Annoyances are no longer offered in the block list
+  catalog, because almost none of their rules apply to DNS. An existing
+  subscription keeps working as a custom list; remove it if you no longer
+  want it.
+- Each node compiles its own block lists, so nodes on different versions can
+  answer some names differently until the whole cluster is upgraded.
+
+### Blocking
+
+- Apply only host rules from adblock-style lists: `||host^`, optionally
+  followed by `|` or `$important`. Paths, wildcards, regular expressions,
+  cosmetic rules, address rules, and every other modifier are skipped, as
+  AdGuard Home, Technitium, and Pi-hole skip them.
+- Stop treating `$badfilter` rules as blocks. AdGuard DNS Filter's
+  `||pl.ua^$badfilter` used to block the whole `pl.ua` suffix.
+- Honor `@@||host^` exception rules across all lists. The query log and
+  Check a domain name the list whose exception let a domain through.
+- Show a list's exceptions and unsupported rules in its details, and keep
+  Invalid lines for lines that are actually malformed.
+
+### DNS
+
+- Accept a wildcard answer whose only proof is the NSEC or NSEC3 record that
+  covers the next closer name, as RFC 5155 sections 7.2.6 and 8.8 and RFC 4035
+  section 5.3.4 allow. These answers used to fail as DNSSEC Bogus (EDE 6), which
+  broke names such as `big.oisd.nl` and, with them, the OISD block lists
+  whenever Sable resolved for its own host.
+- Stop counting an NSEC3 record as covering a name it matches, or one that
+  uses an unknown hash algorithm, as proof that the name doesn't exist.
+
+### Performance
+
+- Compress console assets on first use instead of at startup. Every `sable`
+  command starts about 70 ms faster and allocates 16 MiB less before it does
+  anything, and an idle server uses about 3 MiB less memory.
+
 ## [1.7.0-beta.2] - 2026-10-06
 
 Sable 1.7.0-beta.2 is a code-health release on top of 1.7.0-beta.1. The DNS
