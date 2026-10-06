@@ -50,6 +50,8 @@ type BlockListSourceView struct {
 	Lines          int
 	Accepted       int
 	Invalid        int
+	Exceptions     int
+	Unsupported    int
 	Healthy        bool
 	HealthSummary  string
 	HealthDetail   string
@@ -69,9 +71,7 @@ var blockListCatalog = []BlockListCatalogItem{
 	{"URLhaus Malicious URLs", "Malware distribution sites from abuse.ch", "https://urlhaus.abuse.ch/downloads/hostfile/", "malware"},
 	{"Phishing Army", "Community phishing domain blocklist", "https://phishing.army/download/phishing_army_blocklist.txt", "malware"},
 	{"EasyPrivacy", "Tracking and privacy protection", "https://easylist.to/easylist/easyprivacy.txt", "privacy"},
-	{"Fanboy Annoyances", "Banners, pop-ups, and social widgets", "https://easylist.to/easylist/fanboy-annoyance.txt", "privacy"},
 	{"Steven Black + Social", "Base list with social media sites blocked", "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/social/hosts", "social"},
-	{"Fanboy Social", "Social media tracking and widgets", "https://easylist.to/easylist/fanboy-social.txt", "social"},
 }
 
 // blockingTabs drives both the tab strip and the document title so the browser
@@ -1771,7 +1771,7 @@ func AddBlockListDialog(existing []BlockListSourceView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 131, "</button></div></label> <input type=\"hidden\" name=\"format\" value=\"auto\"></form><div><strong>Supported formats:</strong><ul><li>Standard hosts files</li><li>One domain per line</li><li>AdBlock-style filter lists</li></ul></div></div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 131, "</button></div></label> <input type=\"hidden\" name=\"format\" value=\"auto\"></form><div><strong>Supported formats:</strong><ul><li>Standard hosts files</li><li>One domain per line</li><li>AdBlock-style host rules, like <code>||ads.example^</code></li></ul></div></div></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2392,44 +2392,64 @@ func BlockListDrawer(view BlockListDrawerView) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 160, " ")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					if view.List.Exceptions > 0 {
+						templ_7745c5c3_Err = components.Fact(components.FactProps{Label: "Exceptions", Value: formatNumber(uint64(view.List.Exceptions)), Wide: true}).Render(ctx, templ_7745c5c3_Buffer)
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 161, " ")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					if view.List.Unsupported > 0 {
+						templ_7745c5c3_Err = components.Fact(components.FactProps{Label: "Unsupported rules", Value: formatNumber(uint64(view.List.Unsupported)), Wide: true}).Render(ctx, templ_7745c5c3_Buffer)
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+					}
 					return nil
 				})
 				templ_7745c5c3_Err = components.FactList(components.FactListProps{Class: "query-detail-grid"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var105), templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 160, " <section class=\"query-detail-answer\" aria-labelledby=\"block-list-updates\"><h3 id=\"block-list-updates\">Updates</h3>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 162, " <section class=\"query-detail-answer\" aria-labelledby=\"block-list-updates\"><h3 id=\"block-list-updates\">Updates</h3>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if view.ConsecutiveFailures > 0 {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 161, "<div class=\"query-error block-list-failure\" role=\"status\"><strong>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 163, "<div class=\"query-error block-list-failure\" role=\"status\"><strong>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var106 string
 					templ_7745c5c3_Var106, templ_7745c5c3_Err = templ.JoinStringErrs(view.List.HealthSummary)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 377, Col: 39}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 383, Col: 39}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var106))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 162, "</strong> <span>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 164, "</strong> <span>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var107 string
 					templ_7745c5c3_Var107, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.LastError != "", view.LastError, "The last update attempt failed."))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 378, Col: 93}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 384, Col: 93}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var107))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 163, "</span></div>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 165, "</span></div>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -2450,7 +2470,7 @@ func BlockListDrawer(view BlockListDrawerView) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 164, " ")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 166, " ")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -2459,7 +2479,7 @@ func BlockListDrawer(view BlockListDrawerView) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 165, " ")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 167, " ")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -2479,7 +2499,7 @@ func BlockListDrawer(view BlockListDrawerView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 166, "</section>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 168, "</section>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -2516,7 +2536,7 @@ func blockListFooter(view BlockListDrawerView) templ.Component {
 		}
 		ctx = templ.ClearChildren(ctx)
 		if !view.Missing {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 167, "<div class=\"query-detail-policy-actions insight-drawer-actions\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 169, "<div class=\"query-detail-policy-actions insight-drawer-actions\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2525,20 +2545,20 @@ func blockListFooter(view BlockListDrawerView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if view.CanRefresh && view.List.URL != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 168, "<button class=\"button blocking-update-button block-list-refresh\" id=\"block-list-refresh\" type=\"button\" hx-post=\"/ui/blocking/lists/refresh\" hx-vals=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 170, "<button class=\"button blocking-update-button block-list-refresh\" id=\"block-list-refresh\" type=\"button\" hx-post=\"/ui/blocking/lists/refresh\" hx-vals=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var110 string
 				templ_7745c5c3_Var110, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("{\"name\":%q}", view.List.Name))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 400, Col: 198}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking.templ`, Line: 406, Col: 198}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var110)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 169, "\" hx-target=\"#block-list-content\" hx-swap=\"innerHTML\" hx-disable=\"this\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 171, "\" hx-target=\"#block-list-content\" hx-swap=\"innerHTML\" hx-disable=\"this\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -2546,12 +2566,12 @@ func blockListFooter(view BlockListDrawerView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 170, "<span class=\"update-label\">Refresh This List</span></button>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 172, "<span class=\"update-label\">Refresh This List</span></button>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 171, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 173, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

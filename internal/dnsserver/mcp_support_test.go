@@ -1,6 +1,7 @@
 package dnsserver
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/miekg/dns"
@@ -65,6 +66,53 @@ func TestHandlerDomainPolicyExplainsDecision(t *testing.T) {
 	handler.PauseBlocking(60_000_000_000)
 	if got := handler.DomainPolicy("ads.example"); got.Decision != querylog.PolicyPaused {
 		t.Fatalf("paused decision = %s", got.Decision)
+	}
+}
+
+// An @@ exception on one block list lifts another list's block for the host
+// and its subdomains, as in AdGuard Home and Technitium, and names the list
+// that carries it. A $important block and the operator's own blocked domains
+// stay blocked.
+func TestBlockListExceptionOverridesAnotherListsBlock(t *testing.T) {
+	t.Parallel()
+	configuration := testRuntimeConfig()
+	configuration.Blocking = true
+	configuration.BlockedDomains = []string{"cdn.example", "mine.cdn.example", "tracker.example", "pixel.example"}
+	configuration.BlockedDomainOwnerSets = [][]string{nil, {"EasyPrivacy"}, {"Custom blocked domains"}, {"EasyList"}, {"AdGuard DNS Filter"}}
+	configuration.BlockedDomainOwners = []uint32{1, 2, 1, 3}
+	configuration.ExceptionDomains = []string{"cdn.example", "pixel.example"}
+	configuration.ExceptionDomainOwners = []uint32{4, 4}
+	configuration.ImportantBlockedDomains = []string{"mine.cdn.example", "pixel.example"}
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(runtime)
+	for _, test := range []struct {
+		name     string
+		decision querylog.PolicyDecision
+		rule     string
+		sources  []string
+	}{
+		{"cdn.example", querylog.PolicyAllowed, "cdn.example", []string{"AdGuard DNS Filter"}},
+		{"img.cdn.example", querylog.PolicyAllowed, "cdn.example", []string{"AdGuard DNS Filter"}},
+		{"mine.cdn.example", querylog.PolicyBlocked, "mine.cdn.example", []string{"Custom blocked domains"}},
+		{"pixel.example", querylog.PolicyBlocked, "pixel.example", []string{"EasyList"}},
+		{"tracker.example", querylog.PolicyBlocked, "tracker.example", []string{"EasyPrivacy"}},
+	} {
+		got := handler.DomainPolicy(test.name)
+		if got.Decision != test.decision || got.Rule != test.rule || !slices.Equal(got.Sources, test.sources) {
+			t.Errorf("DomainPolicy(%s) = %+v, want %s %s from %v", test.name, got, test.decision, test.rule, test.sources)
+		}
+	}
+	// The operator's allow list still comes first, without list attribution.
+	configuration.AllowedDomains = []string{"tracker.example"}
+	runtime, err = Compile(configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := NewHandler(runtime).DomainPolicy("tracker.example"); got.Decision != querylog.PolicyAllowed || len(got.Sources) != 0 {
+		t.Fatalf("allow-listed DomainPolicy = %+v", got)
 	}
 }
 

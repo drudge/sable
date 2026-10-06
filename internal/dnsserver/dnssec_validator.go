@@ -809,7 +809,7 @@ func validateResponseProof(response *dns.Msg, question dns.Question) error {
 			continue
 		}
 		closest := suffixDNSLabels(signature.Hdr.Name, int(signature.Labels))
-		if !provesClosestEncloser(proofs, signature.Hdr.Name, closest) {
+		if !provesWildcardExpansion(proofs, signature.Hdr.Name, closest) {
 			return fmt.Errorf("NSEC/NSEC3 records do not prove wildcard expansion for %s", signature.Hdr.Name)
 		}
 	}
@@ -972,6 +972,17 @@ func provesClosestEncloser(records []dns.RR, name, closest string) bool {
 	return false
 }
 
+// provesWildcardExpansion proves a positive answer synthesized from the
+// wildcard at closest. The RRSIG labels field already names the closest
+// encloser, so only the next closer name needs denying: RFC 5155 section
+// 7.2.6 has the server send just the NSEC3 covering it and section 8.8 has
+// the validator check just that, and RFC 4035 sections 3.1.3.3 and 5.3.4 ask
+// the same of NSEC. oisd.nl answers big.oisd.nl this way, with one NSEC3 at
+// the wildcard's hash.
+func provesWildcardExpansion(records []dns.RR, name, closest string) bool {
+	return coversDenialName(records, nextCloserFQDN(name, closest))
+}
+
 func coversDenialName(records []dns.RR, name string) bool {
 	return coversNSECName(records, name) || coversNSEC3Name(records, name)
 }
@@ -1003,7 +1014,10 @@ func coversNSEC3Name(records []dns.RR, name string) bool {
 	name = normalizeFQDN(name)
 	return slices.ContainsFunc(records, func(record dns.RR) bool {
 		nsec3, ok := record.(*dns.NSEC3)
-		return ok && nsec3.Cover(name)
+		// Cover alone counts the owner hash as covered, and an unknown hash
+		// algorithm hashes to "", which sorts below every interval. A record
+		// that matches the name proves it exists (RFC 5155 section 8.3).
+		return ok && nsec3.Hash == dns.SHA1 && nsec3.Cover(name) && !nsec3.Match(name)
 	})
 }
 

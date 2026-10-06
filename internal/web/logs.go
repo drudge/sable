@@ -623,6 +623,9 @@ func queryDecisionView(decision querylog.Decision) pages.QueryDecisionView {
 	case querylog.PolicyAllowed:
 		view.Policy = "Allowed by policy"
 		view.PolicyDetail = matchedDecisionRule(decision.PolicyRule)
+		if sources := joinSourceNames(decision.PolicySources); sources != "" && view.PolicyDetail != "" {
+			view.PolicyDetail += ", an exception on " + sources
+		}
 	case querylog.PolicyBlocked:
 		view.Policy = "Blocked by policy"
 		view.PolicyDetail = matchedDecisionRule(decision.PolicyRule)

@@ -121,9 +121,38 @@ func (runtime *Runtime) policyDecision(name, clientIP string, paused bool) (quer
 		return querylog.PolicyAllowed, rule, nil
 	}
 	if rule, owner := matchingDomainRule(runtime.blocked, name); rule != "" {
+		if exception, exceptionOwner := runtime.matchingException(name); exception != "" {
+			return querylog.PolicyAllowed, exception, runtime.blockedSources(exceptionOwner)
+		}
 		return querylog.PolicyBlocked, rule, runtime.blockedSources(owner)
 	}
 	return querylog.PolicyNoMatch, "", nil
+}
+
+// matchingException finds a block list's @@ exception for a blocked name. An
+// exception lifts blocks from every list, as in AdGuard Home and Technitium,
+// but not a $important block or one the operator added.
+func (runtime *Runtime) matchingException(name string) (string, uint32) {
+	if len(runtime.exceptions) == 0 {
+		return "", 0
+	}
+	exception, owner := matchingDomainRule(runtime.exceptions, name)
+	if exception == "" {
+		return "", 0
+	}
+	if len(runtime.firmBlocked) > 0 {
+		for candidate := normalizeName(name); candidate != ""; {
+			if _, found := runtime.firmBlocked[candidate]; found {
+				return "", 0
+			}
+			_, rest, cut := strings.Cut(candidate, ".")
+			if !cut {
+				break
+			}
+			candidate = rest
+		}
+	}
+	return exception, owner
 }
 
 func (runtime *Runtime) clientBypasses(value string) bool {
