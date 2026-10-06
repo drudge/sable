@@ -27,7 +27,7 @@ SABLE_HTTP_PORT=${SABLE_HTTP_PORT:-15380}
 TECHNITIUM_HOST=${TECHNITIUM_HOST:-127.0.0.1}
 TECHNITIUM_PORT=${TECHNITIUM_PORT:-18054}
 TECHNITIUM_HTTP_PORT=${TECHNITIUM_HTTP_PORT:-15381}
-TECHNITIUM_IMAGE=${TECHNITIUM_IMAGE:-technitium/dns-server:15.4.0}
+TECHNITIUM_IMAGE=${TECHNITIUM_IMAGE:-technitium/dns-server:15.6.0}
 PULL_TECHNITIUM=${PULL_TECHNITIUM:-if-missing}
 READY_TIMEOUT=${READY_TIMEOUT:-60}
 AUTO_START_DOCKER=${AUTO_START_DOCKER:-true}
@@ -318,7 +318,7 @@ memory_limit = "$(toml_string "$MEMORY_LIMIT")"
 isolation = "fresh state and fresh containers for every trial"
 resource_sampling = "isolated Docker stats polling during each measured interval"
 resource_sample_interval_seconds = $RESOURCE_SAMPLE_INTERVAL
-cache_profile_note = "Sable is explicitly aligned to the Technitium 15.4 fresh-install cache profile; Technitium state is retained with the evidence"
+cache_profile_note = "Sable is explicitly aligned to the Technitium 15.6 fresh-install cache profile; Technitium state is retained with the evidence"
 
 [sable]
 image = "$(toml_string "$SABLE_IMAGE")"
