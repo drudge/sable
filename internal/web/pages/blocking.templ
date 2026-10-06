@@ -42,6 +42,8 @@ type BlockListSourceView struct {
 	Lines int
 	Accepted int
 	Invalid int
+	Exceptions int
+	Unsupported int
 	Healthy bool
 	HealthSummary string
 	HealthDetail string
@@ -248,7 +250,7 @@ templ AddBlockListDialog(existing []BlockListSourceView) {
 					<label><span>Block List URL</span><div><input type="url" name="url" placeholder="https://example.com/blocklist.txt" required/><button class="button block-list-add-button" type="submit">@BlockListAddLabel()</button></div></label>
 					<input type="hidden" name="format" value="auto"/>
 				</form>
-				<div><strong>Supported formats:</strong><ul><li>Standard hosts files</li><li>One domain per line</li><li>AdBlock-style filter lists</li></ul></div>
+				<div><strong>Supported formats:</strong><ul><li>Standard hosts files</li><li>One domain per line</li><li>AdBlock-style host rules, like <code>||ads.example^</code></li></ul></div>
 			</div>
 		</div>
 	}
@@ -369,6 +371,12 @@ templ BlockListDrawer(view BlockListDrawerView) {
 				@components.Fact(components.FactProps{Label: "Domains", Value: formatNumber(uint64(view.List.Accepted)), Wide: true})
 				@components.Fact(components.FactProps{Label: "Lines read", Value: formatNumber(uint64(view.List.Lines)), Wide: true})
 				@components.Fact(components.FactProps{Label: "Invalid lines", Value: formatNumber(uint64(view.List.Invalid)), Wide: true})
+				if view.List.Exceptions > 0 {
+					@components.Fact(components.FactProps{Label: "Exceptions", Value: formatNumber(uint64(view.List.Exceptions)), Wide: true})
+				}
+				if view.List.Unsupported > 0 {
+					@components.Fact(components.FactProps{Label: "Unsupported rules", Value: formatNumber(uint64(view.List.Unsupported)), Wide: true})
+				}
 			}
 			<section class="query-detail-answer" aria-labelledby="block-list-updates">
 				<h3 id="block-list-updates">Updates</h3>

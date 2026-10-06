@@ -40,8 +40,14 @@ type Runtime struct {
 	// blocked maps each blocked domain to the set of sources that list it,
 	// an index into blockedOwners. The set rides along with the lookup the
 	// policy check already makes, so attribution costs no extra work per query.
-	blocked             map[string]uint32
-	blockedOwners       [][]string
+	blocked       map[string]uint32
+	blockedOwners [][]string
+	// exceptions maps each host a block list's @@ rule unblocks, with its
+	// subdomains, to the lists that carry the rule. firmBlocked holds the
+	// blocks an exception doesn't lift: $important rules and the operator's
+	// own blocked domains. Both are consulted only once a block matches.
+	exceptions          map[string]uint32
+	firmBlocked         map[string]struct{}
 	allowedExact        map[string]struct{}
 	allowedWildcard     map[string]struct{}
 	blocking            bool
@@ -115,8 +121,15 @@ type RuntimeConfig struct {
 	// BlockedDomainOwners runs parallel to BlockedDomains and indexes
 	// BlockedDomainOwnerSets, the block lists that contributed each domain.
 	// Both are optional; without them blocked queries carry no attribution.
-	BlockedDomainOwners        []uint32
-	BlockedDomainOwnerSets     [][]string
+	BlockedDomainOwners    []uint32
+	BlockedDomainOwnerSets [][]string
+	// ExceptionDomains are the hosts block lists unblock with @@ rules, and
+	// ExceptionDomainOwners runs parallel, indexing BlockedDomainOwnerSets.
+	// ImportantBlockedDomains are the blocks an exception doesn't lift:
+	// $important rules and the operator's own blocked domains.
+	ExceptionDomains           []string
+	ExceptionDomainOwners      []uint32
+	ImportantBlockedDomains    []string
 	AllowedDomains             []string
 	BlockLists                 []BlockListStats
 	BlockingType               string
@@ -224,6 +237,10 @@ type BlockListStats struct {
 	Lines    int    `json:"lines"`
 	Accepted int    `json:"accepted"`
 	Invalid  int    `json:"invalid"`
+	// Exceptions and Unsupported count a list's @@ rules and the adblock
+	// rules DNS can't apply.
+	Exceptions  int `json:"exceptions,omitempty"`
+	Unsupported int `json:"unsupported,omitempty"`
 }
 
 type Stats struct {

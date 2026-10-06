@@ -165,8 +165,9 @@ after a successful commit. This keeps disk and database work out of ordinary DNS
 query handling while preserving one serialization point for zone mutations.
 
 Managed block-list parsing also stays outside the data plane. Domain, hosts,
-mixed, and common Adblock rules compile into the same immutable suffix map as
-inline policy. File changes build a complete candidate before the atomic swap;
+mixed, and Adblock host rules compile into the same immutable suffix map as
+inline policy. Adblock exceptions compile into a second suffix map that the
+policy consults only after a block matches. File changes build a complete candidate before the atomic swap;
 unreadable sources preserve the active policy.
 
 ## Insights

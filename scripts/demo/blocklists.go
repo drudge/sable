@@ -91,6 +91,13 @@ func writeBlockListCache(path string, source blockListSource, domains []string) 
 			fmt.Fprintln(writer, domain)
 		}
 	}
+	if source.Format == "adblock" {
+		// Real filter lists also carry exceptions and browser-only rules,
+		// which the list's details count.
+		fmt.Fprintln(writer, "@@||cdn.vandelay.com^")
+		fmt.Fprintln(writer, "||ads.vandelay.com/banner.js$script")
+		fmt.Fprintln(writer, "vandelay.com##.ad-banner")
+	}
 	if err := writer.Flush(); err != nil {
 		return fmt.Errorf("write block list cache %s: %w", source.Name, err)
 	}

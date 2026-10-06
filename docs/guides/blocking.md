@@ -12,7 +12,9 @@ Open **Blocked → Block Lists**, choose **Add Block List**, and select a curate
 
 While a catalog or custom list downloads and compiles, its Add control shows a spinner and prevents duplicate submissions. The dialog stays open during the operation. Manual add/update failures show error notices; connection failures and unrendered HTTP errors produce a dismissible notice without clearing your custom URL. Correct the cause before retrying.
 
-Sable accepts domain lists, hosts-file lists, and common Adblock domain-rule syntax. Cosmetic rules and Adblock exception syntax are not imported as an allow policy; use Sable's explicit allowed-domain rules for exceptions.
+Sable accepts domain lists, hosts-file lists, and Adblock rules that name a whole host: `||ads.example^`, optionally ending in `|` or `$important`. Like AdGuard Home, Technitium, and Pi-hole, Sable skips Adblock rules it can't apply to a name: rules with a path, a `*` wildcard, a regular expression, or any other modifier, and cosmetic rules. A list's details count them as **Unsupported rules**.
+
+An exception such as `@@||cdn.example^` unblocks that host and its subdomains on every list, as it does in AdGuard Home and Technitium. It doesn't lift a `$important` rule or a domain you blocked yourself. Your own allowed domains still come first.
 
 ![DNS Blocking showing the active policy, compiled domain count, and configured subscriptions](../assets/guide-screenshots/blocking.webp "Check Blocking Status and each subscription's health. The compiled domain count is not the number of queries blocked.")
 

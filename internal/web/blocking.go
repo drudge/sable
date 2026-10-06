@@ -53,6 +53,7 @@ func (server *Server) blockingView(request *http.Request, message, errorMessage,
 		sourceStats[source.Name] = pages.BlockListSourceView{
 			Name: source.Name, Path: source.Path, Lines: source.Lines,
 			Accepted: source.Accepted, Invalid: source.Invalid,
+			Exceptions: source.Exceptions, Unsupported: source.Unsupported,
 		}
 	}
 	updateStatus := server.blockLists.Status()

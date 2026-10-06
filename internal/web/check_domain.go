@@ -76,6 +76,9 @@ func (check domainCheck) Explanation(at func(time.Time) string) string {
 		}
 		return "Blocking is paused, so nothing is blocked."
 	case querylog.PolicyAllowed:
+		if len(policy.Sources) > 0 {
+			return "A block list blocks this domain, but the exception for " + policy.Rule + " on " + strings.Join(policy.Sources, ", ") + " lets it through."
+		}
 		return "The allow list entry " + policy.Rule + " lets this domain through."
 	case querylog.PolicyBlocked:
 		if len(policy.Sources) > 0 {

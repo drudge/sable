@@ -216,6 +216,21 @@ func TestQueryDecisionViewExplainsPolicyAndRoute(t *testing.T) {
 	}
 }
 
+func TestQueryDecisionViewNamesTheListBehindAnException(t *testing.T) {
+	t.Parallel()
+
+	view := queryDecisionView(querylog.Decision{
+		Policy: querylog.PolicyAllowed, PolicyRule: "cdn.example", PolicySources: []string{"AdGuard DNS Filter"},
+	})
+	if view.Policy != "Allowed by policy" || view.PolicyDetail != "Matched cdn.example, an exception on AdGuard DNS Filter" {
+		t.Fatalf("exception explanation = %+v", view)
+	}
+	check := domainCheck{Policy: dnsserver.DomainPolicy{Decision: querylog.PolicyAllowed, Rule: "cdn.example", Sources: []string{"AdGuard DNS Filter"}}}
+	if got := check.Explanation(nil); got != "A block list blocks this domain, but the exception for cdn.example on AdGuard DNS Filter lets it through." {
+		t.Fatalf("Explanation() = %q", got)
+	}
+}
+
 // A lookup refused by the recursion policy says so, apart from one that
 // failed, and says where the policy lives.
 func TestQueryDecisionViewExplainsARecursionRefusal(t *testing.T) {
