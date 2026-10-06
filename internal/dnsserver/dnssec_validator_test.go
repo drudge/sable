@@ -79,6 +79,137 @@ func TestDNSSECValidatorAuthenticatesNSECNameErrorAndWildcard(t *testing.T) {
 	}
 }
 
+// oisd.nl answers big.oisd.nl from *.oisd.nl with one NSEC3, at the
+// wildcard's own hash, covering the next closer name. The RRSIG labels field
+// already names the closest encloser, so nothing has to match oisd.nl itself
+// (RFC 5155 sections 7.2.6 and 8.8). Sable called this bogus, which broke the
+// OISD block lists whenever Sable resolved for its own host.
+func TestDNSSECValidatorAcceptsNSEC3WildcardAnswerWithOnlyTheNextCloserCover(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+	zone := newValidatorTestKey(t, "oisd.nl.")
+	validator := validatorWithAnchor(t, zone, now)
+	query := mapValidatorQuery(map[string]*dns.Msg{
+		validatorQueryKey("oisd.nl.", dns.TypeDNSKEY): validatorDNSKEYResponse(t, now, zone),
+	})
+	question := dns.Question{Name: "big.oisd.nl.", Qtype: dns.TypeA, Qclass: dns.ClassINET}
+	if got := dns.HashName("*.oisd.nl.", dns.SHA1, 0, ""); got != "M614QHO57S65RJHQKG0G26L9IEFOSU2V" {
+		t.Fatalf("hash(*.oisd.nl) = %s", got)
+	}
+	if got := dns.HashName("big.oisd.nl.", dns.SHA1, 0, ""); got != "TH0QEN14T11O6L0GQNM054MBJG6VMOP2" {
+		t.Fatalf("hash(big.oisd.nl) = %s", got)
+	}
+	nsec3 := func(owner, next string) *dns.NSEC3 {
+		return &dns.NSEC3{
+			Hdr:  dns.RR_Header{Name: strings.ToLower(owner) + ".oisd.nl.", Rrtype: dns.TypeNSEC3, Class: dns.ClassINET, Ttl: 60},
+			Hash: dns.SHA1, Iterations: 0, SaltLength: 0, Salt: "", HashLength: 20, NextDomain: next,
+			TypeBitMap: []uint16{dns.TypeA, dns.TypeAAAA, dns.TypeRRSIG},
+		}
+	}
+	answer := func(proof *dns.NSEC3) *dns.Msg {
+		record := validatorA("*.oisd.nl.", "57.128.255.167")
+		signature := signValidatorRRSet(t, now, zone, []dns.RR{record})
+		record.Hdr.Name, signature.Hdr.Name = question.Name, question.Name
+		response := new(dns.Msg)
+		response.SetQuestion(question.Name, question.Qtype)
+		response.SetReply(response)
+		response.Answer = []dns.RR{record, signature}
+		if proof != nil {
+			response.Ns = []dns.RR{proof, signValidatorRRSet(t, now, zone, []dns.RR{proof})}
+		}
+		return response
+	}
+	real := nsec3("M614QHO57S65RJHQKG0G26L9IEFOSU2V", "TI4IMV94LMGCCTDEA183M3O2S1F7JG1I")
+	if state, err := validator.validate(context.Background(), answer(real), question, query); err != nil || state != validationSecure {
+		t.Fatalf("oisd.nl wildcard answer validate() = %v, %v; want secure", state, err)
+	}
+	for name, proof := range map[string]*dns.NSEC3{
+		"no proof": nil,
+		// Ends just below hash(big.oisd.nl), so it doesn't cover it.
+		"short interval": nsec3("M614QHO57S65RJHQKG0G26L9IEFOSU2V", "TH0QEN14T11O6L0GQNM054MBJG6VMOP1"),
+		// Owned by the next closer name: that proves it exists.
+		"matches the next closer": nsec3("TH0QEN14T11O6L0GQNM054MBJG6VMOP2", "TI4IMV94LMGCCTDEA183M3O2S1F7JG1I"),
+	} {
+		if state, _ := validator.validate(context.Background(), answer(proof), question, query); state != validationBogus {
+			t.Errorf("%s: wildcard answer validated as %v, want bogus", name, state)
+		}
+	}
+}
+
+// The NSEC form needs only an NSEC covering the next closer name, not one at
+// the closest encloser (RFC 4035 sections 3.1.3.3 and 5.3.4).
+func TestDNSSECValidatorAcceptsNSECWildcardAnswerWithOnlyTheNextCloserCover(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+	zone := newValidatorTestKey(t, "oisd.demo.")
+	validator := validatorWithAnchor(t, zone, now)
+	query := mapValidatorQuery(map[string]*dns.Msg{
+		validatorQueryKey("oisd.demo.", dns.TypeDNSKEY): validatorDNSKEYResponse(t, now, zone),
+	})
+	question := dns.Question{Name: "deep.big.oisd.demo.", Qtype: dns.TypeA, Qclass: dns.ClassINET}
+	nsec := func(owner, next string) *dns.NSEC {
+		return &dns.NSEC{
+			Hdr:        dns.RR_Header{Name: owner, Rrtype: dns.TypeNSEC, Class: dns.ClassINET, Ttl: 60},
+			NextDomain: next, TypeBitMap: []uint16{dns.TypeA, dns.TypeRRSIG, dns.TypeNSEC},
+		}
+	}
+	answer := func(proof *dns.NSEC) *dns.Msg {
+		record := validatorA("*.oisd.demo.", "192.0.2.80")
+		signature := signValidatorRRSet(t, now, zone, []dns.RR{record})
+		record.Hdr.Name, signature.Hdr.Name = question.Name, question.Name
+		response := new(dns.Msg)
+		response.SetQuestion(question.Name, question.Qtype)
+		response.SetReply(response)
+		response.Answer = []dns.RR{record, signature}
+		if proof != nil {
+			response.Ns = []dns.RR{proof, signValidatorRRSet(t, now, zone, []dns.RR{proof})}
+		}
+		return response
+	}
+	// The next closer name is big.oisd.demo.; *.oisd.demo. sorts before it.
+	if state, err := validator.validate(context.Background(), answer(nsec("*.oisd.demo.", "www.oisd.demo.")), question, query); err != nil || state != validationSecure {
+		t.Fatalf("NSEC wildcard answer validate() = %v, %v; want secure", state, err)
+	}
+	for name, proof := range map[string]*dns.NSEC{
+		"no proof": nil,
+		// Covers deep.big.oisd.demo. but not big.oisd.demo., which may exist.
+		"covers only the qname":       nsec("big.oisd.demo.", "www.oisd.demo."),
+		"ends before the next closer": nsec("*.oisd.demo.", "a.oisd.demo."),
+	} {
+		if state, _ := validator.validate(context.Background(), answer(proof), question, query); state != validationBogus {
+			t.Errorf("%s: wildcard answer validated as %v, want bogus", name, state)
+		}
+	}
+}
+
+// Cover counts an NSEC3's own hash as covered; a record that matches the name
+// proves it exists instead, and an unknown hash algorithm proves nothing.
+func TestNSEC3CoverExcludesTheOwnerHashAndUnknownAlgorithms(t *testing.T) {
+	t.Parallel()
+	owner := dns.HashName("big.oisd.nl.", dns.SHA1, 0, "")
+	record := &dns.NSEC3{
+		Hdr:  dns.RR_Header{Name: strings.ToLower(owner) + ".oisd.nl.", Rrtype: dns.TypeNSEC3, Class: dns.ClassINET, Ttl: 60},
+		Hash: dns.SHA1, NextDomain: "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV", HashLength: 20,
+	}
+	if !record.Cover("big.oisd.nl.") {
+		t.Skip("miekg/dns no longer counts the owner hash as covered")
+	}
+	if coversNSEC3Name([]dns.RR{record}, "big.oisd.nl.") {
+		t.Fatal("an NSEC3 matching the name covered it")
+	}
+	unknown := *record
+	// The last interval in the zone, which Cover says holds "".
+	unknown.Hdr.Name = "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv.oisd.nl."
+	unknown.NextDomain = "00000000000000000000000000000001"
+	unknown.Hash = 2
+	if !unknown.Cover("big.oisd.nl.") {
+		t.Fatal("miekg/dns no longer hashes unknown algorithms to an empty name; drop this case")
+	}
+	if coversNSEC3Name([]dns.RR{&unknown}, "big.oisd.nl.") {
+		t.Fatal("an NSEC3 with an unknown hash algorithm covered a name")
+	}
+}
+
 // A name that doesn't exist, under a wildcard without the type asked for,
 // is NODATA: one NSEC covers the name and another shows the wildcard's
 // types. WordPress VIP's go-vip.net answers HTTPS queries this way, and
