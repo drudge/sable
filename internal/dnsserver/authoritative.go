@@ -68,39 +68,15 @@ func (runtime *Runtime) authoritativeResponseFor(request *dns.Msg, queryName str
 	records, wildcardOwner, nameExists := zone.recordsAt(queryName, now)
 	if !nameExists {
 		response.Rcode = dns.RcodeNameError
-		response.Ns = cloneRecords(zone.soa, "", now)
-		if requestWantsDNSSEC(request) && zone.signed {
-			response.Ns = append(response.Ns, zone.signaturesFor(zone.name, dns.TypeSOA, "", now)...)
-			response.Ns = append(response.Ns, zone.negativeProof(queryName, false, now)...)
-		}
+		response.Ns = zone.nameErrorAuthority(queryName, requestWantsDNSSEC(request), now)
 		return response, true
 	}
-	var chain cnameChain
-	if question.Qtype == dns.TypeANY {
-		for _, typed := range records {
-			response.Answer = append(response.Answer, cloneRecords(typed, queryName, now)...)
-		}
-	} else {
-		response.Answer = append(response.Answer, cloneRecords(records[question.Qtype], queryName, now)...)
-		if question.Qtype != dns.TypeCNAME && len(response.Answer) == 0 {
-			aliases := cloneRecords(records[dns.TypeCNAME], queryName, now)
-			response.Answer = append(response.Answer, aliases...)
-			// RFC 1034 4.3.2 step 3a: an alias answer has to restart the lookup at
-			// the canonical name so the address rides along in the same reply. A
-			// stub resolver such as glibc's or Go's reads a lone CNAME as "no
-			// address" and gives up instead of asking a second time.
-			chain = runtime.chaseCNAME(response, queryName, aliases, question.Qtype, now)
-		}
-	}
+	chain := runtime.authoritativeAnswer(response, records, queryName, question.Qtype, now)
 	if chain.dangling != nil {
 		// RFC 6604: the rcode describes the last name in the chain, and the
 		// aliases that led there stay in the answer section.
 		response.Rcode = dns.RcodeNameError
-		response.Ns = cloneRecords(chain.dangling.soa, "", now)
-		if requestWantsDNSSEC(request) && chain.dangling.signed {
-			response.Ns = append(response.Ns, chain.dangling.signaturesFor(chain.dangling.name, dns.TypeSOA, "", now)...)
-			response.Ns = append(response.Ns, chain.dangling.negativeProof(chain.danglingName, false, now)...)
-		}
+		response.Ns = chain.dangling.nameErrorAuthority(chain.danglingName, requestWantsDNSSEC(request), now)
 	}
 	if len(response.Answer) == 0 {
 		response.Ns = cloneRecords(zone.soa, "", now)
@@ -113,33 +89,73 @@ func (runtime *Runtime) authoritativeResponseFor(request *dns.Msg, queryName str
 			}
 		}
 	} else if requestWantsDNSSEC(request) && zone.signed && question.Qtype != dns.TypeRRSIG && question.Qtype != dns.TypeANY {
-		covered := make(map[string]struct{})
-		for _, answer := range response.Answer {
-			key := signingRecordKey(answer.Header().Name, answer.Header().Rrtype)
-			if _, exists := covered[key]; exists || answer.Header().Rrtype == dns.TypeRRSIG {
-				continue
-			}
-			covered[key] = struct{}{}
-			owner := normalizeName(answer.Header().Name)
-			// A chased hop can live in a different zone than the question, so it
-			// has to be signed with the keys of whichever zone actually owns it.
-			signer := zone
-			if hop := chain.zones[owner]; hop != nil {
-				signer = hop
-			}
-			if !signer.signed {
-				continue
-			}
-			response.Answer = append(response.Answer, signer.signaturesFor(owner, answer.Header().Rrtype, queryName, now)...)
-		}
-		if wildcardOwner != "" {
-			response.Ns = append(response.Ns, zone.wildcardAnswerProof(queryName, now)...)
-		}
-		for _, hop := range chain.wildcards {
-			response.Ns = append(response.Ns, hop.zone.wildcardAnswerProof(hop.name, now)...)
-		}
+		zone.signAnswer(response, chain, queryName, wildcardOwner, now)
 	}
 	return response, true
+}
+
+// authoritativeAnswer fills the answer section from the records at the
+// question's name. An alias with no records of the asked type is chased, and
+// the chain it followed is returned.
+func (runtime *Runtime) authoritativeAnswer(response *dns.Msg, records map[uint16][]authoritativeRecord, queryName string, qtype uint16, now time.Time) cnameChain {
+	if qtype == dns.TypeANY {
+		for _, typed := range records {
+			response.Answer = append(response.Answer, cloneRecords(typed, queryName, now)...)
+		}
+		return cnameChain{}
+	}
+	response.Answer = append(response.Answer, cloneRecords(records[qtype], queryName, now)...)
+	if qtype == dns.TypeCNAME || len(response.Answer) > 0 {
+		return cnameChain{}
+	}
+	aliases := cloneRecords(records[dns.TypeCNAME], queryName, now)
+	response.Answer = append(response.Answer, aliases...)
+	// RFC 1034 4.3.2 step 3a: an alias answer has to restart the lookup at
+	// the canonical name so the address rides along in the same reply. A
+	// stub resolver such as glibc's or Go's reads a lone CNAME as "no
+	// address" and gives up instead of asking a second time.
+	return runtime.chaseCNAME(response, queryName, aliases, qtype, now)
+}
+
+// nameErrorAuthority is the authority section of an NXDOMAIN for name: the
+// zone's SOA and, for a signed zone and a DNSSEC client, the denial proof.
+func (zone *authoritativeZone) nameErrorAuthority(name string, wantsDNSSEC bool, now time.Time) []dns.RR {
+	authority := cloneRecords(zone.soa, "", now)
+	if wantsDNSSEC && zone.signed {
+		authority = append(authority, zone.signaturesFor(zone.name, dns.TypeSOA, "", now)...)
+		authority = append(authority, zone.negativeProof(name, false, now)...)
+	}
+	return authority
+}
+
+// signAnswer adds the signatures for every RRset in a signed zone's answer,
+// and the proofs for any wildcard the answer was expanded from.
+func (zone *authoritativeZone) signAnswer(response *dns.Msg, chain cnameChain, queryName, wildcardOwner string, now time.Time) {
+	covered := make(map[string]struct{})
+	for _, answer := range response.Answer {
+		key := signingRecordKey(answer.Header().Name, answer.Header().Rrtype)
+		if _, exists := covered[key]; exists || answer.Header().Rrtype == dns.TypeRRSIG {
+			continue
+		}
+		covered[key] = struct{}{}
+		owner := normalizeName(answer.Header().Name)
+		// A chased hop can live in a different zone than the question, so it
+		// has to be signed with the keys of whichever zone actually owns it.
+		signer := zone
+		if hop := chain.zones[owner]; hop != nil {
+			signer = hop
+		}
+		if !signer.signed {
+			continue
+		}
+		response.Answer = append(response.Answer, signer.signaturesFor(owner, answer.Header().Rrtype, queryName, now)...)
+	}
+	if wildcardOwner != "" {
+		response.Ns = append(response.Ns, zone.wildcardAnswerProof(queryName, now)...)
+	}
+	for _, hop := range chain.wildcards {
+		response.Ns = append(response.Ns, hop.zone.wildcardAnswerProof(hop.name, now)...)
+	}
 }
 
 // recordsAt resolves the record set an owner name serves inside the zone,
