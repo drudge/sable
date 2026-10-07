@@ -8,6 +8,27 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.0-beta.7] - 2026-10-06
+
+Sable 1.7.0-beta.7 makes the console's buttons and segmented controls the same
+rounded pill shape everywhere.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.0-beta.6. Coming from 1.6.x, also read
+the 1.7.0-beta.1 upgrade notes below.
+
+### Console
+
+- Round the ends of the **Backup Now** split button on **Settings → Backup**
+  to match every other button. It was the only button with squared-off
+  corners.
+- Round the segmented controls to match: the chart range and stats scope
+  toggles, the tabs on **Insights**, **Logs**, and **Administration**, the
+  block list tabs and catalog categories, the zone import source picker, the
+  theme picker, and the command palette search modes. The **Settings** tab
+  bar keeps its rounded rectangles.
+
 ## [1.7.0-beta.6] - 2026-10-06
 
 Sable 1.7.0-beta.6 lets you open the console's navigation on a phone by
