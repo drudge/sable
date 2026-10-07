@@ -2557,11 +2557,11 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .user-edit-dialog { width: min(calc(100% - 2rem), 40rem); max-height: min(90vh, 44rem); overflow: hidden; padding: 0; }
 .user-edit-dialog[open] { grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 0; }
 .user-edit-dialog > .dialog-header { padding: var(--space-6) var(--space-6) 1.1rem; }
-.dialog-tab-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 var(--space-6); border-radius: .5rem; background: var(--muted); padding: var(--space-1); }
+.dialog-tab-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 var(--space-6); border-radius: 999px; background: var(--muted); padding: var(--space-1); }
 .dialog-tab-list.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .dialog-tab-list.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .dialog-tab-list.four .dialog-tab { gap: .3rem; padding: 0 var(--space-1); }
-.dialog-tab { display: inline-flex; height: 2rem; align-items: center; justify-content: center; border: 0; border-radius: .375rem; background: transparent; color: var(--muted-foreground); font-size: .75rem; font-weight: 600; }
+.dialog-tab { display: inline-flex; height: 2rem; align-items: center; justify-content: center; border: 0; border-radius: 999px; background: transparent; color: var(--muted-foreground); font-size: .75rem; font-weight: 600; }
 .dialog-tab:hover { color: var(--foreground); }
 .dialog-tab.active { background: var(--background); color: var(--foreground); box-shadow: 0 1px 3px rgb(0 0 0 / .16); }
 .dialog-tab:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
@@ -2604,7 +2604,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .settings-source-card > header p { margin: .3rem 0 0; color: var(--muted-foreground); font-size: .8125rem; }
 /* The strip shares each row out between whatever tabs land on it, so adding
    or dropping a section never leaves a hole at the end of a row. */
-.settings-tab-list { display: flex; width: 100%; flex-wrap: wrap; gap: var(--space-1); border-radius: .5rem; }
+.settings-tab-list { display: flex; width: 100%; flex-wrap: wrap; gap: var(--space-1); border-radius: 999px; }
 .settings-tab-list > .settings-tab { flex: 1 1 calc((100% - 9 * .25rem) / 10); }
 /* The basis names how many tabs share a row, and flex-grow fills whatever row
    they land on: ten across while there is room, then two even rows of five,
@@ -2612,8 +2612,13 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
    four. A plain fixed basis wraps wherever it happens to run out and leaves
    the last row holding one tab stretched across the whole strip. */
 @media (max-width: 960px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 4 * .25rem) / 5); } }
+/* One row is a capsule like every other segmented control. Once the strip
+   wraps, a capsule around two rows reads as a blob, so the track and its tabs
+   drop to concentric rounded rectangles: the tab's .75rem is the track's 1rem
+   less its .25rem padding. */
+@media (max-width: 960px) { .settings-tab-list { border-radius: 1rem; } .settings-tab-list > .settings-tab { border-radius: .75rem; } }
 @media (max-width: 374px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 3 * .25rem) / 4); } }
-.settings-tab { height: 3.25rem; flex-direction: column; gap: var(--space-1); border-radius: .375rem; padding: .45rem var(--space-1); }
+.settings-tab { height: 3.25rem; flex-direction: column; gap: var(--space-1); border-radius: 999px; padding: .45rem var(--space-1); }
 .settings-tab .nav-icon { width: 1rem; height: 1rem; }
 .settings-tab span { font-size: .6875rem; line-height: 1; }
 .isotope-settings-form, .settings-panel-stack { display: grid; gap: var(--space-6); }
