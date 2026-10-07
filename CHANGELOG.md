@@ -8,6 +8,28 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.0-beta.8] - 2026-10-07
+
+Sable 1.7.0-beta.8 rounds the last square-cornered tabs in the console and
+makes the command palette, dialogs, and sheets open faster.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.0-beta.7. Coming from 1.6.x, also read
+the 1.7.0-beta.1 upgrade notes below.
+
+### Console
+
+- Round the **Settings** tab bar to match the other segmented controls. When
+  it wraps to two rows on narrower screens, it uses softer rounded corners
+  instead.
+- Round the tabs in dialogs to match: **Add User**, **Edit User**, zone
+  settings, and the MCP client setup.
+- Open the command palette, dialogs, and detail sheets faster. Their opening
+  animations are shorter and move less, so they no longer read as lag.
+- Match the **Top N** select to the height of the filter field beside it in
+  the **Top Clients**, **Top Domains**, and **Top Blocked** dialogs.
+
 ## [1.7.0-beta.7] - 2026-10-06
 
 Sable 1.7.0-beta.7 makes the console's buttons and segmented controls the same
