@@ -337,12 +337,13 @@ templ IntegrationsContent(view IntegrationsPageView) {
 		@components.PageHeader(components.PageHeaderProps{Title: "Integrations", Description: "Connect Sable to the systems that already know your network, and publish what they know as DNS."})
 		@Toast(view.Message, "success")
 		@Toast(view.Error, "error")
+		// Cards are in alphabetical order by title.
 		@DynamicDNSCard(view.DynamicDNS)
-		@UniFiCard(view.UniFi)
+		@MCPCard(view.MCP)
 		if view.SSO.Available {
 			@SSOCard(view.SSO)
 		}
-		@MCPCard(view.MCP)
+		@UniFiCard(view.UniFi)
 		if view.UniFi.Available && view.UniFi.Configured {
 			@RemoveUniFiDialog()
 		}

@@ -406,7 +406,7 @@ func IntegrationsContent(view IntegrationsPageView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = UniFiCard(view.UniFi).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = MCPCard(view.MCP).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -416,7 +416,7 @@ func IntegrationsContent(view IntegrationsPageView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = MCPCard(view.MCP).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = UniFiCard(view.UniFi).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -602,7 +602,7 @@ func DynamicDNSCard(view DynamicDNSAppView) templ.Component {
 								var templ_7745c5c3_Var7 string
 								templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(dynamicDNSProviderLabel(publisher.Provider))
 								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 396, Col: 61}
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 397, Col: 61}
 								}
 								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 								if templ_7745c5c3_Err != nil {
@@ -615,7 +615,7 @@ func DynamicDNSCard(view DynamicDNSAppView) templ.Component {
 								var templ_7745c5c3_Var8 string
 								templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(name)
 								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 396, Col: 84}
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 397, Col: 84}
 								}
 								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 								if templ_7745c5c3_Err != nil {
@@ -628,7 +628,7 @@ func DynamicDNSCard(view DynamicDNSAppView) templ.Component {
 								var templ_7745c5c3_Var9 string
 								templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(dynamicDNSZoneTypeLabel(zone))
 								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 396, Col: 133}
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 397, Col: 133}
 								}
 								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 								if templ_7745c5c3_Err != nil {
@@ -641,7 +641,7 @@ func DynamicDNSCard(view DynamicDNSAppView) templ.Component {
 								var templ_7745c5c3_Var10 string
 								templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(zone.TTL))
 								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 396, Col: 166}
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 397, Col: 166}
 								}
 								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 								if templ_7745c5c3_Err != nil {
@@ -856,7 +856,7 @@ func DynamicDNSStatusPanel(view DynamicDNSAppView) templ.Component {
 		var templ_7745c5c3_Var17 string
 		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue(dynamicDNSStatusPoll(view.Status.Running))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 435, Col: 147}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 436, Col: 147}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
 		if templ_7745c5c3_Err != nil {
@@ -882,7 +882,7 @@ func DynamicDNSStatusPanel(view DynamicDNSAppView) templ.Component {
 			var templ_7745c5c3_Var18 string
 			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(view.Status.LastError)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 441, Col: 34}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 442, Col: 34}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 			if templ_7745c5c3_Err != nil {
@@ -900,7 +900,7 @@ func DynamicDNSStatusPanel(view DynamicDNSAppView) templ.Component {
 				var templ_7745c5c3_Var19 string
 				templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(view.Status.LastErrorDetail)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 445, Col: 41}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 446, Col: 41}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 				if templ_7745c5c3_Err != nil {
@@ -943,7 +943,7 @@ func DynamicDNSStatusPanel(view DynamicDNSAppView) templ.Component {
 			var templ_7745c5c3_Var20 string
 			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(view.Status.LastSuccess)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 458, Col: 48}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 459, Col: 48}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 			if templ_7745c5c3_Err != nil {
@@ -961,7 +961,7 @@ func DynamicDNSStatusPanel(view DynamicDNSAppView) templ.Component {
 				var templ_7745c5c3_Var21 string
 				templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(view.Status.Duration)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 460, Col: 41}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 461, Col: 41}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 				if templ_7745c5c3_Err != nil {
@@ -984,7 +984,7 @@ func DynamicDNSStatusPanel(view DynamicDNSAppView) templ.Component {
 				var templ_7745c5c3_Var22 string
 				templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(view.Status.NextAttempt)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 463, Col: 44}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 464, Col: 44}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 				if templ_7745c5c3_Err != nil {
@@ -1155,7 +1155,7 @@ func DynamicDNSCardActionButtons(view DynamicDNSAppView) templ.Component {
 			var templ_7745c5c3_Var27 string
 			templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.Status.Running, "Publishing…", "Publish Now"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 488, Col: 341}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 489, Col: 341}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 			if templ_7745c5c3_Err != nil {
@@ -1333,7 +1333,7 @@ func DynamicDNSSetupDialog(view DynamicDNSAppView) templ.Component {
 			var templ_7745c5c3_Var31 string
 			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.IPv4URL)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 528, Col: 277}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 529, Col: 277}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var31)
 			if templ_7745c5c3_Err != nil {
@@ -1346,7 +1346,7 @@ func DynamicDNSSetupDialog(view DynamicDNSAppView) templ.Component {
 			var templ_7745c5c3_Var32 string
 			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.IPv6URL)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 528, Col: 412}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 529, Col: 412}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var32)
 			if templ_7745c5c3_Err != nil {
@@ -1461,7 +1461,7 @@ func DynamicDNSPublisherEditor(view DynamicDNSPublisherView, key string, removab
 		var templ_7745c5c3_Var36 string
 		templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.ResolveAttributeValue(key)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 554, Col: 93}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 555, Col: 93}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var36)
 		if templ_7745c5c3_Err != nil {
@@ -1474,7 +1474,7 @@ func DynamicDNSPublisherEditor(view DynamicDNSPublisherView, key string, removab
 		var templ_7745c5c3_Var37 string
 		templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.Provider)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 554, Col: 163}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 555, Col: 163}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var37)
 		if templ_7745c5c3_Err != nil {
@@ -1497,7 +1497,7 @@ func DynamicDNSPublisherEditor(view DynamicDNSPublisherView, key string, removab
 		var templ_7745c5c3_Var38 string
 		templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(dynamicDNSPublisherHeading(view))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 556, Col: 121}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 557, Col: 121}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
 		if templ_7745c5c3_Err != nil {
@@ -1510,7 +1510,7 @@ func DynamicDNSPublisherEditor(view DynamicDNSPublisherView, key string, removab
 		var templ_7745c5c3_Var39 string
 		templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(dynamicDNSPublisherOverview(view))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 556, Col: 210}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 557, Col: 210}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
 		if templ_7745c5c3_Err != nil {
@@ -1539,7 +1539,7 @@ func DynamicDNSPublisherEditor(view DynamicDNSPublisherView, key string, removab
 		var templ_7745c5c3_Var40 string
 		templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.ResolveAttributeValue("publisher_" + key + "_provider")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 560, Col: 63}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 561, Col: 63}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var40)
 		if templ_7745c5c3_Err != nil {
@@ -1552,7 +1552,7 @@ func DynamicDNSPublisherEditor(view DynamicDNSPublisherView, key string, removab
 		var templ_7745c5c3_Var41 string
 		templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.Provider)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 560, Col: 87}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 561, Col: 87}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var41)
 		if templ_7745c5c3_Err != nil {
@@ -1638,7 +1638,7 @@ func DynamicDNSZoneEditor(view DynamicDNSZoneView, publisherKey, zoneKey string,
 		var templ_7745c5c3_Var43 string
 		templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.ResolveAttributeValue(zoneKey)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 580, Col: 82}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 581, Col: 82}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var43)
 		if templ_7745c5c3_Err != nil {
@@ -1661,7 +1661,7 @@ func DynamicDNSZoneEditor(view DynamicDNSZoneView, publisherKey, zoneKey string,
 		var templ_7745c5c3_Var44 string
 		templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(dynamicDNSZoneHeading(view))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 581, Col: 114}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 582, Col: 114}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 		if templ_7745c5c3_Err != nil {
@@ -1674,7 +1674,7 @@ func DynamicDNSZoneEditor(view DynamicDNSZoneView, publisherKey, zoneKey string,
 		var templ_7745c5c3_Var45 string
 		templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.JoinStringErrs(dynamicDNSZoneOverview(view))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 581, Col: 193}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 582, Col: 193}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var45))
 		if templ_7745c5c3_Err != nil {
@@ -1695,7 +1695,7 @@ func DynamicDNSZoneEditor(view DynamicDNSZoneView, publisherKey, zoneKey string,
 		var templ_7745c5c3_Var46 string
 		templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.ResolveAttributeValue("publisher_" + publisherKey + "_zone_" + zoneKey + "_zone")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 583, Col: 125}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 584, Col: 125}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var46)
 		if templ_7745c5c3_Err != nil {
@@ -1708,7 +1708,7 @@ func DynamicDNSZoneEditor(view DynamicDNSZoneView, publisherKey, zoneKey string,
 		var templ_7745c5c3_Var47 string
 		templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.Zone)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 583, Col: 145}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 584, Col: 145}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var47)
 		if templ_7745c5c3_Err != nil {
@@ -1745,7 +1745,7 @@ func DynamicDNSZoneEditor(view DynamicDNSZoneView, publisherKey, zoneKey string,
 			var templ_7745c5c3_Var49 string
 			templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.ResolveAttributeValue("publisher_" + publisherKey + "_zone_" + zoneKey + "_names")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 584, Col: 217}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 585, Col: 217}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var49)
 			if templ_7745c5c3_Err != nil {
@@ -1758,7 +1758,7 @@ func DynamicDNSZoneEditor(view DynamicDNSZoneView, publisherKey, zoneKey string,
 			var templ_7745c5c3_Var50 string
 			templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.JoinStringErrs(view.Names)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 584, Col: 320}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 585, Col: 320}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var50))
 			if templ_7745c5c3_Err != nil {
@@ -1781,7 +1781,7 @@ func DynamicDNSZoneEditor(view DynamicDNSZoneView, publisherKey, zoneKey string,
 		var templ_7745c5c3_Var51 string
 		templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.ResolveAttributeValue("publisher_" + publisherKey + "_zone_" + zoneKey + "_publish_ipv4")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 585, Col: 165}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 586, Col: 165}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var51)
 		if templ_7745c5c3_Err != nil {
@@ -1804,7 +1804,7 @@ func DynamicDNSZoneEditor(view DynamicDNSZoneView, publisherKey, zoneKey string,
 		var templ_7745c5c3_Var52 string
 		templ_7745c5c3_Var52, templ_7745c5c3_Err = templ.ResolveAttributeValue("publisher_" + publisherKey + "_zone_" + zoneKey + "_publish_ipv6")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 585, Col: 383}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 586, Col: 383}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var52)
 		if templ_7745c5c3_Err != nil {
@@ -1874,7 +1874,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var54 string
 		templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "cloudflare_api_token")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 592, Col: 241}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 593, Col: 241}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var54)
 		if templ_7745c5c3_Err != nil {
@@ -1887,7 +1887,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var55 string
 		templ_7745c5c3_Var55, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "Cloudflare API token"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 592, Col: 382}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 593, Col: 382}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var55)
 		if templ_7745c5c3_Err != nil {
@@ -1900,7 +1900,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var56 string
 		templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "cloudflare_zone_id")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 592, Col: 505}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 593, Col: 505}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var56)
 		if templ_7745c5c3_Err != nil {
@@ -1923,7 +1923,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var57 string
 		templ_7745c5c3_Var57, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "porkbun_api_key")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 593, Col: 228}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 594, Col: 228}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var57)
 		if templ_7745c5c3_Err != nil {
@@ -1936,7 +1936,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var58 string
 		templ_7745c5c3_Var58, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "porkbun_secret")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 593, Col: 379}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 594, Col: 379}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var58)
 		if templ_7745c5c3_Err != nil {
@@ -1949,7 +1949,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var59 string
 		templ_7745c5c3_Var59, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "Secret API key"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 593, Col: 514}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 594, Col: 514}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var59)
 		if templ_7745c5c3_Err != nil {
@@ -1972,7 +1972,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var60 string
 		templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "namecheap_username")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 594, Col: 226}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 595, Col: 226}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var60)
 		if templ_7745c5c3_Err != nil {
@@ -1985,7 +1985,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var61 string
 		templ_7745c5c3_Var61, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "namecheap_api_key")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 594, Col: 364}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 595, Col: 364}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var61)
 		if templ_7745c5c3_Err != nil {
@@ -1998,7 +1998,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var62 string
 		templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "namecheap_client_ip")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 594, Col: 512}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 595, Col: 512}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var62)
 		if templ_7745c5c3_Err != nil {
@@ -2021,7 +2021,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var63 string
 		templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "godaddy_api_token")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 595, Col: 243}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 596, Col: 243}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var63)
 		if templ_7745c5c3_Err != nil {
@@ -2034,7 +2034,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var64 string
 		templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "GoDaddy API token"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 595, Col: 381}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 596, Col: 381}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var64)
 		if templ_7745c5c3_Err != nil {
@@ -2057,7 +2057,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var65 string
 		templ_7745c5c3_Var65, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "digitalocean_api_token")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 596, Col: 247}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 597, Col: 247}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var65)
 		if templ_7745c5c3_Err != nil {
@@ -2070,7 +2070,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var66 string
 		templ_7745c5c3_Var66, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "DigitalOcean API token"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 596, Col: 390}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 597, Col: 390}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var66)
 		if templ_7745c5c3_Err != nil {
@@ -2093,7 +2093,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var67 string
 		templ_7745c5c3_Var67, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "hetzner_api_token")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 597, Col: 232}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 598, Col: 232}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var67)
 		if templ_7745c5c3_Err != nil {
@@ -2106,7 +2106,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var68 string
 		templ_7745c5c3_Var68, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "Hetzner API token"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 597, Col: 370}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 598, Col: 370}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var68)
 		if templ_7745c5c3_Err != nil {
@@ -2119,7 +2119,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var69 string
 		templ_7745c5c3_Var69, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "hetzner_zone_id")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 597, Col: 490}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 598, Col: 490}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var69)
 		if templ_7745c5c3_Err != nil {
@@ -2142,7 +2142,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var70 string
 		templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "route53_access_key_id")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 598, Col: 224}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 599, Col: 224}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var70)
 		if templ_7745c5c3_Err != nil {
@@ -2155,7 +2155,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var71 string
 		templ_7745c5c3_Var71, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "route53_secret_access_key")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 598, Col: 380}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 599, Col: 380}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var71)
 		if templ_7745c5c3_Err != nil {
@@ -2168,7 +2168,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var72 string
 		templ_7745c5c3_Var72, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "AWS secret access key"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 598, Col: 522}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 599, Col: 522}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var72)
 		if templ_7745c5c3_Err != nil {
@@ -2181,7 +2181,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var73 string
 		templ_7745c5c3_Var73, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "route53_zone_id")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 598, Col: 649}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 599, Col: 649}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var73)
 		if templ_7745c5c3_Err != nil {
@@ -2194,7 +2194,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var74 string
 		templ_7745c5c3_Var74, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "route53_session_token")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 598, Col: 832}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 599, Col: 832}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var74)
 		if templ_7745c5c3_Err != nil {
@@ -2217,7 +2217,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var75 string
 		templ_7745c5c3_Var75, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "ovh_endpoint")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 599, Col: 207}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 600, Col: 207}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var75)
 		if templ_7745c5c3_Err != nil {
@@ -2260,7 +2260,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var76 string
 		templ_7745c5c3_Var76, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "ovh_application_key")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 599, Col: 643}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 600, Col: 643}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var76)
 		if templ_7745c5c3_Err != nil {
@@ -2273,7 +2273,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var77 string
 		templ_7745c5c3_Var77, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "ovh_application_secret")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 599, Col: 797}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 600, Col: 797}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var77)
 		if templ_7745c5c3_Err != nil {
@@ -2286,7 +2286,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var78 string
 		templ_7745c5c3_Var78, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "OVHcloud application secret"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 599, Col: 945}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 600, Col: 945}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var78)
 		if templ_7745c5c3_Err != nil {
@@ -2299,7 +2299,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var79 string
 		templ_7745c5c3_Var79, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "ovh_consumer_key")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 599, Col: 1068}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 600, Col: 1068}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var79)
 		if templ_7745c5c3_Err != nil {
@@ -2322,7 +2322,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var80 string
 		templ_7745c5c3_Var80, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "rfc2136_server")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 600, Col: 224}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 601, Col: 224}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var80)
 		if templ_7745c5c3_Err != nil {
@@ -2335,7 +2335,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var81 string
 		templ_7745c5c3_Var81, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "rfc2136_tsig_name")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 600, Col: 366}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 601, Col: 366}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var81)
 		if templ_7745c5c3_Err != nil {
@@ -2348,7 +2348,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var82 string
 		templ_7745c5c3_Var82, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "rfc2136_tsig_secret")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 600, Col: 521}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 601, Col: 521}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var82)
 		if templ_7745c5c3_Err != nil {
@@ -2361,7 +2361,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var83 string
 		templ_7745c5c3_Var83, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(view.CredentialsConfigured, "Configured — leave blank to keep", "Base64-encoded shared secret"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 600, Col: 670}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 601, Col: 670}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var83)
 		if templ_7745c5c3_Err != nil {
@@ -2374,7 +2374,7 @@ func DynamicDNSCredentialFields(view DynamicDNSPublisherView, prefix string) tem
 		var templ_7745c5c3_Var84 string
 		templ_7745c5c3_Var84, templ_7745c5c3_Err = templ.ResolveAttributeValue(prefix + "rfc2136_tsig_algorithm")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 600, Col: 786}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 601, Col: 786}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var84)
 		if templ_7745c5c3_Err != nil {
@@ -2514,7 +2514,7 @@ func SSOCard(view SSOAppView) templ.Component {
 						var templ_7745c5c3_Var88 string
 						templ_7745c5c3_Var88, templ_7745c5c3_Err = templ.JoinStringErrs(ssoCheckSummary(view.Check))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 619, Col: 139}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 620, Col: 139}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var88))
 						if templ_7745c5c3_Err != nil {
@@ -2540,7 +2540,7 @@ func SSOCard(view SSOAppView) templ.Component {
 						var templ_7745c5c3_Var89 string
 						templ_7745c5c3_Var89, templ_7745c5c3_Err = templ.JoinStringErrs(view.Check.Error)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 621, Col: 135}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 622, Col: 135}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var89))
 						if templ_7745c5c3_Err != nil {
@@ -2942,7 +2942,7 @@ func MCPToolSection(section MCPToolSectionView) templ.Component {
 		var templ_7745c5c3_Var96 string
 		templ_7745c5c3_Var96, templ_7745c5c3_Err = templ.JoinStringErrs(section.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 710, Col: 23}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 711, Col: 23}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var96))
 		if templ_7745c5c3_Err != nil {
@@ -2955,7 +2955,7 @@ func MCPToolSection(section MCPToolSectionView) templ.Component {
 		var templ_7745c5c3_Var97 string
 		templ_7745c5c3_Var97, templ_7745c5c3_Err = templ.ResolveAttributeValue(section.Title + ": " + section.Description)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 711, Col: 130}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 712, Col: 130}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var97)
 		if templ_7745c5c3_Err != nil {
@@ -2976,7 +2976,7 @@ func MCPToolSection(section MCPToolSectionView) templ.Component {
 		var templ_7745c5c3_Var98 string
 		templ_7745c5c3_Var98, templ_7745c5c3_Err = templ.JoinStringErrs(section.Description)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 713, Col: 101}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 714, Col: 101}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var98))
 		if templ_7745c5c3_Err != nil {
@@ -2989,7 +2989,7 @@ func MCPToolSection(section MCPToolSectionView) templ.Component {
 		var templ_7745c5c3_Var99 string
 		templ_7745c5c3_Var99, templ_7745c5c3_Err = templ.ResolveAttributeValue(section.Title + " tool selection")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 716, Col: 99}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 717, Col: 99}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var99)
 		if templ_7745c5c3_Err != nil {
@@ -3007,7 +3007,7 @@ func MCPToolSection(section MCPToolSectionView) templ.Component {
 			var templ_7745c5c3_Var100 string
 			templ_7745c5c3_Var100, templ_7745c5c3_Err = templ.ResolveAttributeValue(tool.Description)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 724, Col: 35}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 725, Col: 35}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var100)
 			if templ_7745c5c3_Err != nil {
@@ -3020,7 +3020,7 @@ func MCPToolSection(section MCPToolSectionView) templ.Component {
 			var templ_7745c5c3_Var101 string
 			templ_7745c5c3_Var101, templ_7745c5c3_Err = templ.ResolveAttributeValue(tool.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 725, Col: 58}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 726, Col: 58}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var101)
 			if templ_7745c5c3_Err != nil {
@@ -3043,7 +3043,7 @@ func MCPToolSection(section MCPToolSectionView) templ.Component {
 			var templ_7745c5c3_Var102 string
 			templ_7745c5c3_Var102, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(tool.ReadOnly, "true", "false"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 725, Col: 137}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 726, Col: 137}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var102)
 			if templ_7745c5c3_Err != nil {
@@ -3056,7 +3056,7 @@ func MCPToolSection(section MCPToolSectionView) templ.Component {
 			var templ_7745c5c3_Var103 string
 			templ_7745c5c3_Var103, templ_7745c5c3_Err = templ.ResolveAttributeValue(tool.Grant)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 725, Col: 163}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 726, Col: 163}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var103)
 			if templ_7745c5c3_Err != nil {
@@ -3069,7 +3069,7 @@ func MCPToolSection(section MCPToolSectionView) templ.Component {
 			var templ_7745c5c3_Var104 string
 			templ_7745c5c3_Var104, templ_7745c5c3_Err = templ.JoinStringErrs(tool.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 726, Col: 22}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 727, Col: 22}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var104))
 			if templ_7745c5c3_Err != nil {
@@ -3082,7 +3082,7 @@ func MCPToolSection(section MCPToolSectionView) templ.Component {
 			var templ_7745c5c3_Var105 string
 			templ_7745c5c3_Var105, templ_7745c5c3_Err = templ.JoinStringErrs(tool.Grant)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 727, Col: 46}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 728, Col: 46}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var105))
 			if templ_7745c5c3_Err != nil {
@@ -3144,7 +3144,7 @@ func MCPAccessStep(view MCPAppView) templ.Component {
 			var templ_7745c5c3_Var107 string
 			templ_7745c5c3_Var107, templ_7745c5c3_Err = templ.JoinStringErrs(grant)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 741, Col: 23}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 742, Col: 23}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var107))
 			if templ_7745c5c3_Err != nil {
@@ -3238,7 +3238,7 @@ func mcpGrantCoverage(group MCPGroupView) templ.Component {
 		var templ_7745c5c3_Var109 string
 		templ_7745c5c3_Var109, templ_7745c5c3_Err = templ.JoinStringErrs(group.Coverage)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 758, Col: 53}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 759, Col: 53}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var109))
 		if templ_7745c5c3_Err != nil {
@@ -3266,7 +3266,7 @@ func mcpGrantCoverage(group MCPGroupView) templ.Component {
 			var templ_7745c5c3_Var110 string
 			templ_7745c5c3_Var110, templ_7745c5c3_Err = templ.JoinStringErrs(grant)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 762, Col: 22}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 763, Col: 22}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var110))
 			if templ_7745c5c3_Err != nil {
@@ -3316,7 +3316,7 @@ func MCPAccessGroup(group MCPGroupView) templ.Component {
 		var templ_7745c5c3_Var112 string
 		templ_7745c5c3_Var112, templ_7745c5c3_Err = templ.ResolveAttributeValue(group.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 771, Col: 88}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 772, Col: 88}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var112)
 		if templ_7745c5c3_Err != nil {
@@ -3329,7 +3329,7 @@ func MCPAccessGroup(group MCPGroupView) templ.Component {
 		var templ_7745c5c3_Var113 string
 		templ_7745c5c3_Var113, templ_7745c5c3_Err = templ.ResolveAttributeValue(strings.Join(group.Grants, " "))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 771, Col: 146}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 772, Col: 146}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var113)
 		if templ_7745c5c3_Err != nil {
@@ -3355,7 +3355,7 @@ func MCPAccessGroup(group MCPGroupView) templ.Component {
 			var templ_7745c5c3_Var114 string
 			templ_7745c5c3_Var114, templ_7745c5c3_Err = templ.JoinStringErrs(group.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 773, Col: 120}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 774, Col: 120}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var114))
 			if templ_7745c5c3_Err != nil {
@@ -3449,7 +3449,7 @@ func MCPAccessGroup(group MCPGroupView) templ.Component {
 				var templ_7745c5c3_Var115 string
 				templ_7745c5c3_Var115, templ_7745c5c3_Err = templ.JoinStringErrs(group.Result)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 793, Col: 77}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 794, Col: 77}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var115))
 				if templ_7745c5c3_Err != nil {
@@ -3475,7 +3475,7 @@ func MCPAccessGroup(group MCPGroupView) templ.Component {
 				var templ_7745c5c3_Var116 string
 				templ_7745c5c3_Var116, templ_7745c5c3_Err = templ.JoinStringErrs(group.Result)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 795, Col: 84}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 796, Col: 84}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var116))
 				if templ_7745c5c3_Err != nil {
@@ -3565,7 +3565,7 @@ func MCPAccessToken(group MCPGroupView, outOfBand bool) templ.Component {
 			var templ_7745c5c3_Var120 string
 			templ_7745c5c3_Var120, templ_7745c5c3_Err = templ.JoinStringErrs(group.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 807, Col: 121}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 808, Col: 121}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var120))
 			if templ_7745c5c3_Err != nil {
@@ -3596,7 +3596,7 @@ func MCPAccessToken(group MCPGroupView, outOfBand bool) templ.Component {
 				var templ_7745c5c3_Var121 string
 				templ_7745c5c3_Var121, templ_7745c5c3_Err = templ.JoinStringErrs(group.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 811, Col: 132}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 812, Col: 132}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var121))
 				if templ_7745c5c3_Err != nil {
@@ -3622,7 +3622,7 @@ func MCPAccessToken(group MCPGroupView, outOfBand bool) templ.Component {
 					var templ_7745c5c3_Var122 string
 					templ_7745c5c3_Var122, templ_7745c5c3_Err = templ.JoinStringErrs(token.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 815, Col: 32}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 816, Col: 32}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var122))
 					if templ_7745c5c3_Err != nil {
@@ -3635,7 +3635,7 @@ func MCPAccessToken(group MCPGroupView, outOfBand bool) templ.Component {
 					var templ_7745c5c3_Var123 string
 					templ_7745c5c3_Var123, templ_7745c5c3_Err = templ.JoinStringErrs(token.LastUsed)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 815, Col: 73}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 816, Col: 73}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var123))
 					if templ_7745c5c3_Err != nil {
@@ -3648,7 +3648,7 @@ func MCPAccessToken(group MCPGroupView, outOfBand bool) templ.Component {
 					var templ_7745c5c3_Var124 string
 					templ_7745c5c3_Var124, templ_7745c5c3_Err = templ.JoinStringErrs(token.Expires)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 815, Col: 94}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 816, Col: 94}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var124))
 					if templ_7745c5c3_Err != nil {
@@ -3687,7 +3687,7 @@ func MCPAccessToken(group MCPGroupView, outOfBand bool) templ.Component {
 				var templ_7745c5c3_Var125 string
 				templ_7745c5c3_Var125, templ_7745c5c3_Err = templ.JoinStringErrs(group.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 822, Col: 122}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 823, Col: 122}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var125))
 				if templ_7745c5c3_Err != nil {
@@ -3736,7 +3736,7 @@ func MCPAccessToken(group MCPGroupView, outOfBand bool) templ.Component {
 				var templ_7745c5c3_Var126 string
 				templ_7745c5c3_Var126, templ_7745c5c3_Err = templ.JoinStringErrs(group.TokenError)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 829, Col: 88}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 830, Col: 88}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var126))
 				if templ_7745c5c3_Err != nil {
@@ -3763,7 +3763,7 @@ func MCPAccessToken(group MCPGroupView, outOfBand bool) templ.Component {
 			var templ_7745c5c3_Var127 string
 			templ_7745c5c3_Var127, templ_7745c5c3_Err = templ.JoinStringErrs(group.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 833, Col: 53}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 834, Col: 53}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var127))
 			if templ_7745c5c3_Err != nil {
@@ -3906,7 +3906,7 @@ func MCPSetupDialog(view MCPAppView) templ.Component {
 			var templ_7745c5c3_Var131 string
 			templ_7745c5c3_Var131, templ_7745c5c3_Err = templ.JoinStringErrs(mcpAddressHelp(view))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 882, Col: 130}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 883, Col: 130}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var131))
 			if templ_7745c5c3_Err != nil {
@@ -3919,7 +3919,7 @@ func MCPSetupDialog(view MCPAppView) templ.Component {
 			var templ_7745c5c3_Var132 string
 			templ_7745c5c3_Var132, templ_7745c5c3_Err = templ.JoinStringErrs(view.Address)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 884, Col: 48}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 885, Col: 48}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var132))
 			if templ_7745c5c3_Err != nil {
@@ -4080,7 +4080,7 @@ func MCPClientSnippet(label, id, snippet, help string) templ.Component {
 		var templ_7745c5c3_Var134 string
 		templ_7745c5c3_Var134, templ_7745c5c3_Err = templ.JoinStringErrs(help)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 933, Col: 29}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 934, Col: 29}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var134))
 		if templ_7745c5c3_Err != nil {
@@ -4093,7 +4093,7 @@ func MCPClientSnippet(label, id, snippet, help string) templ.Component {
 		var templ_7745c5c3_Var135 string
 		templ_7745c5c3_Var135, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 935, Col: 14}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 936, Col: 14}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var135)
 		if templ_7745c5c3_Err != nil {
@@ -4106,7 +4106,7 @@ func MCPClientSnippet(label, id, snippet, help string) templ.Component {
 		var templ_7745c5c3_Var136 string
 		templ_7745c5c3_Var136, templ_7745c5c3_Err = templ.JoinStringErrs(snippet)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 935, Col: 26}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 936, Col: 26}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var136))
 		if templ_7745c5c3_Err != nil {
@@ -4119,7 +4119,7 @@ func MCPClientSnippet(label, id, snippet, help string) templ.Component {
 		var templ_7745c5c3_Var137 string
 		templ_7745c5c3_Var137, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 936, Col: 71}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 937, Col: 71}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var137)
 		if templ_7745c5c3_Err != nil {
@@ -4132,7 +4132,7 @@ func MCPClientSnippet(label, id, snippet, help string) templ.Component {
 		var templ_7745c5c3_Var138 string
 		templ_7745c5c3_Var138, templ_7745c5c3_Err = templ.ResolveAttributeValue("Copy " + label + " setup")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 936, Col: 113}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 937, Col: 113}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var138)
 		if templ_7745c5c3_Err != nil {
@@ -4243,7 +4243,7 @@ func SSOMappingTable(view SSOAppView) templ.Component {
 					var templ_7745c5c3_Var141 string
 					templ_7745c5c3_Var141, templ_7745c5c3_Err = templ.JoinStringErrs(mapping.Group)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 988, Col: 33}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 989, Col: 33}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var141))
 					if templ_7745c5c3_Err != nil {
@@ -4256,7 +4256,7 @@ func SSOMappingTable(view SSOAppView) templ.Component {
 					var templ_7745c5c3_Var142 string
 					templ_7745c5c3_Var142, templ_7745c5c3_Err = templ.JoinStringErrs(mapping.Role)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 988, Col: 65}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 989, Col: 65}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var142))
 					if templ_7745c5c3_Err != nil {
@@ -4279,7 +4279,7 @@ func SSOMappingTable(view SSOAppView) templ.Component {
 					var templ_7745c5c3_Var143 string
 					templ_7745c5c3_Var143, templ_7745c5c3_Err = templ.JoinStringErrs(view.DefaultRoles)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 991, Col: 80}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 992, Col: 80}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var143))
 					if templ_7745c5c3_Err != nil {
@@ -4663,7 +4663,7 @@ func UniFiCardActionButtons(view UniFiAppView) templ.Component {
 			var templ_7745c5c3_Var154 string
 			templ_7745c5c3_Var154, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(view.Status.Running, "Synchronizing…", "Sync Now"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1066, Col: 207}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1067, Col: 207}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var154))
 			if templ_7745c5c3_Err != nil {
@@ -4761,7 +4761,7 @@ func UniFiStatusPanel(view UniFiAppView) templ.Component {
 		var templ_7745c5c3_Var157 string
 		templ_7745c5c3_Var157, templ_7745c5c3_Err = templ.ResolveAttributeValue(unifiStatusPoll(view.Status.Running))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1091, Col: 130}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1092, Col: 130}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var157)
 		if templ_7745c5c3_Err != nil {
@@ -4787,7 +4787,7 @@ func UniFiStatusPanel(view UniFiAppView) templ.Component {
 			var templ_7745c5c3_Var158 string
 			templ_7745c5c3_Var158, templ_7745c5c3_Err = templ.JoinStringErrs(view.Status.LastError)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1093, Col: 136}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1094, Col: 136}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var158))
 			if templ_7745c5c3_Err != nil {
@@ -4871,7 +4871,7 @@ func UniFiStatusPanel(view UniFiAppView) templ.Component {
 			var templ_7745c5c3_Var160 string
 			templ_7745c5c3_Var160, templ_7745c5c3_Err = templ.JoinStringErrs(view.Status.LastSuccess)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1109, Col: 53}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1110, Col: 53}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var160))
 			if templ_7745c5c3_Err != nil {
@@ -4889,7 +4889,7 @@ func UniFiStatusPanel(view UniFiAppView) templ.Component {
 				var templ_7745c5c3_Var161 string
 				templ_7745c5c3_Var161, templ_7745c5c3_Err = templ.JoinStringErrs(view.Status.Duration)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1111, Col: 41}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1112, Col: 41}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var161))
 				if templ_7745c5c3_Err != nil {
@@ -4912,7 +4912,7 @@ func UniFiStatusPanel(view UniFiAppView) templ.Component {
 				var templ_7745c5c3_Var162 string
 				templ_7745c5c3_Var162, templ_7745c5c3_Err = templ.JoinStringErrs(view.Status.NextAttempt)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1114, Col: 44}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1115, Col: 44}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var162))
 				if templ_7745c5c3_Err != nil {
@@ -4985,7 +4985,7 @@ func UniFiMappingTable(view UniFiAppView, outOfBand bool) templ.Component {
 				var templ_7745c5c3_Var165 string
 				templ_7745c5c3_Var165, templ_7745c5c3_Err = templ.JoinStringErrs(mapping.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1131, Col: 30}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1132, Col: 30}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var165))
 				if templ_7745c5c3_Err != nil {
@@ -4998,7 +4998,7 @@ func UniFiMappingTable(view UniFiAppView, outOfBand bool) templ.Component {
 				var templ_7745c5c3_Var166 templ.SafeURL
 				templ_7745c5c3_Var166, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/zones/" + mapping.Zone))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1132, Col: 57}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1133, Col: 57}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var166))
 				if templ_7745c5c3_Err != nil {
@@ -5011,7 +5011,7 @@ func UniFiMappingTable(view UniFiAppView, outOfBand bool) templ.Component {
 				var templ_7745c5c3_Var167 string
 				templ_7745c5c3_Var167, templ_7745c5c3_Err = templ.JoinStringErrs(mapping.Zone)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1132, Col: 74}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1133, Col: 74}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var167))
 				if templ_7745c5c3_Err != nil {
@@ -5029,7 +5029,7 @@ func UniFiMappingTable(view UniFiAppView, outOfBand bool) templ.Component {
 					var templ_7745c5c3_Var168 string
 					templ_7745c5c3_Var168, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(mapping.Hosts))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1134, Col: 36}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1135, Col: 36}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var168))
 					if templ_7745c5c3_Err != nil {
@@ -5052,7 +5052,7 @@ func UniFiMappingTable(view UniFiAppView, outOfBand bool) templ.Component {
 				var templ_7745c5c3_Var169 string
 				templ_7745c5c3_Var169, templ_7745c5c3_Err = templ.JoinStringErrs(mapping.Preview)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1138, Col: 50}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1139, Col: 50}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var169))
 				if templ_7745c5c3_Err != nil {
@@ -5065,7 +5065,7 @@ func UniFiMappingTable(view UniFiAppView, outOfBand bool) templ.Component {
 				var templ_7745c5c3_Var170 string
 				templ_7745c5c3_Var170, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(mapping.TTL))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1139, Col: 33}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1140, Col: 33}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var170))
 				if templ_7745c5c3_Err != nil {
@@ -5078,7 +5078,7 @@ func UniFiMappingTable(view UniFiAppView, outOfBand bool) templ.Component {
 				var templ_7745c5c3_Var171 string
 				templ_7745c5c3_Var171, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(mapping.Reverse, "Yes", "No"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1140, Col: 46}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1141, Col: 46}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var171))
 				if templ_7745c5c3_Err != nil {
@@ -5174,7 +5174,7 @@ func UniFiWizardDialog(view UniFiAppView) templ.Component {
 				var templ_7745c5c3_Var174 string
 				templ_7745c5c3_Var174, templ_7745c5c3_Err = templ.JoinStringErrs(unifiStepProblem(view.Wizard.Step))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1163, Col: 109}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1164, Col: 109}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var174))
 				if templ_7745c5c3_Err != nil {
@@ -5187,7 +5187,7 @@ func UniFiWizardDialog(view UniFiAppView) templ.Component {
 				var templ_7745c5c3_Var175 string
 				templ_7745c5c3_Var175, templ_7745c5c3_Err = templ.JoinStringErrs(view.Wizard.Error)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1163, Col: 145}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1164, Col: 145}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var175))
 				if templ_7745c5c3_Err != nil {
@@ -5270,7 +5270,7 @@ func UniFiWizardProgress(step string) templ.Component {
 		var templ_7745c5c3_Var177 string
 		templ_7745c5c3_Var177, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("Step %d of 4", unifiStepNumber(step)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1182, Col: 93}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1183, Col: 93}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var177)
 		if templ_7745c5c3_Err != nil {
@@ -5366,7 +5366,7 @@ func UniFiWizardStepMarker(step string, position int, target, label string) temp
 			var templ_7745c5c3_Var181 string
 			templ_7745c5c3_Var181, templ_7745c5c3_Err = templ.ResolveAttributeValue(target)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1198, Col: 100}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1199, Col: 100}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var181)
 			if templ_7745c5c3_Err != nil {
@@ -5379,7 +5379,7 @@ func UniFiWizardStepMarker(step string, position int, target, label string) temp
 			var templ_7745c5c3_Var182 string
 			templ_7745c5c3_Var182, templ_7745c5c3_Err = templ.ResolveAttributeValue("Back to " + label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1198, Col: 144}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1199, Col: 144}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var182)
 			if templ_7745c5c3_Err != nil {
@@ -5392,7 +5392,7 @@ func UniFiWizardStepMarker(step string, position int, target, label string) temp
 			var templ_7745c5c3_Var183 string
 			templ_7745c5c3_Var183, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1199, Col: 38}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1200, Col: 38}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var183))
 			if templ_7745c5c3_Err != nil {
@@ -5428,7 +5428,7 @@ func UniFiWizardStepMarker(step string, position int, target, label string) temp
 			var templ_7745c5c3_Var186 string
 			templ_7745c5c3_Var186, templ_7745c5c3_Err = templ.JoinStringErrs(unifiStepMarker(step, position))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1202, Col: 87}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1203, Col: 87}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var186))
 			if templ_7745c5c3_Err != nil {
@@ -5441,7 +5441,7 @@ func UniFiWizardStepMarker(step string, position int, target, label string) temp
 			var templ_7745c5c3_Var187 string
 			templ_7745c5c3_Var187, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1202, Col: 110}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1203, Col: 110}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var187))
 			if templ_7745c5c3_Err != nil {
@@ -5492,7 +5492,7 @@ func UniFiWizardConnectStep(wizard UniFiWizardView) templ.Component {
 		var templ_7745c5c3_Var189 string
 		templ_7745c5c3_Var189, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.ControllerURL)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1211, Col: 116}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1212, Col: 116}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var189)
 		if templ_7745c5c3_Err != nil {
@@ -5505,7 +5505,7 @@ func UniFiWizardConnectStep(wizard UniFiWizardView) templ.Component {
 		var templ_7745c5c3_Var190 string
 		templ_7745c5c3_Var190, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.Site)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1212, Col: 87}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1213, Col: 87}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var190)
 		if templ_7745c5c3_Err != nil {
@@ -5566,7 +5566,7 @@ func UniFiWizardConnectStep(wizard UniFiWizardView) templ.Component {
 		var templ_7745c5c3_Var191 string
 		templ_7745c5c3_Var191, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.Username)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1223, Col: 99}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1224, Col: 99}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var191)
 		if templ_7745c5c3_Err != nil {
@@ -5579,7 +5579,7 @@ func UniFiWizardConnectStep(wizard UniFiWizardView) templ.Component {
 		var templ_7745c5c3_Var192 string
 		templ_7745c5c3_Var192, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(wizard.CredentialsConfigured, "Configured — leave blank to keep", "Local account password"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1224, Col: 234}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1225, Col: 234}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var192)
 		if templ_7745c5c3_Err != nil {
@@ -5600,7 +5600,7 @@ func UniFiWizardConnectStep(wizard UniFiWizardView) templ.Component {
 		var templ_7745c5c3_Var193 string
 		templ_7745c5c3_Var193, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.CAFile)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1228, Col: 110}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1229, Col: 110}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var193)
 		if templ_7745c5c3_Err != nil {
@@ -5685,7 +5685,7 @@ func UniFiWizardNetworksStep(wizard UniFiWizardView) templ.Component {
 				var templ_7745c5c3_Var196 string
 				templ_7745c5c3_Var196, templ_7745c5c3_Err = templ.ResolveAttributeValue(unifiNetworkFieldID(index))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1242, Col: 47}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1243, Col: 47}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var196)
 				if templ_7745c5c3_Err != nil {
@@ -5698,7 +5698,7 @@ func UniFiWizardNetworksStep(wizard UniFiWizardView) templ.Component {
 				var templ_7745c5c3_Var197 string
 				templ_7745c5c3_Var197, templ_7745c5c3_Err = templ.ResolveAttributeValue(network.ID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1242, Col: 99}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1243, Col: 99}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var197)
 				if templ_7745c5c3_Err != nil {
@@ -5721,7 +5721,7 @@ func UniFiWizardNetworksStep(wizard UniFiWizardView) templ.Component {
 				var templ_7745c5c3_Var198 string
 				templ_7745c5c3_Var198, templ_7745c5c3_Err = templ.ResolveAttributeValue(unifiNetworkFieldID(index))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1243, Col: 48}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1244, Col: 48}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var198)
 				if templ_7745c5c3_Err != nil {
@@ -5734,7 +5734,7 @@ func UniFiWizardNetworksStep(wizard UniFiWizardView) templ.Component {
 				var templ_7745c5c3_Var199 string
 				templ_7745c5c3_Var199, templ_7745c5c3_Err = templ.JoinStringErrs(network.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1243, Col: 65}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1244, Col: 65}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var199))
 				if templ_7745c5c3_Err != nil {
@@ -5747,7 +5747,7 @@ func UniFiWizardNetworksStep(wizard UniFiWizardView) templ.Component {
 				var templ_7745c5c3_Var200 string
 				templ_7745c5c3_Var200, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(network.Subnet != "", network.Subnet, "—"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1244, Col: 87}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1245, Col: 87}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var200))
 				if templ_7745c5c3_Err != nil {
@@ -5760,7 +5760,7 @@ func UniFiWizardNetworksStep(wizard UniFiWizardView) templ.Component {
 				var templ_7745c5c3_Var201 string
 				templ_7745c5c3_Var201, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(network.Hosts))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1245, Col: 55}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1246, Col: 55}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var201))
 				if templ_7745c5c3_Err != nil {
@@ -5880,7 +5880,7 @@ func UniFiWizardZonesStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var203 string
 			templ_7745c5c3_Var203, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1268, Col: 48}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1269, Col: 48}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var203)
 			if templ_7745c5c3_Err != nil {
@@ -5911,7 +5911,7 @@ func UniFiWizardZonesStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var204 string
 			templ_7745c5c3_Var204, templ_7745c5c3_Err = templ.ResolveAttributeValue("network_id_" + strconv.Itoa(index))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1275, Col: 68}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1276, Col: 68}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var204)
 			if templ_7745c5c3_Err != nil {
@@ -5924,7 +5924,7 @@ func UniFiWizardZonesStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var205 string
 			templ_7745c5c3_Var205, templ_7745c5c3_Err = templ.ResolveAttributeValue(network.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1275, Col: 89}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1276, Col: 89}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var205)
 			if templ_7745c5c3_Err != nil {
@@ -5937,7 +5937,7 @@ func UniFiWizardZonesStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var206 string
 			templ_7745c5c3_Var206, templ_7745c5c3_Err = templ.ResolveAttributeValue("network_name_" + strconv.Itoa(index))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1276, Col: 70}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1277, Col: 70}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var206)
 			if templ_7745c5c3_Err != nil {
@@ -5950,7 +5950,7 @@ func UniFiWizardZonesStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var207 string
 			templ_7745c5c3_Var207, templ_7745c5c3_Err = templ.ResolveAttributeValue(network.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1276, Col: 93}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1277, Col: 93}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var207)
 			if templ_7745c5c3_Err != nil {
@@ -5963,7 +5963,7 @@ func UniFiWizardZonesStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var208 string
 			templ_7745c5c3_Var208, templ_7745c5c3_Err = templ.ResolveAttributeValue("network_subnet_" + strconv.Itoa(index))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1277, Col: 72}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1278, Col: 72}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var208)
 			if templ_7745c5c3_Err != nil {
@@ -5976,7 +5976,7 @@ func UniFiWizardZonesStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var209 string
 			templ_7745c5c3_Var209, templ_7745c5c3_Err = templ.ResolveAttributeValue(network.Subnet)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1277, Col: 97}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1278, Col: 97}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var209)
 			if templ_7745c5c3_Err != nil {
@@ -5989,7 +5989,7 @@ func UniFiWizardZonesStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var210 string
 			templ_7745c5c3_Var210, templ_7745c5c3_Err = templ.JoinStringErrs(network.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1278, Col: 35}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1279, Col: 35}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var210))
 			if templ_7745c5c3_Err != nil {
@@ -6002,7 +6002,7 @@ func UniFiWizardZonesStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var211 string
 			templ_7745c5c3_Var211, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(network.Subnet != "", network.Subnet, "no subnet"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1278, Col: 130}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1279, Col: 130}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var211))
 			if templ_7745c5c3_Err != nil {
@@ -6015,7 +6015,7 @@ func UniFiWizardZonesStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var212 string
 			templ_7745c5c3_Var212, templ_7745c5c3_Err = templ.ResolveAttributeValue("zone_" + strconv.Itoa(index))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1280, Col: 95}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1281, Col: 95}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var212)
 			if templ_7745c5c3_Err != nil {
@@ -6028,7 +6028,7 @@ func UniFiWizardZonesStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var213 string
 			templ_7745c5c3_Var213, templ_7745c5c3_Err = templ.ResolveAttributeValue(network.Zone)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1280, Col: 118}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1281, Col: 118}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var213)
 			if templ_7745c5c3_Err != nil {
@@ -6046,7 +6046,7 @@ func UniFiWizardZonesStep(wizard UniFiWizardView) templ.Component {
 				var templ_7745c5c3_Var214 string
 				templ_7745c5c3_Var214, templ_7745c5c3_Err = templ.JoinStringErrs(network.Preview)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1283, Col: 41}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1284, Col: 41}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var214))
 				if templ_7745c5c3_Err != nil {
@@ -6064,7 +6064,7 @@ func UniFiWizardZonesStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var215 string
 			templ_7745c5c3_Var215, templ_7745c5c3_Err = templ.ResolveAttributeValue("template_" + strconv.Itoa(index))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1288, Col: 55}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1289, Col: 55}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var215)
 			if templ_7745c5c3_Err != nil {
@@ -6097,7 +6097,7 @@ func UniFiWizardZonesStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var216 string
 			templ_7745c5c3_Var216, templ_7745c5c3_Err = templ.ResolveAttributeValue("ttl_" + strconv.Itoa(index))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1293, Col: 107}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1294, Col: 107}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var216)
 			if templ_7745c5c3_Err != nil {
@@ -6110,7 +6110,7 @@ func UniFiWizardZonesStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var217 string
 			templ_7745c5c3_Var217, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(unifiRowTTL(network.TTL)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1293, Col: 154}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1294, Col: 154}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var217)
 			if templ_7745c5c3_Err != nil {
@@ -6123,7 +6123,7 @@ func UniFiWizardZonesStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var218 string
 			templ_7745c5c3_Var218, templ_7745c5c3_Err = templ.ResolveAttributeValue("reverse_" + strconv.Itoa(index))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1295, Col: 105}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1296, Col: 105}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var218)
 			if templ_7745c5c3_Err != nil {
@@ -6151,7 +6151,7 @@ func UniFiWizardZonesStep(wizard UniFiWizardView) templ.Component {
 				var templ_7745c5c3_Var219 string
 				templ_7745c5c3_Var219, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(network.ReverseZones, ", "))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1297, Col: 61}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1298, Col: 61}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var219))
 				if templ_7745c5c3_Err != nil {
@@ -6184,7 +6184,7 @@ func UniFiWizardZonesStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var220 string
 			templ_7745c5c3_Var220, templ_7745c5c3_Err = templ.ResolveAttributeValue(name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1307, Col: 24}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1308, Col: 24}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var220)
 			if templ_7745c5c3_Err != nil {
@@ -6244,7 +6244,7 @@ func UniFiWizardReviewStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var222 string
 			templ_7745c5c3_Var222, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1318, Col: 48}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1319, Col: 48}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var222)
 			if templ_7745c5c3_Err != nil {
@@ -6263,7 +6263,7 @@ func UniFiWizardReviewStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var223 string
 			templ_7745c5c3_Var223, templ_7745c5c3_Err = templ.ResolveAttributeValue("network_id_" + strconv.Itoa(index))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1321, Col: 65}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1322, Col: 65}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var223)
 			if templ_7745c5c3_Err != nil {
@@ -6276,7 +6276,7 @@ func UniFiWizardReviewStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var224 string
 			templ_7745c5c3_Var224, templ_7745c5c3_Err = templ.ResolveAttributeValue(network.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1321, Col: 86}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1322, Col: 86}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var224)
 			if templ_7745c5c3_Err != nil {
@@ -6289,7 +6289,7 @@ func UniFiWizardReviewStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var225 string
 			templ_7745c5c3_Var225, templ_7745c5c3_Err = templ.ResolveAttributeValue("network_name_" + strconv.Itoa(index))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1322, Col: 67}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1323, Col: 67}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var225)
 			if templ_7745c5c3_Err != nil {
@@ -6302,7 +6302,7 @@ func UniFiWizardReviewStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var226 string
 			templ_7745c5c3_Var226, templ_7745c5c3_Err = templ.ResolveAttributeValue(network.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1322, Col: 90}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1323, Col: 90}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var226)
 			if templ_7745c5c3_Err != nil {
@@ -6315,7 +6315,7 @@ func UniFiWizardReviewStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var227 string
 			templ_7745c5c3_Var227, templ_7745c5c3_Err = templ.ResolveAttributeValue("network_subnet_" + strconv.Itoa(index))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1323, Col: 69}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1324, Col: 69}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var227)
 			if templ_7745c5c3_Err != nil {
@@ -6328,7 +6328,7 @@ func UniFiWizardReviewStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var228 string
 			templ_7745c5c3_Var228, templ_7745c5c3_Err = templ.ResolveAttributeValue(network.Subnet)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1323, Col: 94}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1324, Col: 94}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var228)
 			if templ_7745c5c3_Err != nil {
@@ -6341,7 +6341,7 @@ func UniFiWizardReviewStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var229 string
 			templ_7745c5c3_Var229, templ_7745c5c3_Err = templ.ResolveAttributeValue("zone_" + strconv.Itoa(index))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1324, Col: 59}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1325, Col: 59}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var229)
 			if templ_7745c5c3_Err != nil {
@@ -6354,7 +6354,7 @@ func UniFiWizardReviewStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var230 string
 			templ_7745c5c3_Var230, templ_7745c5c3_Err = templ.ResolveAttributeValue(network.Zone)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1324, Col: 82}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1325, Col: 82}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var230)
 			if templ_7745c5c3_Err != nil {
@@ -6367,7 +6367,7 @@ func UniFiWizardReviewStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var231 string
 			templ_7745c5c3_Var231, templ_7745c5c3_Err = templ.ResolveAttributeValue("template_" + strconv.Itoa(index))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1325, Col: 63}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1326, Col: 63}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var231)
 			if templ_7745c5c3_Err != nil {
@@ -6380,7 +6380,7 @@ func UniFiWizardReviewStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var232 string
 			templ_7745c5c3_Var232, templ_7745c5c3_Err = templ.ResolveAttributeValue(network.Template)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1325, Col: 90}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1326, Col: 90}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var232)
 			if templ_7745c5c3_Err != nil {
@@ -6393,7 +6393,7 @@ func UniFiWizardReviewStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var233 string
 			templ_7745c5c3_Var233, templ_7745c5c3_Err = templ.ResolveAttributeValue("ttl_" + strconv.Itoa(index))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1326, Col: 58}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1327, Col: 58}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var233)
 			if templ_7745c5c3_Err != nil {
@@ -6406,7 +6406,7 @@ func UniFiWizardReviewStep(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var234 string
 			templ_7745c5c3_Var234, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprint(unifiRowTTL(network.TTL)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1326, Col: 105}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1327, Col: 105}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var234)
 			if templ_7745c5c3_Err != nil {
@@ -6424,7 +6424,7 @@ func UniFiWizardReviewStep(wizard UniFiWizardView) templ.Component {
 				var templ_7745c5c3_Var235 string
 				templ_7745c5c3_Var235, templ_7745c5c3_Err = templ.ResolveAttributeValue("reverse_" + strconv.Itoa(index))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1328, Col: 63}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1329, Col: 63}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var235)
 				if templ_7745c5c3_Err != nil {
@@ -6558,7 +6558,7 @@ func unifiReviewPlan(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var238 string
 			templ_7745c5c3_Var238, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(wizard.Plan.CreatedZones, ", "))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1349, Col: 151}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1350, Col: 151}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var238))
 			if templ_7745c5c3_Err != nil {
@@ -6607,7 +6607,7 @@ func unifiReviewPlan(wizard UniFiWizardView) templ.Component {
 			var templ_7745c5c3_Var239 string
 			templ_7745c5c3_Var239, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d entries produced no record", len(wizard.Plan.Skipped)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1359, Col: 114}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1360, Col: 114}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var239))
 			if templ_7745c5c3_Err != nil {
@@ -6625,7 +6625,7 @@ func unifiReviewPlan(wizard UniFiWizardView) templ.Component {
 				var templ_7745c5c3_Var240 string
 				templ_7745c5c3_Var240, templ_7745c5c3_Err = templ.JoinStringErrs(entry)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1361, Col: 15}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1362, Col: 15}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var240))
 				if templ_7745c5c3_Err != nil {
@@ -6696,7 +6696,7 @@ func UniFiPlanRecords(title string, records []UniFiPlanRecordView) templ.Compone
 			var templ_7745c5c3_Var242 string
 			templ_7745c5c3_Var242, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%s (%d)", title, len(records)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1371, Col: 57}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1372, Col: 57}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var242))
 			if templ_7745c5c3_Err != nil {
@@ -6726,7 +6726,7 @@ func UniFiPlanRecords(title string, records []UniFiPlanRecordView) templ.Compone
 					var templ_7745c5c3_Var244 string
 					templ_7745c5c3_Var244, templ_7745c5c3_Err = templ.JoinStringErrs(record.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1374, Col: 32}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1375, Col: 32}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var244))
 					if templ_7745c5c3_Err != nil {
@@ -6739,7 +6739,7 @@ func UniFiPlanRecords(title string, records []UniFiPlanRecordView) templ.Compone
 					var templ_7745c5c3_Var245 string
 					templ_7745c5c3_Var245, templ_7745c5c3_Err = templ.JoinStringErrs(record.Type)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1374, Col: 63}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1375, Col: 63}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var245))
 					if templ_7745c5c3_Err != nil {
@@ -6752,7 +6752,7 @@ func UniFiPlanRecords(title string, records []UniFiPlanRecordView) templ.Compone
 					var templ_7745c5c3_Var246 string
 					templ_7745c5c3_Var246, templ_7745c5c3_Err = templ.JoinStringErrs(record.Value)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1374, Col: 94}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1375, Col: 94}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var246))
 					if templ_7745c5c3_Err != nil {
@@ -6809,7 +6809,7 @@ func UniFiWizardCarriedConnection(wizard UniFiWizardView) templ.Component {
 		var templ_7745c5c3_Var248 string
 		templ_7745c5c3_Var248, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.ControllerURL)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1385, Col: 72}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1386, Col: 72}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var248)
 		if templ_7745c5c3_Err != nil {
@@ -6822,7 +6822,7 @@ func UniFiWizardCarriedConnection(wizard UniFiWizardView) templ.Component {
 		var templ_7745c5c3_Var249 string
 		templ_7745c5c3_Var249, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.Site)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1386, Col: 53}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1387, Col: 53}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var249)
 		if templ_7745c5c3_Err != nil {
@@ -6835,7 +6835,7 @@ func UniFiWizardCarriedConnection(wizard UniFiWizardView) templ.Component {
 		var templ_7745c5c3_Var250 string
 		templ_7745c5c3_Var250, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.AuthMode)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1387, Col: 62}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1388, Col: 62}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var250)
 		if templ_7745c5c3_Err != nil {
@@ -6848,7 +6848,7 @@ func UniFiWizardCarriedConnection(wizard UniFiWizardView) templ.Component {
 		var templ_7745c5c3_Var251 string
 		templ_7745c5c3_Var251, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.Username)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1388, Col: 61}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1389, Col: 61}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var251)
 		if templ_7745c5c3_Err != nil {
@@ -6861,7 +6861,7 @@ func UniFiWizardCarriedConnection(wizard UniFiWizardView) templ.Component {
 		var templ_7745c5c3_Var252 string
 		templ_7745c5c3_Var252, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.CAFile)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1389, Col: 62}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1390, Col: 62}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var252)
 		if templ_7745c5c3_Err != nil {
@@ -6911,7 +6911,7 @@ func UniFiWizardCarriedPublishing(wizard UniFiWizardView) templ.Component {
 		var templ_7745c5c3_Var254 string
 		templ_7745c5c3_Var254, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.Interval)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1399, Col: 61}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1400, Col: 61}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var254)
 		if templ_7745c5c3_Err != nil {
@@ -7404,7 +7404,7 @@ func SSOWizardDialog(wizard SSOWizardView) templ.Component {
 				var templ_7745c5c3_Var258 string
 				templ_7745c5c3_Var258, templ_7745c5c3_Err = templ.JoinStringErrs(ssoStepProblem(wizard.Step))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1772, Col: 102}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1773, Col: 102}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var258))
 				if templ_7745c5c3_Err != nil {
@@ -7417,7 +7417,7 @@ func SSOWizardDialog(wizard SSOWizardView) templ.Component {
 				var templ_7745c5c3_Var259 string
 				templ_7745c5c3_Var259, templ_7745c5c3_Err = templ.JoinStringErrs(wizard.Error)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1772, Col: 133}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1773, Col: 133}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var259))
 				if templ_7745c5c3_Err != nil {
@@ -7500,7 +7500,7 @@ func SSOWizardProgress(step string) templ.Component {
 		var templ_7745c5c3_Var261 string
 		templ_7745c5c3_Var261, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("Step %d of 4", ssoStepIndex(step)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1791, Col: 90}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1792, Col: 90}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var261)
 		if templ_7745c5c3_Err != nil {
@@ -7596,7 +7596,7 @@ func SSOWizardStepMarker(step string, position int, target, label string) templ.
 			var templ_7745c5c3_Var265 string
 			templ_7745c5c3_Var265, templ_7745c5c3_Err = templ.ResolveAttributeValue(target)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1807, Col: 98}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1808, Col: 98}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var265)
 			if templ_7745c5c3_Err != nil {
@@ -7609,7 +7609,7 @@ func SSOWizardStepMarker(step string, position int, target, label string) templ.
 			var templ_7745c5c3_Var266 string
 			templ_7745c5c3_Var266, templ_7745c5c3_Err = templ.ResolveAttributeValue("Back to " + label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1807, Col: 142}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1808, Col: 142}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var266)
 			if templ_7745c5c3_Err != nil {
@@ -7622,7 +7622,7 @@ func SSOWizardStepMarker(step string, position int, target, label string) templ.
 			var templ_7745c5c3_Var267 string
 			templ_7745c5c3_Var267, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1808, Col: 38}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1809, Col: 38}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var267))
 			if templ_7745c5c3_Err != nil {
@@ -7658,7 +7658,7 @@ func SSOWizardStepMarker(step string, position int, target, label string) templ.
 			var templ_7745c5c3_Var270 string
 			templ_7745c5c3_Var270, templ_7745c5c3_Err = templ.JoinStringErrs(ssoStepMarker(step, position))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1811, Col: 83}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1812, Col: 83}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var270))
 			if templ_7745c5c3_Err != nil {
@@ -7671,7 +7671,7 @@ func SSOWizardStepMarker(step string, position int, target, label string) templ.
 			var templ_7745c5c3_Var271 string
 			templ_7745c5c3_Var271, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1811, Col: 106}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1812, Col: 106}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var271))
 			if templ_7745c5c3_Err != nil {
@@ -7724,7 +7724,7 @@ func SSOWizardProviderStep(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var273 string
 		templ_7745c5c3_Var273, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.Issuer)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1824, Col: 44}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1825, Col: 44}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var273)
 		if templ_7745c5c3_Err != nil {
@@ -7737,7 +7737,7 @@ func SSOWizardProviderStep(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var274 string
 		templ_7745c5c3_Var274, templ_7745c5c3_Err = templ.JoinStringErrs("/.well-known/openid-configuration")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1825, Col: 58}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1826, Col: 58}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var274))
 		if templ_7745c5c3_Err != nil {
@@ -7750,7 +7750,7 @@ func SSOWizardProviderStep(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var275 string
 		templ_7745c5c3_Var275, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.ClientID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1830, Col: 50}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1831, Col: 50}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var275)
 		if templ_7745c5c3_Err != nil {
@@ -7763,7 +7763,7 @@ func SSOWizardProviderStep(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var276 string
 		templ_7745c5c3_Var276, templ_7745c5c3_Err = templ.ResolveAttributeValue(ssoWizardSecretPlaceholder(wizard))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1834, Col: 123}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1835, Col: 123}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var276)
 		if templ_7745c5c3_Err != nil {
@@ -7776,7 +7776,7 @@ func SSOWizardProviderStep(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var277 string
 		templ_7745c5c3_Var277, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.RedirectURL)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1839, Col: 55}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1840, Col: 55}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var277)
 		if templ_7745c5c3_Err != nil {
@@ -7789,7 +7789,7 @@ func SSOWizardProviderStep(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var278 string
 		templ_7745c5c3_Var278, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.DerivedRedirectURL)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1839, Col: 97}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1840, Col: 97}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var278)
 		if templ_7745c5c3_Err != nil {
@@ -7802,7 +7802,7 @@ func SSOWizardProviderStep(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var279 string
 		templ_7745c5c3_Var279, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.Label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1844, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1845, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var279)
 		if templ_7745c5c3_Err != nil {
@@ -7815,7 +7815,7 @@ func SSOWizardProviderStep(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var280 string
 		templ_7745c5c3_Var280, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.Scopes)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1847, Col: 57}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1848, Col: 57}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var280)
 		if templ_7745c5c3_Err != nil {
@@ -7828,7 +7828,7 @@ func SSOWizardProviderStep(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var281 string
 		templ_7745c5c3_Var281, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.UsernameClaim)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1848, Col: 72}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1849, Col: 72}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var281)
 		if templ_7745c5c3_Err != nil {
@@ -7841,7 +7841,7 @@ func SSOWizardProviderStep(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var282 string
 		templ_7745c5c3_Var282, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.GroupsClaim)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1849, Col: 68}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1850, Col: 68}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var282)
 		if templ_7745c5c3_Err != nil {
@@ -7892,7 +7892,7 @@ func SSOWizardClaimsStep(wizard SSOWizardView) templ.Component {
 			var templ_7745c5c3_Var284 string
 			templ_7745c5c3_Var284, templ_7745c5c3_Err = templ.JoinStringErrs(wizard.Probe.Issuer)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1857, Col: 33}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1858, Col: 33}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var284))
 			if templ_7745c5c3_Err != nil {
@@ -7905,7 +7905,7 @@ func SSOWizardClaimsStep(wizard SSOWizardView) templ.Component {
 			var templ_7745c5c3_Var285 string
 			templ_7745c5c3_Var285, templ_7745c5c3_Err = templ.JoinStringErrs(ssoProbeSummary(wizard.Probe))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1858, Col: 41}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1859, Col: 41}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var285))
 			if templ_7745c5c3_Err != nil {
@@ -7923,7 +7923,7 @@ func SSOWizardClaimsStep(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var286 string
 		templ_7745c5c3_Var286, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.Scopes)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1864, Col: 44}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1865, Col: 44}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var286)
 		if templ_7745c5c3_Err != nil {
@@ -7941,7 +7941,7 @@ func SSOWizardClaimsStep(wizard SSOWizardView) templ.Component {
 			var templ_7745c5c3_Var287 string
 			templ_7745c5c3_Var287, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(wizard.Probe.Scopes, ", "))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1866, Col: 76}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1867, Col: 76}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var287))
 			if templ_7745c5c3_Err != nil {
@@ -7964,7 +7964,7 @@ func SSOWizardClaimsStep(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var288 string
 		templ_7745c5c3_Var288, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.UsernameClaim)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1874, Col: 60}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1875, Col: 60}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var288)
 		if templ_7745c5c3_Err != nil {
@@ -7977,7 +7977,7 @@ func SSOWizardClaimsStep(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var289 string
 		templ_7745c5c3_Var289, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.GroupsClaim)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1878, Col: 56}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1879, Col: 56}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var289)
 		if templ_7745c5c3_Err != nil {
@@ -7995,7 +7995,7 @@ func SSOWizardClaimsStep(wizard SSOWizardView) templ.Component {
 			var templ_7745c5c3_Var290 string
 			templ_7745c5c3_Var290, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(wizard.Probe.Claims, ", "))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1882, Col: 103}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1883, Col: 103}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var290))
 			if templ_7745c5c3_Err != nil {
@@ -8086,7 +8086,7 @@ func SSOWizardRolesStep(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var292 string
 		templ_7745c5c3_Var292, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.DefaultRoles)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1900, Col: 57}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1901, Col: 57}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var292)
 		if templ_7745c5c3_Err != nil {
@@ -8099,7 +8099,7 @@ func SSOWizardRolesStep(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var293 string
 		templ_7745c5c3_Var293, templ_7745c5c3_Err = templ.JoinStringErrs(wizard.GroupsClaim)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1905, Col: 111}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1906, Col: 111}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var293))
 		if templ_7745c5c3_Err != nil {
@@ -8117,7 +8117,7 @@ func SSOWizardRolesStep(wizard SSOWizardView) templ.Component {
 			var templ_7745c5c3_Var294 string
 			templ_7745c5c3_Var294, templ_7745c5c3_Err = templ.ResolveAttributeValue(mapping.Group)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1908, Col: 53}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1909, Col: 53}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var294)
 			if templ_7745c5c3_Err != nil {
@@ -8130,7 +8130,7 @@ func SSOWizardRolesStep(wizard SSOWizardView) templ.Component {
 			var templ_7745c5c3_Var295 string
 			templ_7745c5c3_Var295, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("Provider group %d", index+1))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1908, Col: 135}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1909, Col: 135}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var295)
 			if templ_7745c5c3_Err != nil {
@@ -8151,7 +8151,7 @@ func SSOWizardRolesStep(wizard SSOWizardView) templ.Component {
 			var templ_7745c5c3_Var296 string
 			templ_7745c5c3_Var296, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("Sable role %d", index+1))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1910, Col: 101}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1911, Col: 101}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var296)
 			if templ_7745c5c3_Err != nil {
@@ -8169,7 +8169,7 @@ func SSOWizardRolesStep(wizard SSOWizardView) templ.Component {
 				var templ_7745c5c3_Var297 string
 				templ_7745c5c3_Var297, templ_7745c5c3_Err = templ.ResolveAttributeValue(role)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1913, Col: 26}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1914, Col: 26}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var297)
 				if templ_7745c5c3_Err != nil {
@@ -8192,7 +8192,7 @@ func SSOWizardRolesStep(wizard SSOWizardView) templ.Component {
 				var templ_7745c5c3_Var298 string
 				templ_7745c5c3_Var298, templ_7745c5c3_Err = templ.JoinStringErrs(role)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1913, Col: 70}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1914, Col: 70}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var298))
 				if templ_7745c5c3_Err != nil {
@@ -8325,7 +8325,7 @@ func SSOWizardReviewStep(wizard SSOWizardView) templ.Component {
 					var templ_7745c5c3_Var302 string
 					templ_7745c5c3_Var302, templ_7745c5c3_Err = templ.JoinStringErrs(mapping.Group)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1939, Col: 33}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1940, Col: 33}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var302))
 					if templ_7745c5c3_Err != nil {
@@ -8338,7 +8338,7 @@ func SSOWizardReviewStep(wizard SSOWizardView) templ.Component {
 					var templ_7745c5c3_Var303 string
 					templ_7745c5c3_Var303, templ_7745c5c3_Err = templ.JoinStringErrs(mapping.Role)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1939, Col: 65}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1940, Col: 65}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var303))
 					if templ_7745c5c3_Err != nil {
@@ -8361,7 +8361,7 @@ func SSOWizardReviewStep(wizard SSOWizardView) templ.Component {
 					var templ_7745c5c3_Var304 string
 					templ_7745c5c3_Var304, templ_7745c5c3_Err = templ.JoinStringErrs(wizard.DefaultRoles)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1942, Col: 82}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1943, Col: 82}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var304))
 					if templ_7745c5c3_Err != nil {
@@ -8386,7 +8386,7 @@ func SSOWizardReviewStep(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var305 string
 		templ_7745c5c3_Var305, templ_7745c5c3_Err = templ.JoinStringErrs(ssoWizardProvisionSummary(wizard))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1946, Col: 74}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1947, Col: 74}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var305))
 		if templ_7745c5c3_Err != nil {
@@ -8440,7 +8440,7 @@ func SSOWizardFooter(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var307 string
 		templ_7745c5c3_Var307, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.Step)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1954, Col: 61}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1955, Col: 61}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var307)
 		if templ_7745c5c3_Err != nil {
@@ -8522,7 +8522,7 @@ func SSOWizardCarriedProvider(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var309 string
 		templ_7745c5c3_Var309, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.Label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1975, Col: 62}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1976, Col: 62}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var309)
 		if templ_7745c5c3_Err != nil {
@@ -8535,7 +8535,7 @@ func SSOWizardCarriedProvider(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var310 string
 		templ_7745c5c3_Var310, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.Issuer)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1976, Col: 57}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1977, Col: 57}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var310)
 		if templ_7745c5c3_Err != nil {
@@ -8548,7 +8548,7 @@ func SSOWizardCarriedProvider(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var311 string
 		templ_7745c5c3_Var311, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.ClientID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1977, Col: 62}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1978, Col: 62}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var311)
 		if templ_7745c5c3_Err != nil {
@@ -8561,7 +8561,7 @@ func SSOWizardCarriedProvider(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var312 string
 		templ_7745c5c3_Var312, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.RedirectURL)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1978, Col: 68}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1979, Col: 68}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var312)
 		if templ_7745c5c3_Err != nil {
@@ -8603,7 +8603,7 @@ func SSOWizardCarriedClaims(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var314 string
 		templ_7745c5c3_Var314, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.Scopes)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1983, Col: 57}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1984, Col: 57}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var314)
 		if templ_7745c5c3_Err != nil {
@@ -8616,7 +8616,7 @@ func SSOWizardCarriedClaims(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var315 string
 		templ_7745c5c3_Var315, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.UsernameClaim)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1984, Col: 72}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1985, Col: 72}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var315)
 		if templ_7745c5c3_Err != nil {
@@ -8629,7 +8629,7 @@ func SSOWizardCarriedClaims(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var316 string
 		templ_7745c5c3_Var316, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.GroupsClaim)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1985, Col: 68}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1986, Col: 68}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var316)
 		if templ_7745c5c3_Err != nil {
@@ -8677,7 +8677,7 @@ func SSOWizardCarriedRoles(wizard SSOWizardView) templ.Component {
 		var templ_7745c5c3_Var318 string
 		templ_7745c5c3_Var318, templ_7745c5c3_Err = templ.ResolveAttributeValue(wizard.DefaultRoles)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1993, Col: 70}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 1994, Col: 70}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var318)
 		if templ_7745c5c3_Err != nil {
@@ -8713,7 +8713,7 @@ func SSOWizardCarriedRoles(wizard SSOWizardView) templ.Component {
 			var templ_7745c5c3_Var319 string
 			templ_7745c5c3_Var319, templ_7745c5c3_Err = templ.ResolveAttributeValue(mapping.Group)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 2004, Col: 65}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 2005, Col: 65}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var319)
 			if templ_7745c5c3_Err != nil {
@@ -8726,7 +8726,7 @@ func SSOWizardCarriedRoles(wizard SSOWizardView) templ.Component {
 			var templ_7745c5c3_Var320 string
 			templ_7745c5c3_Var320, templ_7745c5c3_Err = templ.ResolveAttributeValue(mapping.Role)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 2005, Col: 63}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 2006, Col: 63}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var320)
 			if templ_7745c5c3_Err != nil {
@@ -8916,7 +8916,7 @@ func DynamicDNSAddressFact(label, id, value string, copyable bool) templ.Compone
 				var templ_7745c5c3_Var323 string
 				templ_7745c5c3_Var323, templ_7745c5c3_Err = templ.JoinStringErrs(value)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 2143, Col: 16}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `integrations.templ`, Line: 2144, Col: 16}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var323))
 				if templ_7745c5c3_Err != nil {
