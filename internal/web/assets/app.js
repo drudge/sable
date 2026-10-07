@@ -3871,12 +3871,17 @@
 	  });
 	};
 	syncSidebarToggleState();
+	// The one way the phone drawer opens or closes, whether by the menu
+	// button or a swipe; opening moves focus into the navigation.
+	const setMobileSidebarOpen = (open) => {
+	  document.documentElement.classList.toggle("sidebar-mobile-open", open);
+	  syncSidebarToggleState();
+	  if (open) document.querySelector("#primary-navigation [aria-current=page], #primary-navigation a")?.focus();
+	};
 	  document.querySelectorAll("[data-sidebar-toggle]").forEach((button) => {
       button.addEventListener("click", () => {
         if (window.matchMedia("(max-width: 767px)").matches) {
-		  const opening = document.documentElement.classList.toggle("sidebar-mobile-open");
-		  syncSidebarToggleState();
-		  if (opening) document.querySelector("#primary-navigation [aria-current=page], #primary-navigation a")?.focus();
+		  setMobileSidebarOpen(!document.documentElement.classList.contains("sidebar-mobile-open"));
           return;
         }
         const collapsed = document.documentElement.classList.toggle("sidebar-collapsed");
@@ -3916,6 +3921,97 @@
 	  document.documentElement.classList.remove("sidebar-mobile-open");
 	  syncSidebarToggleState();
 	});
+
+	// On phones a drag to the right anywhere on the page pulls the drawer out
+	// with the finger, as Slack and Discord do. It never claims the screen
+	// edge: iOS Safari plays its back gesture there before the page hears of
+	// it. Vertical scrolls, sideways scrollers, charts, fields, menus, and
+	// dialogs keep their own gestures.
+	(() => {
+	  const phone = window.matchMedia("(max-width: 767px)");
+	  const sidebar = document.getElementById("app-sidebar");
+	  const scrim = document.querySelector(".sidebar-scrim");
+	  if (!sidebar || !scrim) return;
+	  const root = document.documentElement;
+	  const slop = 14;
+	  const exempt = "#app-sidebar, dialog, [role=dialog], [role=menu], [role=listbox], [data-menu], input, textarea, select, [contenteditable]";
+	  // An element that scrolls sideways, or that takes horizontal touches for
+	  // itself (a chart scrubs with touch-action: pan-y), keeps the drag.
+	  const ownsSideways = (target) => {
+		for (let element = target; element && element !== document.body; element = element.parentElement) {
+		  const style = getComputedStyle(element);
+		  if ((style.overflowX === "auto" || style.overflowX === "scroll") && element.scrollWidth > element.clientWidth + 2) return true;
+		  if (style.touchAction !== "auto" && style.touchAction !== "manipulation") return true;
+		}
+		return false;
+	  };
+	  let gesture = null;
+	  const reset = () => {
+		root.classList.remove("sidebar-dragging");
+		sidebar.style.removeProperty("transform");
+		scrim.style.removeProperty("display");
+		scrim.style.removeProperty("opacity");
+	  };
+	  document.addEventListener("touchstart", (event) => {
+		gesture = null;
+		if (!phone.matches || event.touches.length !== 1 || root.classList.contains("sidebar-mobile-open")) return;
+		const target = event.target instanceof Element ? event.target : null;
+		if (!target || target.closest(exempt) || document.querySelector("dialog[open]") || ownsSideways(target)) return;
+		const touch = event.touches[0];
+		gesture = { x: touch.clientX, y: touch.clientY, width: sidebar.offsetWidth || 256, dragging: false, progress: 0, samples: [] };
+	  }, { passive: true });
+	  document.addEventListener("touchmove", (event) => {
+		if (!gesture) return;
+		if (event.touches.length !== 1) { if (gesture.dragging) reset(); gesture = null; return; }
+		const touch = event.touches[0];
+		const dx = touch.clientX - gesture.x;
+		const dy = touch.clientY - gesture.y;
+		if (!gesture.dragging) {
+		  if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { gesture = null; return; }
+		  if (dx < slop || dx < Math.abs(dy) * 1.5) return;
+		  // Once the browser has started scrolling it won't hand the touch back.
+		  if (!event.cancelable) { gesture = null; return; }
+		  gesture.dragging = true;
+		  root.classList.add("sidebar-dragging");
+		  scrim.style.display = "block";
+		}
+		event.preventDefault();
+		gesture.progress = Math.min(1, Math.max(0, (dx - slop) / gesture.width));
+		sidebar.style.transform = `translateX(${(gesture.progress - 1) * 100}%)`;
+		scrim.style.opacity = String(gesture.progress);
+		const now = event.timeStamp;
+		gesture.samples.push({ x: touch.clientX, t: now });
+		while (gesture.samples.length > 2 && now - gesture.samples[0].t > 100) gesture.samples.shift();
+	  }, { passive: false });
+	  const release = () => {
+		if (!gesture?.dragging) { gesture = null; return; }
+		const { progress, samples } = gesture;
+		gesture = null;
+		// Speed over the last tenth of a second, so a slow drag that ends in a
+		// flick still opens and a fast start that stalls does not.
+		const first = samples[0];
+		const last = samples.at(-1);
+		const speed = last && last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0;
+		const open = progress > 1 / 3 || speed > 0.6;
+		if (open) {
+		  // The scrim fades on from where the finger left it instead of
+		  // replaying its entrance from nothing.
+		  scrim.style.animation = "none";
+		  scrim.style.transition = "opacity 150ms ease-out";
+		}
+		reset();
+		if (open) {
+		  scrim.style.opacity = String(progress);
+		  window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+			scrim.style.removeProperty("opacity");
+			window.setTimeout(() => { scrim.style.removeProperty("animation"); scrim.style.removeProperty("transition"); }, 160);
+		  }));
+		}
+		setMobileSidebarOpen(open);
+	  };
+	  document.addEventListener("touchend", release, { passive: true });
+	  document.addEventListener("touchcancel", release, { passive: true });
+	})();
 
     // On phones the header sticks to the top, so it would eat screen space on
     // every long page. It slides away while scrolling down and comes straight

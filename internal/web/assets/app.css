@@ -1927,6 +1927,8 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
      blurs and fades in the way dialog backdrops do. */
   .sidebar-scrim { position: fixed; inset: 0; z-index: 20; background: rgb(0 0 0 / 0.55); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
   .sidebar-mobile-open .sidebar-scrim { display: block; animation: backdrop-in 150ms ease-out; }
+  /* A swipe moves the drawer and scrim with the finger, so neither eases. */
+  .sidebar-dragging .sidebar, .sidebar-dragging .sidebar-scrim { transition: none !important; animation: none !important; }
   .main { min-height: 100vh; overflow: visible; border: 0; border-radius: 0; box-shadow: none; }
   /* The header sticks so navigation stays one tap away, but slides out of the
      way while reading down a long page and comes back on the first scroll up. */
