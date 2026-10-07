@@ -8,6 +8,156 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.0] - 2026-10-07
+
+Sable 1.7.0 makes block lists block what their authors meant, and stops
+DNSSEC from failing correctly signed answers that broke reverse lookups and
+the OISD block lists. Kubernetes ExternalDNS can now manage the override
+records on Forwarder zones. Sable starts faster and uses less memory per
+query, Insights stays quick on a large query log, and a stuck client or a
+lookup that hits a bug can no longer tie the server up. The console looks the
+same on every page, opens its dialogs faster, and on a phone opens its menu
+with a swipe.
+
+### Upgrading from 1.6.1
+
+- Adblock-style lists such as EasyList, EasyPrivacy, and AdGuard DNS Filter
+  block fewer domains after the upgrade. Rules with a path, a wildcard, a
+  regular expression, or a modifier other than `$important` used to be cut
+  down to their host, so `||google.com/adsense/…` blocked all of google.com.
+  They're now skipped and counted as unsupported rules. Sites those rules
+  broke resolve again.
+- `@@||host^` exception rules now unblock that host and its subdomains on
+  every list. Your own blocked domains and `$important` rules still win, and
+  your allowed domains are still checked first.
+- Fanboy Social and Fanboy Annoyances are no longer offered in the block list
+  catalog, because almost none of their rules apply to DNS. An existing
+  subscription keeps working as a custom list; remove it if you no longer
+  want it.
+- Allowed and blocked domains are now exclusive. Adding a domain to one list
+  removes it from the other, whether you use the console, MCP, the query
+  log's allow and block actions, or a file import.
+- The MCP `lookup` tool now needs `zones.read`. A token that only has
+  blocking or settings access gets "this token needs zones.read to use
+  lookup". Groups made by the MCP setup in **Integrations** already have it.
+  For a group you built yourself, add `zones.read` to its API access.
+- A TSIG-signed zone transfer, NOTIFY, or dynamic update sent over
+  DNS-over-HTTPS is now refused, because Sable never checked the signature on
+  that path. Send them over UDP, TCP, or DoT, where it does.
+- The first start upgrades the database once and records its schema version,
+  so later starts skip that work. On PostgreSQL, nodes that share a database
+  take turns, and the query log indexes are built without blocking writes, so
+  a large log can make that first start slow.
+- In a cluster, keep the mixed-version window short. Each node compiles its
+  own block lists, so nodes on different versions can answer some names
+  differently until the whole cluster is upgraded.
+
+### Blocking
+
+- Apply only the host rules from adblock-style lists: `||host^`, optionally
+  followed by `|` or `$important`. Paths, wildcards, regular expressions,
+  cosmetic rules, address rules, and other modifiers are skipped, as AdGuard
+  Home, Technitium, and Pi-hole skip them.
+- Stop treating `$badfilter` rules as blocks. AdGuard DNS Filter's
+  `||pl.ua^$badfilter` blocked the whole `pl.ua` suffix.
+- Honor `@@||host^` exception rules across all lists. The query log and
+  **Check a Domain** name the list whose exception let a domain through.
+- Show a list's exceptions and unsupported rules in its details, and keep
+  **Invalid lines** for lines that are actually malformed.
+
+### DNSSEC
+
+- Accept correctly signed answers that Sable failed as Bogus (EDE 6):
+  - Names under an empty non-terminal, a name with children but no records of
+    its own (RFC 4035 sections 3.1.3.2 and 5.4). Reverse lookups in ARIN,
+    APNIC, and LACNIC space, such as `254.55.207.192.in-addr.arpa`, failed
+    this way.
+  - Wildcard answers proved only by the record covering the next closer name
+    (RFC 5155 sections 7.2.6 and 8.8, RFC 4035 section 5.3.4). Names such as
+    `big.oisd.nl` failed this way, and with them the OISD block list refresh.
+- Stop accepting proofs that don't prove anything: a parent zone's NSEC at a
+  delegation or DNAME offered as proof about the child zone, and an NSEC3
+  that matches the name or uses an unknown hash algorithm offered as proof the
+  name doesn't exist.
+- Keep serve-stale, prefetch, and the TTL limits after a trust anchor
+  rollover. The cache came back with default settings.
+- Stop a prefetch from replacing a validated cached answer with an
+  unvalidated one when local validation is off.
+
+### DNS
+
+- Accept RFC 2136 dynamic updates on Forwarder zones, so Kubernetes
+  ExternalDNS and similar tools can manage a Forwarder zone's local override
+  records. Secondary Forwarder zones still refuse them, and no update can add
+  or remove forwarding routes.
+- Accept the "delete this RRset" and "RRset exists" records of an RFC 2136
+  update. Sable answered those updates with FORMERR.
+- Answer SERVFAIL when a lookup hits a bug, and count it in
+  `sable_dns_panics_total`. The query used to die, and the same question from
+  other devices could hang until they gave up.
+- Cap open connections at 1,024 across TCP, DoT, and DoH, and at 256 for
+  DNS-over-QUIC, so a client that opens connections and never closes them
+  can't use up memory.
+- Check DoH and DoQ requests the same way as UDP, TCP, and DoT, and answer a
+  malformed one with the same DNS reply.
+- Stop sending a deleted zone's records to a secondary that asks for an
+  incremental transfer after the zone is deleted or re-created.
+- Apply configuration reloads and zone changes one at a time, so a reload
+  can't bring back zones a zone change had just replaced.
+
+### Performance
+
+- Start every `sable` command about 70 ms faster with 16 MiB less allocated,
+  and use about 3 MiB less memory when idle.
+- Allocate less per query, on cache hits and DoH responses in particular.
+- Read all-time and open-ended Insights ranges from the rollups
+  instead of the whole query log, and share dashboard data between open
+  dashboards instead of re-reading it on every poll.
+- Load a zone's history when you open it instead of for every zone in the
+  list, and redraw only the zone you changed after a record edit.
+
+### Logs
+
+- Prune old queries in small batches. A large retention cut or a long outage
+  made one huge delete that could time out and start over every hour, drop new
+  queries while it ran, and hold the SQLite write lock the whole time.
+- Stream the CSV export without skipping or repeating rows that arrive during
+  the download. A failure partway through fails the download instead of
+  saving a short file.
+- Match `_` and `%` literally in query log search.
+
+### Console
+
+- Draw every page from one set of buttons, dialogs, tabs, tables, menus, and
+  badges. Buttons and segmented controls are rounded pills everywhere, status
+  badges use one green and one red, file sizes use binary units everywhere,
+  and every table heading is announced to screen readers as a column heading.
+- Open the command palette, dialogs, and detail sheets faster.
+- Open the navigation on a phone by dragging right from anywhere on the page.
+  Start a little in from the edge, since iOS Safari keeps the edge for its
+  back gesture.
+- Ask "Delete this record?" with the record's type and name before deleting
+  a record.
+- Show a linked identity's last sign-in in your time setting instead of UTC.
+- List the cards on **Integrations** alphabetically.
+- Match records by lowercase name and value, ignoring TTL, in both the
+  console and MCP, so an edit or delete through MCP picks the same record the
+  console would.
+
+### Monitoring
+
+- Add the standard Prometheus process and Go runtime metrics to `/metrics`,
+  such as `process_resident_memory_bytes`, `process_cpu_seconds_total`,
+  `process_open_fds`, `go_goroutines`, and `go_gc_duration_seconds`.
+- Add memory, CPU, and garbage collector figures to the MCP `get_stats`
+  result.
+
+### Updates
+
+- Check for updates through Sable's own resolver, falling back to the host's
+  only when Sable has no answer. On hosts whose resolver drops queries, such
+  as some Starlink routers, the check timed out.
+
 ## [1.7.0-beta.8] - 2026-10-07
 
 Sable 1.7.0-beta.8 rounds the last square-cornered tabs in the console and
