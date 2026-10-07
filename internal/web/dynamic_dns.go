@@ -1,12 +1,14 @@
 package web
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -125,42 +127,137 @@ func dynamicDNSStatusView(provider string, status dynamicdns.Status, display pag
 
 var providerSecretPattern = regexp.MustCompile(`(?i)((?:authorization|api[-_ ]?key|access[-_ ]?key|token|secret|password)\s*[:=]\s*)(?:bearer\s+)?[^\s,;]+`)
 
+var (
+	dynamicDNSPublishFailure = regexp.MustCompile(`^(?:([a-z0-9]+): )?publish (\S+) (A|AAAA): (.*)$`)
+	providerHTTPStatus       = regexp.MustCompile(`API returned ((\d{3})[^:]*): (.*)$`)
+)
+
+// maximumListedRecords is how many records one error line names before it
+// counts the rest.
+const maximumListedRecords = 3
+
+// dynamicDNSErrorDisplay turns the publisher's last error into a readable
+// summary and, when a provider sent a JSON body, that body with its secrets
+// redacted. Each failed record is one line of the error, and records that
+// failed the same way share one summary line.
 func dynamicDNSErrorDisplay(provider, raw string) (string, string) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "", ""
 	}
+	type failureGroup struct {
+		records         []string
+		summary, detail string
+	}
+	var groups []*failureGroup
+	bySummary := make(map[string]*failureGroup)
+	for line := range strings.Lines(raw) {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		lineProvider, record, message := provider, "", line
+		if match := dynamicDNSPublishFailure.FindStringSubmatch(line); match != nil {
+			lineProvider, record, message = cmp.Or(match[1], provider), match[2]+" "+match[3], match[4]
+		}
+		summary, detail := providerErrorDisplay(lineProvider, message)
+		group := bySummary[summary]
+		if group == nil {
+			group = &failureGroup{summary: summary, detail: detail}
+			bySummary[summary] = group
+			groups = append(groups, group)
+		}
+		if record != "" && !slices.Contains(group.records, record) {
+			group.records = append(group.records, record)
+		}
+	}
+	summaries := make([]string, 0, len(groups))
+	var details []string
+	for _, group := range groups {
+		summaries = append(summaries, failedRecordsLabel(group.records)+group.summary)
+		if group.detail != "" {
+			details = append(details, group.detail)
+		}
+	}
+	return strings.Join(summaries, "\n"), strings.Join(details, "\n\n")
+}
 
-	start := strings.IndexAny(raw, "{[")
-	if start < 0 {
-		return redactProviderSecrets(raw), ""
+func failedRecordsLabel(records []string) string {
+	switch {
+	case len(records) == 0:
+		return ""
+	case len(records) > maximumListedRecords:
+		return fmt.Sprintf("%s and %d more: ", strings.Join(records[:maximumListedRecords], ", "), len(records)-maximumListedRecords)
+	default:
+		return strings.Join(records, ", ") + ": "
+	}
+}
+
+// providerErrorDisplay summarizes one provider failure. A rate limit or a
+// failure on the provider's side is named as such, because Sable retries it
+// and nothing needs fixing. A rejected request names the provider's own
+// messages and codes.
+func providerErrorDisplay(provider, message string) (string, string) {
+	name := dynamicDNSProviderName(provider)
+	status, statusCode, body := "", 0, message
+	if match := providerHTTPStatus.FindStringSubmatch(message); match != nil {
+		status, body = strings.TrimSpace(match[1]), strings.TrimSpace(match[3])
+		statusCode, _ = strconv.Atoi(match[2])
 	}
 
+	payload, decoded := providerPayload(body)
+	detail := ""
+	if decoded {
+		if encoded, err := json.MarshalIndent(sanitizeProviderPayload(payload), "", "  "); err == nil {
+			detail = string(encoded)
+		}
+	}
+
+	switch {
+	case statusCode == http.StatusTooManyRequests:
+		return name + " is rate limiting requests (" + status + "). Sable will try again.", detail
+	case statusCode >= http.StatusInternalServerError:
+		return name + " had a temporary problem (" + status + "). Sable will try again.", detail
+	}
+	if decoded {
+		if messages, codes := providerDiagnostics(payload); len(messages) > 0 {
+			return name + " rejected the request: " + strings.Join(messages, ": ") + providerCodesLabel(codes) + ".", detail
+		}
+	}
+	if status == "" {
+		return redactProviderSecrets(message), detail
+	}
+	if !decoded && body != status && !strings.HasPrefix(body, "<") {
+		return name + " returned " + status + ": " + redactProviderSecrets(body), ""
+	}
+	return name + " returned " + status + ".", detail
+}
+
+// providerPayload decodes the JSON a provider sent, which starts at the first
+// brace or bracket of the message.
+func providerPayload(message string) (any, bool) {
+	start := strings.IndexAny(message, "{[")
+	if start < 0 {
+		return nil, false
+	}
 	var payload any
-	decoder := json.NewDecoder(strings.NewReader(raw[start:]))
+	decoder := json.NewDecoder(strings.NewReader(message[start:]))
 	decoder.UseNumber()
 	if err := decoder.Decode(&payload); err != nil {
-		return redactProviderSecrets(raw), ""
+		return nil, false
 	}
+	return payload, true
+}
 
-	messages, codes := providerDiagnostics(payload)
-	if len(messages) == 0 {
-		return redactProviderSecrets(raw), ""
+func providerCodesLabel(codes []string) string {
+	switch len(codes) {
+	case 0:
+		return ""
+	case 1:
+		return " (code " + codes[0] + ")"
+	default:
+		return " (codes " + strings.Join(codes, ", ") + ")"
 	}
-
-	summary := dynamicDNSProviderName(provider) + " rejected the request: " + strings.Join(messages, ": ")
-	if len(codes) == 1 {
-		summary += " (code " + codes[0] + ")"
-	} else if len(codes) > 1 {
-		summary += " (codes " + strings.Join(codes, ", ") + ")"
-	}
-	summary += "."
-
-	detail, err := json.MarshalIndent(sanitizeProviderPayload(payload), "", "  ")
-	if err != nil {
-		return summary, ""
-	}
-	return summary, string(detail)
 }
 
 func providerDiagnostics(payload any) ([]string, []string) {

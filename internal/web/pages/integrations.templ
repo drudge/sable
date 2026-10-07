@@ -439,7 +439,7 @@ templ DynamicDNSStatusPanel(view DynamicDNSAppView) {
 				@Icon("alert-triangle")
 				<div>
 					<strong>Last publish failed</strong>
-					<span>{ view.Status.LastError }</span>
+					<span class="integration-error-summary">{ view.Status.LastError }</span>
 					if view.Status.LastErrorDetail != "" {
 						<details class="integration-error-details">
 							<summary>View provider details</summary>

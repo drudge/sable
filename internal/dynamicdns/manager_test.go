@@ -462,3 +462,54 @@ func testDynamicDNSSettings() config.DynamicDNS {
 		}},
 	}
 }
+
+func TestReconcileStopsCallingAProviderThatIsFailingOnItsSide(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name      string
+		err       *dnsprovider.APIError
+		attempts  int
+		wantRetry time.Duration
+	}{
+		{name: "a 502 stops after the first record", err: &dnsprovider.APIError{StatusCode: 502}, attempts: 1, wantRetry: 30 * time.Second},
+		{name: "a 429 waits as long as the provider asks", err: &dnsprovider.APIError{StatusCode: 429, RetryAfter: 2 * time.Minute}, attempts: 1, wantRetry: 2 * time.Minute},
+		{name: "a 400 still tries every record", err: &dnsprovider.APIError{StatusCode: 400, RetryAfter: time.Hour}, attempts: 3, wantRetry: 30 * time.Second},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			settings := config.DynamicDNS{
+				Enabled: true, Interval: config.Duration{Duration: 5 * time.Minute},
+				IPv4URL: "https://ipv4.test", IPv6URL: "https://ipv6.test",
+				Publishers: []config.DynamicDNSPublisher{
+					{Provider: "cloudflare", Records: []config.DynamicDNSRecord{
+						{Zone: "example.com", Name: "home.example.com", IPv4: true, IPv6: true, TTL: 300},
+						{Zone: "example.com", Name: "vpn.example.com", IPv4: true, TTL: 300},
+					}},
+					{Provider: "route53", Records: []config.DynamicDNSRecord{{Zone: "example.net", Name: "edge.example.net", IPv4: true, TTL: 300}}},
+				},
+			}
+			providers := map[string]*testProvider{"cloudflare": {err: test.err}, "route53": {changed: true}}
+			manager := newTestManager(settings, providers["cloudflare"])
+			manager.newProvider = func(name string, _ dnsprovider.Credentials) (provider, error) { return providers[name], nil }
+			manager.discover = func(_ context.Context, _ string, recordType string) (netip.Addr, error) {
+				if recordType == dnsprovider.TypeA {
+					return netip.MustParseAddr("8.8.8.8"), nil
+				}
+				return netip.MustParseAddr("2001:4860:4860::8888"), nil
+			}
+
+			manager.runOnce(context.Background())
+
+			if attempts := len(providers["cloudflare"].records); attempts != test.attempts {
+				t.Fatalf("Cloudflare requests = %d, want %d", attempts, test.attempts)
+			}
+			if len(providers["route53"].records) != 1 {
+				t.Fatalf("Route 53 requests = %d, want 1", len(providers["route53"].records))
+			}
+			status := manager.Status(context.Background())
+			if retry := status.NextAttempt.Sub(status.LastAttempt); retry != test.wantRetry {
+				t.Fatalf("next attempt in %s, want %s", retry, test.wantRetry)
+			}
+		})
+	}
+}
