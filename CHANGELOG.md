@@ -8,6 +8,27 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.0-beta.6] - 2026-10-06
+
+Sable 1.7.0-beta.6 lets you open the console's navigation on a phone by
+dragging right from anywhere on the page, and lists the integrations in
+alphabetical order.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.0-beta.5. Coming from 1.6.x, also read
+the 1.7.0-beta.1 upgrade notes below.
+
+### Console
+
+- Open the navigation on a phone by dragging right from anywhere on the page,
+  the way Slack and Discord do. The menu follows your finger and opens past a
+  third of the way or on a quick flick. Start a little in from the screen edge,
+  since iOS Safari keeps the edge for its back gesture. Vertical scrolling,
+  wide tables, charts, and form fields keep their own gestures, and the menu
+  button works as before.
+- List the cards on the **Integrations** page alphabetically by title.
+
 ## [1.7.0-beta.5] - 2026-10-06
 
 Sable 1.7.0-beta.5 fixes console buttons that saved the form they sat in
