@@ -3922,6 +3922,45 @@
 	  syncSidebarToggleState();
 	});
 
+	// The page behind a modal stays put under a finger. The stylesheet's
+	// overflow: hidden on the root covers wheels and trackpads, but iOS Safari
+	// still scrolls the document by touch, and once it does the toolbar
+	// collapses and the drawer slides away with the page. A touch move is
+	// refused unless it lands in something inside the modal that can scroll
+	// along the gesture; those scrollers contain their own overscroll.
+	(() => {
+	  const scrolls = (element, vertical) => {
+		const style = getComputedStyle(element);
+		const overflow = vertical ? style.overflowY : style.overflowX;
+		if (overflow !== "auto" && overflow !== "scroll") return false;
+		return vertical ? element.scrollHeight > element.clientHeight + 1 : element.scrollWidth > element.clientWidth + 1;
+	  };
+	  const ownsScroll = (target, dialog, vertical) => {
+		for (let element = target; element && element !== dialog.parentElement; element = element.parentElement) {
+		  if (scrolls(element, vertical)) return true;
+		  if (element === dialog) break;
+		}
+		return false;
+	  };
+	  let start = null;
+	  document.addEventListener("touchstart", (event) => {
+		const touch = event.touches[0];
+		start = touch ? { x: touch.clientX, y: touch.clientY } : null;
+	  }, { passive: true });
+	  document.addEventListener("touchmove", (event) => {
+		if (!event.cancelable || event.touches.length !== 1 || !start) return;
+		const modal = [...document.querySelectorAll("dialog[open]")].find((dialog) => dialog.matches(":modal"));
+		if (!modal) return;
+		const target = event.target instanceof Element ? event.target : null;
+		const inside = target && modal.contains(target) ? target : null;
+		// Text fields and range inputs own their drags.
+		if (inside?.closest("input, textarea, select, [contenteditable]")) return;
+		const touch = event.touches[0];
+		const vertical = Math.abs(touch.clientY - start.y) >= Math.abs(touch.clientX - start.x);
+		if (!inside || !ownsScroll(inside, modal, vertical)) event.preventDefault();
+	  }, { passive: false });
+	})();
+
 	// On phones a drag to the right anywhere on the page pulls the drawer out
 	// with the finger, as Slack and Discord do. It never claims the screen
 	// edge: iOS Safari plays its back gesture there before the page hears of
