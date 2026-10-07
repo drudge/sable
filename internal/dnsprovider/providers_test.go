@@ -503,3 +503,53 @@ func TestNamecheapFailuresDoNotNameTheAPIKey(t *testing.T) {
 		t.Fatalf("error = %v", err)
 	}
 }
+
+func TestProviderAPIErrorsSayWhetherToRetry(t *testing.T) {
+	for _, test := range []struct {
+		status     int
+		retryAfter string
+		temporary  bool
+		wait       time.Duration
+	}{
+		{status: http.StatusBadGateway, retryAfter: "60", temporary: true, wait: time.Minute},
+		{status: http.StatusTooManyRequests, temporary: true},
+		{status: http.StatusBadRequest},
+	} {
+		client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			response := httpResponse(test.status, `{"title":"failure"}`)
+			if test.retryAfter != "" {
+				response.Header.Set("Retry-After", test.retryAfter)
+			}
+			return response, nil
+		})}
+		provider := &cloudflareProvider{
+			credentials: Credentials{APIToken: "token", ZoneID: "zone-1"}, client: client, baseURL: "https://cloudflare.test/client/v4",
+		}
+		_, err := provider.EnsureRecord(context.Background(), Record{
+			Zone: "example.com", Name: "home.example.com", Type: TypeA, Value: "198.51.100.1", TTL: 300,
+		})
+		var apiError *APIError
+		if !errors.As(err, &apiError) {
+			t.Fatalf("status %d: error %v is not an APIError", test.status, err)
+		}
+		if apiError.StatusCode != test.status || apiError.Temporary() != test.temporary || apiError.RetryAfter != test.wait {
+			t.Errorf("status %d: APIError = %+v, temporary %v", test.status, apiError, apiError.Temporary())
+		}
+	}
+}
+
+func TestRetryAfterReadsSecondsAndDates(t *testing.T) {
+	now := time.Date(2026, time.October, 7, 14, 46, 37, 0, time.UTC)
+	for value, expected := range map[string]time.Duration{
+		"":                              0,
+		"120":                           2 * time.Minute,
+		"-5":                            0,
+		"soon":                          0,
+		"Wed, 07 Oct 2026 14:47:37 GMT": time.Minute,
+		"Wed, 07 Oct 2026 14:40:00 GMT": 0,
+	} {
+		if actual := retryAfter(value, now); actual != expected {
+			t.Errorf("retryAfter(%q) = %s, want %s", value, actual, expected)
+		}
+	}
+}

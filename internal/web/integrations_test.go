@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -404,6 +405,43 @@ func TestDynamicDNSErrorDisplaySummarizesAndSanitizesProviderResponse(t *testing
 	}
 	if strings.Contains(summary, "secret-value") || strings.Contains(detail, "secret-value") {
 		t.Fatal("provider diagnostics exposed an authorization value")
+	}
+}
+
+func TestDynamicDNSErrorDisplayCollapsesRepeatedProviderOutages(t *testing.T) {
+	t.Parallel()
+	body := `{"type":"https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-5xx-errors/error-502/","title":"Error 502: Bad gateway","status":502,"detail":"The origin web server returned an invalid or incomplete response.","instance":"%s","zone":"api-gateway.api.cloudflare.com","retryable":true}`
+	var lines []string
+	for _, record := range []string{"home.example.test A", "home.example.test AAAA", "vpn.example.test A", "edge.example.test A"} {
+		lines = append(lines, "cloudflare: publish "+record+": DNS provider API returned 502 Bad Gateway: "+fmt.Sprintf(body, record))
+	}
+
+	summary, detail := dynamicDNSErrorDisplay("", strings.Join(lines, "\n"))
+
+	expected := "home.example.test A, home.example.test AAAA, vpn.example.test A and 1 more: Cloudflare had a temporary problem (502 Bad Gateway). Sable will try again."
+	if summary != expected {
+		t.Fatalf("summary = %q, want %q", summary, expected)
+	}
+	if !strings.Contains(detail, `"title": "Error 502: Bad gateway"`) || strings.Count(detail, `"title"`) != 1 {
+		t.Fatalf("detail should hold the first provider response once: %s", detail)
+	}
+}
+
+func TestDynamicDNSErrorDisplayNamesRateLimitsAndPlainResponses(t *testing.T) {
+	t.Parallel()
+	for raw, expected := range map[string]string{
+		"route53: publish edge.example.test A: Route 53 API returned 429 Too Many Requests: Too Many Requests":                                     "edge.example.test A: Amazon Route 53 is rate limiting requests (429 Too Many Requests). Sable will try again.",
+		"publish edge.example.test A: GoDaddy API returned 404 Not Found: <html><body>Not Found</body></html>":                                     "edge.example.test A: GoDaddy returned 404 Not Found.",
+		"publish edge.example.test A: GoDaddy API returned 403 Forbidden: access denied for token=secret-value":                                    "edge.example.test A: GoDaddy returned 403 Forbidden: access denied for token=[redacted]",
+		"cloudflare DNS credentials are not configured\nroute53: publish edge.example.test A: Route 53 API returned 503 Service Unavailable: busy": "cloudflare DNS credentials are not configured\nedge.example.test A: Amazon Route 53 had a temporary problem (503 Service Unavailable). Sable will try again.",
+	} {
+		provider := "godaddy"
+		if strings.Contains(raw, "Route 53") {
+			provider = ""
+		}
+		if summary, _ := dynamicDNSErrorDisplay(provider, raw); summary != expected {
+			t.Errorf("summary of %q = %q, want %q", raw, summary, expected)
+		}
 	}
 }
 

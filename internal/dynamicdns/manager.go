@@ -295,6 +295,9 @@ type reconcileResult struct {
 	ipv6      string
 	changed   int
 	unchanged int
+	// retryAfter is the longest wait a provider asked for before the next
+	// attempt.
+	retryAfter time.Duration
 }
 
 func (manager *Manager) reconcile(ctx context.Context, settings config.DynamicDNS) (reconcileResult, error) {
@@ -323,26 +326,41 @@ func (manager *Manager) reconcile(ctx context.Context, settings config.DynamicDN
 			publicationErrors = append(publicationErrors, fmt.Errorf("initialize %s provider: %w", configuredPublisher.Provider, providerErr))
 			continue
 		}
-		for _, configured := range configuredPublisher.Records {
-			for _, recordType := range recordTypes(configured) {
-				address := addresses[recordType]
-				changed, ensureErr := publisher.EnsureRecord(ctx, dnsprovider.Record{
-					Zone: configured.Zone, Name: configured.Name, Type: recordType,
-					Value: address.String(), TTL: configured.TTL,
-				})
-				if ensureErr != nil {
-					publicationErrors = append(publicationErrors, fmt.Errorf("%s: publish %s %s: %w", configuredPublisher.Provider, configured.Name, recordType, ensureErr))
-					continue
-				}
+		if err := publishRecords(ctx, configuredPublisher, publisher, addresses, &result); err != nil {
+			publicationErrors = append(publicationErrors, err)
+		}
+	}
+	return result, errors.Join(publicationErrors...)
+}
+
+// publishRecords ensures every record of one publisher. A provider that is rate
+// limiting or failing on its own side gets no more requests this attempt:
+// the rest would fail the same way, and the retry backoff covers them all.
+func publishRecords(ctx context.Context, configured config.DynamicDNSPublisher, publisher provider, addresses map[string]netip.Addr, result *reconcileResult) error {
+	var publicationErrors []error
+	for _, record := range configured.Records {
+		for _, recordType := range recordTypes(record) {
+			changed, err := publisher.EnsureRecord(ctx, dnsprovider.Record{
+				Zone: record.Zone, Name: record.Name, Type: recordType,
+				Value: addresses[recordType].String(), TTL: record.TTL,
+			})
+			if err == nil {
 				if changed {
 					result.changed++
 				} else {
 					result.unchanged++
 				}
+				continue
+			}
+			publicationErrors = append(publicationErrors, fmt.Errorf("%s: publish %s %s: %w", configured.Provider, record.Name, recordType, err))
+			var apiError *dnsprovider.APIError
+			if errors.As(err, &apiError) && apiError.Temporary() {
+				result.retryAfter = max(result.retryAfter, apiError.RetryAfter)
+				return errors.Join(publicationErrors...)
 			}
 		}
 	}
-	return result, errors.Join(publicationErrors...)
+	return errors.Join(publicationErrors...)
 }
 
 func (manager *Manager) discoverAddresses(ctx context.Context, settings config.DynamicDNS) (reconcileResult, map[string]netip.Addr, error) {
@@ -494,7 +512,11 @@ func (manager *Manager) finishAttempt(started time.Time, interval time.Duration,
 	}
 	manager.status.ConsecutiveFailures++
 	manager.status.LastError = err.Error()
-	manager.status.NextAttempt = started.Add(retryDelay(manager.status.ConsecutiveFailures, interval))
+	delay := retryDelay(manager.status.ConsecutiveFailures, interval)
+	if result.retryAfter > delay {
+		delay = min(result.retryAfter, maximumRetry)
+	}
+	manager.status.NextAttempt = started.Add(delay)
 }
 
 func retryDelay(failures int, interval time.Duration) time.Duration {

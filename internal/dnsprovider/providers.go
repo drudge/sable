@@ -467,13 +467,54 @@ func jsonHTTPProviderRequest(ctx context.Context, method, endpoint, authorizatio
 	return request, nil
 }
 
+// APIError is a provider API response outside the 2xx range.
+type APIError struct {
+	Provider   string
+	StatusCode int
+	Status     string
+	Body       string
+	// RetryAfter is the wait the provider asked for in a Retry-After header,
+	// or zero when it named none.
+	RetryAfter time.Duration
+}
+
+func (apiError *APIError) Error() string {
+	return fmt.Sprintf("%s API returned %s: %s", apiError.Provider, apiError.Status, apiError.Body)
+}
+
+// Temporary reports whether the provider is rate limiting or briefly failing
+// on its own side, so the same request is worth sending again later.
+func (apiError *APIError) Temporary() bool {
+	return apiError.StatusCode == http.StatusTooManyRequests || apiError.StatusCode >= http.StatusInternalServerError
+}
+
 func responseError(provider string, response *http.Response) error {
 	contents, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
-	message := strings.TrimSpace(string(contents))
+	// One line per body keeps a joined error to one line per failed record.
+	message := strings.Join(strings.Fields(string(contents)), " ")
 	if message == "" {
 		message = response.Status
 	}
-	return fmt.Errorf("%s API returned %s: %s", provider, response.Status, message)
+	return &APIError{
+		Provider: provider, StatusCode: response.StatusCode, Status: response.Status,
+		Body: message, RetryAfter: retryAfter(response.Header.Get("Retry-After"), time.Now()),
+	}
+}
+
+// retryAfter reads a Retry-After header in either of its forms: a number of
+// seconds or an HTTP date.
+func retryAfter(value string, now time.Time) time.Duration {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+	if seconds, err := strconv.Atoi(value); err == nil {
+		return max(time.Duration(seconds)*time.Second, 0)
+	}
+	if at, err := http.ParseTime(value); err == nil {
+		return max(at.Sub(now), 0)
+	}
+	return 0
 }
 
 func relativeName(name, zone string) string {
