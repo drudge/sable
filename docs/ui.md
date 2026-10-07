@@ -157,6 +157,11 @@ contract:
 - Desktop and mobile navigation keep their expanded state synchronized. The
   mobile drawer moves focus into navigation, makes main content inert, traps
   focus while open, and returns focus to its trigger when Escape closes it.
+- On phones a drag to the right that starts anywhere in the page pulls the
+  drawer out with the finger, as in Slack and Discord. It never claims the
+  screen edge, which is iOS Safari's back gesture, and it leaves vertical
+  scrolls, sideways scrollers, charts, fields, menus, and dialogs alone. The
+  menu button stays the single-pointer way to open it (WCAG 2.5.1).
 - Tab lists use one tab stop. Arrow keys, Home, and End move and activate tabs;
   every tab names a corresponding tab panel.
 - Native dialogs have an accessible name, put focus on the first useful field,
