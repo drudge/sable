@@ -3560,9 +3560,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .backup-history-header-actions .button .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; }
 .backup-run-split { display: flex; align-items: stretch; }
 .backup-run-split > form { display: flex; margin: 0; }
-.backup-run-split > form .button { border-radius: var(--radius) 0 0 var(--radius); }
+.backup-run-split > form .button { border-radius: 999px 0 0 999px; }
 .backup-run-menu { position: relative; }
-.backup-run-menu > summary { width: 2.15rem; height: 100%; border-left-color: color-mix(in oklch, currentColor 25%, transparent); border-radius: 0 var(--radius) var(--radius) 0; padding: 0; }
+.backup-run-menu > summary { width: 2.15rem; height: 100%; border-left-color: color-mix(in oklch, currentColor 25%, transparent); border-radius: 0 999px 999px 0; padding: 0; }
 .backup-run-menu > summary .nav-icon { width: .8rem; height: .8rem; }
 .backup-run-menu[open] > summary .nav-icon { rotate: 180deg; }
 .backup-run-menu > div { position: absolute; top: calc(100% + .35rem); right: 0; z-index: 50; display: grid; width: max-content; min-width: 13rem; overflow: hidden; border: 1px solid var(--border); border-radius: .5rem; background: var(--popover, var(--card)); padding: .3rem; color: var(--popover-foreground, var(--foreground)); box-shadow: 0 1rem 2.5rem rgb(0 0 0 / .35); }
