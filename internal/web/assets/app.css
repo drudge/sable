@@ -1035,7 +1035,6 @@ dialog[open]::backdrop {
 .top-stats-toolbar { display: flex; align-items: center; gap: var(--space-3); border-bottom: 1px solid var(--border); padding: .65rem var(--space-5); }
 .top-stats-search { position: relative; min-width: 10rem; flex: 1; }
 .top-stats-limit select, .top-stats-limit .styled-select { width: 6.875rem; }
-.top-stats-limit .styled-select-trigger { height: 2rem; }
 .top-stats-list { min-height: 8rem; max-height: calc(85vh - 9rem); overflow-y: auto; }
 .top-stats-row { display: flex; min-height: 2.75rem; align-items: center; gap: var(--space-3); border-bottom: 1px solid var(--border); padding: .4rem var(--space-5); transition: background-color .15s ease; }
 .top-stats-row:hover { background: color-mix(in oklch, var(--muted) 50%, transparent); }
