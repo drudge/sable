@@ -8,6 +8,35 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.0-beta.9] - 2026-10-07
+
+Sable 1.7.0-beta.9 keeps the page behind an open sheet or dialog from
+scrolling on phones, and shows a short summary when a Dynamic DNS provider
+has an outage instead of its raw responses.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.0-beta.8. Coming from 1.6.x, also read
+the 1.7.0-beta.1 upgrade notes below.
+
+### Console
+
+- Keep the page behind an open detail sheet or dialog still on iPhone and
+  iPad. A drag on the sheet's header or the dimmed backdrop no longer
+  scrolls the page and slides the sheet off screen, and a list inside a
+  sheet stops at its end instead of scrolling the page.
+
+### Dynamic DNS
+
+- Summarize provider outages on the **Dynamic DNS** card. A rate limit or
+  server error now reads as one short line per failure, such as "Cloudflare
+  had a temporary problem (502 Bad Gateway). Sable will try again." The raw
+  response is still under **View provider details**, and the text wraps on
+  narrow screens.
+- Stop sending requests to a provider for the rest of a run after its first
+  rate limit or server error, and wait as long as its `Retry-After` asks
+  (up to 30 minutes) before trying again. Other providers still update.
+
 ## [1.7.0-beta.8] - 2026-10-07
 
 Sable 1.7.0-beta.8 rounds the last square-cornered tabs in the console and
