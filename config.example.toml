@@ -98,6 +98,13 @@ allow_txt_report = true
 # path = "lists/block.txt"
 # format = "auto"
 
+# A rule set gives some devices their own lists and domains. A device joins
+# one through its [[clients]] entry's rule_set.
+# [[blocking.rule_sets]]
+# name = "Kids"
+# lists = ["local"]
+# domains = ["youtube.com"]
+
 # Remote subscriptions are downloaded into Sable's data directory and updated
 # automatically. The path is optional for remote lists.
 # [[blocking.lists]]

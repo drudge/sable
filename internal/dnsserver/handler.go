@@ -46,15 +46,20 @@ type Runtime struct {
 	// subdomains, to the lists that carry the rule. firmBlocked holds the
 	// blocks an exception doesn't lift: $important rules and the operator's
 	// own blocked domains. Both are consulted only once a block matches.
-	exceptions          map[string]uint32
-	firmBlocked         map[string]struct{}
-	allowedExact        map[string]struct{}
-	allowedWildcard     map[string]struct{}
-	blocking            bool
-	blockType           string
-	blockTTL            uint32
-	blockAddrs          []netip.Addr
-	bypass              []netip.Prefix
+	exceptions  map[string]uint32
+	firmBlocked map[string]struct{}
+	allowed     allowList
+	blocking    bool
+	blockType   string
+	blockTTL    uint32
+	blockAddrs  []netip.Addr
+	// ruleSets are the policies for particular clients, picked by address
+	// from clientExact, then by the most specific network in clientPrefixes.
+	// defaultSet narrows the block lists for everyone else; nil uses them all.
+	ruleSets            []ruleSet
+	defaultSet          *ruleSet
+	clientExact         map[netip.Addr]int
+	clientPrefixes      []clientPrefix
 	blockTXT            bool
 	cache               *ResponseCache
 	blockLists          []BlockListStats
@@ -127,15 +132,19 @@ type RuntimeConfig struct {
 	// ExceptionDomainOwners runs parallel, indexing BlockedDomainOwnerSets.
 	// ImportantBlockedDomains are the blocks an exception doesn't lift:
 	// $important rules and the operator's own blocked domains.
-	ExceptionDomains           []string
-	ExceptionDomainOwners      []uint32
-	ImportantBlockedDomains    []string
-	AllowedDomains             []string
-	BlockLists                 []BlockListStats
-	BlockingType               string
-	BlockingTTL                uint32
-	BlockingAddrs              []string
-	BypassClients              []string
+	ExceptionDomains        []string
+	ExceptionDomainOwners   []uint32
+	ImportantBlockedDomains []string
+	AllowedDomains          []string
+	BlockLists              []BlockListStats
+	BlockingType            string
+	BlockingTTL             uint32
+	BlockingAddrs           []string
+	BypassClients           []string
+	RuleSets                []RuleSetPolicy
+	// DefaultLists names the block-list sources for clients without a rule
+	// set. Nil applies every source.
+	DefaultLists               []string
 	AllowTXTReport             bool
 	Hosts                      []HostOverride
 	Zones                      []AuthoritativeZone

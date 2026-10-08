@@ -290,6 +290,10 @@ type Blocking struct {
 	CustomAddresses []string    `toml:"custom_addresses"`
 	BypassClients   []string    `toml:"bypass_clients"`
 	AllowTXTReport  bool        `toml:"allow_txt_report"`
+	// DefaultLists names the block lists for clients without a rule set. Empty
+	// means every list.
+	DefaultLists []string  `toml:"default_lists,omitempty"`
+	RuleSets     []RuleSet `toml:"rule_sets,omitempty"`
 }
 
 type BlockList struct {
@@ -712,6 +716,7 @@ func (configuration Config) Validate() error {
 		validationErrors = append(validationErrors, errors.New("security.secure_cookies must be true when server.http_listen is not loopback"))
 	}
 	validationErrors = append(validationErrors, configuration.Blocking.validate()...)
+	validationErrors = append(validationErrors, validateClientRuleSets(configuration.Clients, configuration.Blocking.RuleSets)...)
 	validationErrors = append(validationErrors, configuration.DynamicDNS.validate()...)
 	validationErrors = append(validationErrors, configuration.MCP.validate()...)
 	validationErrors = append(validationErrors, configuration.UniFi.validate()...)
@@ -1062,11 +1067,7 @@ func (settings Security) validate() []error {
 
 func (settings Blocking) validate() []error {
 	var validationErrors []error
-	for index, domain := range settings.Domains {
-		if _, err := dnsname.Normalize(strings.TrimPrefix(domain, "*.")); err != nil {
-			validationErrors = append(validationErrors, fmt.Errorf("blocking.domains[%d]: %w", index, err))
-		}
-	}
+	validationErrors = append(validationErrors, validatePolicyDomains("blocking.domains", settings.Domains)...)
 	seenLists := make(map[string]struct{}, len(settings.Lists))
 	for index, list := range settings.Lists {
 		field := fmt.Sprintf("blocking.lists[%d]", index)
@@ -1089,12 +1090,21 @@ func (settings Blocking) validate() []error {
 		}
 		seenLists[list.Name] = struct{}{}
 	}
-	for index, domain := range settings.AllowedDomains {
+	validationErrors = append(validationErrors, validatePolicyDomains("blocking.allowed_domains", settings.AllowedDomains)...)
+	validationErrors = append(validationErrors, settings.validateRuleSets()...)
+	return append(validationErrors, settings.validateResponse()...)
+}
+
+// validatePolicyDomains checks blocked or allowed domains, each a name or a
+// "*." wildcard.
+func validatePolicyDomains(field string, domains []string) []error {
+	var validationErrors []error
+	for index, domain := range domains {
 		if _, err := dnsname.Normalize(strings.TrimPrefix(domain, "*.")); err != nil {
-			validationErrors = append(validationErrors, fmt.Errorf("blocking.allowed_domains[%d]: %w", index, err))
+			validationErrors = append(validationErrors, fmt.Errorf("%s[%d]: %w", field, index, err))
 		}
 	}
-	return append(validationErrors, settings.validateResponse()...)
+	return validationErrors
 }
 
 // validateResponse checks how blocked queries are answered and who skips
@@ -1495,6 +1505,7 @@ func (settings *Blocking) normalize() {
 	}
 	settings.CustomAddresses = uniqueAddresses(settings.CustomAddresses)
 	settings.BypassClients = uniqueTrimmed(settings.BypassClients)
+	settings.normalizeRuleSets()
 	for index := range settings.Lists {
 		settings.Lists[index].normalize()
 	}

@@ -121,7 +121,7 @@ func compileResolver(configuration RuntimeConfig) (*Runtime, error) {
 }
 
 // compilePolicy fills in the block and allow lists, the blocking response and
-// the clients that bypass blocking.
+// the rule sets for particular clients, bypass clients among them.
 func (runtime *Runtime) compilePolicy(configuration RuntimeConfig) error {
 	blocked := make(map[string]uint32, len(configuration.BlockedDomains))
 	attributed := len(configuration.BlockedDomainOwners) == len(configuration.BlockedDomains)
@@ -148,20 +148,9 @@ func (runtime *Runtime) compilePolicy(configuration RuntimeConfig) error {
 	if err != nil {
 		return err
 	}
-	allowedExact := make(map[string]struct{}, len(configuration.AllowedDomains))
-	allowedWildcard := make(map[string]struct{}, len(configuration.AllowedDomains))
-	for _, domain := range configuration.AllowedDomains {
-		domain = strings.TrimSpace(domain)
-		wildcard := strings.HasPrefix(domain, "*.")
-		normalized, err := dnsname.Normalize(strings.TrimPrefix(domain, "*."))
-		if err != nil {
-			return fmt.Errorf("invalid allowed domain %q: %w", domain, err)
-		}
-		if wildcard {
-			allowedWildcard[normalized] = struct{}{}
-		} else {
-			allowedExact[normalized] = struct{}{}
-		}
+	allowed, err := compileAllowList(configuration.AllowedDomains)
+	if err != nil {
+		return err
 	}
 	blockingType := configuration.BlockingType
 	if blockingType == "" {
@@ -182,31 +171,17 @@ func (runtime *Runtime) compilePolicy(configuration RuntimeConfig) error {
 			blockAddresses = append(blockAddresses, address.Unmap())
 		}
 	}
-	bypass := make([]netip.Prefix, 0, len(configuration.BypassClients))
-	for _, value := range configuration.BypassClients {
-		prefix, err := netip.ParsePrefix(value)
-		if err != nil {
-			address, addressErr := netip.ParseAddr(value)
-			if addressErr != nil || address.Zone() != "" {
-				return fmt.Errorf("invalid blocking bypass client %q", value)
-			}
-			prefix = netip.PrefixFrom(address.Unmap(), address.Unmap().BitLen())
-		}
-		bypass = append(bypass, prefix.Masked())
-	}
 	runtime.blocked = blocked
 	runtime.blockedOwners = configuration.BlockedDomainOwnerSets
 	runtime.exceptions = exceptions
 	runtime.firmBlocked = firmBlocked
-	runtime.allowedExact = allowedExact
-	runtime.allowedWildcard = allowedWildcard
+	runtime.allowed = allowed
 	runtime.blocking = configuration.Blocking
 	runtime.blockType = blockingType
 	runtime.blockTTL = configuration.BlockingTTL
 	runtime.blockAddrs = blockAddresses
-	runtime.bypass = bypass
 	runtime.blockTXT = configuration.AllowTXTReport
-	return nil
+	return runtime.compileRuleSets(configuration)
 }
 
 // compileRoutes builds the conditional forwarding table, keyed by the

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -370,6 +371,8 @@ func compileRuntime(configuration config.Config, configuredZones []zone.Zone, ba
 		BlockingTTL:                configuration.Blocking.ResponseTTL,
 		BlockingAddrs:              configuration.Blocking.CustomAddresses,
 		BypassClients:              configuration.Blocking.BypassClients,
+		RuleSets:                   runtimeRuleSets(configuration),
+		DefaultLists:               defaultLists(configuration.Blocking.DefaultLists),
 		AllowTXTReport:             configuration.Blocking.AllowTXTReport,
 		Hosts:                      hosts,
 		Zones:                      zones,
@@ -448,6 +451,37 @@ func authoritativeZones(configuredZones []zone.Zone) []dnsserver.AuthoritativeZo
 		zones = append(zones, zone)
 	}
 	return zones
+}
+
+// runtimeRuleSets gives each rule set the devices that use it. The operator's
+// own blocked domains apply to every rule set, whatever lists it picks. A device named
+// by hardware address joins once Sable knows its addresses; until then only
+// devices named by address or network are in a rule set.
+func runtimeRuleSets(configuration config.Config) []dnsserver.RuleSetPolicy {
+	sets := make([]dnsserver.RuleSetPolicy, 0, len(configuration.Blocking.RuleSets))
+	for _, set := range configuration.Blocking.RuleSets {
+		policy := dnsserver.RuleSetPolicy{
+			Name: set.Name, Lists: append(slices.Clone(set.Lists), blockcompiler.CustomSourceName),
+			Domains: set.Domains, AllowedDomains: set.AllowedDomains,
+		}
+		for _, client := range configuration.Clients {
+			if client.RuleSet == set.Name && client.Address != "" {
+				policy.Clients = append(policy.Clients, client.Address)
+			}
+		}
+		sets = append(sets, policy)
+	}
+	return sets
+}
+
+// defaultLists adds the operator's own blocked domains to the default policy's
+// choice of block lists, since they apply whatever lists a policy uses. No
+// choice stays nil, which applies every list.
+func defaultLists(lists []string) []string {
+	if len(lists) == 0 {
+		return nil
+	}
+	return append(slices.Clone(lists), blockcompiler.CustomSourceName)
 }
 
 func runtimeTSIGKeys(keys []config.TSIGKey) []dnsserver.TSIGKey {

@@ -113,6 +113,7 @@ Replicated state includes:
 
 - authoritative zones, records, DNSSEC policy, and encrypted signing keys;
 - resolver, cache, TSIG, blocking, and query-log runtime settings;
+- devices (`[[clients]]`): their names, types, and blocking rule sets;
 - Dynamic DNS settings and external provider credentials;
 - UniFi settings and controller credentials;
 - OpenID Connect settings, client secret, linked identities, and role mappings;

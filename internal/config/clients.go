@@ -26,6 +26,9 @@ type Client struct {
 	Address string `toml:"address,omitempty"`
 	// Type is one of ClientTypes, set when the operator corrected Sable's guess.
 	Type string `toml:"type,omitempty"`
+	// RuleSet names the blocking rule set the device uses instead of the
+	// default policy.
+	RuleSet string `toml:"rule_set,omitempty"`
 }
 
 // ClientTypes are the kinds of device Sable recognizes, as stored in a
@@ -46,8 +49,8 @@ func (client Client) Key() string {
 
 func validateClient(field string, client Client) error {
 	name := strings.TrimSpace(client.Name)
-	if name == "" && client.Type == "" {
-		return fmt.Errorf("%s.name or %s.type is required", field, field)
+	if name == "" && client.Type == "" && client.RuleSet == "" {
+		return fmt.Errorf("%s.name, %s.type, or %s.rule_set is required", field, field, field)
 	}
 	if client.Type != "" && !slices.Contains(ClientTypes, client.Type) {
 		return fmt.Errorf("%s.type must be one of %s", field, strings.Join(ClientTypes, ", "))
@@ -99,6 +102,7 @@ func validateClients(clients []Client) error {
 func normalizeClient(client Client) Client {
 	client.Name = strings.TrimSpace(client.Name)
 	client.Type = strings.TrimSpace(client.Type)
+	client.RuleSet = strings.TrimSpace(client.RuleSet)
 	client.MAC = strings.TrimSpace(client.MAC)
 	client.Address = strings.TrimSpace(client.Address)
 	if mac, err := net.ParseMAC(client.MAC); err == nil {
@@ -175,7 +179,7 @@ func changeClient(clients []Client, target Client, change func(*Client)) ([]Clie
 		return true
 	})
 	change(&entry)
-	if entry.Name == "" && entry.Type == "" {
+	if entry.Name == "" && entry.Type == "" && entry.RuleSet == "" {
 		return updated, nil
 	}
 	if err := validateClient("client", entry); err != nil {

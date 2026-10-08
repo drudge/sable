@@ -90,6 +90,8 @@ func cloneConfig(source Config) Config {
 	cloned.Blocking.Lists = append([]BlockList(nil), source.Blocking.Lists...)
 	cloned.Blocking.CustomAddresses = append([]string(nil), source.Blocking.CustomAddresses...)
 	cloned.Blocking.BypassClients = append([]string(nil), source.Blocking.BypassClients...)
+	cloned.Blocking.DefaultLists = append([]string(nil), source.Blocking.DefaultLists...)
+	cloned.Blocking.RuleSets = cloneRuleSets(source.Blocking.RuleSets)
 	cloned.EncryptedDNS.DoTListen = append([]string(nil), source.EncryptedDNS.DoTListen...)
 	cloned.EncryptedDNS.DoHListen = append([]string(nil), source.EncryptedDNS.DoHListen...)
 	cloned.EncryptedDNS.DoQListen = append([]string(nil), source.EncryptedDNS.DoQListen...)
