@@ -53,14 +53,14 @@ type Runtime struct {
 	blockType   string
 	blockTTL    uint32
 	blockAddrs  []netip.Addr
-	// ruleSets are the policies for particular clients, picked by address
-	// from clientExact, then by the most specific network in clientPrefixes.
-	// defaultSet narrows the block lists for everyone else; nil uses them all.
+	// ruleSets are the policies for particular clients, picked through
+	// ruleSetClients. defaultSet narrows the block lists for everyone else;
+	// nil uses them all. holds block everything for particular clients, until
+	// a time in Unix nanoseconds, or forever when it is zero.
 	ruleSets            []ruleSet
-	ruleSetIndex        map[string]int
+	ruleSetClients      clientTable[int]
 	defaultSet          *ruleSet
-	clientExact         map[netip.Addr]int
-	clientPrefixes      []clientPrefix
+	holds               clientTable[int64]
 	blockTXT            bool
 	cache               *ResponseCache
 	blockLists          []BlockListStats
@@ -145,7 +145,9 @@ type RuntimeConfig struct {
 	RuleSets                []RuleSetPolicy
 	// DefaultLists names the block-list sources for clients without a rule
 	// set. Nil applies every source.
-	DefaultLists               []string
+	DefaultLists []string
+	// Holds block everything for particular clients.
+	Holds                      []HoldPolicy
 	AllowTXTReport             bool
 	Hosts                      []HostOverride
 	Zones                      []AuthoritativeZone
@@ -294,8 +296,8 @@ type Handler struct {
 	// private recursion admits. A background watcher replaces the list; a
 	// lookup only loads it.
 	attached atomic.Pointer[[]netip.Prefix]
-	// deviceAddresses ties addresses to rule sets for devices named by
-	// hardware address. A background worker replaces it; a lookup only loads it.
+	// deviceAddresses ties addresses to the hardware address of the device
+	// using them. A background worker replaces it; a lookup only loads it.
 	deviceAddresses      atomic.Pointer[DeviceAddresses]
 	queries              atomic.Uint64
 	noError              atomic.Uint64

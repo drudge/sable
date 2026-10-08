@@ -26,7 +26,10 @@ const (
 	PolicyClientBypass PolicyDecision = "client_bypass"
 	PolicyAllowed      PolicyDecision = "allowed"
 	PolicyBlocked      PolicyDecision = "blocked"
-	PolicyNoMatch      PolicyDecision = "no_match"
+	// PolicyHeld blocked a query because everything is blocked for its client
+	// for a while.
+	PolicyHeld    PolicyDecision = "held"
+	PolicyNoMatch PolicyDecision = "no_match"
 )
 
 type CacheDecision string

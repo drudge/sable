@@ -665,8 +665,8 @@ tools = ["list_zones", "list_records", "add_record", "set_records", "update_reco
 ```
 
 The rest start off: `create_zone`, `delete_zone`, `add_block_list`,
-`remove_block_list`, `refresh_block_lists`, `sync_dynamic_dns`,
-`search_queries`, and `search_server_logs`. See
+`remove_block_list`, `refresh_block_lists`, `block_device`, `unblock_device`,
+`sync_dynamic_dns`, `search_queries`, and `search_server_logs`. See
 [Let an AI assistant manage records](guides/mcp.md) for each tool's grant.
 
 An empty list offers no tools. A token still needs each tool's grant.
@@ -769,6 +769,35 @@ both win over a network.
 
 `bypass_clients` is a rule set with blocking off: those clients skip blocking
 entirely, and an address there wins over every rule set's.
+
+### Blocking everything for a device
+
+A hold blocks everything for one device for a while, like a router's "pause
+internet". The device still reaches its allowed domains, its rule set's and the
+global ones, and the names Sable answers itself from its zones and host
+overrides. Every other query gets the usual blocked answer.
+
+```toml
+[[blocking.holds]]
+mac = "da:a1:19:00:00:01"
+until = 2026-10-08T20:00:00-04:00
+
+[[blocking.holds]]
+address = "192.0.2.20"   # no until: held until the hold is removed
+```
+
+A hold names its device the way a [`[[clients]]`](#devices-and-insights) entry
+does, by `mac` or by `address`, which can be a network. A hold by `mac` follows
+the device to every address Sable has tied to it, so it needs Insights on. A
+hold wins over the device's rule set and over `bypass_clients`, and it keeps
+blocking while blocking is paused; with blocking turned off it does nothing.
+Once `until` passes the hold stops applying, and the next hold change removes
+it. Holds replicate to every node and each change shows in the Change Center.
+
+The MCP tools `block_device` and `unblock_device` set and end holds; both are
+off until added to `[mcp] tools`. DNS blocking isn't a firewall: a device that
+uses another DNS server, DNS over HTTPS in its browser, or a VPN gets past a
+hold.
 
 ### Block-list health and retry backoff
 

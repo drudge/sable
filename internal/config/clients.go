@@ -61,16 +61,22 @@ func validateClient(field string, client Client) error {
 	if strings.IndexFunc(name, unicode.IsControl) >= 0 {
 		return fmt.Errorf("%s.name must not contain control characters", field)
 	}
+	return validateDevice(field, client.MAC, client.Address)
+}
+
+// validateDevice checks how an entry names a device: by hardware address, or
+// by an IP address or CIDR network, but not both.
+func validateDevice(field, mac, address string) error {
 	switch {
-	case client.MAC != "" && client.Address != "":
+	case mac != "" && address != "":
 		return fmt.Errorf("%s must set mac or address, not both", field)
-	case client.MAC != "":
-		if _, err := net.ParseMAC(client.MAC); err != nil {
+	case mac != "":
+		if _, err := net.ParseMAC(mac); err != nil {
 			return fmt.Errorf("%s.mac must be a hardware address", field)
 		}
-	case client.Address != "":
-		if _, err := netip.ParsePrefix(client.Address); err != nil {
-			if _, err := netip.ParseAddr(client.Address); err != nil {
+	case address != "":
+		if _, err := netip.ParsePrefix(address); err != nil {
+			if _, err := netip.ParseAddr(address); err != nil {
 				return fmt.Errorf("%s.address must be an IP address or CIDR network", field)
 			}
 		}

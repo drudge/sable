@@ -89,17 +89,28 @@ func (runtime *Runtime) blockedSources(owner uint32) []string {
 	return runtime.blockedOwners[owner]
 }
 
-// policyDecision decides how blocking treats name for a client. A client's
-// rule set comes first: its own allowed and blocked domains win over the
-// global ones, and only its block lists apply.
+// policyDecision decides how blocking treats name for a client. A hold on
+// the client blocks everything but its allowed domains, even while blocking
+// is paused. Otherwise the client's rule set comes first: its own allowed and
+// blocked domains win over the global ones, and only its block lists apply.
 func (runtime *Runtime) policyDecision(name, clientIP string, devices DeviceAddresses, paused bool) (querylog.PolicyDecision, string, []string) {
 	if !runtime.blocking {
 		return querylog.PolicyDisabled, "", nil
 	}
+	client, identified := identifyClient(clientIP, devices)
+	set := runtime.ruleSetFor(client, identified)
+	if identified && !runtime.holds.empty() && runtime.held(client, time.Now) {
+		if rule := set.allowedRule(name); rule != "" {
+			return querylog.PolicyAllowed, rule, nil
+		}
+		if rule := runtime.allowed.match(name); rule != "" {
+			return querylog.PolicyAllowed, rule, nil
+		}
+		return querylog.PolicyHeld, "", nil
+	}
 	if paused {
 		return querylog.PolicyPaused, "", nil
 	}
-	set := runtime.ruleSetFor(clientIP, devices)
 	if set != nil {
 		if set.off {
 			// The fact that the client bypassed policy is useful; persisting the

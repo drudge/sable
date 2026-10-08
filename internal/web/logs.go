@@ -632,6 +632,9 @@ func queryDecisionView(decision querylog.Decision) pages.QueryDecisionView {
 		if sources := joinSourceNames(decision.PolicySources); sources != "" && view.PolicyDetail != "" {
 			view.PolicyDetail += " from " + sources
 		}
+	case querylog.PolicyHeld:
+		view.Policy = "Everything blocked for this device"
+		view.PolicyDetail = "The device has a hold that blocks everything but its allowed domains."
 	case querylog.PolicyNoMatch:
 		view.Policy = "No blocking rule matched"
 	}

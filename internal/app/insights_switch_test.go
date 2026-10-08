@@ -171,6 +171,8 @@ func TestReplicatedRuntimeConfigurationKeepsLocalInsightsWhenPrimaryOmitsIt(t *t
 func TestReplicatedRuntimeConfigurationCarriesDevices(t *testing.T) {
 	primary := config.Defaults()
 	primary.Clients = []config.Client{{Name: "Leo's Switch", Address: "192.0.2.20", RuleSet: "Kids"}}
+	until := time.Date(2026, 10, 8, 20, 0, 0, 0, time.FixedZone("EDT", -4*3600))
+	primary.Blocking.Holds = []config.Hold{{Address: "192.0.2.20", Until: until}}
 	candidate := config.Defaults()
 	candidate.Clients = []config.Client{{Name: "Old name", Address: "192.0.2.20"}}
 	source := replicatedRuntimeConfiguration(primary)
@@ -178,8 +180,24 @@ func TestReplicatedRuntimeConfigurationCarriesDevices(t *testing.T) {
 	if len(candidate.Clients) != 1 || candidate.Clients[0].RuleSet != "Kids" {
 		t.Fatalf("replica devices = %+v, want the primary's", candidate.Clients)
 	}
+	if len(candidate.Blocking.Holds) != 1 || !candidate.Blocking.Holds[0].Until.Equal(until) {
+		t.Fatalf("replica holds = %+v, want the primary's", candidate.Blocking.Holds)
+	}
+	// Holds survive the trip through TOML unchanged, so a replica doesn't
+	// rewrite its configuration on every heartbeat.
+	encoded, err := toml.Marshal(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var held clusterRuntimeConfiguration
+	if err := toml.Unmarshal(encoded, &held); err != nil {
+		t.Fatal(err)
+	}
+	if !replicatedConfigurationEqual(source, held) {
+		t.Fatal("holds changed on the way through TOML")
+	}
 	// A primary whose last device was removed still says so through TOML.
-	encoded, err := toml.Marshal(replicatedRuntimeConfiguration(config.Defaults()))
+	encoded, err = toml.Marshal(replicatedRuntimeConfiguration(config.Defaults()))
 	if err != nil {
 		t.Fatal(err)
 	}

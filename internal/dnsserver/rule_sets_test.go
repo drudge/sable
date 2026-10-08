@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/drudge/sable/internal/querylog"
 )
@@ -26,6 +27,7 @@ func ruleSetTestConfig() RuntimeConfig {
 		{Name: "Work", Lists: []string{"Custom"}, AllowedDomains: []string{"*.tracker.example"}, Clients: []string{"192.0.2.50", "2001:db8::/32"}},
 		{Name: "Strict only", Lists: []string{"Strict", "Custom"}, Clients: []string{"198.51.100.7"}},
 		{Name: "Ads only", Lists: []string{"Ads"}, Clients: []string{"198.51.100.8"}},
+		{Name: "Tablets", Lists: []string{"Strict"}, Clients: []string{"DA:A1:19:00:00:01"}},
 	}
 	configuration.BypassClients = []string{"192.0.2.99", "203.0.113.0/24"}
 	return configuration
@@ -93,15 +95,18 @@ func TestDefaultListsNarrowPolicyForClientsWithoutRuleSet(t *testing.T) {
 
 func TestDeviceAddressesPutDevicesInRuleSets(t *testing.T) {
 	t.Parallel()
-	runtime, err := Compile(ruleSetTestConfig())
+	configuration := ruleSetTestConfig()
+	configuration.RuleSets[0].Clients = append(configuration.RuleSets[0].Clients, "da:a1:19:00:00:02")
+	runtime, err := Compile(configuration)
 	if err != nil {
 		t.Fatalf("Compile() error = %v", err)
 	}
 	devices := DeviceAddresses{
-		netip.MustParseAddr("10.0.0.7"):    "Kids",
-		netip.MustParseAddr("192.0.2.50"):  "Kids",
-		netip.MustParseAddr("2001:db8::9"): "Kids",
-		netip.MustParseAddr("10.0.0.8"):    "Renamed",
+		netip.MustParseAddr("10.0.0.7"):    "da:a1:19:00:00:02",
+		netip.MustParseAddr("192.0.2.50"):  "da:a1:19:00:00:02",
+		netip.MustParseAddr("2001:db8::9"): "da:a1:19:00:00:02",
+		netip.MustParseAddr("10.0.0.8"):    "da:a1:19:00:00:01",
+		netip.MustParseAddr("10.0.0.9"):    "da:a1:19:00:00:09",
 	}
 	for _, test := range []struct {
 		client   string
@@ -110,12 +115,17 @@ func TestDeviceAddressesPutDevicesInRuleSets(t *testing.T) {
 		{"10.0.0.7", querylog.PolicyBlocked},     // learned address joins Kids
 		{"192.0.2.50", querylog.PolicyNoMatch},   // a configured address wins
 		{"2001:db8::9", querylog.PolicyBlocked},  // learned beats a configured network
-		{"10.0.0.8", querylog.PolicyNoMatch},     // a set that no longer exists is ignored
+		{"10.0.0.8", querylog.PolicyNoMatch},     // Tablets doesn't block games.example
+		{"10.0.0.9", querylog.PolicyNoMatch},     // a device in no rule set
 		{"fe80::1%eth0", querylog.PolicyNoMatch}, // zones are ignored
 	} {
 		if decision, _, _ := runtime.policyDecision("games.example", test.client, devices, false); decision != test.decision {
 			t.Errorf("policyDecision(games.example) for %s = %q, want %q", test.client, decision, test.decision)
 		}
+	}
+	if decision, _, sources := runtime.policyDecision("video.example", "10.0.0.8", devices, false); decision != querylog.PolicyBlocked ||
+		!slices.Equal(sources, []string{"Strict"}) {
+		t.Errorf("policyDecision(video.example) for a tablet = %q %v, want blocked by Strict", decision, sources)
 	}
 	handler := NewHandler(runtime)
 	if handler.DeviceAddressTable() != nil {
@@ -154,7 +164,7 @@ func TestPolicyDecisionDoesNotAllocateWithRuleSets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Compile() error = %v", err)
 	}
-	devices := DeviceAddresses{netip.MustParseAddr("10.0.0.7"): "Kids"}
+	devices := DeviceAddresses{netip.MustParseAddr("10.0.0.7"): "da:a1:19:00:00:01"}
 	for _, client := range []string{"10.0.0.1", "10.0.0.7", "192.0.2.4", "192.0.2.50", "198.51.100.7", "192.0.2.99"} {
 		if allocations := testing.AllocsPerRun(100, func() {
 			_, _, _ = runtime.policyDecision("pixel.shorts.video.example.", client, devices, false)
@@ -166,7 +176,7 @@ func TestPolicyDecisionDoesNotAllocateWithRuleSets(t *testing.T) {
 
 // BenchmarkPolicyDecision measures the per-query policy check against a large
 // block list, for a client with no rule set and for one in a set that uses
-// only some of the lists.
+// only some of the lists, with holds on other clients.
 func BenchmarkPolicyDecision(b *testing.B) {
 	const policySize = 100_000
 	configuration := testRuntimeConfig()
@@ -186,13 +196,14 @@ func BenchmarkPolicyDecision(b *testing.B) {
 	withSets := configuration
 	withSets.RuleSets = []RuleSetPolicy{
 		{Name: "Kids", Lists: []string{"Strict"}, Domains: []string{"games.example"}, Clients: []string{"192.0.2.0/24"}},
-		{Name: "Work", Lists: []string{"Ads"}, Clients: []string{"192.0.2.50", "2001:db8::/32"}},
+		{Name: "Work", Lists: []string{"Ads"}, Clients: []string{"192.0.2.50", "2001:db8::/32", "da:a1:19:00:00:01"}},
 	}
+	withSets.Holds = []HoldPolicy{{Client: "192.0.2.77", Until: time.Now().Add(time.Hour)}, {Client: "da:a1:19:00:00:02"}}
 	setRuntime, err := Compile(withSets)
 	if err != nil {
 		b.Fatal(err)
 	}
-	devices := DeviceAddresses{netip.MustParseAddr("10.0.0.7"): "Kids"}
+	devices := DeviceAddresses{netip.MustParseAddr("10.0.0.7"): "da:a1:19:00:00:01"}
 	for _, run := range []struct {
 		name    string
 		runtime *Runtime

@@ -78,7 +78,7 @@ type process struct {
 	dnssec             *dnssecSigner
 	zoneManager        *zone.Manager
 	handler            *dnsserver.Handler
-	deviceRuleSets     *deviceRuleSets
+	deviceAddresses    *deviceAddressTable
 	listeners          *dnsserver.ListenerGroup
 	readInterfaces     func() ([]localnet.Interface, error)
 	attachedNetworks   *localnet.Watcher
@@ -235,12 +235,12 @@ func (process *process) startDNS(ctx context.Context) error {
 	process.readInterfaces = attachedInterfaceReader()
 	process.attachedNetworks = localnet.NewWatcher(process.handler.SetAttachedNetworks)
 	_ = process.attachedNetworks.Refresh(process.readInterfaces)
-	// Devices named by hardware address join their rule sets as Sable ties
-	// addresses to them.
-	process.deviceRuleSets = newDeviceRuleSets(process.database.ClientIdentities, process.database.ClientTracking,
+	// Rule sets and holds reach devices named by hardware address as Sable
+	// ties addresses to them.
+	process.deviceAddresses = newDeviceAddressTable(process.database.ClientIdentities, process.database.ClientTracking,
 		process.handler.SetDeviceAddresses, process.logger)
-	process.deviceRuleSets.SetClients(process.initial.Clients)
-	process.runWorker(process.deviceRuleSets.Run)
+	process.deviceAddresses.SetConfiguration(process.initial)
+	process.runWorker(process.deviceAddresses.Run)
 	return nil
 }
 
@@ -408,7 +408,7 @@ func (process *process) applyConfiguration(reloadContext context.Context, active
 		return err
 	}
 	// After the recorder settings, so turning Insights off empties the table.
-	process.deviceRuleSets.SetClients(candidate.Clients)
+	process.deviceAddresses.SetConfiguration(candidate)
 	if clusterRestartRequired {
 		process.logger.Info("cluster bootstrap settings staged", "restart_required", true)
 	}
@@ -528,12 +528,12 @@ func (process *process) insightsEnabled() bool { return process.current().Insigh
 func (process *process) startIntegrations() {
 	database := process.database
 	process.unifiSync = newUniFiSyncer(process.configurationManager, process.zoneManager, process.unifiCredentials, process.leading, process.logger)
-	process.unifiSync.identities = process.deviceRuleSets.Record(database.RecordClientIdentities)
+	process.unifiSync.identities = process.deviceAddresses.Record(database.RecordClientIdentities)
 	process.unifiSync.reading = database.RecordUniFiReading
 	process.runWorker(func(context.Context) { process.unifiSync.Run(process.zoneRefreshContext) })
 	process.runWorker(func(context.Context) {
 		runNeighborSampler(process.runtimeContext, process.insightsEnabled, neighbors.Read,
-			process.deviceRuleSets.Record(database.RecordClientIdentities), process.logger)
+			process.deviceAddresses.Record(database.RecordClientIdentities), process.logger)
 	})
 	process.runWorker(func(context.Context) {
 		process.attachedNetworks.Run(process.runtimeContext, process.readInterfaces, process.logger)
@@ -673,7 +673,7 @@ func (process *process) startAlerts() {
 	// The lead hands replicas the addresses it has tied to hardware, since a
 	// replica may not see the network's hardware addresses itself.
 	clusterService.SetClientIdentities(cluster.ClientIdentities{
-		Read: database.ClientIdentities, Record: process.deviceRuleSets.Record(database.RecordClientIdentities), Lookback: devices.Lookback,
+		Read: database.ClientIdentities, Record: process.deviceAddresses.Record(database.RecordClientIdentities), Lookback: devices.Lookback,
 		Enabled: process.insightsEnabled,
 	})
 	// A replica in a container can't see the LAN it serves, so the lead hands
