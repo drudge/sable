@@ -1,6 +1,8 @@
 package main
 
 import (
+	"slices"
+
 	blockcompiler "github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/config"
 )
@@ -14,6 +16,7 @@ func applyPrimaryFixture(configuration *config.Config, controllerURL string) {
 		Forwarders: []string{"10.20.10.20:53"},
 	}}
 	configuration.Blocking = blockingFixture()
+	configuration.Clients = slices.Clone(ruleSetClients)
 	configuration.UniFi = unifiFixture(controllerURL)
 }
 
@@ -23,6 +26,7 @@ func blockingFixture() config.Blocking {
 	blocking.Domains = blockedDomains
 	blocking.AllowedDomains = allowedDomains
 	blocking.BypassClients = []string{"10.20.10.20"}
+	blocking.RuleSets = slices.Clone(ruleSetsFixture)
 	blocking.Lists = make([]config.BlockList, 0, len(blockListSources))
 	for _, source := range blockListSources {
 		blocking.Lists = append(blocking.Lists, config.BlockList{
@@ -60,4 +64,24 @@ func unifiFixture(controllerURL string) config.UniFi {
 		})
 	}
 	return settings
+}
+
+// ruleSetsFixture gives the warehouse floor, the IoT gear, and guests their
+// own blocking, which the Rule Sets tab shows.
+var ruleSetsFixture = []config.RuleSet{
+	{Name: "Guests", Lists: []string{"OISD Big"}, Domains: []string{"bittorrent.com"}},
+	{Name: "IoT", Lists: []string{"Steven Black Unified"}, AllowedDomains: []string{"*.ubnt.com"}},
+	{Name: "Warehouse", Lists: []string{"AdGuard DNS Filter", "OISD Big"}, Domains: []string{"tiktok.com", "youtube.com"}},
+}
+
+// ruleSetClients puts devices in those rule sets: by hardware address, so
+// UniFi's names label them, and the guest network by its range.
+var ruleSetClients = []config.Client{
+	{MAC: "00:05:12:66:22:e1", RuleSet: "Warehouse"},
+	{MAC: "00:05:12:66:22:e2", RuleSet: "Warehouse"},
+	{MAC: "00:07:4d:22:07:b5", RuleSet: "Warehouse"},
+	{MAC: "9c:8e:cd:33:0c:c2", RuleSet: "IoT"},
+	{MAC: "9c:8e:cd:33:0c:c3", RuleSet: "IoT"},
+	{MAC: "a4:cf:12:33:0c:c5", RuleSet: "IoT"},
+	{Address: "10.20.40.0/24", RuleSet: "Guests"},
 }

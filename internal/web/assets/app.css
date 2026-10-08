@@ -605,7 +605,7 @@ button.ranking-row { width: 100%; border-width: 1px 0 0; background: none; color
 
 .blocking-page { width: 100%; }
 .blocking-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(17rem, .8fr); align-items: start; gap: var(--space-4); }
-.blocking-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-1); border-bottom: 1px solid var(--border); padding: var(--space-3); }
+.blocking-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-1); border-bottom: 1px solid var(--border); padding: var(--space-3); }
 .blocking-tabs button { display: flex; height: 2.25rem; align-items: center; justify-content: center; gap: var(--space-2); border: 0; border-radius: 999px; background: transparent; color: var(--muted-foreground); font-size: .8rem; font-weight: 500; }
 .blocking-tabs button:hover { background: var(--muted); color: var(--foreground); }
 .blocking-tabs button.active { background: var(--muted); color: var(--foreground); box-shadow: inset 0 0 0 1px var(--border); }
@@ -711,7 +711,7 @@ button.ranking-row { width: 100%; border-width: 1px 0 0; background: none; color
 .pause-menu > div button { min-height: 2rem; border: 0; border-radius: .35rem; background: transparent; padding: 0 .65rem; color: inherit; font-size: .76rem; text-align: left; white-space: nowrap; }
 .pause-menu > div button:hover { background: var(--muted); }
 .blocking-workspace { position: relative; z-index: 1; min-width: 0; }
-.blocking-workspace > .blocking-tabs { grid-template-columns: repeat(3, 1fr); border: 0; border-radius: 999px; background: var(--muted); padding: var(--space-1); }
+.blocking-workspace > .blocking-tabs { grid-template-columns: repeat(4, 1fr); border: 0; border-radius: 999px; background: var(--muted); padding: var(--space-1); }
 .blocking-workspace > .blocking-tabs button.active { background: var(--card); }
 .blocking-workspace > .blocking-panel { padding: var(--space-6) 0 0; }
 .blocking-list-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-4); }
@@ -4355,8 +4355,8 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 /* A problem arrives as a toast that floats over the dialog, so its slot takes no room. */
 .alert-destination-notice { display: contents; }
 .alert-destination-form .dialog-footer .alert-preview-button { margin-right: auto; }
-.isotope-dialog-body fieldset.alert-formats, .isotope-dialog-body fieldset.alert-sends { min-width: 0; margin: 0; border: 0; padding: 0; }
-.isotope-dialog-body :is(.alert-formats, .alert-sends) > legend { margin-bottom: var(--space-2); padding: 0; font-size: .8125rem; font-weight: 500; }
+.isotope-dialog-body fieldset:is(.alert-formats, .alert-sends, .rule-set-lists) { min-width: 0; margin: 0; border: 0; padding: 0; }
+.isotope-dialog-body :is(.alert-formats, .alert-sends, .rule-set-lists) > legend { margin-bottom: var(--space-2); padding: 0; font-size: .8125rem; font-weight: 500; }
 .alert-format-tabs { display: flex; flex-wrap: wrap; width: 100%; align-items: center; gap: .125rem; border-radius: .5rem; background: var(--muted); padding: var(--space-1); }
 .alert-format { display: inline-flex; flex: 1 1 auto; height: 1.75rem; align-items: center; justify-content: center; gap: .4rem; border-radius: .375rem; padding: 0 .6rem; white-space: nowrap; color: var(--muted-foreground); font-size: .8125rem; cursor: pointer; }
 .alert-format .nav-icon { width: .875rem; height: .875rem; flex: 0 0 .875rem; }
@@ -4364,10 +4364,10 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .alert-format:has(input:checked) { background: var(--background); color: var(--foreground); box-shadow: 0 1px 3px rgb(0 0 0 / 0.16); }
 .alert-format:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; }
 .alert-format:has(input:disabled) { cursor: not-allowed; opacity: .5; }
-.alert-sends-choice { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); font-size: .8125rem; font-weight: 400; }
-.alert-sends-choice label, .alert-sends-groups label { display: inline-flex; align-items: center; gap: .45rem; cursor: pointer; }
-.alert-sends :is(input[type="radio"], input[type="checkbox"]) { width: 1rem; height: 1rem; flex: 0 0 1rem; margin: 0; padding: 0; accent-color: var(--foreground); }
-.alert-sends-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem var(--space-4); margin-top: .65rem; border-top: 1px solid var(--border); padding-top: .65rem; font-size: .8125rem; font-weight: 400; }
+:is(.alert-sends-choice, .rule-set-choice) { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); font-size: .8125rem; font-weight: 400; }
+:is(.alert-sends-choice, .alert-sends-groups, .rule-set-choice, .rule-set-list-choices) label { display: inline-flex; align-items: center; gap: .45rem; cursor: pointer; }
+:is(.alert-sends, .rule-set-lists) :is(input[type="radio"], input[type="checkbox"]) { width: 1rem; height: 1rem; flex: 0 0 1rem; margin: 0; padding: 0; accent-color: var(--foreground); }
+:is(.alert-sends-groups, .rule-set-list-choices) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem var(--space-4); margin-top: .65rem; border-top: 1px solid var(--border); padding-top: .65rem; font-size: .8125rem; font-weight: 400; }
 .alert-sends-groups small { color: var(--muted-foreground); font-size: .68rem; }
 /* Everything needs no list of groups. */
 .alert-sends:has(input[name="sends_all"][value="true"]:checked) .alert-sends-groups { display: none; }
@@ -4384,7 +4384,31 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .alert-preview-error { margin: 0; padding: .45rem .65rem 0; color: var(--destructive); font-size: .8125rem; }
 .alert-preview pre { flex: 1 1 auto; min-height: 0; max-height: none; margin: 0; overflow: auto; border: 0; border-radius: 0; background: transparent; padding: .45rem 2.25rem .45rem .65rem; font-size: .75rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 480px) {
-	.alert-sends-groups { grid-template-columns: 1fr; }
+	:is(.alert-sends-groups, .rule-set-list-choices) { grid-template-columns: 1fr; }
+}
+
+/* Rule sets: the Default row and one row per rule set, with Edit beside
+   Delete, and a dialog whose block list choices scroll when there are many. */
+.rule-set-toolbar .field-help { margin: 0; max-width: 36rem; }
+.rule-set-toolbar > .button { flex: none; white-space: nowrap; }
+.rule-set-row small { text-transform: none; }
+.rule-set-row .rule-set-name { overflow-wrap: anywhere; }
+.rule-set-row > .button { justify-self: end; }
+.rule-set-row:not(:has(> .icon-button)) > .button { grid-column: 3 / -1; }
+.rule-set-empty { min-height: 0; margin-top: var(--space-4); padding: var(--space-6); }
+.rule-set-note { margin: var(--space-4) 0 0; }
+.rule-set-form { display: grid; gap: var(--space-4); }
+.rule-set-body { padding: 0; }
+/* A problem arrives as a toast that floats over the dialog, so its slot takes no room. */
+.rule-set-notice { display: contents; }
+.rule-set-list-choices { max-height: 12rem; overflow-y: auto; }
+.rule-set-lists:not(.rule-set-scope) > .rule-set-list-choices { margin-top: 0; border-top: 0; padding-top: 0; }
+.rule-set-list-choices span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rule-set-lists > small { display: block; margin-top: var(--space-2); }
+/* Every Block List needs no list to pick from. */
+.rule-set-scope:has(input[name="scope"][value="all"]:checked) .rule-set-list-choices { display: none; }
+@media (max-width: 640px) {
+	.rule-set-row { grid-template-columns: 2rem minmax(0, 1fr) auto 2rem; }
 }
 
 /* Watches: a row per watch with its switch beside Edit and Remove, and a

@@ -257,11 +257,9 @@ func (server *Server) mcpRemoveBlockList(request *http.Request, arguments json.R
 	}
 	name := server.config.Current().Config.Blocking.Lists[index].Name
 	err = editor.UpdateBlocking(request.Context(), func(policy *config.Blocking) error {
-		index := slices.IndexFunc(policy.Lists, matches)
-		if index < 0 {
-			return errors.New("block list was not found")
+		if err := policy.RemoveList(name); err != nil {
+			return err
 		}
-		policy.Lists = slices.Delete(policy.Lists, index, index+1)
 		if len(remoteBlockSources(*policy)) == 0 {
 			server.blockLists.Schedule(time.Time{})
 		}

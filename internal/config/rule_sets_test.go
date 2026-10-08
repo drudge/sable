@@ -64,3 +64,78 @@ func TestClientWithOnlyRuleSetIsKept(t *testing.T) {
 		t.Fatalf("clients after removing the name = %+v, want the rule set kept", updated)
 	}
 }
+
+func TestSaveAndDeleteRuleSetsCarryTheirDevices(t *testing.T) {
+	t.Parallel()
+	configuration := Defaults()
+	configuration.Blocking.Lists = []BlockList{{Name: "Ads", Path: "ads.txt"}}
+	configuration.Blocking.RuleSets = []RuleSet{{Name: "Kids", Lists: []string{"Ads"}}}
+	configuration.Clients = []Client{
+		{MAC: "da:a1:19:00:00:01", Name: "Emma's iPad", RuleSet: "Kids"},
+		{Address: "192.0.2.20", RuleSet: "Kids"},
+		{Address: "192.0.2.30", Name: "Printer"},
+	}
+
+	if err := configuration.SaveRuleSet("", RuleSet{Name: " Work "}); err != nil || configuration.Blocking.RuleSets[1].Name != "Work" {
+		t.Fatalf("SaveRuleSet(new) = %v, sets %+v", err, configuration.Blocking.RuleSets)
+	}
+	if err := configuration.SaveRuleSet("", RuleSet{Name: "kids"}); err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("SaveRuleSet(duplicate) = %v", err)
+	}
+	if err := configuration.SaveRuleSet("Guests", RuleSet{Name: "Guests"}); err == nil || !strings.Contains(err.Error(), "no rule set") {
+		t.Fatalf("SaveRuleSet(missing) = %v", err)
+	}
+	if err := configuration.SaveRuleSet("", RuleSet{Name: "Default"}); err == nil || !strings.Contains(err.Error(), "reserved") {
+		t.Fatalf("SaveRuleSet(Default) = %v", err)
+	}
+	// A rename keeps the devices; renaming to its own name in another case is fine.
+	if err := configuration.SaveRuleSet("Kids", RuleSet{Name: "Children", Domains: []string{"games.example"}}); err != nil {
+		t.Fatal(err)
+	}
+	if configuration.Clients[0].RuleSet != "Children" || configuration.Clients[1].RuleSet != "Children" || configuration.Blocking.RuleSets[0].Domains[0] != "games.example" {
+		t.Fatalf("after rename: clients %+v, sets %+v", configuration.Clients, configuration.Blocking.RuleSets)
+	}
+	configuration.normalize()
+	if err := configuration.Validate(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := configuration.DeleteRuleSet("Children"); err != nil {
+		t.Fatal(err)
+	}
+	// The address entry said only which rule set it used, so it goes.
+	if len(configuration.Clients) != 2 || slices.ContainsFunc(configuration.Clients, func(client Client) bool { return client.RuleSet != "" }) ||
+		len(configuration.Blocking.RuleSets) != 1 {
+		t.Fatalf("after delete: clients %+v, sets %+v", configuration.Clients, configuration.Blocking.RuleSets)
+	}
+	if err := configuration.DeleteRuleSet("Children"); err == nil {
+		t.Fatal("DeleteRuleSet() deleted a rule set twice")
+	}
+}
+
+func TestRemoveListLeavesRuleSetsValid(t *testing.T) {
+	t.Parallel()
+	blocking := Blocking{
+		Lists:        []BlockList{{Name: "Ads"}, {Name: "Strict"}},
+		DefaultLists: []string{"Ads", "Strict"},
+		RuleSets:     []RuleSet{{Name: "Kids", Lists: []string{"Ads", "Strict"}}},
+	}
+	// The manager hands out shared slices, so the change must not write to them.
+	shared := blocking.RuleSets
+	if err := blocking.RemoveList("Strict"); err != nil {
+		t.Fatal(err)
+	}
+	if len(blocking.Lists) != 1 || !slices.Equal(blocking.DefaultLists, []string{"Ads"}) || !slices.Equal(blocking.RuleSets[0].Lists, []string{"Ads"}) {
+		t.Fatalf("after RemoveList: %+v", blocking)
+	}
+	if !slices.Equal(shared[0].Lists, []string{"Ads", "Strict"}) {
+		t.Fatal("RemoveList changed a rule set it was given")
+	}
+	// Removing the default policy's only list would turn every list on.
+	if err := blocking.RemoveList("Ads"); err == nil || !strings.Contains(err.Error(), "only block list") {
+		t.Fatalf("RemoveList(only default) = %v", err)
+	}
+	if err := blocking.RemoveList("Missing"); err == nil {
+		t.Fatal("RemoveList() removed a list that isn't there")
+	}
+}

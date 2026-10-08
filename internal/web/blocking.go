@@ -45,7 +45,7 @@ func (server *Server) blockingView(request *http.Request, message, errorMessage,
 	console := server.consoleView(request)
 	snapshot := server.config.Current()
 	stats := server.stats.Stats()
-	if activeTab != "domains" && activeTab != "allowed" {
+	if activeTab != "domains" && activeTab != "allowed" && activeTab != ruleSetsTab {
 		activeTab = "lists"
 	}
 	sourceStats := make(map[string]pages.BlockListSourceView, len(stats.BlockSources))
@@ -93,7 +93,8 @@ func (server *Server) blockingView(request *http.Request, message, errorMessage,
 		UpdateHours:     max(1, int(snapshot.Config.Blocking.UpdateInterval.Duration/time.Hour)),
 		LastUpdate:      updateStatus.LastUpdate, NextUpdate: updateStatus.NextUpdate, Updating: updateStatus.Updating,
 		DegradedLists: updateStatus.Degraded,
-		ActiveTab:     activeTab, Message: message, Error: errorMessage,
+		RuleSets:      server.ruleSetViews(request.Context(), snapshot.Config), DefaultLists: slices.Clone(snapshot.Config.Blocking.DefaultLists),
+		ActiveTab: activeTab, Message: message, Error: errorMessage,
 	}
 }
 
@@ -187,26 +188,29 @@ func (server *Server) logBlockingOperation(request *http.Request, operationErr e
 
 func blockingMutationAction(path string) string {
 	actions := map[string]string{
-		"/ui/blocking/reload":         "blocking.reload",
-		"/ui/blocking/domains/add":    "blocking.blocked_domain.add",
-		"/ui/blocking/domains/delete": "blocking.blocked_domain.delete",
-		"/ui/blocking/domains/flush":  "blocking.blocked_domain.clear",
-		"/ui/blocking/domains/import": "blocking.blocked_domain.import",
-		"/ui/blocking/domains/export": "blocking.blocked_domain.export",
-		"/ui/blocking/allowed/add":    "blocking.allowed_domain.add",
-		"/ui/blocking/allowed/delete": "blocking.allowed_domain.delete",
-		"/ui/blocking/allowed/flush":  "blocking.allowed_domain.clear",
-		"/ui/blocking/allowed/import": "blocking.allowed_domain.import",
-		"/ui/blocking/allowed/export": "blocking.allowed_domain.export",
-		"/ui/blocking/lists/add":      "blocking.list.add",
-		"/ui/blocking/lists/delete":   "blocking.list.delete",
-		"/ui/blocking/lists/update":   "blocking.list.update",
-		"/ui/blocking/lists/refresh":  "blocking.list.refresh",
-		"/ui/blocking/toggle":         "blocking.toggle",
-		"/ui/blocking/pause":          "blocking.pause",
-		"/ui/blocking/resume":         "blocking.resume",
-		"/ui/blocking/query-domain":   "blocking.query_log_policy",
-		"/ui/blocking/check/rule":     "blocking.check_policy",
+		"/ui/blocking/reload":            "blocking.reload",
+		"/ui/blocking/domains/add":       "blocking.blocked_domain.add",
+		"/ui/blocking/domains/delete":    "blocking.blocked_domain.delete",
+		"/ui/blocking/domains/flush":     "blocking.blocked_domain.clear",
+		"/ui/blocking/domains/import":    "blocking.blocked_domain.import",
+		"/ui/blocking/domains/export":    "blocking.blocked_domain.export",
+		"/ui/blocking/allowed/add":       "blocking.allowed_domain.add",
+		"/ui/blocking/allowed/delete":    "blocking.allowed_domain.delete",
+		"/ui/blocking/allowed/flush":     "blocking.allowed_domain.clear",
+		"/ui/blocking/allowed/import":    "blocking.allowed_domain.import",
+		"/ui/blocking/allowed/export":    "blocking.allowed_domain.export",
+		"/ui/blocking/lists/add":         "blocking.list.add",
+		"/ui/blocking/lists/delete":      "blocking.list.delete",
+		"/ui/blocking/lists/update":      "blocking.list.update",
+		"/ui/blocking/lists/refresh":     "blocking.list.refresh",
+		"/ui/blocking/toggle":            "blocking.toggle",
+		"/ui/blocking/rule-sets/save":    "blocking.rule_set.save",
+		"/ui/blocking/rule-sets/delete":  "blocking.rule_set.delete",
+		"/ui/blocking/rule-sets/default": "blocking.default_lists.update",
+		"/ui/blocking/pause":             "blocking.pause",
+		"/ui/blocking/resume":            "blocking.resume",
+		"/ui/blocking/query-domain":      "blocking.query_log_policy",
+		"/ui/blocking/check/rule":        "blocking.check_policy",
 	}
 	if action := actions[path]; action != "" {
 		return action
@@ -485,12 +489,9 @@ func (server *Server) addBlockList(writer http.ResponseWriter, request *http.Req
 
 func (server *Server) deleteBlockList(writer http.ResponseWriter, request *http.Request) {
 	server.updateBlocking(writer, request, "lists", "Block list removed", func(policy *config.Blocking) error {
-		name := request.FormValue("name")
-		index := slices.IndexFunc(policy.Lists, func(list config.BlockList) bool { return list.Name == name })
-		if index < 0 {
-			return errors.New("block list was not found")
+		if err := policy.RemoveList(request.FormValue("name")); err != nil {
+			return err
 		}
-		policy.Lists = slices.Delete(policy.Lists, index, index+1)
 		if len(remoteBlockSources(*policy)) == 0 {
 			server.blockLists.Schedule(time.Time{})
 		}
