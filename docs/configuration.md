@@ -758,9 +758,14 @@ apply in every rule set. `lists` names entries in `[[blocking.lists]]`; a list a
 rule set leaves out doesn't block for its devices, and neither do that list's
 `@@` exceptions. `Default` is reserved for devices without a rule set.
 
-For now a rule set applies to devices named by `address`. A device named by
-`mac` keeps its rule set in the configuration, and it takes effect in a later
-release, once Sable ties hardware addresses to the addresses they use.
+A device named by `mac` joins its rule set at every address Sable has tied to
+that hardware address, from the neighbor table, UniFi, or a replica's lead.
+An address follows whichever device used it last. A new address, such as a
+fresh IPv6 privacy address, uses the default policy until Sable sees it, which
+is usually within a minute. With [Insights](#devices-and-insights) off Sable
+doesn't tie addresses to hardware, so only devices named by `address` are in a
+rule set. An address named in `[[clients]]` wins over one Sable learned, and
+both win over a network.
 
 `bypass_clients` is a rule set with blocking off: those clients skip blocking
 entirely, and an address there wins over every rule set's.

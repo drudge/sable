@@ -57,6 +57,7 @@ type Runtime struct {
 	// from clientExact, then by the most specific network in clientPrefixes.
 	// defaultSet narrows the block lists for everyone else; nil uses them all.
 	ruleSets            []ruleSet
+	ruleSetIndex        map[string]int
 	defaultSet          *ruleSet
 	clientExact         map[netip.Addr]int
 	clientPrefixes      []clientPrefix
@@ -292,7 +293,10 @@ type Handler struct {
 	// attached holds the IPv6 networks this node is attached to, which
 	// private recursion admits. A background watcher replaces the list; a
 	// lookup only loads it.
-	attached             atomic.Pointer[[]netip.Prefix]
+	attached atomic.Pointer[[]netip.Prefix]
+	// deviceAddresses ties addresses to rule sets for devices named by
+	// hardware address. A background worker replaces it; a lookup only loads it.
+	deviceAddresses      atomic.Pointer[DeviceAddresses]
 	queries              atomic.Uint64
 	noError              atomic.Uint64
 	serverFailures       atomic.Uint64

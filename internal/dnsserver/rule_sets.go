@@ -39,6 +39,25 @@ type ruleSet struct {
 	allowed allowList
 }
 
+// DeviceAddresses maps the addresses Sable has tied to a device, by its
+// hardware address, to the name of the device's rule set.
+type DeviceAddresses map[netip.Addr]string
+
+// SetDeviceAddresses replaces the addresses of devices in a rule set. The
+// table lives beside the runtime rather than in it, so a new lease or IPv6
+// address doesn't recompile the block lists.
+func (handler *Handler) SetDeviceAddresses(addresses DeviceAddresses) {
+	handler.deviceAddresses.Store(&addresses)
+}
+
+// DeviceAddressTable returns the current table. It is shared; don't change it.
+func (handler *Handler) DeviceAddressTable() DeviceAddresses {
+	if addresses := handler.deviceAddresses.Load(); addresses != nil {
+		return *addresses
+	}
+	return nil
+}
+
 // clientPrefix maps a network to the rule set its clients use.
 type clientPrefix struct {
 	prefix netip.Prefix
@@ -131,6 +150,12 @@ func (runtime *Runtime) compileRuleSets(configuration RuntimeConfig) error {
 		return cmp.Compare(right.prefix.Bits(), left.prefix.Bits())
 	})
 	runtime.ruleSets = sets
+	runtime.ruleSetIndex = make(map[string]int, len(sets))
+	for index, set := range sets {
+		if set.name != "" {
+			runtime.ruleSetIndex[set.name] = index
+		}
+	}
 	runtime.clientExact = exact
 	runtime.clientPrefixes = prefixes
 	runtime.defaultSet = nil
@@ -197,10 +222,12 @@ func parseClientPrefix(value string) (netip.Prefix, error) {
 	return netip.PrefixFrom(address, address.BitLen()), nil
 }
 
-// ruleSetFor picks the rule set for a client, falling back to the default
-// one, which is nil when every list applies. It runs on every query that
-// reaches policy, so it must not allocate.
-func (runtime *Runtime) ruleSetFor(clientIP string) *ruleSet {
+// ruleSetFor picks the rule set for a client: an address the configuration
+// names, then one Sable has tied to a device in a rule set, then the most
+// specific network. Without any it falls back to the default set, which is
+// nil when every list applies. It runs on every query that reaches policy, so
+// it must not allocate.
+func (runtime *Runtime) ruleSetFor(clientIP string, devices DeviceAddresses) *ruleSet {
 	if len(runtime.ruleSets) == 0 || clientIP == "" {
 		return runtime.defaultSet
 	}
@@ -211,6 +238,11 @@ func (runtime *Runtime) ruleSetFor(clientIP string) *ruleSet {
 	address = address.Unmap().WithZone("")
 	if index, found := runtime.clientExact[address]; found {
 		return &runtime.ruleSets[index]
+	}
+	if name, found := devices[address]; found {
+		if index, known := runtime.ruleSetIndex[name]; known {
+			return &runtime.ruleSets[index]
+		}
 	}
 	for _, entry := range runtime.clientPrefixes {
 		if entry.prefix.Contains(address) {

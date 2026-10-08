@@ -453,10 +453,10 @@ func authoritativeZones(configuredZones []zone.Zone) []dnsserver.AuthoritativeZo
 	return zones
 }
 
-// runtimeRuleSets gives each rule set the devices that use it. The operator's
-// own blocked domains apply to every rule set, whatever lists it picks. A device named
-// by hardware address joins once Sable knows its addresses; until then only
-// devices named by address or network are in a rule set.
+// runtimeRuleSets gives each rule set the devices named by address or network
+// that use it. The operator's own blocked domains apply to every rule set,
+// whatever lists it picks. Devices named by hardware address join through
+// deviceRuleSets instead, since their addresses change without a reload.
 func runtimeRuleSets(configuration config.Config) []dnsserver.RuleSetPolicy {
 	sets := make([]dnsserver.RuleSetPolicy, 0, len(configuration.Blocking.RuleSets))
 	for _, set := range configuration.Blocking.RuleSets {

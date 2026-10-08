@@ -2,6 +2,7 @@ package dnsserver
 
 import (
 	"fmt"
+	"net/netip"
 	"slices"
 	"strings"
 	"testing"
@@ -61,7 +62,7 @@ func TestRuleSetsDecidePolicyPerClient(t *testing.T) {
 		{"no client", "", "games.example", querylog.PolicyNoMatch, "", nil},
 	}
 	for _, test := range tests {
-		decision, rule, sources := runtime.policyDecision(test.query, test.client, false)
+		decision, rule, sources := runtime.policyDecision(test.query, test.client, nil, false)
 		if decision != test.decision || rule != test.rule || !slices.Equal(sources, test.sources) {
 			t.Errorf("%s: policyDecision(%q, %q) = %q %q %v, want %q %q %v", test.name, test.query, test.client,
 				decision, rule, sources, test.decision, test.rule, test.sources)
@@ -81,12 +82,48 @@ func TestDefaultListsNarrowPolicyForClientsWithoutRuleSet(t *testing.T) {
 	if policy := handler.DomainPolicy("video.example"); policy.Decision != querylog.PolicyNoMatch {
 		t.Errorf("DomainPolicy(video.example) = %+v, want no match outside the default lists", policy)
 	}
-	if decision, rule, sources := runtime.policyDecision("tracker.example", "10.0.0.1", false); decision != querylog.PolicyBlocked ||
+	if decision, rule, sources := runtime.policyDecision("tracker.example", "10.0.0.1", nil, false); decision != querylog.PolicyBlocked ||
 		rule != "tracker.example" || !slices.Equal(sources, []string{"Ads"}) {
 		t.Errorf("policyDecision(tracker.example) = %q %q %v, want blocked by Ads alone", decision, rule, sources)
 	}
-	if decision, _, _ := runtime.policyDecision("video.example", "198.51.100.7", false); decision != querylog.PolicyBlocked {
+	if decision, _, _ := runtime.policyDecision("video.example", "198.51.100.7", nil, false); decision != querylog.PolicyBlocked {
 		t.Errorf("policyDecision(video.example) for a rule set = %q, want its own lists to apply", decision)
+	}
+}
+
+func TestDeviceAddressesPutDevicesInRuleSets(t *testing.T) {
+	t.Parallel()
+	runtime, err := Compile(ruleSetTestConfig())
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	devices := DeviceAddresses{
+		netip.MustParseAddr("10.0.0.7"):    "Kids",
+		netip.MustParseAddr("192.0.2.50"):  "Kids",
+		netip.MustParseAddr("2001:db8::9"): "Kids",
+		netip.MustParseAddr("10.0.0.8"):    "Renamed",
+	}
+	for _, test := range []struct {
+		client   string
+		decision querylog.PolicyDecision
+	}{
+		{"10.0.0.7", querylog.PolicyBlocked},     // learned address joins Kids
+		{"192.0.2.50", querylog.PolicyNoMatch},   // a configured address wins
+		{"2001:db8::9", querylog.PolicyBlocked},  // learned beats a configured network
+		{"10.0.0.8", querylog.PolicyNoMatch},     // a set that no longer exists is ignored
+		{"fe80::1%eth0", querylog.PolicyNoMatch}, // zones are ignored
+	} {
+		if decision, _, _ := runtime.policyDecision("games.example", test.client, devices, false); decision != test.decision {
+			t.Errorf("policyDecision(games.example) for %s = %q, want %q", test.client, decision, test.decision)
+		}
+	}
+	handler := NewHandler(runtime)
+	if handler.DeviceAddressTable() != nil {
+		t.Fatal("a new handler has device addresses")
+	}
+	handler.SetDeviceAddresses(devices)
+	if got := handler.DeviceAddressTable(); len(got) != len(devices) {
+		t.Fatalf("DeviceAddressTable() = %v", got)
 	}
 }
 
@@ -117,9 +154,10 @@ func TestPolicyDecisionDoesNotAllocateWithRuleSets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Compile() error = %v", err)
 	}
-	for _, client := range []string{"10.0.0.1", "192.0.2.4", "192.0.2.50", "198.51.100.7", "192.0.2.99"} {
+	devices := DeviceAddresses{netip.MustParseAddr("10.0.0.7"): "Kids"}
+	for _, client := range []string{"10.0.0.1", "10.0.0.7", "192.0.2.4", "192.0.2.50", "198.51.100.7", "192.0.2.99"} {
 		if allocations := testing.AllocsPerRun(100, func() {
-			_, _, _ = runtime.policyDecision("pixel.shorts.video.example.", client, false)
+			_, _, _ = runtime.policyDecision("pixel.shorts.video.example.", client, devices, false)
 		}); allocations != 0 {
 			t.Errorf("policyDecision for %s allocated %.0f times, want 0", client, allocations)
 		}
@@ -154,19 +192,21 @@ func BenchmarkPolicyDecision(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	devices := DeviceAddresses{netip.MustParseAddr("10.0.0.7"): "Kids"}
 	for _, run := range []struct {
 		name    string
 		runtime *Runtime
 		client  string
 	}{
 		{"NoRuleSets", runtime, "192.0.2.4"},
+		{"LearnedDevice", setRuntime, "10.0.0.7"},
 		{"OutsideRuleSets", setRuntime, "10.0.0.1"},
 		{"InRuleSet", setRuntime, "192.0.2.4"},
 	} {
 		b.Run(run.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
-				_, _, _ = run.runtime.policyDecision("pixel.host-99999.example.", run.client, false)
+				_, _, _ = run.runtime.policyDecision("pixel.host-99999.example.", run.client, devices, false)
 			}
 		})
 	}
