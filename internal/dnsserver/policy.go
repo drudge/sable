@@ -2,7 +2,6 @@ package dnsserver
 
 import (
 	"net"
-	"net/netip"
 	"strings"
 	"time"
 
@@ -56,35 +55,20 @@ func (handler *Handler) DomainPolicy(name string) DomainPolicy {
 }
 
 func (runtime *Runtime) matchesBlocked(name string) bool {
-	rule, _ := matchingDomainRule(runtime.blocked, name)
+	rule, _ := matchingDomainRule(runtime.blocked, name, nil)
 	return rule != ""
 }
 
-func (runtime *Runtime) matchesAllowed(name string) bool {
-	return runtime.matchingAllowedRule(name) != ""
-}
-
-func (runtime *Runtime) matchingAllowedRule(name string) string {
-	name = normalizeName(name)
-	if _, found := runtime.allowedExact[name]; found {
-		return name
+// matchingDomainRule finds the most specific blocked name that covers name.
+// applies, when set, skips entries whose owner set it marks false, so a rule
+// set that doesn't use a list sees past that list's entries to a parent's.
+func matchingDomainRule(domains map[string]uint32, name string, applies []bool) (string, uint32) {
+	if len(domains) == 0 {
+		return "", 0
 	}
-	for {
-		separator := strings.IndexByte(name, '.')
-		if separator < 0 {
-			return ""
-		}
-		name = name[separator+1:]
-		if _, found := runtime.allowedWildcard[name]; found {
-			return "*." + name
-		}
-	}
-}
-
-func matchingDomainRule(domains map[string]uint32, name string) (string, uint32) {
 	name = normalizeName(name)
 	for name != "" {
-		if owner, found := domains[name]; found {
+		if owner, found := domains[name]; found && (applies == nil || (int(owner) < len(applies) && applies[owner])) {
 			return name, owner
 		}
 		separator := strings.IndexByte(name, '.')
@@ -105,6 +89,9 @@ func (runtime *Runtime) blockedSources(owner uint32) []string {
 	return runtime.blockedOwners[owner]
 }
 
+// policyDecision decides how blocking treats name for a client. A client's
+// rule set comes first: its own allowed and blocked domains win over the
+// global ones, and only its block lists apply.
 func (runtime *Runtime) policyDecision(name, clientIP string, paused bool) (querylog.PolicyDecision, string, []string) {
 	if !runtime.blocking {
 		return querylog.PolicyDisabled, "", nil
@@ -112,31 +99,42 @@ func (runtime *Runtime) policyDecision(name, clientIP string, paused bool) (quer
 	if paused {
 		return querylog.PolicyPaused, "", nil
 	}
-	if runtime.clientBypasses(clientIP) {
-		// The fact that the client bypassed policy is useful; persisting the
-		// matching address or network would duplicate sensitive configuration.
-		return querylog.PolicyClientBypass, "", nil
+	set := runtime.ruleSetFor(clientIP)
+	if set != nil {
+		if set.off {
+			// The fact that the client bypassed policy is useful; persisting the
+			// matching address or network would duplicate sensitive configuration.
+			return querylog.PolicyClientBypass, "", nil
+		}
+		if rule := set.allowed.match(name); rule != "" {
+			return querylog.PolicyAllowed, rule, nil
+		}
+		if rule, _ := matchingDomainRule(set.blocked, name, nil); rule != "" {
+			return querylog.PolicyBlocked, rule, nil
+		}
 	}
-	if rule := runtime.matchingAllowedRule(name); rule != "" {
+	if rule := runtime.allowed.match(name); rule != "" {
 		return querylog.PolicyAllowed, rule, nil
 	}
-	if rule, owner := matchingDomainRule(runtime.blocked, name); rule != "" {
-		if exception, exceptionOwner := runtime.matchingException(name); exception != "" {
-			return querylog.PolicyAllowed, exception, runtime.blockedSources(exceptionOwner)
+	applies := set.ownerMask()
+	if rule, owner := matchingDomainRule(runtime.blocked, name, applies); rule != "" {
+		if exception, exceptionOwner := runtime.matchingException(name, applies); exception != "" {
+			return querylog.PolicyAllowed, exception, set.ownerSources(runtime, exceptionOwner)
 		}
-		return querylog.PolicyBlocked, rule, runtime.blockedSources(owner)
+		return querylog.PolicyBlocked, rule, set.ownerSources(runtime, owner)
 	}
 	return querylog.PolicyNoMatch, "", nil
 }
 
 // matchingException finds a block list's @@ exception for a blocked name. An
 // exception lifts blocks from every list, as in AdGuard Home and Technitium,
-// but not a $important block or one the operator added.
-func (runtime *Runtime) matchingException(name string) (string, uint32) {
+// but not a $important block or one the operator added. Only exceptions from
+// lists the client's rule set uses count.
+func (runtime *Runtime) matchingException(name string, applies []bool) (string, uint32) {
 	if len(runtime.exceptions) == 0 {
 		return "", 0
 	}
-	exception, owner := matchingDomainRule(runtime.exceptions, name)
+	exception, owner := matchingDomainRule(runtime.exceptions, name, applies)
 	if exception == "" {
 		return "", 0
 	}
@@ -153,23 +151,6 @@ func (runtime *Runtime) matchingException(name string) (string, uint32) {
 		}
 	}
 	return exception, owner
-}
-
-func (runtime *Runtime) clientBypasses(value string) bool {
-	if value == "" || len(runtime.bypass) == 0 {
-		return false
-	}
-	address, err := netip.ParseAddr(value)
-	if err != nil {
-		return false
-	}
-	address = address.Unmap()
-	for _, prefix := range runtime.bypass {
-		if prefix.Contains(address) {
-			return true
-		}
-	}
-	return false
 }
 
 func (runtime *Runtime) blockedResponse(request *dns.Msg) *dns.Msg {

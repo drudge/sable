@@ -30,7 +30,7 @@ func TestClientsValidateAndNormalize(t *testing.T) {
 		client Client
 		want   string
 	}{
-		{Client{MAC: "da:a1:19:00:00:01"}, "name or clients[0].type is required"},
+		{Client{MAC: "da:a1:19:00:00:01"}, "clients[0].type, or clients[0].rule_set is required"},
 		{Client{MAC: "da:a1:19:00:00:01", Type: "toaster"}, "type must be one of"},
 		{Client{Name: "Both", MAC: "da:a1:19:00:00:01", Address: "10.0.0.1"}, "not both"},
 		{Client{Name: "Neither"}, "must set mac or address"},

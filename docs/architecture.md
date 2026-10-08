@@ -258,7 +258,7 @@ stops answering.
 Sable uses a primary/replica control plane designed for one- and two-server
 deployments. One primary accepts configuration changes. Replicas pull signed,
 monotonically numbered generations containing authoritative zones, resolver and
-cache policy, TSIG keys, blocking and query-log settings, Dynamic DNS, UniFi,
+cache policy, TSIG keys, blocking and query-log settings, devices, Dynamic DNS, UniFi,
 and OpenID Connect configuration, users, roles, grants, federated identities, and API-token
 hashes. Replicated credentials travel over the authenticated enrollment and
 synchronization channel and land in each node's own encrypted vault, so no node

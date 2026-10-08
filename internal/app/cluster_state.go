@@ -135,6 +135,10 @@ type clusterRuntimeConfiguration struct {
 	// that predates the switch sends none, which leaves this node's own as it
 	// is.
 	InsightsEnabled *bool `toml:"insights_enabled,omitempty"`
+	// Devices follow the primary, since a device's rule set decides how every
+	// node blocks for it. A primary that predates them sends none, which
+	// leaves this node's own as they are.
+	Devices *clusterDevices `toml:"devices"`
 	// InsightDataDeletedAt is when the primary last deleted what Insights had
 	// collected. Every node keeps its own sightings, so a replica whose copy
 	// predates it deletes its own too. It is not configuration, so it is left
@@ -150,6 +154,12 @@ type insightDataStore interface {
 }
 
 // clusterAlerts is the alert state that follows the primary.
+// clusterDevices wraps the [[clients]] list so a primary with no devices
+// still sends an empty list rather than leaving a replica's own in place.
+type clusterDevices struct {
+	Clients []config.Client `toml:"clients"`
+}
+
 type clusterAlerts struct {
 	// Settings is the [alerts] section with every destination's URL, keys,
 	// and header values filled in from the primary's vault. The receiving
@@ -333,6 +343,9 @@ func (replicator *clusterStateReplicator) Apply(ctx context.Context, contents []
 	if runtimeConfiguration.InsightsEnabled == nil {
 		activeConfiguration.InsightsEnabled = nil
 	}
+	if runtimeConfiguration.Devices == nil {
+		activeConfiguration.Devices = nil
+	}
 	activeZones := replicator.zones.Current().Zones
 	activeAuthorization := store.AuthorizationState{}
 	authorizationChanged := false
@@ -462,6 +475,7 @@ func replicatedRuntimeConfiguration(source config.Config) clusterRuntimeConfigur
 		InsightFindings:  &findings,
 		MCP:              &mcp,
 		InsightsEnabled:  &insightsEnabled,
+		Devices:          &clusterDevices{Clients: slices.Clone(source.Clients)},
 	}
 }
 
@@ -496,6 +510,14 @@ func applyReplicatedRuntimeConfiguration(candidate *config.Config, source cluste
 	}
 	if source.InsightsEnabled != nil {
 		candidate.Insights.Enabled = *source.InsightsEnabled
+	}
+	if source.Devices != nil {
+		// Through TOML no devices arrive as an empty list; keep nil so an
+		// unchanged snapshot leaves the configuration untouched.
+		candidate.Clients = nil
+		if len(source.Devices.Clients) > 0 {
+			candidate.Clients = slices.Clone(source.Devices.Clients)
+		}
 	}
 }
 

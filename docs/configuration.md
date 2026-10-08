@@ -719,6 +719,52 @@ any of them, recompiles the policy, and restores the previous files if
 activation fails. The console supports curated and custom subscriptions,
 manual refresh, and the configured automatic refresh interval.
 
+### Rule sets
+
+A rule set gives some devices a different blocking policy: their own choice of
+block lists, and blocked and allowed domains of their own.
+
+```toml
+[blocking]
+# Devices without a rule set use these lists. Leave it out to use every list.
+default_lists = ["OISD Big"]
+
+[[blocking.rule_sets]]
+name = "Kids"
+lists = ["OISD Big", "filters"]
+domains = ["youtube.com", "tiktok.com"]
+
+[[blocking.rule_sets]]
+name = "Work"
+lists = []
+allowed_domains = ["*.tracker.example"]
+
+[[clients]]
+name = "Leo's Switch"
+address = "192.0.2.20"
+rule_set = "Kids"
+
+[[clients]]
+name = "Guest Wi-Fi"
+address = "10.20.40.0/24"
+rule_set = "Work"
+```
+
+A device joins a rule set through its [`[[clients]]`](#devices-and-insights) entry. When
+several entries match an address, an exact address wins over a network and a
+smaller network over a larger one. A rule set's `domains` and `allowed_domains`
+win over the global ones, and `blocking.domains` and `blocking.allowed_domains`
+apply in every rule set. `lists` names entries in `[[blocking.lists]]`; a list a
+rule set leaves out doesn't block for its devices, and neither do that list's
+`@@` exceptions. `Default` is reserved for devices without a rule set.
+
+For now a rule set applies to devices named by `address`. A device named by
+`mac` keeps its rule set in the configuration, and it takes effect in a later
+release, once Sable ties hardware addresses to the addresses they use.
+
+`bypass_clients` is a rule set with blocking off: those clients skip blocking
+entirely, and an address there wins over every rule set's.
+
 ### Block-list health and retry backoff
 
 Sable tracks each remote subscription independently: last attempt, last
@@ -819,7 +865,8 @@ be set alone. The Insights device drawer writes both, so most people never edit
 these by hand. Valid types are `phone`, `tablet`, `computer`, `server`, `tv`,
 `streaming-player`, `smart-speaker`, `speaker`, `camera`, `doorbell`,
 `game-console`, `printer`, `storage`, `network`, `thermostat`, `lighting`,
-`smart-plug`, `smart-home`, `watch`, and `ups`.
+`smart-plug`, `smart-home`, `watch`, and `ups`. `rule_set` puts the device in
+a [blocking rule set](#rule-sets). Replicas follow the primary's devices.
 
 `[insights] enabled` turns Insights on, which is the default. Set it to `false`
 to stop Sable recording which devices it sees and what hardware they are, stop

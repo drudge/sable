@@ -167,3 +167,34 @@ func TestReplicatedRuntimeConfigurationKeepsLocalInsightsWhenPrimaryOmitsIt(t *t
 		t.Fatal("primary's Insights switch was ignored")
 	}
 }
+
+func TestReplicatedRuntimeConfigurationCarriesDevices(t *testing.T) {
+	primary := config.Defaults()
+	primary.Clients = []config.Client{{Name: "Leo's Switch", Address: "192.0.2.20", RuleSet: "Kids"}}
+	candidate := config.Defaults()
+	candidate.Clients = []config.Client{{Name: "Old name", Address: "192.0.2.20"}}
+	source := replicatedRuntimeConfiguration(primary)
+	applyReplicatedRuntimeConfiguration(&candidate, source)
+	if len(candidate.Clients) != 1 || candidate.Clients[0].RuleSet != "Kids" {
+		t.Fatalf("replica devices = %+v, want the primary's", candidate.Clients)
+	}
+	// A primary whose last device was removed still says so through TOML.
+	encoded, err := toml.Marshal(replicatedRuntimeConfiguration(config.Defaults()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded clusterRuntimeConfiguration
+	if err := toml.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	applyReplicatedRuntimeConfiguration(&candidate, decoded)
+	if len(candidate.Clients) != 0 {
+		t.Fatalf("replica kept devices the primary removed: %+v", candidate.Clients)
+	}
+	source.Devices = nil
+	candidate.Clients = []config.Client{{Name: "Kept", Address: "192.0.2.30"}}
+	applyReplicatedRuntimeConfiguration(&candidate, source)
+	if len(candidate.Clients) != 1 || candidate.Clients[0].Name != "Kept" {
+		t.Fatalf("a primary that predates devices replaced them: %+v", candidate.Clients)
+	}
+}
