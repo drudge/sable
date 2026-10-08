@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -373,6 +374,7 @@ func compileRuntime(configuration config.Config, configuredZones []zone.Zone, ba
 		BypassClients:              configuration.Blocking.BypassClients,
 		RuleSets:                   runtimeRuleSets(configuration),
 		DefaultLists:               defaultLists(configuration.Blocking.DefaultLists),
+		Holds:                      runtimeHolds(configuration.Blocking.Holds),
 		AllowTXTReport:             configuration.Blocking.AllowTXTReport,
 		Hosts:                      hosts,
 		Zones:                      zones,
@@ -453,10 +455,8 @@ func authoritativeZones(configuredZones []zone.Zone) []dnsserver.AuthoritativeZo
 	return zones
 }
 
-// runtimeRuleSets gives each rule set the devices named by address or network
-// that use it. The operator's own blocked domains apply to every rule set,
-// whatever lists it picks. Devices named by hardware address join through
-// deviceRuleSets instead, since their addresses change without a reload.
+// runtimeRuleSets gives each rule set the devices that use it. The operator's
+// own blocked domains apply to every rule set, whatever lists it picks.
 func runtimeRuleSets(configuration config.Config) []dnsserver.RuleSetPolicy {
 	sets := make([]dnsserver.RuleSetPolicy, 0, len(configuration.Blocking.RuleSets))
 	for _, set := range configuration.Blocking.RuleSets {
@@ -465,13 +465,21 @@ func runtimeRuleSets(configuration config.Config) []dnsserver.RuleSetPolicy {
 			Domains: set.Domains, AllowedDomains: set.AllowedDomains,
 		}
 		for _, client := range configuration.Clients {
-			if client.RuleSet == set.Name && client.Address != "" {
-				policy.Clients = append(policy.Clients, client.Address)
+			if client.RuleSet == set.Name {
+				policy.Clients = append(policy.Clients, cmp.Or(client.MAC, client.Address))
 			}
 		}
 		sets = append(sets, policy)
 	}
 	return sets
+}
+
+func runtimeHolds(holds []config.Hold) []dnsserver.HoldPolicy {
+	policies := make([]dnsserver.HoldPolicy, 0, len(holds))
+	for _, hold := range holds {
+		policies = append(policies, dnsserver.HoldPolicy{Client: cmp.Or(hold.MAC, hold.Address), Until: hold.Until})
+	}
+	return policies
 }
 
 // defaultLists adds the operator's own blocked domains to the default policy's

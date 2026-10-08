@@ -231,6 +231,15 @@ func TestQueryDecisionViewNamesTheListBehindAnException(t *testing.T) {
 	}
 }
 
+func TestQueryDecisionViewExplainsAHold(t *testing.T) {
+	t.Parallel()
+	view := queryDecisionView(querylog.Decision{Policy: querylog.PolicyHeld, Resolver: querylog.ResolverBlocked})
+	if view.Policy != "Everything blocked for this device" || !strings.Contains(view.PolicyDetail, "allowed domains") ||
+		view.Resolver != "Synthesized a blocking response" {
+		t.Fatalf("hold explanation = %+v", view)
+	}
+}
+
 // A lookup refused by the recursion policy says so, apart from one that
 // failed, and says where the policy lives.
 func TestQueryDecisionViewExplainsARecursionRefusal(t *testing.T) {

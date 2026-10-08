@@ -108,6 +108,35 @@ var mcpDNSTools = []mcpTool{
 		grant:       "blocking.write",
 	},
 	{
+		Name:  "block_device",
+		Title: "Block everything for a device",
+		Description: "Block every domain for one device, except the domains it is allowed and the names Sable answers " +
+			"itself, for some minutes, until a time, or until unblock_device ends it. It replaces any block the device " +
+			"already has, so it also extends or shortens one. It works even while blocking is paused. Only DNS is " +
+			"blocked: a device using another DNS server or a VPN gets past it.",
+		InputSchema: mcpObjectSchema(map[string]any{
+			"device":  mcpString("The device: its hardware address, its name in Sable, or its IP address. A CIDR network blocks every device on it."),
+			"minutes": mcpInteger("How many minutes to block it for. Leave out minutes and until to block it until unblock_device.", 1),
+			"until":   mcpString("When to stop blocking it, in RFC 3339 form such as 2026-10-08T20:00:00-04:00. Not with minutes."),
+		}, []string{"device"}),
+		Annotations: mcpToolAnnotations{Title: "Block everything for a device", DestructiveHint: true, IdempotentHint: true},
+		call:        (*Server).mcpBlockDevice,
+		section:     "blocking",
+		grant:       "blocking.write",
+	},
+	{
+		Name:        "unblock_device",
+		Title:       "Stop blocking everything for a device",
+		Description: "End a block_device block, so the device's usual blocking applies again.",
+		InputSchema: mcpObjectSchema(map[string]any{
+			"device": mcpString("The device, named the same way as for block_device."),
+		}, []string{"device"}),
+		Annotations: mcpToolAnnotations{Title: "Stop blocking everything for a device", IdempotentHint: true},
+		call:        (*Server).mcpUnblockDevice,
+		section:     "blocking",
+		grant:       "blocking.write",
+	},
+	{
 		Name:  "remove_domain_rule",
 		Title: "Remove a domain from the allow and block lists",
 		Description: "Take a domain off both the allow list and the block list, so block lists alone decide " +
@@ -288,6 +317,53 @@ func (server *Server) mcpChangeDomainRule(
 		return nil, err
 	}
 	return change(request.Context(), requestActor(request, "mcp"), input.Domain)
+}
+
+func (server *Server) mcpBlockDevice(request *http.Request, arguments json.RawMessage) (any, error) {
+	var input struct {
+		Device  string `json:"device"`
+		Minutes int    `json:"minutes"`
+		Until   string `json:"until"`
+	}
+	if err := decodeMCPArguments(arguments, &input); err != nil {
+		return nil, err
+	}
+	var until time.Time
+	switch {
+	case input.Minutes != 0 && input.Until != "":
+		return nil, errors.New("give minutes or until, not both")
+	case input.Minutes < 0 || input.Minutes > maximumHoldMinutes:
+		return nil, fmt.Errorf("minutes must be between 1 and %d", maximumHoldMinutes)
+	case input.Minutes > 0:
+		until = time.Now().Add(time.Duration(input.Minutes) * time.Minute)
+	case input.Until != "":
+		parsed, err := time.Parse(time.RFC3339, input.Until)
+		if err != nil {
+			return nil, errors.New("until must be a time in RFC 3339 form, such as 2026-10-08T20:00:00-04:00")
+		}
+		until = parsed
+	}
+	service := server.holdService()
+	device, err := service.Device(request.Context(), input.Device)
+	if err != nil {
+		return nil, err
+	}
+	return service.Hold(request.Context(), requestActor(request, "mcp"), device, until)
+}
+
+func (server *Server) mcpUnblockDevice(request *http.Request, arguments json.RawMessage) (any, error) {
+	var input struct {
+		Device string `json:"device"`
+	}
+	if err := decodeMCPArguments(arguments, &input); err != nil {
+		return nil, err
+	}
+	service := server.holdService()
+	device, err := service.Device(request.Context(), input.Device)
+	if err != nil {
+		return nil, err
+	}
+	return service.End(request.Context(), requestActor(request, "mcp"), device)
 }
 
 func mcpQuestionName(value string) (string, error) {

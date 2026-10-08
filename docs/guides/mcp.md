@@ -22,6 +22,7 @@ You choose each tool in the first step of the setup wizard, and a token still ne
 | `allow_domain`, `block_domain`, `remove_domain_rule` | On | Change the allow and block lists. Allowing a domain takes it off the block list, and blocking takes it off the allow list | `blocking.write` |
 | `list_block_lists` | On | Lists block lists and their health | `blocking.read` |
 | `add_block_list`, `remove_block_list`, `refresh_block_lists` | Off | Change and refresh block lists | `blocking.write` |
+| `block_device`, `unblock_device` | Off | Block everything but allowed domains for one device, for some minutes, until a time, or until unblocked | `blocking.write` |
 | `lookup` | On | Resolves a name through Sable and says where the answer came from | `zones.read` |
 | `purge_cache` | On | Forgets this node's cached answers for one name | `settings.write` |
 | `list_findings` | On | What Insights noticed, with its evidence and a link to each finding | `logs.read` |

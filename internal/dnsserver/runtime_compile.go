@@ -181,7 +181,10 @@ func (runtime *Runtime) compilePolicy(configuration RuntimeConfig) error {
 	runtime.blockTTL = configuration.BlockingTTL
 	runtime.blockAddrs = blockAddresses
 	runtime.blockTXT = configuration.AllowTXTReport
-	return runtime.compileRuleSets(configuration)
+	if err := runtime.compileRuleSets(configuration); err != nil {
+		return err
+	}
+	return runtime.compileHolds(configuration.Holds)
 }
 
 // compileRoutes builds the conditional forwarding table, keyed by the

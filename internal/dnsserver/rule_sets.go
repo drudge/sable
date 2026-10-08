@@ -1,9 +1,7 @@
 package dnsserver
 
 import (
-	"cmp"
 	"fmt"
-	"net/netip"
 	"slices"
 	"strings"
 
@@ -22,7 +20,8 @@ type RuleSetPolicy struct {
 	// global blocked and allowed domains, and win over them.
 	Domains        []string
 	AllowedDomains []string
-	// Clients are the IP addresses and CIDR networks the set applies to.
+	// Clients are the IP addresses, CIDR networks and hardware addresses the
+	// set applies to.
 	Clients []string
 }
 
@@ -37,31 +36,6 @@ type ruleSet struct {
 	sources [][]string
 	blocked map[string]uint32
 	allowed allowList
-}
-
-// DeviceAddresses maps the addresses Sable has tied to a device, by its
-// hardware address, to the name of the device's rule set.
-type DeviceAddresses map[netip.Addr]string
-
-// SetDeviceAddresses replaces the addresses of devices in a rule set. The
-// table lives beside the runtime rather than in it, so a new lease or IPv6
-// address doesn't recompile the block lists.
-func (handler *Handler) SetDeviceAddresses(addresses DeviceAddresses) {
-	handler.deviceAddresses.Store(&addresses)
-}
-
-// DeviceAddressTable returns the current table. It is shared; don't change it.
-func (handler *Handler) DeviceAddressTable() DeviceAddresses {
-	if addresses := handler.deviceAddresses.Load(); addresses != nil {
-		return *addresses
-	}
-	return nil
-}
-
-// clientPrefix maps a network to the rule set its clients use.
-type clientPrefix struct {
-	prefix netip.Prefix
-	set    int
 }
 
 // allowList holds allowed names: exact ones, and wildcards that allow every
@@ -119,8 +93,7 @@ func (runtime *Runtime) compileRuleSets(configuration RuntimeConfig) error {
 		policies = append([]RuleSetPolicy{{Off: true, Clients: configuration.BypassClients}}, policies...)
 	}
 	sets := make([]ruleSet, 0, len(policies))
-	exact := make(map[netip.Addr]int)
-	var prefixes []clientPrefix
+	var clients clientTable[int]
 	for index, policy := range policies {
 		set, err := runtime.compileRuleSet(policy)
 		if err != nil {
@@ -128,36 +101,18 @@ func (runtime *Runtime) compileRuleSets(configuration RuntimeConfig) error {
 		}
 		sets = append(sets, set)
 		for _, value := range policy.Clients {
-			prefix, err := parseClientPrefix(value)
-			if err != nil {
+			// The first set to name a client keeps it, so a bypass wins.
+			if err := clients.add(value, index); err != nil {
 				if policy.Off {
 					return fmt.Errorf("invalid blocking bypass client %q", value)
 				}
 				return fmt.Errorf("rule set %q: invalid client %q", policy.Name, value)
 			}
-			if prefix.IsSingleIP() {
-				// The first set to name an address keeps it, so a bypass wins.
-				if _, taken := exact[prefix.Addr()]; !taken {
-					exact[prefix.Addr()] = index
-				}
-				continue
-			}
-			prefixes = append(prefixes, clientPrefix{prefix: prefix, set: index})
 		}
 	}
-	// The most specific network wins; among equals, the earlier set.
-	slices.SortStableFunc(prefixes, func(left, right clientPrefix) int {
-		return cmp.Compare(right.prefix.Bits(), left.prefix.Bits())
-	})
+	clients.sort()
 	runtime.ruleSets = sets
-	runtime.ruleSetIndex = make(map[string]int, len(sets))
-	for index, set := range sets {
-		if set.name != "" {
-			runtime.ruleSetIndex[set.name] = index
-		}
-	}
-	runtime.clientExact = exact
-	runtime.clientPrefixes = prefixes
+	runtime.ruleSetClients = clients
 	runtime.defaultSet = nil
 	if configuration.DefaultLists != nil {
 		applies, sources := ownerSetsUsing(runtime.blockedOwners, configuration.DefaultLists)
@@ -210,44 +165,14 @@ func ownerSetsUsing(owners [][]string, lists []string) ([]bool, [][]string) {
 	return applies, sources
 }
 
-func parseClientPrefix(value string) (netip.Prefix, error) {
-	if prefix, err := netip.ParsePrefix(value); err == nil {
-		return prefix.Masked(), nil
-	}
-	address, err := netip.ParseAddr(value)
-	if err != nil || address.Zone() != "" {
-		return netip.Prefix{}, fmt.Errorf("invalid client %q", value)
-	}
-	address = address.Unmap()
-	return netip.PrefixFrom(address, address.BitLen()), nil
-}
-
-// ruleSetFor picks the rule set for a client: an address the configuration
-// names, then one Sable has tied to a device in a rule set, then the most
-// specific network. Without any it falls back to the default set, which is
-// nil when every list applies. It runs on every query that reaches policy, so
-// it must not allocate.
-func (runtime *Runtime) ruleSetFor(clientIP string, devices DeviceAddresses) *ruleSet {
-	if len(runtime.ruleSets) == 0 || clientIP == "" {
+// ruleSetFor picks the rule set for a client. Without one it falls back to
+// the default set, which is nil when every list applies.
+func (runtime *Runtime) ruleSetFor(client policyClient, identified bool) *ruleSet {
+	if !identified {
 		return runtime.defaultSet
 	}
-	address, err := netip.ParseAddr(clientIP)
-	if err != nil {
-		return runtime.defaultSet
-	}
-	address = address.Unmap().WithZone("")
-	if index, found := runtime.clientExact[address]; found {
+	if index, found := runtime.ruleSetClients.lookup(client); found {
 		return &runtime.ruleSets[index]
-	}
-	if name, found := devices[address]; found {
-		if index, known := runtime.ruleSetIndex[name]; known {
-			return &runtime.ruleSets[index]
-		}
-	}
-	for _, entry := range runtime.clientPrefixes {
-		if entry.prefix.Contains(address) {
-			return &runtime.ruleSets[entry.set]
-		}
 	}
 	return runtime.defaultSet
 }
@@ -261,6 +186,14 @@ func (set *ruleSet) ownerSources(runtime *Runtime, owner uint32) []string {
 		return nil
 	}
 	return set.sources[owner]
+}
+
+// allowedRule returns the rule set's own rule that allows name, or "".
+func (set *ruleSet) allowedRule(name string) string {
+	if set == nil {
+		return ""
+	}
+	return set.allowed.match(name)
 }
 
 // ownerMask is the owner sets a client's rule set applies, nil for all.

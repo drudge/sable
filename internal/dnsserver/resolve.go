@@ -283,7 +283,7 @@ func (handler *Handler) resolveRequest(request *dns.Msg, name string, runtime *R
 		return recursionNotAllowed(request)
 	}
 	policy, policyRule, policySources := runtime.policyDecision(name, clientIP, handler.DeviceAddressTable(), handler.BlockingPaused())
-	if policy == querylog.PolicyBlocked {
+	if policy == querylog.PolicyBlocked || policy == querylog.PolicyHeld {
 		handler.blocked.Add(1)
 		return resolution{response: runtime.blockedResponse(request), source: querylog.SourceBlocked,
 			decision: querylog.Decision{Policy: policy, PolicyRule: policyRule, PolicySources: policySources, Resolver: querylog.ResolverBlocked}}

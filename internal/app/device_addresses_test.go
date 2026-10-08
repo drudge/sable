@@ -15,47 +15,52 @@ import (
 
 func TestDeviceAddressesFollowEachAddressToItsNewestDevice(t *testing.T) {
 	t.Parallel()
-	ruleSets := ruleSetsByMAC([]config.Client{
-		{Name: "Emma's iPad", MAC: "DA:A1:19:00:00:01", RuleSet: "Kids"},
-		{Name: "Work laptop", MAC: "da:a1:19:00:00:02", RuleSet: "Work"},
-		{Name: "Printer", MAC: "da:a1:19:00:00:03"},
-		{Name: "Guests", Address: "10.0.40.0/24", RuleSet: "Work"},
+	macs := blockingHardwareAddresses(config.Config{
+		Clients: []config.Client{
+			{Name: "Emma's iPad", MAC: "DA:A1:19:00:00:01", RuleSet: "Kids"},
+			{Name: "Work laptop", MAC: "da:a1:19:00:00:02", RuleSet: "Work"},
+			{Name: "Printer", MAC: "da:a1:19:00:00:03"},
+			{Name: "Guests", Address: "10.0.40.0/24", RuleSet: "Work"},
+		},
+		Blocking: config.Blocking{Holds: []config.Hold{{MAC: "da:a1:19:00:00:04"}, {Address: "10.0.0.20"}}},
 	})
-	if len(ruleSets) != 2 || ruleSets["da:a1:19:00:00:01"] != "Kids" {
-		t.Fatalf("ruleSetsByMAC() = %v", ruleSets)
+	if len(macs) != 3 {
+		t.Fatalf("blockingHardwareAddresses() = %v", macs)
 	}
 	// Newest first, as the store returns them.
-	addresses := deviceAddresses(ruleSets, []querylog.ClientIdentity{
+	addresses := deviceAddresses(macs, []querylog.ClientIdentity{
 		{Address: "10.0.0.5", MAC: "da:a1:19:00:00:03"}, // the printer has it now
 		{Address: "fd00::a1", MAC: "da:a1:19:00:00:01"}, // an IPv6 privacy address
 		{Address: "10.0.0.7", MAC: "DA:A1:19:00:00:01"}, // the iPad
 		{Address: "10.0.0.5", MAC: "da:a1:19:00:00:02"}, // the laptop had it before
 		{Address: "::ffff:10.0.0.9", MAC: "da:a1:19:00:00:02"},
+		{Address: "10.0.0.11", MAC: "da:a1:19:00:00:04"}, // held, in no rule set
 		{Address: "not-an-address", MAC: "da:a1:19:00:00:02"},
 	})
 	want := dnsserver.DeviceAddresses{
-		netip.MustParseAddr("fd00::a1"): "Kids",
-		netip.MustParseAddr("10.0.0.7"): "Kids",
-		netip.MustParseAddr("10.0.0.9"): "Work",
+		netip.MustParseAddr("fd00::a1"):  "da:a1:19:00:00:01",
+		netip.MustParseAddr("10.0.0.7"):  "da:a1:19:00:00:01",
+		netip.MustParseAddr("10.0.0.9"):  "da:a1:19:00:00:02",
+		netip.MustParseAddr("10.0.0.11"): "da:a1:19:00:00:04",
 	}
 	if len(addresses) != len(want) {
 		t.Fatalf("deviceAddresses() = %v, want %v", addresses, want)
 	}
-	for address, ruleSet := range want {
-		if addresses[address] != ruleSet {
-			t.Fatalf("deviceAddresses()[%s] = %q, want %q", address, addresses[address], ruleSet)
+	for address, mac := range want {
+		if addresses[address] != mac {
+			t.Fatalf("deviceAddresses()[%s] = %q, want %q", address, addresses[address], mac)
 		}
 	}
 }
 
-func TestDeviceRuleSetsRebuildOnIdentitiesAndConfiguration(t *testing.T) {
+func TestDeviceAddressTableRebuildsOnIdentitiesAndConfiguration(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	tracking := true
 	reads := make(chan time.Time, 10)
 	applied := make(chan dnsserver.DeviceAddresses, 10)
-	table := newDeviceRuleSets(
+	table := newDeviceAddressTable(
 		func(_ context.Context, since time.Time) ([]querylog.ClientIdentity, error) {
 			reads <- since
 			return []querylog.ClientIdentity{{Address: "10.0.0.7", MAC: "da:a1:19:00:00:01"}}, nil
@@ -75,15 +80,15 @@ func TestDeviceRuleSetsRebuildOnIdentitiesAndConfiguration(t *testing.T) {
 		}
 	}
 
-	// No device in a rule set by hardware address: nothing to read.
-	table.SetClients([]config.Client{{Name: "Switch", Address: "192.0.2.20", RuleSet: "Kids"}})
+	// No device named by hardware address: nothing to read.
+	table.SetConfiguration(config.Config{Clients: []config.Client{{Name: "Switch", Address: "192.0.2.20", RuleSet: "Kids"}}})
 	go table.Run(ctx)
 	if addresses := next(); addresses != nil || len(reads) != 0 {
 		t.Fatalf("table without MAC devices = %v after %d reads", addresses, len(reads))
 	}
 
-	table.SetClients([]config.Client{{Name: "Emma's iPad", MAC: "da:a1:19:00:00:01", RuleSet: "Kids"}})
-	if addresses := next(); addresses[netip.MustParseAddr("10.0.0.7")] != "Kids" {
+	table.SetConfiguration(config.Config{Clients: []config.Client{{Name: "Emma's iPad", MAC: "da:a1:19:00:00:01", RuleSet: "Kids"}}})
+	if addresses := next(); addresses[netip.MustParseAddr("10.0.0.7")] != "da:a1:19:00:00:01" {
 		t.Fatalf("table = %v, want the iPad in Kids", addresses)
 	}
 	if since := <-reads; time.Since(since) < 24*time.Hour {

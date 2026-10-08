@@ -158,7 +158,7 @@ type MCP struct {
 // lists them.
 var MCPTools = []string{
 	"list_zones", "list_records", "add_record", "set_records", "update_record", "delete_record", "create_zone", "delete_zone",
-	"check_domain", "allow_domain", "block_domain", "remove_domain_rule",
+	"check_domain", "allow_domain", "block_domain", "remove_domain_rule", "block_device", "unblock_device",
 	"list_block_lists", "add_block_list", "remove_block_list", "refresh_block_lists",
 	"lookup", "purge_cache", "list_findings", "search_queries", "search_server_logs",
 	"get_version", "get_stats", "get_dynamic_dns", "sync_dynamic_dns", "get_cluster_status",
@@ -166,8 +166,8 @@ var MCPTools = []string{
 
 // DefaultMCPTools are the tools offered until an operator chooses: records,
 // allow and block rules, lookups, the cache, and how the server is doing.
-// Creating and deleting zones, block lists, updating Dynamic DNS, and the
-// query and runtime logs wait to be added.
+// Creating and deleting zones, block lists, blocking a device, updating
+// Dynamic DNS, and the query and runtime logs wait to be added.
 func DefaultMCPTools() []string {
 	return []string{
 		"list_zones", "list_records", "add_record", "set_records", "update_record", "delete_record",
@@ -294,6 +294,8 @@ type Blocking struct {
 	// means every list.
 	DefaultLists []string  `toml:"default_lists,omitempty"`
 	RuleSets     []RuleSet `toml:"rule_sets,omitempty"`
+	// Holds block everything for a device, for a while or until removed.
+	Holds []Hold `toml:"holds,omitempty"`
 }
 
 type BlockList struct {
@@ -1092,6 +1094,7 @@ func (settings Blocking) validate() []error {
 	}
 	validationErrors = append(validationErrors, validatePolicyDomains("blocking.allowed_domains", settings.AllowedDomains)...)
 	validationErrors = append(validationErrors, settings.validateRuleSets()...)
+	validationErrors = append(validationErrors, validateHolds(settings.Holds)...)
 	return append(validationErrors, settings.validateResponse()...)
 }
 
@@ -1506,6 +1509,7 @@ func (settings *Blocking) normalize() {
 	settings.CustomAddresses = uniqueAddresses(settings.CustomAddresses)
 	settings.BypassClients = uniqueTrimmed(settings.BypassClients)
 	settings.normalizeRuleSets()
+	settings.Holds = normalizeHolds(settings.Holds)
 	for index := range settings.Lists {
 		settings.Lists[index].normalize()
 	}
