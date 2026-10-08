@@ -50,7 +50,7 @@ func (handler *Handler) DomainPolicy(name string) DomainPolicy {
 	if runtime == nil {
 		return DomainPolicy{Decision: querylog.PolicyNotEvaluated}
 	}
-	decision, rule, sources := runtime.policyDecision(name, "", handler.BlockingPaused())
+	decision, rule, sources := runtime.policyDecision(name, "", nil, handler.BlockingPaused())
 	return DomainPolicy{Decision: decision, Rule: rule, Sources: append([]string(nil), sources...)}
 }
 
@@ -92,14 +92,14 @@ func (runtime *Runtime) blockedSources(owner uint32) []string {
 // policyDecision decides how blocking treats name for a client. A client's
 // rule set comes first: its own allowed and blocked domains win over the
 // global ones, and only its block lists apply.
-func (runtime *Runtime) policyDecision(name, clientIP string, paused bool) (querylog.PolicyDecision, string, []string) {
+func (runtime *Runtime) policyDecision(name, clientIP string, devices DeviceAddresses, paused bool) (querylog.PolicyDecision, string, []string) {
 	if !runtime.blocking {
 		return querylog.PolicyDisabled, "", nil
 	}
 	if paused {
 		return querylog.PolicyPaused, "", nil
 	}
-	set := runtime.ruleSetFor(clientIP)
+	set := runtime.ruleSetFor(clientIP, devices)
 	if set != nil {
 		if set.off {
 			// The fact that the client bypassed policy is useful; persisting the
