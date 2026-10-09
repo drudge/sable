@@ -8,6 +8,74 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.0-beta.10] - 2026-10-09
+
+Sable 1.7.0-beta.10 adds per-device blocking. Rule sets give some devices
+their own block lists, blocked and allowed domains, and blocked apps, and a
+hold blocks everything for one device for a while.
+
+### Upgrading
+
+- `blocking.bypass_clients` moves into a rule set called `No Blocking` with
+  blocking turned off, one `[[clients]]` entry per address or network, the
+  first time this version loads the config. The key is dropped on the next
+  save, and the **Bypass Clients** card leaves **Settings**. An address that
+  already had a rule set moves to `No Blocking`, since a bypass used to win.
+- Devices (`[[clients]]`) now replicate to replicas, since a device's rule
+  set decides how every node blocks for it. Upgrade every node in a cluster
+  together.
+- Coming from 1.6.x, also read the 1.7.0-beta.1 upgrade notes below.
+
+### Blocking
+
+- Add rule sets (`[[blocking.rule_sets]]`) on a new **Blocked → Rule Sets**
+  tab. Each rule set picks its own block lists and keeps its own blocked and
+  allowed domains, which win over everyone's. Devices without a rule set use
+  the **Default** rules, whose lists `blocking.default_lists` can narrow.
+- Open a rule set to see and change everything about it in one panel: its
+  devices, addresses, and networks (with suggestions from the devices Sable
+  has seen), its block lists, and its own blocked and allowed domains.
+- Block apps for a rule set. **Choose Apps** opens a grid of app logos by
+  category with a search, and each app blocks every domain Sable knows it
+  uses. The grid leaves out device platforms, smart home, cameras, and work
+  tools so nobody breaks a device by accident.
+- Turn blocking off for a rule set with **Turn Off Blocking**. This replaces
+  Bypass Clients.
+- Put a device in a rule set by its hardware address. It applies at every
+  address Sable ties to that device, from the neighbor table, UniFi, or the
+  cluster lead, without Sable being the DHCP server.
+- Block everything for one device for 30 minutes, an hour, until a time, or
+  until you turn it off, from its **Blocking** section on **Insights →
+  Devices**. A live countdown, **Add 30 Minutes**, and **End Now** sit
+  beside it. A hold outlasts a global pause, and the device's allowed
+  domains still work. Holds are in `[[blocking.holds]]`, so they replicate
+  and show in the Change Center.
+- Show which rule set a device uses, and why, on its Insights panel, with a
+  picker to give it another.
+
+### Query log and Check a Domain
+
+- Name the rule set and the app behind a block in the query explanation,
+  such as "Matched tiktokcdn.com, one of TikTok's domains, blocked by the
+  Warehouse rule set". Held queries say the device is held.
+- Check a domain for one device. Once any devices are in rule sets, **Check
+  a Domain** has a device field, and **Why is this blocked?** in the query
+  log checks for the device that asked.
+- Hide **Allow** when a rule set's own block stopped a query, since allowing
+  a domain everywhere can't get past it. The rule set's panel can.
+
+### MCP
+
+- Give `check_domain` an optional `device`, and return the `rule_set` and
+  `app` that decided.
+- Add `block_device` and `unblock_device` to set and end holds. Both are off
+  by default.
+
+### Security
+
+- Build with Go 1.27.2 and golang.org/x/net 0.60.0, which fix advisories in
+  `net/http`, its HTTP/2 code, `net/textproto`, and `crypto/tls`.
+
 ## [1.7.0-beta.9] - 2026-10-07
 
 Sable 1.7.0-beta.9 keeps the page behind an open sheet or dialog from
