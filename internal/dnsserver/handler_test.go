@@ -1156,7 +1156,7 @@ func TestBlockingPolicySupportsOverridesPauseBypassAndResponses(t *testing.T) {
 	configuration.BlockingType = "custom"
 	configuration.BlockingTTL = 42
 	configuration.BlockingAddrs = []string{"192.0.2.9", "2001:db8::9"}
-	configuration.BypassClients = []string{"198.51.100.0/24"}
+	configuration.RuleSets = []RuleSetPolicy{{Name: "No Blocking", Off: true, Clients: []string{"198.51.100.0/24"}}}
 	configuration.AllowTXTReport = true
 	runtime, err := Compile(configuration)
 	if err != nil {

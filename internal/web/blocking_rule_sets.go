@@ -3,13 +3,17 @@ package web
 import (
 	"cmp"
 	"context"
+	"maps"
+	"net"
 	"net/http"
+	"net/netip"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/insights/devices"
+	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/web/pages"
 )
 
@@ -42,7 +46,7 @@ func (server *Server) saveRuleSet(writer http.ResponseWriter, request *http.Requ
 		server.renderRuleSetProblem(writer, request, refuse(http.StatusBadRequest, "Sable could not read the form."))
 		return
 	}
-	set := config.RuleSet{Name: strings.TrimSpace(request.FormValue("name")), Lists: request.Form["lists"]}
+	set := config.RuleSet{Name: strings.TrimSpace(request.FormValue("name")), Off: request.FormValue("off") == "true", Lists: request.Form["lists"]}
 	message, err := server.ruleSetService().Save(request.Context(), requestActor(request, ""), request.FormValue("original"), set)
 	if err != nil {
 		server.renderRuleSetProblem(writer, request, err)
@@ -91,11 +95,30 @@ func (server *Server) renderRuleSetProblem(writer http.ResponseWriter, request *
 	server.render(writer, request, pages.ToastSticky(sentence(err.Error()), "error"))
 }
 
-// ruleSetViews describes each rule set with the devices in it, by the name
-// the operator or UniFi gave each one, or its address.
+// ruleSetViews describes each rule set with the devices in it.
 func (server *Server) ruleSetViews(ctx context.Context, configuration config.Config) []pages.RuleSetView {
+	label := server.clientLabeler(ctx)
+	views := make([]pages.RuleSetView, 0, len(configuration.Blocking.RuleSets))
+	for _, set := range configuration.Blocking.RuleSets {
+		view := ruleSetView(set)
+		for _, client := range configuration.Clients {
+			if client.RuleSet == set.Name {
+				view.Devices = append(view.Devices, pages.RuleSetDevice{
+					Label: label(client), Entry: cmp.Or(client.MAC, client.Address), Kind: clientEntryKind(client), Type: client.Type,
+				})
+			}
+		}
+		views = append(views, view)
+	}
+	return views
+}
+
+// clientLabeler names devices by the name the operator or UniFi gave each
+// one, or else its hardware address or address. It reads the given names
+// only when a device needs them.
+func (server *Server) clientLabeler(ctx context.Context) func(config.Client) string {
 	var given *devices.GivenNames
-	name := func(client config.Client) string {
+	return func(client config.Client) string {
 		if client.Name != "" {
 			return client.Name
 		}
@@ -108,22 +131,22 @@ func (server *Server) ruleSetViews(ctx context.Context, configuration config.Con
 		}
 		return cmp.Or(given.Address(client.Address), client.Address)
 	}
-	views := make([]pages.RuleSetView, 0, len(configuration.Blocking.RuleSets))
-	for _, set := range configuration.Blocking.RuleSets {
-		view := ruleSetView(set)
-		for _, client := range configuration.Clients {
-			if client.RuleSet == set.Name {
-				view.Devices = append(view.Devices, name(client))
-			}
-		}
-		views = append(views, view)
+}
+
+func clientEntryKind(client config.Client) string {
+	switch {
+	case client.MAC != "":
+		return "mac"
+	case strings.Contains(client.Address, "/"):
+		return "network"
+	default:
+		return "address"
 	}
-	return views
 }
 
 func ruleSetView(set config.RuleSet) pages.RuleSetView {
 	return pages.RuleSetView{
-		Name: set.Name, Lists: slices.Clone(set.Lists),
+		Name: set.Name, Off: set.Off, Lists: slices.Clone(set.Lists),
 		Domains: slices.Clone(set.Domains), AllowedDomains: slices.Clone(set.AllowedDomains),
 	}
 }
@@ -145,7 +168,139 @@ func (server *Server) ruleSetDrawerView(request *http.Request, name string) page
 	set := configuration.Blocking.RuleSets[index]
 	configuration.Blocking.RuleSets = []config.RuleSet{set}
 	view.Set = server.ruleSetViews(request.Context(), configuration)[0]
+	if view.CanWrite {
+		view.DeviceOptions = server.ruleSetDeviceOptions(request.Context(), configuration, set.Name)
+	}
 	return view
+}
+
+// ruleSetDeviceLimit bounds how many seen devices the Add Device field
+// offers.
+const ruleSetDeviceLimit = 500
+
+// ruleSetDeviceOptions offers the devices Sable has seen, by hardware
+// address when it knows one, and the ones the operator named, leaving out
+// those already in the rule set.
+func (server *Server) ruleSetDeviceOptions(ctx context.Context, configuration config.Config, name string) []pages.RuleSetDeviceOption {
+	taken := map[string]bool{}
+	for _, client := range configuration.Clients {
+		if client.RuleSet == name {
+			taken[cmp.Or(client.MAC, client.Address)] = true
+		}
+	}
+	var identities []querylog.ClientIdentity
+	if reader, ok := server.queries.(clientIdentityReader); ok && server.insightsEnabled() {
+		var err error
+		if identities, err = reader.ClientIdentities(ctx, time.Now().Add(-devices.Lookback)); err != nil {
+			server.logger.Warn("read client identities", "error", err)
+		}
+	}
+	given := devices.NewGivenNames(identities, configuration.Clients)
+	options := map[string]pages.RuleSetDeviceOption{}
+	add := func(entry, label string) {
+		if entry == "" || taken[entry] {
+			return
+		}
+		if _, found := options[entry]; !found || label != entry {
+			options[entry] = pages.RuleSetDeviceOption{Value: entry, Label: cmp.Or(label, entry)}
+		}
+	}
+	for _, identity := range identities {
+		if identity.MAC != "" {
+			add(identity.MAC, cmp.Or(given.Hardware(identity.MAC), identity.Hostname))
+		} else {
+			add(identity.Address, cmp.Or(given.Address(identity.Address), identity.Hostname))
+		}
+	}
+	for _, client := range configuration.Clients {
+		add(cmp.Or(client.MAC, client.Address), client.Name)
+	}
+	list := slices.SortedFunc(maps.Values(options), func(left, right pages.RuleSetDeviceOption) int {
+		return cmp.Or(strings.Compare(strings.ToLower(left.Label), strings.ToLower(right.Label)), strings.Compare(left.Value, right.Value))
+	})
+	return list[:min(len(list), ruleSetDeviceLimit)]
+}
+
+func (server *Server) addRuleSetDevice(writer http.ResponseWriter, request *http.Request) {
+	server.changeRuleSetDevice(writer, request, true)
+}
+
+func (server *Server) deleteRuleSetDevice(writer http.ResponseWriter, request *http.Request) {
+	server.changeRuleSetDevice(writer, request, false)
+}
+
+// changeRuleSetDevice puts a device, address, or network in a rule set, or
+// takes it out, then shows the rule set's panel again with the page beneath.
+// A device can be named by what the Add Device field offers or by its name.
+func (server *Server) changeRuleSetDevice(writer http.ResponseWriter, request *http.Request, add bool) {
+	if err := request.ParseForm(); err != nil {
+		server.renderRuleSetChange(writer, request, "", "", refuse(http.StatusBadRequest, "Sable could not read the form."))
+		return
+	}
+	name := request.FormValue("name")
+	message, err := server.assignRuleSetDevice(request, name, strings.TrimSpace(request.FormValue("device")), add)
+	server.renderRuleSetChange(writer, request, name, message, err)
+}
+
+func (server *Server) assignRuleSetDevice(request *http.Request, name, entry string, add bool) (string, error) {
+	configuration := server.config.Current().Config
+	if !slices.ContainsFunc(configuration.Blocking.RuleSets, func(set config.RuleSet) bool { return set.Name == name }) {
+		return "", refuse(http.StatusNotFound, "No rule set is called %s. It may have been deleted.", name)
+	}
+	if add {
+		entry = server.ruleSetDeviceEntry(request.Context(), configuration, name, entry)
+	}
+	device, ok := readClientEntry(entry)
+	if !ok {
+		return "", refuse(http.StatusUnprocessableEntity, "Enter a device Sable has seen, an IP address, a network such as 10.0.20.0/24, or a hardware address.")
+	}
+	label := server.clientLabeler(request.Context())(device)
+	current := slices.IndexFunc(configuration.Clients, func(client config.Client) bool { return client.Key() == device.Key() && client.RuleSet == name })
+	switch {
+	case add && current >= 0:
+		return "", refuse(http.StatusUnprocessableEntity, "%s is already in %s.", label, name)
+	case !add && current < 0:
+		return "", refuse(http.StatusUnprocessableEntity, "%s isn't in %s.", label, name)
+	case add:
+		device.RuleSet = name
+	}
+	var addresses []string
+	if device.MAC != "" {
+		var err error
+		if addresses, err = server.deviceAddresses(request.Context(), "mac:"+device.MAC); err != nil {
+			return "", err
+		}
+	}
+	return server.ruleSetService().Assign(request.Context(), requestActor(request, ""), device, addresses, label)
+}
+
+// ruleSetDeviceEntry turns what was typed into the Add Device field into an
+// entry: a device's name becomes the entry the field offers for it.
+func (server *Server) ruleSetDeviceEntry(ctx context.Context, configuration config.Config, name, typed string) string {
+	if _, ok := readClientEntry(typed); ok {
+		return typed
+	}
+	for _, option := range server.ruleSetDeviceOptions(ctx, configuration, name) {
+		if strings.EqualFold(option.Label, typed) {
+			return option.Value
+		}
+	}
+	return typed
+}
+
+// readClientEntry reads a hardware address, IP address, or network into the
+// entry that names it in [[clients]].
+func readClientEntry(entry string) (config.Client, bool) {
+	if _, err := net.ParseMAC(entry); err == nil {
+		return clientForEntry(entry), true
+	}
+	if _, err := netip.ParsePrefix(entry); err == nil {
+		return clientForEntry(entry), true
+	}
+	if _, err := netip.ParseAddr(entry); err == nil {
+		return clientForEntry(entry), true
+	}
+	return config.Client{}, false
 }
 
 func (server *Server) addRuleSetDomain(writer http.ResponseWriter, request *http.Request) {

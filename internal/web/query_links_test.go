@@ -76,7 +76,7 @@ func TestSettingsCardsHaveLinkableIDs(t *testing.T) {
 		}
 		seen[match[1]] = true
 	}
-	for _, id := range []string{"block-list-updates", "bypass-clients", "public-tls-certificate", "destinations", "alert-types", "watches"} {
+	for _, id := range []string{"block-list-updates", "public-tls-certificate", "destinations", "alert-types", "watches"} {
 		if !seen[id] {
 			t.Errorf("no Settings card is #%s; have %v", id, seen)
 		}

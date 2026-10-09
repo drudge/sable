@@ -91,15 +91,15 @@ const {chromium} = require('playwright');
     assert.equal(await check.isVisible(), true, 'the panel stays open after Allow');
 
     // A Settings card's address opens its tab, scrolls to it, and outlines it.
-    await page.goto(`${baseURL}/settings#bypass-clients`);
-    const card = page.locator('#bypass-clients');
+    await page.goto(`${baseURL}/settings#block-list-updates`);
+    const card = page.locator('#block-list-updates');
     await card.and(page.locator('.is-linked')).waitFor();
     assert.equal(await page.locator('[data-isotope-panel="blocking"]').isVisible(), true, 'the card\'s tab opens');
     // The scroll is smooth unless the viewer asks for less motion.
     await page.waitForTimeout(1000);
     const box = await card.boundingBox();
     assert.ok(box && box.y >= 0 && box.y + box.height <= 900, `the card is in view, at ${box?.y} to ${box && box.y + box.height}`);
-    await page.waitForFunction(() => !document.querySelector('#bypass-clients.is-linked'), null, {timeout: 4000});
+    await page.waitForFunction(() => !document.querySelector('#block-list-updates.is-linked'), null, {timeout: 4000});
 
     assert.deepEqual(errors, []);
     console.log('PASS queries, domain checks, and Settings cards open at their own addresses');

@@ -300,9 +300,10 @@ func policyTab(allowed bool) string {
 }
 
 // sentence capitalizes a message for the console, where messages start a
-// sentence. A message that opens with a domain name keeps its case.
+// sentence. A message that opens with a domain name or an address keeps its
+// case.
 func sentence(message string) string {
-	if first, _, _ := strings.Cut(message, " "); first == "" || strings.Contains(first, ".") {
+	if first, _, _ := strings.Cut(message, " "); first == "" || strings.ContainsAny(first, ".:") {
 		return message
 	}
 	return strings.ToUpper(message[:1]) + message[1:]

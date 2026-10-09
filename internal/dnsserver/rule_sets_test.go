@@ -28,8 +28,8 @@ func ruleSetTestConfig() RuntimeConfig {
 		{Name: "Strict only", Lists: []string{"Strict", "Custom"}, Clients: []string{"198.51.100.7"}},
 		{Name: "Ads only", Lists: []string{"Ads"}, Clients: []string{"198.51.100.8"}},
 		{Name: "Tablets", Lists: []string{"Strict"}, Clients: []string{"DA:A1:19:00:00:01"}},
+		{Name: "No Blocking", Off: true, Clients: []string{"192.0.2.99", "203.0.113.0/24"}},
 	}
-	configuration.BypassClients = []string{"192.0.2.99", "203.0.113.0/24"}
 	return configuration
 }
 
@@ -145,7 +145,7 @@ func TestRuleSetsRejectInvalidClientsAndDomains(t *testing.T) {
 		error string
 	}{
 		{"client", func(configuration *RuntimeConfig) { configuration.RuleSets[0].Clients = []string{"not-an-address"} }, `rule set "Kids": invalid client`},
-		{"bypass", func(configuration *RuntimeConfig) { configuration.BypassClients = []string{"fe80::1%eth0"} }, "invalid blocking bypass client"},
+		{"off", func(configuration *RuntimeConfig) { configuration.RuleSets[5].Clients = []string{"fe80::1%eth0"} }, `rule set "No Blocking": invalid client`},
 		{"domain", func(configuration *RuntimeConfig) { configuration.RuleSets[1].Domains = []string{"bad..example"} }, `rule set "Work": invalid blocked domain`},
 		{"allowed", func(configuration *RuntimeConfig) {
 			configuration.RuleSets[1].AllowedDomains = []string{"bad..example"}
@@ -188,13 +188,14 @@ func BenchmarkPolicyDecision(b *testing.B) {
 		configuration.BlockedDomains = append(configuration.BlockedDomains, fmt.Sprintf("host-%d.example", index))
 		configuration.BlockedDomainOwners = append(configuration.BlockedDomainOwners, uint32(1+index%2))
 	}
-	configuration.BypassClients = []string{"198.51.100.0/24"}
+	configuration.RuleSets = []RuleSetPolicy{{Name: "No Blocking", Off: true, Clients: []string{"198.51.100.0/24"}}}
 	runtime, err := Compile(configuration)
 	if err != nil {
 		b.Fatal(err)
 	}
 	withSets := configuration
 	withSets.RuleSets = []RuleSetPolicy{
+		configuration.RuleSets[0],
 		{Name: "Kids", Lists: []string{"Strict"}, Domains: []string{"games.example"}, Clients: []string{"192.0.2.0/24"}},
 		{Name: "Work", Lists: []string{"Ads"}, Clients: []string{"192.0.2.50", "2001:db8::/32", "da:a1:19:00:00:01"}},
 	}

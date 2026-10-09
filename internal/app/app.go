@@ -371,7 +371,6 @@ func compileRuntime(configuration config.Config, configuredZones []zone.Zone, ba
 		BlockingType:               configuration.Blocking.ResponseType,
 		BlockingTTL:                configuration.Blocking.ResponseTTL,
 		BlockingAddrs:              configuration.Blocking.CustomAddresses,
-		BypassClients:              configuration.Blocking.BypassClients,
 		RuleSets:                   runtimeRuleSets(configuration),
 		DefaultLists:               defaultLists(configuration.Blocking.DefaultLists),
 		Holds:                      runtimeHolds(configuration.Blocking.Holds),
@@ -461,7 +460,7 @@ func runtimeRuleSets(configuration config.Config) []dnsserver.RuleSetPolicy {
 	sets := make([]dnsserver.RuleSetPolicy, 0, len(configuration.Blocking.RuleSets))
 	for _, set := range configuration.Blocking.RuleSets {
 		policy := dnsserver.RuleSetPolicy{
-			Name: set.Name, Lists: append(slices.Clone(set.Lists), blockcompiler.CustomSourceName),
+			Name: set.Name, Off: set.Off, Lists: append(slices.Clone(set.Lists), blockcompiler.CustomSourceName),
 			Domains: set.Domains, AllowedDomains: set.AllowedDomains,
 		}
 		for _, client := range configuration.Clients {

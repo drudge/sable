@@ -12,7 +12,7 @@ import (
 // client none of them name gets the global policy.
 type RuleSetPolicy struct {
 	Name string
-	// Off turns blocking off for the set's clients, as a bypass does.
+	// Off turns blocking off for the set's clients.
 	Off bool
 	// Lists names the block-list sources that apply to the set's clients.
 	Lists []string
@@ -85,13 +85,9 @@ func (list allowList) match(name string) string {
 }
 
 // compileRuleSets builds the rule sets and the table that picks one for a
-// client. Bypass clients become a rule set with blocking off, so there is one
-// path for both. Owner sets must already be in place.
+// client. Owner sets must already be in place.
 func (runtime *Runtime) compileRuleSets(configuration RuntimeConfig) error {
 	policies := configuration.RuleSets
-	if len(configuration.BypassClients) > 0 {
-		policies = append([]RuleSetPolicy{{Off: true, Clients: configuration.BypassClients}}, policies...)
-	}
 	sets := make([]ruleSet, 0, len(policies))
 	var clients clientTable[int]
 	for index, policy := range policies {
@@ -101,11 +97,8 @@ func (runtime *Runtime) compileRuleSets(configuration RuntimeConfig) error {
 		}
 		sets = append(sets, set)
 		for _, value := range policy.Clients {
-			// The first set to name a client keeps it, so a bypass wins.
+			// The first set to name a client keeps it.
 			if err := clients.add(value, index); err != nil {
-				if policy.Off {
-					return fmt.Errorf("invalid blocking bypass client %q", value)
-				}
 				return fmt.Errorf("rule set %q: invalid client %q", policy.Name, value)
 			}
 		}

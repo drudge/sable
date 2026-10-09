@@ -139,3 +139,60 @@ func TestRemoveListLeavesRuleSetsValid(t *testing.T) {
 		t.Fatal("RemoveList() removed a list that isn't there")
 	}
 }
+
+func TestBypassClientsMoveIntoARuleSetWithBlockingOff(t *testing.T) {
+	t.Parallel()
+	loaded, err := Decode(strings.NewReader(`
+[blocking]
+bypass_clients = [" 10.0.0.0/8 ", "192.0.2.1", "10.0.0.0/8"]
+
+[[blocking.rule_sets]]
+name = "No Blocking"
+lists = []
+
+[[blocking.rule_sets]]
+name = "Kids"
+lists = []
+
+[[clients]]
+address = "192.0.2.1"
+name = "Printer"
+rule_set = "Kids"
+`))
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	blocking := loaded.Blocking
+	if len(blocking.BypassClients) != 0 {
+		t.Fatalf("bypass clients = %v, want them moved", blocking.BypassClients)
+	}
+	// The operator's own "No Blocking" keeps blocking on, so the bypass takes
+	// the next free name.
+	index := slices.IndexFunc(blocking.RuleSets, func(set RuleSet) bool { return set.Name == "No Blocking 2" })
+	if index < 0 || !blocking.RuleSets[index].Off {
+		t.Fatalf("rule sets = %+v, want No Blocking 2 with blocking off", blocking.RuleSets)
+	}
+	want := []Client{
+		{Address: "10.0.0.0/8", RuleSet: "No Blocking 2"},
+		{Address: "192.0.2.1", Name: "Printer", RuleSet: "No Blocking 2"},
+	}
+	if !slices.Equal(loaded.Clients, want) {
+		t.Fatalf("clients = %+v, want %+v", loaded.Clients, want)
+	}
+
+	// Saved again, the old key is gone and nothing moves twice.
+	saved, err := Marshal(loaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(saved), "bypass_clients") {
+		t.Fatalf("saved configuration still has bypass_clients:\n%s", saved)
+	}
+	reloaded, err := Decode(strings.NewReader(string(saved)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(reloaded.Clients, want) || len(reloaded.Blocking.RuleSets) != 3 {
+		t.Fatalf("reloaded clients = %+v, rule sets = %+v", reloaded.Clients, reloaded.Blocking.RuleSets)
+	}
+}

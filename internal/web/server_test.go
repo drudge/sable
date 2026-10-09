@@ -696,7 +696,7 @@ func TestDashboardAndHealthAreServedFromEmbeddedApplication(t *testing.T) {
 		t.Fatalf("blocking page status = %d", blockingResponse.Code)
 	}
 	settingsResponse := serveRequest(server, http.MethodGet, "/settings")
-	for _, expected := range []string{"Settings", "General", "Protocols", "Recursion", "DNS Forwarders", "Logging", "DNS Query Logs", "Server Logs", "Dashboard History", "Query Log Retention", "Minimum Log Level", "Server Log Retention", "Statistics Retention", "Blocking Response", "Block List Updates", "Bypass Clients", "Manage Block Lists and Domains", "Display Preferences", `data-time-format-preference data-styled-select`, `data-record-name-preference data-styled-select`, "12-hour (9:30 PM)", "Relative to zone (www)"} {
+	for _, expected := range []string{"Settings", "General", "Protocols", "Recursion", "DNS Forwarders", "Logging", "DNS Query Logs", "Server Logs", "Dashboard History", "Query Log Retention", "Minimum Log Level", "Server Log Retention", "Statistics Retention", "Blocking Response", "Block List Updates", "Manage Block Lists and Domains", "Display Preferences", `data-time-format-preference data-styled-select`, `data-record-name-preference data-styled-select`, "12-hour (9:30 PM)", "Relative to zone (www)"} {
 		if !strings.Contains(settingsResponse.Body.String(), expected) {
 			t.Errorf("settings page does not contain %q", expected)
 		}
@@ -936,8 +936,8 @@ func TestSettingsEditorValidatesPersistsAndRendersRuntimeSettings(t *testing.T) 
 		"cache_prefetch_trigger_ttl": {"9"}, "cache_prefetch_sample_interval": {"5m"},
 		"cache_prefetch_hits_per_hour": {"30"},
 		"blocking_update_hours":        {"12"}, "blocking_response_type": {"zero"}, "blocking_response_ttl": {"45"},
-		"blocking_bypass_clients": {"192.0.2.10\n10.0.0.0/8"}, "blocking_allow_txt_report": {"true"},
-		"settings_tab": {"blocking"},
+		"blocking_allow_txt_report": {"true"},
+		"settings_tab":              {"blocking"},
 	}
 	request := httptest.NewRequest(http.MethodPost, "/ui/settings", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -964,7 +964,7 @@ func TestSettingsEditorValidatesPersistsAndRendersRuntimeSettings(t *testing.T) 
 		updated.Config.QueryLog.Retention.Duration != 14*24*time.Hour || !updated.Config.ServerLog.Enabled || updated.Config.ServerLog.Level != "debug" ||
 		updated.Config.ServerLog.Retention.Duration != 90*24*time.Hour || updated.Config.Statistics.Retention.Duration != 2*365*24*time.Hour ||
 		updated.Config.Blocking.UpdateInterval.Duration != 12*time.Hour || updated.Config.Blocking.ResponseType != "zero" ||
-		updated.Config.Blocking.ResponseTTL != 45 || len(updated.Config.Blocking.BypassClients) != 2 || !updated.Config.Blocking.AllowTXTReport {
+		updated.Config.Blocking.ResponseTTL != 45 || !updated.Config.Blocking.AllowTXTReport {
 		t.Fatalf("updated settings = %+v revision=%d", updated.Config, updated.Revision)
 	}
 

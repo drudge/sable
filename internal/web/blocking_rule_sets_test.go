@@ -174,7 +174,7 @@ func TestRuleSetPanelChangesItsOwnDomains(t *testing.T) {
 	}
 
 	panel := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-set?name=Kids", nil).Body.String()
-	for _, want := range []string{">Kids</h2>", "Leo&#39;s Switch, 10.20.40.0/24", "Strict", `data-policy-domain="games.example"`, "No allowed domains of its own.", `name="kind" value="allowed"`} {
+	for _, want := range []string{">Kids</h2>", "<strong>Leo&#39;s Switch</strong>", "Address 192.0.2.20", "Every device on 10.20.40.0/24", "Strict", `data-policy-domain="games.example"`, "No allowed domains of its own.", `name="kind" value="allowed"`} {
 		if !strings.Contains(panel, want) {
 			t.Errorf("panel is missing %q", want)
 		}
@@ -205,5 +205,97 @@ func TestRuleSetPanelChangesItsOwnDomains(t *testing.T) {
 	missing := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/domains/add", url.Values{"name": {"Nope"}, "kind": {"blocked"}, "domain": {"x.example"}})
 	if missing.Code != http.StatusUnprocessableEntity || !strings.Contains(missing.Body.String(), "Rule set not found") {
 		t.Fatalf("an unknown rule set = %d %s", missing.Code, missing.Body.String())
+	}
+}
+
+func TestRuleSetPanelAddsAndRemovesDevices(t *testing.T) {
+	t.Parallel()
+	server, configuration := newRuleSetTestServer(t)
+	kids := func() []config.Client {
+		var clients []config.Client
+		for _, client := range configuration.Current().Config.Clients {
+			if client.RuleSet == "Kids" {
+				clients = append(clients, client)
+			}
+		}
+		return clients
+	}
+	post := func(path string, values url.Values) (int, string) {
+		t.Helper()
+		values.Set("name", "Kids")
+		response := serveRuleSetRequest(server, http.MethodPost, path, values)
+		return response.Code, response.Body.String()
+	}
+
+	panel := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-set?name=Kids", nil).Body.String()
+	if !strings.Contains(panel, `name="device" list="rule-set-device-options"`) || !strings.Contains(panel, `hx-post="/ui/blocking/rule-sets/devices/delete"`) {
+		t.Fatalf("panel has no way to add or remove devices:\n%s", panel)
+	}
+
+	// A hardware address, in any spelling, and a name the operator gave.
+	if code, body := post("/ui/blocking/rule-sets/devices/add", url.Values{"device": {"DA-A1-19-00-00-09"}}); code != http.StatusOK ||
+		!strings.Contains(body, "da:a1:19:00:00:09 uses the Kids rule set") || !strings.Contains(body, `data-rule-set-device="da:a1:19:00:00:09"`) {
+		t.Fatalf("add a hardware address = %d %s", code, body)
+	}
+	if err := configuration.Update(context.Background(), func(candidate *config.Config) error {
+		candidate.Clients = append(candidate.Clients, config.Client{Name: "Mia's iPad", Address: "192.0.2.30"})
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if code, body := post("/ui/blocking/rule-sets/devices/add", url.Values{"device": {"mia's ipad"}}); code != http.StatusOK || !strings.Contains(body, "Mia&#39;s iPad uses the Kids rule set") {
+		t.Fatalf("add by name = %d %s", code, body)
+	}
+	if got := len(kids()); got != 4 {
+		t.Fatalf("Kids has %d devices, want 4: %+v", got, kids())
+	}
+	if code, body := post("/ui/blocking/rule-sets/devices/add", url.Values{"device": {"192.0.2.30"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "already in Kids") {
+		t.Fatalf("add twice = %d %s", code, body)
+	}
+	if code, body := post("/ui/blocking/rule-sets/devices/add", url.Values{"device": {"someone's phone"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "Enter a device Sable has seen") {
+		t.Fatalf("add something unknown = %d %s", code, body)
+	}
+
+	// Taking a device out keeps its name; a network's entry goes with it.
+	if code, body := post("/ui/blocking/rule-sets/devices/delete", url.Values{"device": {"192.0.2.30"}}); code != http.StatusOK || !strings.Contains(body, "no longer has a rule set of its own") || !strings.Contains(body, `hx-swap-oob`) {
+		t.Fatalf("remove = %d %s", code, body)
+	}
+	if code, _ := post("/ui/blocking/rule-sets/devices/delete", url.Values{"device": {"10.20.40.0/24"}}); code != http.StatusOK {
+		t.Fatalf("remove a network = %d", code)
+	}
+	clients := configuration.Current().Config.Clients
+	if !slices.ContainsFunc(clients, func(client config.Client) bool { return client.Name == "Mia's iPad" && client.RuleSet == "" }) ||
+		slices.ContainsFunc(clients, func(client config.Client) bool { return client.Address == "10.20.40.0/24" }) {
+		t.Fatalf("clients after removing = %+v", clients)
+	}
+	if code, body := post("/ui/blocking/rule-sets/devices/delete", url.Values{"device": {"192.0.2.30"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "isn&#39;t in Kids") {
+		t.Fatalf("remove twice = %d %s", code, body)
+	}
+	if response := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/devices/add", url.Values{"name": {"Nope"}, "device": {"192.0.2.40"}}); response.Code != http.StatusNotFound {
+		t.Fatalf("an unknown rule set = %d", response.Code)
+	}
+}
+
+func TestRuleSetWithBlockingOffSkipsItsListsAndDomains(t *testing.T) {
+	t.Parallel()
+	server, configuration := newRuleSetTestServer(t)
+	saved := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/save", url.Values{"original": {"Kids"}, "name": {"Kids"}, "off": {"true"}, "lists": {"Strict"}})
+	if saved.Code != http.StatusOK {
+		t.Fatalf("save = %d %s", saved.Code, saved.Body.String())
+	}
+	set := configuration.Current().Config.Blocking.RuleSets[0]
+	if !set.Off || !slices.Equal(set.Domains, []string{"games.example"}) {
+		t.Fatalf("rule set = %+v, want blocking off and its domains kept", set)
+	}
+	if !strings.Contains(saved.Body.String(), "Blocking off") {
+		t.Fatalf("the Rule Sets tab doesn't say blocking is off:\n%s", saved.Body.String())
+	}
+	form := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-sets/form?name=Kids", nil).Body.String()
+	if !strings.Contains(form, `name="off" value="true" checked`) {
+		t.Fatalf("form doesn't show blocking off:\n%s", form)
+	}
+	panel := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-set?name=Kids", nil).Body.String()
+	if !strings.Contains(panel, "Off for its devices") || strings.Contains(panel, "Blocked Domains") || !strings.Contains(panel, "Leo&#39;s Switch") {
+		t.Fatalf("panel for a rule set with blocking off:\n%s", panel)
 	}
 }

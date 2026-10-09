@@ -305,6 +305,8 @@ func routeTable() []route {
 		{pattern: "POST /ui/blocking/rule-sets/delete", handler: (*Server).deleteRuleSet, perm: auth.PermissionBlockingWrite},
 		{pattern: "POST /ui/blocking/rule-sets/domains/add", handler: (*Server).addRuleSetDomain, perm: auth.PermissionBlockingWrite},
 		{pattern: "POST /ui/blocking/rule-sets/domains/delete", handler: (*Server).deleteRuleSetDomain, perm: auth.PermissionBlockingWrite},
+		{pattern: "POST /ui/blocking/rule-sets/devices/add", handler: (*Server).addRuleSetDevice, perm: auth.PermissionBlockingWrite},
+		{pattern: "POST /ui/blocking/rule-sets/devices/delete", handler: (*Server).deleteRuleSetDevice, perm: auth.PermissionBlockingWrite},
 		{pattern: "POST /ui/blocking/rule-sets/default", handler: (*Server).saveDefaultLists, perm: auth.PermissionBlockingWrite},
 		{pattern: "POST /ui/blocking/toggle", handler: (*Server).toggleBlocking, perm: auth.PermissionBlockingWrite},
 		{pattern: "POST /ui/blocking/pause", handler: (*Server).pauseBlocking, perm: auth.PermissionBlockingWrite},

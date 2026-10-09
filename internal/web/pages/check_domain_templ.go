@@ -521,7 +521,7 @@ func CheckDomainDrawer(view CheckDomainView) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, " <p class=\"check-domain-note\">This is the answer for a typical device. Devices in <a class=\"inline-link\" href=\"/settings?tab=blocking#bypass-clients\">Bypass Clients</a> are never blocked.</p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, " <p class=\"check-domain-note\">This is the answer for a device on the Default rules. A device in a <a class=\"inline-link\" href=\"/blocked?tab=rule-sets\">rule set</a> can get a different one.</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
