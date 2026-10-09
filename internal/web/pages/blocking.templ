@@ -25,6 +25,10 @@ type BlockingPageView struct {
 	NextUpdate time.Time
 	Updating bool
 	DegradedLists int
+	RuleSets []RuleSetView
+	// DefaultLists names the block lists for devices without a rule set;
+	// empty means every list.
+	DefaultLists []string
 	ActiveTab string
 	Message string
 	Error string
@@ -72,6 +76,7 @@ var blockingTabs = []tabOption{
 	{"lists", "Block Lists", "list"},
 	{"domains", "Blocked", "shield-x"},
 	{"allowed", "Allowed", "shield-check"},
+	{"rule-sets", "Rule Sets", "users"},
 }
 
 templ BlockingPage(view BlockingPageView) {
@@ -134,6 +139,7 @@ templ BlockingContent(view BlockingPageView) {
 					</div>
 					@DomainPanel("domains", view.Domains, view.ActiveTab, false)
 					@DomainPanel("allowed", view.AllowedDomains, view.ActiveTab, true)
+					@RuleSetsPanel(view)
 				</section>
 			</div>
 			<aside class="blocking-aside isotope-blocking-aside">
@@ -150,6 +156,7 @@ templ BlockingContent(view BlockingPageView) {
 		@DomainDialog("add-blocked-domain-dialog", "Add Blocked Domain", "/ui/blocking/domains/add", "Block Domain", "Enter a domain to block. Use a wildcard such as *.example.com to represent subdomains.")
 		@DomainDialog("add-allowed-domain-dialog", "Add Allowed Domain", "/ui/blocking/allowed/add", "Allow Domain", "Exact entries allow only that name. Use *.example.com to allow its subdomains.")
 		@FlushDomainDialog("flush-blocked-dialog", "Clear Custom Blocked Domains?", "/ui/blocking/domains/flush", len(view.Domains))
+		@RuleSetDialog()
 		@FlushDomainDialog("flush-allowed-dialog", "Clear Allowed Domains?", "/ui/blocking/allowed/flush", len(view.AllowedDomains))
 	</div>
 }

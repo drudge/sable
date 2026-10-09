@@ -171,6 +171,13 @@ func (given GivenNames) Address(address string) string {
 	return name
 }
 
+// Hardware returns the given name of the device with a hardware address, or
+// nothing when it has none.
+func (given GivenNames) Hardware(mac string) string {
+	name, _, _ := chooseName(Device{MAC: mac}, given, nil)
+	return name
+}
+
 // Key returns the key of the device behind one client address, as Build keys
 // it.
 func (given GivenNames) Key(address string) string {
