@@ -1272,7 +1272,7 @@ func RuleSetAppPicker(view RuleSetAppPickerView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 86, "</p><label class=\"sr-only\" for=\"rule-set-app-search\">Search apps</label> <input id=\"rule-set-app-search\" class=\"rule-set-app-search\" type=\"search\" placeholder=\"Search apps\" autocomplete=\"off\" spellcheck=\"false\" data-app-search> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 86, "</p><label class=\"sr-only\" for=\"rule-set-app-search\">Search apps</label> <input id=\"rule-set-app-search\" class=\"rule-set-app-search\" type=\"search\" placeholder=\"Search apps\" autocomplete=\"off\" spellcheck=\"false\" data-app-picker-search> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1370,7 +1370,7 @@ func RuleSetAppPicker(view RuleSetAppPickerView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 98, "<p class=\"rule-set-domains-empty\" data-app-search-empty hidden>No apps match.</p></form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 98, "<p class=\"rule-set-domains-empty\" data-app-picker-empty hidden>No apps match.</p></form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

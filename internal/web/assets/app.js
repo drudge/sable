@@ -1782,7 +1782,7 @@
   // A rule set's app picker narrows its tiles to the apps whose names match
   // what was typed, and hides a category with none left.
   document.addEventListener("input", (event) => {
-    const search = event.target.closest?.("[data-app-search]");
+    const search = event.target.closest?.("[data-app-picker-search]");
     if (!search) return;
     const form = search.closest("form");
     const typed = search.value.trim().toLowerCase();
@@ -1797,11 +1797,11 @@
       group.hidden = matches === 0;
       shown += matches;
     });
-    form.querySelector("[data-app-search-empty]").hidden = shown > 0;
+    form.querySelector("[data-app-picker-empty]").hidden = shown > 0;
   });
   // Enter in the search narrows the tiles; it does not save the picker.
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && event.target.closest?.("[data-app-search]")) event.preventDefault();
+    if (event.key === "Enter" && event.target.closest?.("[data-app-picker-search]")) event.preventDefault();
   });
 
   // Add Destination and each Edit button load a fresh form into the dialog,

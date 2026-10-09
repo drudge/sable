@@ -383,7 +383,7 @@ templ RuleSetAppPicker(view RuleSetAppPickerView) {
 			<input type="hidden" name="name" value={ view.Name }/>
 			<p class="rule-set-domains-help">{ "Pick the apps " + view.Name + " devices can't use. Each one blocks every domain Sable knows the app uses." }</p>
 			<label class="sr-only" for="rule-set-app-search">Search apps</label>
-			<input id="rule-set-app-search" class="rule-set-app-search" type="search" placeholder="Search apps" autocomplete="off" spellcheck="false" data-app-search/>
+			<input id="rule-set-app-search" class="rule-set-app-search" type="search" placeholder="Search apps" autocomplete="off" spellcheck="false" data-app-picker-search/>
 			for _, group := range view.Groups {
 				<fieldset class="rule-set-app-group" data-app-group>
 					<legend>{ group.Category }</legend>
@@ -399,7 +399,7 @@ templ RuleSetAppPicker(view RuleSetAppPickerView) {
 					</div>
 				</fieldset>
 			}
-			<p class="rule-set-domains-empty" data-app-search-empty hidden>No apps match.</p>
+			<p class="rule-set-domains-empty" data-app-picker-empty hidden>No apps match.</p>
 		</form>
 	}
 }
