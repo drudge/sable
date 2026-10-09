@@ -88,6 +88,7 @@ templ BlockingPage(view BlockingPageView) {
 templ blockingDocument(view BlockingPageView) {
 	@BlockingContent(view)
 	@checkDomainDialog()
+	@ruleSetDrawer()
 	<dialog class="query-detail-dialog block-list-dialog" id="block-list-dialog" aria-labelledby="block-list-title" { blockListDrawerRoute()... }>
 		<div class="query-detail-content" id="block-list-content">
 			@blockListLoading()
@@ -137,8 +138,8 @@ templ BlockingContent(view BlockingPageView) {
 							}
 						</div>
 					</div>
-					@DomainPanel("domains", view.Domains, view.ActiveTab, false)
-					@DomainPanel("allowed", view.AllowedDomains, view.ActiveTab, true)
+					@DomainPanel("domains", view.Domains, view.ActiveTab, false, view.RuleSets)
+					@DomainPanel("allowed", view.AllowedDomains, view.ActiveTab, true, view.RuleSets)
 					@RuleSetsPanel(view)
 				</section>
 			</div>
@@ -203,7 +204,7 @@ templ BlockListRow(list BlockListSourceView) {
 	</article>
 }
 
-templ DomainPanel(value string, domains []string, active string, allowed bool) {
+templ DomainPanel(value string, domains []string, active string, allowed bool, ruleSets []RuleSetView) {
 	<div class="blocking-panel isotope-domain-panel" id={ "blocking-panel-" + value } role="tabpanel" aria-labelledby={ "blocking-tab-" + value } data-blocking-panel={ value } hidden?={ active != value }>
 		<div class="domain-list-toolbar">
 			@components.Button(components.ButtonProps{Label: "Add Domain", Icon: "plus", Class: "domain-list-add", Attrs: templ.Attributes{"data-dialog-open": ifThen(allowed, "add-allowed-domain-dialog", "add-blocked-domain-dialog"), "data-replica-primary-action": true}})
@@ -221,11 +222,12 @@ templ DomainPanel(value string, domains []string, active string, allowed bool) {
 				@components.EmptyState(components.EmptyStateProps{Description: "No " + domainPolicyKind(allowed) + " domains yet. Add your first domain to get started.", Class: "blocking-empty domain-list-empty"})
 			}
 			for _, domain := range domains {
-				<div class={ ifThen(allowed, "blocked-domain-row allowed", "blocked-domain-row") } data-policy-domain={ domain } data-domain-kind={ value }><span>@Icon(ifThen(allowed, "shield-check", "shield-x"))</span><strong>{ domain }</strong><span class={ ifThen(allowed, "domain-policy-badge allowed", "domain-policy-badge blocked") }>{ ifThen(allowed, "allowed", "blocked") }</span><button class="icon-button danger" type="button" hx-post={ ifThen(allowed, "/ui/blocking/allowed/delete", "/ui/blocking/domains/delete") } hx-vals={ fmt.Sprintf("{\"domain\":%q}", domain) } hx-target="#blocking-content" hx-swap="outerHTML" hx-confirm={ "Remove " + domain + " from the " + domainPolicyKind(allowed) + " list?" } data-confirm-title={ "Remove " + domainPolicyKind(allowed) + " domain?" } data-confirm-action="Remove Domain" aria-label={ "Remove " + domain }>@Icon("trash")</button></div>
+				@PolicyDomainRow(domain, allowed, value, policyRemoveAttrs(domain, allowed, "/ui/blocking/"+ifThen(allowed, "allowed", "domains")+"/delete", fmt.Sprintf("{\"domain\":%q}", domain), "#blocking-content", "outerHTML", ""))
 			}
 			@components.EmptyState(components.EmptyStateProps{Description: "No domains match your search.", Class: "blocking-filter-empty", Attrs: templ.Attributes{"data-domain-empty": value, "hidden": true}})
 		</div>
 		<p class="domain-list-count"><span data-domain-total={ value }>{ formatNumber(uint64(len(domains))) }</span> { plural(len(domains), "domain", "domains") } in { domainPolicyKind(allowed) } list <span data-domain-shown={ value } hidden></span></p>
+		@ruleSetDomainsNote(ruleSets, allowed)
 	</div>
 }
 
@@ -304,6 +306,71 @@ func blockListLocation(list BlockListSourceView) string { return BlockListLocati
 // scheme for a subscription, or its file path for a local list.
 func BlockListLocation(sourceURL, path string) string { if sourceURL != "" { parsed := strings.TrimPrefix(strings.TrimPrefix(sourceURL, "https://"), "http://"); return strings.TrimSuffix(parsed, "/") }; return path }
 func blockingStatusDescription(view BlockingPageView) string { if !view.Enabled { return "DNS blocking is currently disabled" }; if !view.PausedUntil.IsZero() { return "Temporarily disabled — resumes at " + FormatClock(view.PausedUntil, view.Console.TimeDisplay, false) }; return "DNS blocking is active and protecting your network" }
+// ruleSetDomainsNote points from everyone's list to the rule sets that keep
+// one of their own, which win over it for their devices.
+templ ruleSetDomainsNote(ruleSets []RuleSetView, allowed bool) {
+	{{ owners := ruleSetsWithDomains(ruleSets, allowed) }}
+	if len(owners) > 0 {
+		<p class="insight-blocking-note rule-set-domains-note">
+			@Icon("users")
+			<span>
+				for index, name := range owners {
+					{ listSeparator(index, len(owners)) }<button class="link-button" type="button" { drawerOpener(RuleSetDrawerLink(name))... }>{ name }</button>
+				}
+				{ plural(len(owners), " has its own ", " have their own ") + domainPolicyKind(allowed) + " domains too, which win over these for " + plural(len(owners), "its", "their") + " devices." }
+			</span>
+		</p>
+	}
+}
+
+func ruleSetsWithDomains(ruleSets []RuleSetView, allowed bool) []string {
+	var names []string
+	for _, set := range ruleSets {
+		if len(ruleSetList(set, allowed)) > 0 {
+			names = append(names, set.Name)
+		}
+	}
+	return names
+}
+
+// listSeparator goes before item index of count in a list written as prose,
+// such as "Kids, Guests and Warehouse".
+func listSeparator(index, count int) string {
+	switch {
+	case index == 0:
+		return ""
+	case index == count-1:
+		return " and "
+	default:
+		return ", "
+	}
+}
+
+// PolicyDomainRow is one domain on a blocked or allowed list. kind names the
+// tab whose search filters it, and those rows say which list they're on; a
+// list under its own heading needs neither. remove posts its removal, and
+// without it the row has no remove button.
+templ PolicyDomainRow(domain string, allowed bool, kind string, remove templ.Attributes) {
+	<div class={ ifThen(allowed, "blocked-domain-row allowed", "blocked-domain-row") } data-policy-domain={ domain } if kind != "" { data-domain-kind={ kind } }><span>@Icon(ifThen(allowed, "shield-check", "shield-x"))</span><strong>{ domain }</strong>
+		if kind != "" {
+			<span class={ ifThen(allowed, "domain-policy-badge allowed", "domain-policy-badge blocked") }>{ domainPolicyKind(allowed) }</span>
+		}
+		if remove != nil {
+			<button class="icon-button danger" type="button" aria-label={ "Remove " + domain } { remove... }>@Icon("trash")</button>
+		}
+	</div>
+}
+
+// policyRemoveAttrs asks before taking a domain off a list, then posts vals to
+// endpoint. owner finishes the question, such as " for the Kids rule set".
+func policyRemoveAttrs(domain string, allowed bool, endpoint, vals, target, swap, owner string) templ.Attributes {
+	return templ.Attributes{
+		"hx-post": endpoint, "hx-vals": vals, "hx-target": target, "hx-swap": swap,
+		"hx-confirm": "Remove " + domain + " from the " + domainPolicyKind(allowed) + " list" + owner + "?",
+		"data-confirm-title": "Remove " + domainPolicyKind(allowed) + " domain?", "data-confirm-action": "Remove Domain",
+	}
+}
+
 func domainPolicyKind(allowed bool) string { if allowed { return "allowed" }; return "blocked" }
 func blockingNavigationPage(view BlockingPageView) string { if view.ActiveTab == "allowed" { return "allowed" }; return "blocked" }
 

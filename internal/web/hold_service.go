@@ -47,9 +47,10 @@ func (service holdService) Hold(ctx context.Context, who actor, device config.Cl
 		return holdChange{}, refuse(http.StatusUnprocessableEntity, "%v", err)
 	}
 	action := "blocking.hold.set"
-	err := policy.update(ctx, who, action, func(blocking *config.Blocking) {
+	err := policy.update(ctx, who, action, func(blocking *config.Blocking) error {
 		// Checked above, so this can't fail on the device or the time.
 		blocking.Holds, _ = config.SetHold(blocking.Holds, device, until, now)
+		return nil
 	}, "device", device.Key())
 	if err != nil {
 		return holdChange{}, err
@@ -77,8 +78,9 @@ func (service holdService) End(ctx context.Context, who actor, device config.Cli
 		return change, nil
 	}
 	action := "blocking.hold.end"
-	err := policy.update(ctx, who, action, func(blocking *config.Blocking) {
+	err := policy.update(ctx, who, action, func(blocking *config.Blocking) error {
 		blocking.Holds, change.Changed = config.EndHold(blocking.Holds, device, now)
+		return nil
 	}, "device", device.Key())
 	if err != nil {
 		return holdChange{}, err

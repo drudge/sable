@@ -15,13 +15,19 @@ type ruleSetService struct{ server *Server }
 
 func (server *Server) ruleSetService() ruleSetService { return ruleSetService{server} }
 
-// Save adds a rule set, or replaces the one called original.
+// Save adds a rule set, or renames the one called original and replaces its
+// block lists. A rule set's own domains are changed one at a time through
+// policyService, so Save keeps the ones it has.
 func (service ruleSetService) Save(ctx context.Context, who actor, original string, set config.RuleSet) (string, error) {
 	action, message := "blocking.rule_set.add", "Rule set "+set.Name+" added"
 	if original != "" {
 		action, message = "blocking.rule_set.update", "Rule set "+set.Name+" saved"
 	}
 	err := service.update(ctx, who, action, func(configuration *config.Config) error {
+		if index := slices.IndexFunc(configuration.Blocking.RuleSets, func(existing config.RuleSet) bool { return existing.Name == original }); original != "" && index >= 0 {
+			existing := configuration.Blocking.RuleSets[index]
+			set.Domains, set.AllowedDomains = slices.Clone(existing.Domains), slices.Clone(existing.AllowedDomains)
+		}
 		return configuration.SaveRuleSet(original, set)
 	})
 	if err != nil {

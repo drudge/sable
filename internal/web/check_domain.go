@@ -155,7 +155,7 @@ func (server *Server) checkDomainRule(writer http.ResponseWriter, request *http.
 		tab = "allowed"
 	}
 	domain := request.FormValue("domain")
-	result, err := server.policyService().Add(request.Context(), requestActor(request, ""), domain, allowed)
+	result, err := server.policyService().Add(request.Context(), requestActor(request, ""), "", domain, allowed)
 	query := request.URL.Query()
 	query.Set("domain", domain)
 	request.URL.RawQuery = query.Encode()

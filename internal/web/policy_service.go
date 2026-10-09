@@ -13,7 +13,8 @@ import (
 
 // policyService changes the allow and block lists for every caller: the
 // console, MCP, the query log, and the check-domain panel. The two lists are
-// exclusive, so putting a domain on one takes it off the other.
+// exclusive, so putting a domain on one takes it off the other. Each change
+// applies to everyone, or to one rule set's own lists when ruleSet names one.
 type policyService struct{ server *Server }
 
 func (server *Server) policyService() policyService { return policyService{server} }
@@ -24,27 +25,27 @@ type domainRuleChange struct {
 	Message string `json:"message"`
 }
 
-func (service policyService) Allow(ctx context.Context, who actor, domain string) (domainRuleChange, error) {
-	return service.change(ctx, who, domain, "blocking.allowed_domain.add", allowDomainRule)
+func (service policyService) Allow(ctx context.Context, who actor, ruleSet, domain string) (domainRuleChange, error) {
+	return service.change(ctx, who, ruleSet, domain, "blocking.allowed_domain.add", allowDomainRule)
 }
 
-func (service policyService) Block(ctx context.Context, who actor, domain string) (domainRuleChange, error) {
-	return service.change(ctx, who, domain, "blocking.blocked_domain.add", blockDomainRule)
+func (service policyService) Block(ctx context.Context, who actor, ruleSet, domain string) (domainRuleChange, error) {
+	return service.change(ctx, who, ruleSet, domain, "blocking.blocked_domain.add", blockDomainRule)
 }
 
 // Add puts a domain on the allow list or the block list.
-func (service policyService) Add(ctx context.Context, who actor, domain string, allowed bool) (domainRuleChange, error) {
+func (service policyService) Add(ctx context.Context, who actor, ruleSet, domain string, allowed bool) (domainRuleChange, error) {
 	if allowed {
-		return service.Allow(ctx, who, domain)
+		return service.Allow(ctx, who, ruleSet, domain)
 	}
-	return service.Block(ctx, who, domain)
+	return service.Block(ctx, who, ruleSet, domain)
 }
 
 // RemoveRule takes a domain off both lists.
-func (service policyService) RemoveRule(ctx context.Context, who actor, domain string) (domainRuleChange, error) {
-	return service.change(ctx, who, domain, "blocking.domain_rule.remove", func(policy *config.Blocking, domain string) (bool, string) {
-		unblocked := removePolicyEntry(&policy.Domains, domain)
-		disallowed := removePolicyEntry(&policy.AllowedDomains, domain)
+func (service policyService) RemoveRule(ctx context.Context, who actor, ruleSet, domain string) (domainRuleChange, error) {
+	return service.change(ctx, who, ruleSet, domain, "blocking.domain_rule.remove", func(lists domainLists, domain string) (bool, string) {
+		unblocked := removePolicyEntry(lists.blocked, domain)
+		disallowed := removePolicyEntry(lists.allowed, domain)
 		switch {
 		case unblocked && disallowed:
 			return true, domain + " was taken off the block list and the allow list"
@@ -58,13 +59,13 @@ func (service policyService) RemoveRule(ctx context.Context, who actor, domain s
 }
 
 // Remove takes a domain off one list.
-func (service policyService) Remove(ctx context.Context, who actor, domain string, allowed bool) (domainRuleChange, error) {
+func (service policyService) Remove(ctx context.Context, who actor, ruleSet, domain string, allowed bool) (domainRuleChange, error) {
 	action, list := "blocking.blocked_domain.delete", "block list"
 	if allowed {
 		action, list = "blocking.allowed_domain.delete", "allow list"
 	}
-	return service.change(ctx, who, domain, action, func(policy *config.Blocking, domain string) (bool, string) {
-		if removePolicyEntry(policyList(policy, allowed), domain) {
+	return service.change(ctx, who, ruleSet, domain, action, func(lists domainLists, domain string) (bool, string) {
+		if removePolicyEntry(lists.list(allowed), domain) {
 			return true, domain + " was taken off the " + list
 		}
 		return false, domain + " is not on the " + list
@@ -72,14 +73,20 @@ func (service policyService) Remove(ctx context.Context, who actor, domain strin
 }
 
 // Clear empties one list.
-func (service policyService) Clear(ctx context.Context, who actor, allowed bool) (string, error) {
+func (service policyService) Clear(ctx context.Context, who actor, ruleSet string, allowed bool) (string, error) {
 	action, message := "blocking.blocked_domain.clear", "Custom blocked domains cleared"
 	if allowed {
 		action, message = "blocking.allowed_domain.clear", "Allowed domains cleared"
 	}
-	err := service.update(ctx, who, action, func(policy *config.Blocking) {
-		*policyList(policy, allowed) = nil
-	})
+	message = forRuleSet(message, ruleSet)
+	err := service.update(ctx, who, action, func(policy *config.Blocking) error {
+		lists, err := ruleSetLists(policy, ruleSet)
+		if err != nil {
+			return err
+		}
+		*lists.list(allowed) = nil
+		return nil
+	}, ruleSetAttribute(ruleSet)...)
 	if err != nil {
 		return "", err
 	}
@@ -89,15 +96,19 @@ func (service policyService) Clear(ctx context.Context, who actor, allowed bool)
 
 // Import adds many domains to one list and takes them off the other.
 // skipped is how many lines of the file were not domains, for the message.
-func (service policyService) Import(ctx context.Context, who actor, domains []string, skipped int, allowed bool) (string, error) {
+func (service policyService) Import(ctx context.Context, who actor, ruleSet string, domains []string, skipped int, allowed bool) (string, error) {
 	action := "blocking.blocked_domain.import"
 	if allowed {
 		action = "blocking.allowed_domain.import"
 	}
 	var added, moved int
-	err := service.update(ctx, who, action, func(policy *config.Blocking) {
+	err := service.update(ctx, who, action, func(policy *config.Blocking) error {
+		lists, err := ruleSetLists(policy, ruleSet)
+		if err != nil {
+			return err
+		}
 		added, moved = 0, 0
-		target, other := policyList(policy, allowed), policyList(policy, !allowed)
+		target, other := lists.list(allowed), lists.list(!allowed)
 		existing := make(map[string]struct{}, len(*target)+len(domains))
 		for _, domain := range *target {
 			existing[domain] = struct{}{}
@@ -119,20 +130,21 @@ func (service policyService) Import(ctx context.Context, who actor, domains []st
 			return found
 		})
 		moved = before - len(*other)
-	}, "added", len(domains))
+		return nil
+	}, append(ruleSetAttribute(ruleSet), "added", len(domains))...)
 	if err != nil {
 		return "", err
 	}
-	message := importMessage(added, moved, skipped, allowed)
+	message := forRuleSet(importMessage(added, moved, skipped, allowed), ruleSet)
 	service.finish(ctx, who, action, "", message)
 	return message, nil
 }
 
 // allowDomainRule puts a domain on the allow list and takes it off the
 // block list.
-func allowDomainRule(policy *config.Blocking, domain string) (bool, string) {
-	added := addPolicyEntry(&policy.AllowedDomains, domain)
-	unblocked := removePolicyEntry(&policy.Domains, domain)
+func allowDomainRule(lists domainLists, domain string) (bool, string) {
+	added := addPolicyEntry(lists.allowed, domain)
+	unblocked := removePolicyEntry(lists.blocked, domain)
 	switch {
 	case added && unblocked:
 		return true, domain + " is now allowed and was taken off the block list"
@@ -146,9 +158,9 @@ func allowDomainRule(policy *config.Blocking, domain string) (bool, string) {
 
 // blockDomainRule puts a domain on the block list and takes it off the
 // allow list.
-func blockDomainRule(policy *config.Blocking, domain string) (bool, string) {
-	added := addPolicyEntry(&policy.Domains, domain)
-	disallowed := removePolicyEntry(&policy.AllowedDomains, domain)
+func blockDomainRule(lists domainLists, domain string) (bool, string) {
+	added := addPolicyEntry(lists.blocked, domain)
+	disallowed := removePolicyEntry(lists.allowed, domain)
 	switch {
 	case added && disallowed:
 		return true, domain + " is now blocked and was taken off the allow list"
@@ -160,11 +172,44 @@ func blockDomainRule(policy *config.Blocking, domain string) (bool, string) {
 	return false, domain + " was already blocked"
 }
 
-func policyList(policy *config.Blocking, allowed bool) *[]string {
+// domainLists are the block and allow lists one change works on: everyone's,
+// or one rule set's own.
+type domainLists struct{ blocked, allowed *[]string }
+
+func (lists domainLists) list(allowed bool) *[]string {
 	if allowed {
-		return &policy.AllowedDomains
+		return lists.allowed
 	}
-	return &policy.Domains
+	return lists.blocked
+}
+
+// ruleSetLists finds the lists a change applies to: everyone's when ruleSet
+// is empty, otherwise that rule set's.
+func ruleSetLists(policy *config.Blocking, ruleSet string) (domainLists, error) {
+	if ruleSet == "" {
+		return domainLists{blocked: &policy.Domains, allowed: &policy.AllowedDomains}, nil
+	}
+	index := slices.IndexFunc(policy.RuleSets, func(set config.RuleSet) bool { return set.Name == ruleSet })
+	if index < 0 {
+		return domainLists{}, refuse(http.StatusUnprocessableEntity, "There is no rule set called %s.", ruleSet)
+	}
+	set := &policy.RuleSets[index]
+	return domainLists{blocked: &set.Domains, allowed: &set.AllowedDomains}, nil
+}
+
+// forRuleSet says which rule set a message is about, when it is about one.
+func forRuleSet(message, ruleSet string) string {
+	if ruleSet == "" {
+		return message
+	}
+	return message + " for the " + ruleSet + " rule set"
+}
+
+func ruleSetAttribute(ruleSet string) []any {
+	if ruleSet == "" {
+		return nil
+	}
+	return []any{"rule_set", ruleSet}
 }
 
 // change makes one change to the lists for one domain. The change is worked
@@ -172,26 +217,37 @@ func policyList(policy *config.Blocking, allowed bool) *[]string {
 func (service policyService) change(
 	ctx context.Context,
 	who actor,
-	raw, action string,
-	change func(*config.Blocking, string) (bool, string),
+	ruleSet, raw, action string,
+	change func(domainLists, string) (bool, string),
 ) (domainRuleChange, error) {
 	if err := service.ready(who); err != nil {
 		return domainRuleChange{}, err
 	}
+	ruleSet = strings.TrimSpace(ruleSet)
 	domain, err := normalizePolicyEntry(strings.TrimSuffix(strings.TrimSpace(raw), "."))
 	if err != nil {
 		return domainRuleChange{}, refuse(http.StatusUnprocessableEntity, "domain is invalid: %v", err)
 	}
-	preview := service.server.config.Current().Config.Blocking
-	preview.Domains = slices.Clone(preview.Domains)
-	preview.AllowedDomains = slices.Clone(preview.AllowedDomains)
-	changed, message := change(&preview, domain)
+	policy := service.server.config.Current().Config.Blocking
+	current, err := ruleSetLists(&policy, ruleSet)
+	if err != nil {
+		return domainRuleChange{}, err
+	}
+	blocked, allowed := slices.Clone(*current.blocked), slices.Clone(*current.allowed)
+	changed, message := change(domainLists{blocked: &blocked, allowed: &allowed}, domain)
+	message = forRuleSet(message, ruleSet)
 	if !changed {
 		return domainRuleChange{Domain: domain, Message: message}, nil
 	}
-	err = service.update(ctx, who, action, func(policy *config.Blocking) {
-		changed, message = change(policy, domain)
-	}, "domain", domain)
+	err = service.update(ctx, who, action, func(policy *config.Blocking) error {
+		lists, err := ruleSetLists(policy, ruleSet)
+		if err != nil {
+			return err
+		}
+		changed, message = change(lists, domain)
+		message = forRuleSet(message, ruleSet)
+		return nil
+	}, append(ruleSetAttribute(ruleSet), "domain", domain)...)
 	if err != nil {
 		return domainRuleChange{}, err
 	}
@@ -214,7 +270,7 @@ func (service policyService) ready(who actor) error {
 
 // update runs one validated configuration transaction on the lists and logs
 // a failure.
-func (service policyService) update(ctx context.Context, who actor, action string, mutate func(*config.Blocking), attributes ...any) error {
+func (service policyService) update(ctx context.Context, who actor, action string, mutate func(*config.Blocking) error, attributes ...any) error {
 	if err := service.ready(who); err != nil {
 		return err
 	}
@@ -222,10 +278,7 @@ func (service policyService) update(ctx context.Context, who actor, action strin
 	if !ok {
 		return refuse(http.StatusNotImplemented, "this configuration source is read-only")
 	}
-	err := editor.UpdateBlocking(ctx, func(policy *config.Blocking) error {
-		mutate(policy)
-		return nil
-	})
+	err := editor.UpdateBlocking(ctx, mutate)
 	if err != nil {
 		service.server.logger.Warn("blocking operation failed", append(service.logAttributes(who, action, attributes...), "error", err)...)
 	}

@@ -37,8 +37,12 @@ type blockingPauser interface {
 }
 
 func (server *Server) blockingPage(writer http.ResponseWriter, request *http.Request) {
-	view := server.blockingView(request, "", "", request.URL.Query().Get("tab"))
-	server.render(writer, request, pages.BlockingPage(view))
+	tab := request.URL.Query().Get("tab")
+	// A rule set's address opens its panel over the tab that lists it.
+	if tab == "" && strings.HasPrefix(request.URL.Path, pages.RuleSetRoute) {
+		tab = ruleSetsTab
+	}
+	server.render(writer, request, pages.BlockingPage(server.blockingView(request, "", "", tab)))
 }
 
 func (server *Server) blockingView(request *http.Request, message, errorMessage, activeTab string) pages.BlockingPageView {
@@ -233,7 +237,7 @@ func (server *Server) addQueryPolicyDomain(writer http.ResponseWriter, request *
 		return
 	}
 	allowed := request.FormValue("action") == "allow"
-	result, err := server.policyService().Add(request.Context(), requestActor(request, ""), request.FormValue("domain"), allowed)
+	result, err := server.policyService().Add(request.Context(), requestActor(request, ""), "", request.FormValue("domain"), allowed)
 	if err != nil {
 		server.render(writer, request, pages.Toast(err.Error(), "error"))
 		return
@@ -264,14 +268,14 @@ func (server *Server) changePolicyDomain(
 	writer http.ResponseWriter,
 	request *http.Request,
 	allowed bool,
-	change func(context.Context, actor, string, bool) (domainRuleChange, error),
+	change func(context.Context, actor, string, string, bool) (domainRuleChange, error),
 ) {
 	tab := policyTab(allowed)
 	if err := request.ParseForm(); err != nil {
 		server.renderPolicyChange(writer, request, tab, "", refuse(http.StatusBadRequest, "Invalid blocking form."))
 		return
 	}
-	result, err := change(request.Context(), requestActor(request, ""), request.FormValue("domain"), allowed)
+	result, err := change(request.Context(), requestActor(request, ""), "", request.FormValue("domain"), allowed)
 	if err == nil && !result.Changed {
 		err = refuse(http.StatusUnprocessableEntity, "%s", sentence(result.Message))
 	}
@@ -313,7 +317,7 @@ func (server *Server) flushAllowedDomains(writer http.ResponseWriter, request *h
 }
 
 func (server *Server) flushPolicyDomains(writer http.ResponseWriter, request *http.Request, allowed bool) {
-	message, err := server.policyService().Clear(request.Context(), requestActor(request, ""), allowed)
+	message, err := server.policyService().Clear(request.Context(), requestActor(request, ""), "", allowed)
 	server.renderPolicyChange(writer, request, policyTab(allowed), message, err)
 }
 
@@ -360,7 +364,7 @@ func (server *Server) importPolicyDomains(writer http.ResponseWriter, request *h
 		server.render(writer, request, pages.BlockingContent(server.blockingView(request, "", "The selected file does not contain any valid domains.", tab)))
 		return
 	}
-	message, err := server.policyService().Import(request.Context(), requestActor(request, ""), domains, invalid, allowed)
+	message, err := server.policyService().Import(request.Context(), requestActor(request, ""), "", domains, invalid, allowed)
 	server.renderPolicyChange(writer, request, tab, message, err)
 }
 

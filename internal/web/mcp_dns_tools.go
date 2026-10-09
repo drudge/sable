@@ -87,7 +87,8 @@ var mcpDNSTools = []mcpTool{
 		Description: "Put a domain on the allow list so no block list stops it, and take it off the block list. " +
 			"Use *.example.com to allow every name under a domain.",
 		InputSchema: mcpObjectSchema(map[string]any{
-			"domain": mcpString("Domain to allow, for example cdn.example.com or *.example.com."),
+			"domain":   mcpString("Domain to allow, for example cdn.example.com or *.example.com."),
+			"rule_set": mcpRuleSetArgument,
 		}, []string{"domain"}),
 		Annotations: mcpToolAnnotations{Title: "Allow a domain", IdempotentHint: true},
 		call:        (*Server).mcpAllowDomain,
@@ -100,7 +101,8 @@ var mcpDNSTools = []mcpTool{
 		Description: "Put a domain on the block list, which also blocks every name under it, and take it off " +
 			"the allow list.",
 		InputSchema: mcpObjectSchema(map[string]any{
-			"domain": mcpString("Domain to block, for example tracker.example.com."),
+			"domain":   mcpString("Domain to block, for example tracker.example.com."),
+			"rule_set": mcpRuleSetArgument,
 		}, []string{"domain"}),
 		Annotations: mcpToolAnnotations{Title: "Block a domain", DestructiveHint: true, IdempotentHint: true},
 		call:        (*Server).mcpBlockDomain,
@@ -142,7 +144,8 @@ var mcpDNSTools = []mcpTool{
 		Description: "Take a domain off both the allow list and the block list, so block lists alone decide " +
 			"what happens to it. It does not unblock a domain a block list names; use allow_domain for that.",
 		InputSchema: mcpObjectSchema(map[string]any{
-			"domain": mcpString("Domain exactly as it appears on the list, for example *.example.com."),
+			"domain":   mcpString("Domain exactly as it appears on the list, for example *.example.com."),
+			"rule_set": mcpRuleSetArgument,
 		}, []string{"domain"}),
 		Annotations: mcpToolAnnotations{Title: "Remove a domain from the allow and block lists", DestructiveHint: true, IdempotentHint: true},
 		call:        (*Server).mcpRemoveDomainRule,
@@ -150,6 +153,9 @@ var mcpDNSTools = []mcpTool{
 		grant:       "blocking.write",
 	},
 }
+
+// mcpRuleSetArgument narrows a domain rule to one rule set's devices.
+var mcpRuleSetArgument = mcpString("Name of a rule set to change only its own lists, which win over everyone's for its devices. Leave out to change the lists that apply to everyone.")
 
 // mcpHasPermission reports whether the caller holds a permission outright,
 // not scoped to particular zones.
@@ -308,15 +314,16 @@ func (server *Server) mcpRemoveDomainRule(request *http.Request, arguments json.
 func (server *Server) mcpChangeDomainRule(
 	request *http.Request,
 	arguments json.RawMessage,
-	change func(context.Context, actor, string) (domainRuleChange, error),
+	change func(context.Context, actor, string, string) (domainRuleChange, error),
 ) (any, error) {
 	var input struct {
-		Domain string `json:"domain"`
+		Domain  string `json:"domain"`
+		RuleSet string `json:"rule_set"`
 	}
 	if err := decodeMCPArguments(arguments, &input); err != nil {
 		return nil, err
 	}
-	return change(request.Context(), requestActor(request, "mcp"), input.Domain)
+	return change(request.Context(), requestActor(request, "mcp"), input.RuleSet, input.Domain)
 }
 
 func (server *Server) mcpBlockDevice(request *http.Request, arguments json.RawMessage) (any, error) {
