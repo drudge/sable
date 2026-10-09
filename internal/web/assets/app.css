@@ -4438,6 +4438,17 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .rule-set-domain-form input { min-width: 0; flex: 1; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: .8125rem; }
 .rule-set-domain-form .button { flex: none; }
 .rule-set-domain-list .blocked-domain-row { min-height: 2.75rem; grid-template-columns: 1.25rem minmax(0, 1fr) auto; padding: .3rem var(--space-2) .3rem var(--space-3); }
+.rule-set-device-row { display: grid; min-height: 2.75rem; grid-template-columns: 1.25rem minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); border-top: 1px solid var(--border); padding: .4rem var(--space-2) .4rem var(--space-3); }
+.rule-set-device-row:first-child { border-top: 0; }
+.rule-set-device-row:hover { background: color-mix(in oklch, var(--muted) 45%, transparent); }
+.rule-set-device-icon { display: inline-flex; color: var(--muted-foreground); }
+.rule-set-device-icon .nav-icon { width: 1rem; height: 1rem; }
+.rule-set-device-name { display: grid; min-width: 0; gap: .1rem; }
+.rule-set-device-name strong, .rule-set-device-name small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rule-set-device-name strong { font-size: .875rem; font-weight: 500; }
+.rule-set-device-name small { color: var(--muted-foreground); font: .75rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.rule-set-device-form input { font-family: inherit; font-size: .875rem; }
+.rule-set-form:has(.rule-set-off input:checked) .rule-set-lists { display: none; }
 .rule-set-domains-note { margin-top: var(--space-3); }
 .rule-set-domains-note button { border: 0; background: none; padding: 0; color: var(--primary); cursor: pointer; font: inherit; font-weight: 600; }
 .rule-set-domains-note button:hover { text-decoration: underline; }

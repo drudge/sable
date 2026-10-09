@@ -19,7 +19,7 @@ import (
 type InsightDeviceBlockingView struct {
 	// RuleSet names the rule set the device uses, empty for the default.
 	RuleSet string
-	// Off says Bypass Clients turns blocking off for the device.
+	// Off says the device's rule set turns blocking off.
 	Off bool
 	// MatchedBy says which entry chose the rule set, such as "its hardware
 	// address" or "the network 10.20.40.0/24". Empty means none did.
@@ -169,7 +169,7 @@ func insightDeviceRuleSet(view InsightDeviceDrawerView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		if blocking.CanEdit && blocking.Editing != "rule-set" && !blocking.Off {
+		if blocking.CanEdit && blocking.Editing != "rule-set" {
 			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<button class=\"query-detail-title-action\" type=\"button\" hx-get=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
@@ -578,27 +578,26 @@ func insightHoldAttrs(view InsightDeviceDrawerView, action string) templ.Attribu
 }
 
 func insightRuleSetTitle(blocking InsightDeviceBlockingView) string {
-	switch {
-	case blocking.Off:
-		return "Blocking off"
-	case blocking.RuleSet == "":
+	if blocking.RuleSet == "" {
 		return "Default rule set"
-	default:
-		return blocking.RuleSet + " rule set"
 	}
+	return blocking.RuleSet + " rule set"
 }
 
 func insightRuleSetReason(blocking InsightDeviceBlockingView) string {
+	reason := ""
 	switch {
-	case blocking.Off:
-		return "Bypass Clients names " + blocking.MatchedBy + "."
 	case blocking.MatchedBy == "":
 		return "No rule set names this device, so it uses the default block lists."
 	case blocking.Own != "":
-		return "Set by " + blocking.MatchedBy + "."
+		reason = "Set by " + blocking.MatchedBy + "."
 	default:
-		return "From " + blocking.MatchedBy + "."
+		reason = "From " + blocking.MatchedBy + "."
 	}
+	if blocking.Off {
+		return "Blocking is off. " + reason
+	}
+	return reason
 }
 
 var _ = templruntime.GeneratedTemplate

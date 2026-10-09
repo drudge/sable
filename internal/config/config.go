@@ -288,8 +288,11 @@ type Blocking struct {
 	ResponseType    string      `toml:"response_type"`
 	ResponseTTL     uint32      `toml:"response_ttl"`
 	CustomAddresses []string    `toml:"custom_addresses"`
-	BypassClients   []string    `toml:"bypass_clients"`
-	AllowTXTReport  bool        `toml:"allow_txt_report"`
+	// BypassClients is the old way to turn blocking off for some clients. It
+	// is read once and moved into the NoBlockingRuleSetName rule set; see
+	// migrateBypassClients.
+	BypassClients  []string `toml:"bypass_clients,omitempty"`
+	AllowTXTReport bool     `toml:"allow_txt_report"`
 	// DefaultLists names the block lists for clients without a rule set. Empty
 	// means every list.
 	DefaultLists []string  `toml:"default_lists,omitempty"`
@@ -1128,12 +1131,9 @@ func (settings Blocking) validateResponse() []error {
 			validationErrors = append(validationErrors, fmt.Errorf("blocking.custom_addresses[%d] must be an IP address", index))
 		}
 	}
-	for index, client := range settings.BypassClients {
-		if _, err := netip.ParsePrefix(client); err != nil {
-			if address, addressErr := netip.ParseAddr(client); addressErr != nil || address.Zone() != "" {
-				validationErrors = append(validationErrors, fmt.Errorf("blocking.bypass_clients[%d] must be an IP address or CIDR network", index))
-			}
-		}
+	// migrateBypassClients leaves behind only the entries it could not read.
+	for index := range settings.BypassClients {
+		validationErrors = append(validationErrors, fmt.Errorf("blocking.bypass_clients[%d] must be an IP address or CIDR network", index))
 	}
 	return validationErrors
 }
@@ -1393,6 +1393,7 @@ func (configuration Config) DedicatedDoHListeners() []string {
 }
 
 func (configuration *Config) normalize() {
+	configuration.migrateBypassClients()
 	configuration.normalizeClients()
 	configuration.normalizeAlerts()
 	configuration.Updates.normalize()

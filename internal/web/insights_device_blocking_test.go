@@ -70,15 +70,16 @@ func TestDeviceDrawerPutsTheDeviceInARuleSet(t *testing.T) {
 	}
 }
 
-func TestDeviceDrawerShowsBypassedDevicesAsUnblocked(t *testing.T) {
+func TestDeviceDrawerShowsARuleSetWithBlockingOff(t *testing.T) {
 	t.Parallel()
 	server := newInsightsTestServer(t)
 	server.withConfig(t, func(configuration *config.Config) {
-		configuration.Blocking.BypassClients = []string{"10.0.0.5"}
+		configuration.Blocking.RuleSets = append(configuration.Blocking.RuleSets, config.RuleSet{Name: "No Blocking", Off: true})
+		configuration.Clients = append(configuration.Clients, config.Client{Address: "10.0.0.5", RuleSet: "No Blocking"})
 	})
 	drawer := server.get(t, "everything", "/ui/insights/device?range=day&key="+url.QueryEscape(insightsTestLaptop), true).Body.String()
-	if !strings.Contains(drawer, "Blocking off") || !strings.Contains(drawer, "Bypass Clients names the address 10.0.0.5.") || strings.Contains(drawer, "Change the rule set of") {
-		t.Fatalf("bypassed device:\n%s", drawer)
+	if !strings.Contains(drawer, "No Blocking rule set") || !strings.Contains(drawer, "Blocking is off. Set by the address 10.0.0.5.") || !strings.Contains(drawer, "Change the rule set of") {
+		t.Fatalf("device in a rule set with blocking off:\n%s", drawer)
 	}
 }
 

@@ -19,13 +19,34 @@ import (
 
 // RuleSetView is one blocking rule set and the devices that use it.
 type RuleSetView struct {
-	Name           string
+	Name string
+	// Off says the rule set turns blocking off for its devices.
+	Off            bool
 	Lists          []string
 	Domains        []string
 	AllowedDomains []string
-	// Devices names each device in the set as the operator named it, or by
-	// its address when it has no name.
-	Devices []string
+	Devices        []RuleSetDevice
+}
+
+// RuleSetDevice is one device, address, or network in a rule set.
+type RuleSetDevice struct {
+	// Label is the name the operator or UniFi gave the device, or Entry when
+	// it has none.
+	Label string
+	// Entry is the hardware address, IP address, or network that puts the
+	// device in the rule set.
+	Entry string
+	// Kind is "mac", "address", or "network", for how Entry is described.
+	Kind string
+	// Type is the kind of device the operator set, for its icon.
+	Type string
+}
+
+// RuleSetDeviceOption is a device Sable has seen, offered when adding one to
+// a rule set: Value is what the form sends, Label how it reads.
+type RuleSetDeviceOption struct {
+	Value string
+	Label string
 }
 
 // RuleSetFormView fills the rule set dialog. Default edits the block lists
@@ -74,7 +95,7 @@ func RuleSetsPanel(view BlockingPageView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "><div class=\"blocking-list-toolbar rule-set-toolbar\"><p class=\"field-help\">Give some devices their own block lists and domains. Pick a device's rule set from its panel in <a href=\"/insights?tab=devices\">Insights → Devices</a>.</p>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "><div class=\"blocking-list-toolbar rule-set-toolbar\"><p class=\"field-help\">Give some devices their own block lists and domains, or turn blocking off for them. Open a rule set to add its devices.</p>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -97,7 +118,7 @@ func RuleSetsPanel(view BlockingPageView) templ.Component {
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(defaultListsSummary(view.DefaultLists))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 49, Col: 52}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 70, Col: 52}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
@@ -167,7 +188,7 @@ func RuleSetRow(set RuleSetView, index int) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(set.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 66, Col: 75}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 87, Col: 75}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 		if templ_7745c5c3_Err != nil {
@@ -177,7 +198,7 @@ func RuleSetRow(set RuleSetView, index int) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = Icon("users").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Icon(ifThen(set.Off, "shield-off", "users")).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -196,7 +217,7 @@ func RuleSetRow(set RuleSetView, index int) templ.Component {
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.ResolveAttributeValue("View details for " + set.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 69, Col: 160}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 90, Col: 160}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
 		if templ_7745c5c3_Err != nil {
@@ -209,7 +230,7 @@ func RuleSetRow(set RuleSetView, index int) templ.Component {
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(set.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 69, Col: 173}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 90, Col: 173}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
@@ -222,7 +243,7 @@ func RuleSetRow(set RuleSetView, index int) templ.Component {
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(ruleSetSummary(set))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 70, Col: 31}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 91, Col: 31}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
@@ -257,7 +278,7 @@ func RuleSetRow(set RuleSetView, index int) templ.Component {
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(ruleSetDevices(set.Devices))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 71, Col: 125}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 92, Col: 125}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
@@ -278,7 +299,7 @@ func RuleSetRow(set RuleSetView, index int) templ.Component {
 		var templ_7745c5c3_Var11 string
 		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.ResolveAttributeValue(fmt.Sprintf("{\"name\":%q}", set.Name))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 74, Col: 139}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 95, Col: 139}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var11)
 		if templ_7745c5c3_Err != nil {
@@ -291,7 +312,7 @@ func RuleSetRow(set RuleSetView, index int) templ.Component {
 		var templ_7745c5c3_Var12 string
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue(ruleSetDeleteQuestion(set))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 74, Col: 231}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 95, Col: 231}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
 		if templ_7745c5c3_Err != nil {
@@ -304,7 +325,7 @@ func RuleSetRow(set RuleSetView, index int) templ.Component {
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue("Delete " + set.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 74, Col: 343}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 95, Col: 343}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
 		if templ_7745c5c3_Err != nil {
@@ -470,7 +491,7 @@ func RuleSetForm(form RuleSetFormView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = components.DialogHeader(components.DialogProps{TitleID: "rule-set-title", Title: ifThen(form.Original == "", "Add Rule Set", "Edit "+form.Original), Description: "Devices in a rule set use only its block lists, plus its own blocked and allowed domains."}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = components.DialogHeader(components.DialogProps{TitleID: "rule-set-title", Title: ifThen(form.Original == "", "Add Rule Set", "Edit "+form.Original), Description: "Devices in a rule set use only its block lists, plus its own blocked and allowed domains, or skip blocking altogether."}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -482,7 +503,7 @@ func RuleSetForm(form RuleSetFormView) templ.Component {
 				var templ_7745c5c3_Var18 string
 				templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.ResolveAttributeValue(form.Original)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 111, Col: 62}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 132, Col: 62}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var18)
 				if templ_7745c5c3_Err != nil {
@@ -498,6 +519,10 @@ func RuleSetForm(form RuleSetFormView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			templ_7745c5c3_Err = components.Field(components.FieldProps{ID: "rule-set-name", Label: "Name", Input: templ.Attributes{"name": "name", "value": form.Set.Name, "placeholder": "Kids", "maxlength": "64", "autocomplete": "off", "required": true}}).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = components.SwitchField(components.SwitchFieldProps{ID: "rule-set-off", Title: "Turn Off Blocking", Description: "Its devices skip every block list and blocked domain. Blocking everything for one of them still works.", Name: "off", Checked: form.Set.Off, Class: "rule-set-off"}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -521,7 +546,7 @@ func RuleSetForm(form RuleSetFormView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if form.Original == "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "<p class=\"field-help\">Add its own blocked and allowed domains from its panel once it's saved.</p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "<p class=\"field-help\">Add its devices, and its own blocked and allowed domains, from its panel once it's saved.</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -594,7 +619,7 @@ func ruleSetListChoices(lists, chosen []string) templ.Component {
 			var templ_7745c5c3_Var21 string
 			templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue(list)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 139, Col: 58}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 161, Col: 58}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 			if templ_7745c5c3_Err != nil {
@@ -617,7 +642,7 @@ func ruleSetListChoices(lists, chosen []string) templ.Component {
 			var templ_7745c5c3_Var22 string
 			templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(list)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 139, Col: 117}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 161, Col: 117}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 			if templ_7745c5c3_Err != nil {
@@ -654,6 +679,9 @@ func defaultListsSummary(lists []string) string {
 }
 
 func ruleSetSummary(set RuleSetView) string {
+	if set.Off {
+		return "Blocking off"
+	}
 	parts := []string{ifThen(len(set.Lists) == 0, "No block lists", "Lists: "+strings.Join(set.Lists, ", "))}
 	if len(set.Domains) > 0 {
 		parts = append(parts, countLabel(uint64(len(set.Domains)), "blocked domain", "blocked domains"))
@@ -664,11 +692,15 @@ func ruleSetSummary(set RuleSetView) string {
 	return strings.Join(parts, " · ")
 }
 
-func ruleSetDevices(devices []string) string {
+func ruleSetDevices(devices []RuleSetDevice) string {
 	if len(devices) == 0 {
 		return "No devices yet"
 	}
-	return "Devices: " + strings.Join(devices, ", ")
+	labels := make([]string, len(devices))
+	for index, device := range devices {
+		labels[index] = device.Label
+	}
+	return "Devices: " + strings.Join(labels, ", ")
 }
 
 func ruleSetDeleteQuestion(set RuleSetView) string {
@@ -699,6 +731,9 @@ func ruleSetDrawerRoute() templ.Attributes {
 // and its own blocked and allowed domains, which are changed here.
 type RuleSetDrawerView struct {
 	Set RuleSetView
+	// DeviceOptions are the devices Sable has seen that are not in the rule
+	// set yet, offered as the Add Device field is filled in.
+	DeviceOptions []RuleSetDeviceOption
 	// Missing is set when no rule set has the requested name.
 	Missing  bool
 	CanWrite bool
@@ -858,7 +893,7 @@ func RuleSetDrawer(view RuleSetDrawerView) templ.Component {
 				var templ_7745c5c3_Var28 string
 				templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(view.Error)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 243, Col: 96}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 275, Col: 96}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 				if templ_7745c5c3_Err != nil {
@@ -891,17 +926,16 @@ func RuleSetDrawer(view RuleSetDrawerView) templ.Component {
 						}()
 					}
 					ctx = templ.InitializeContext(ctx)
-					templ_7745c5c3_Err = components.Fact(components.FactProps{Label: "Devices", Value: ruleSetDeviceFact(view.Set.Devices), Full: true}).Render(ctx, templ_7745c5c3_Buffer)
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, " ")
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-					templ_7745c5c3_Err = components.Fact(components.FactProps{Label: "Block lists", Value: ifThen(len(view.Set.Lists) == 0, "None, only its own domains and the Blocked tab", strings.Join(view.Set.Lists, ", ")), Full: true}).Render(ctx, templ_7745c5c3_Buffer)
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
+					if view.Set.Off {
+						templ_7745c5c3_Err = components.Fact(components.FactProps{Label: "Blocking", Value: "Off for its devices. Blocking everything for one of them still works.", Full: true}).Render(ctx, templ_7745c5c3_Buffer)
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+					} else {
+						templ_7745c5c3_Err = components.Fact(components.FactProps{Label: "Block lists", Value: ifThen(len(view.Set.Lists) == 0, "None, only its own domains and the Blocked tab", strings.Join(view.Set.Lists, ", ")), Full: true}).Render(ctx, templ_7745c5c3_Buffer)
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
 					}
 					return nil
 				})
@@ -909,21 +943,31 @@ func RuleSetDrawer(view RuleSetDrawerView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, " ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = ruleSetDeviceSection(view).Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, " ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = ruleSetDomains(view, false).Render(ctx, templ_7745c5c3_Buffer)
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, " ")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = ruleSetDomains(view, true).Render(ctx, templ_7745c5c3_Buffer)
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
+				if !view.Set.Off {
+					templ_7745c5c3_Err = ruleSetDomains(view, false).Render(ctx, templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, " ")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = ruleSetDomains(view, true).Render(ctx, templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
 				}
 			}
 			return nil
@@ -966,7 +1010,7 @@ func ruleSetDomains(view RuleSetDrawerView, allowed bool) templ.Component {
 		var templ_7745c5c3_Var31 string
 		templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.ResolveAttributeValue("rule-set-" + kind + "-title")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 261, Col: 102}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 299, Col: 102}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var31)
 		if templ_7745c5c3_Err != nil {
@@ -979,7 +1023,7 @@ func ruleSetDomains(view RuleSetDrawerView, allowed bool) templ.Component {
 		var templ_7745c5c3_Var32 string
 		templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.ResolveAttributeValue("rule-set-" + kind + "-title")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 263, Col: 41}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 301, Col: 41}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var32)
 		if templ_7745c5c3_Err != nil {
@@ -992,7 +1036,7 @@ func ruleSetDomains(view RuleSetDrawerView, allowed bool) templ.Component {
 		var templ_7745c5c3_Var33 string
 		templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(allowed, "Allowed Domains", "Blocked Domains"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 263, Col: 99}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 301, Col: 99}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 		if templ_7745c5c3_Err != nil {
@@ -1015,7 +1059,7 @@ func ruleSetDomains(view RuleSetDrawerView, allowed bool) templ.Component {
 		var templ_7745c5c3_Var34 string
 		templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(ruleSetDomainsHelp(view.Set.Name, allowed))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 268, Col: 79}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 306, Col: 79}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 		if templ_7745c5c3_Err != nil {
@@ -1033,7 +1077,7 @@ func ruleSetDomains(view RuleSetDrawerView, allowed bool) templ.Component {
 			var templ_7745c5c3_Var35 string
 			templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.Set.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 271, Col: 58}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 309, Col: 58}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var35)
 			if templ_7745c5c3_Err != nil {
@@ -1046,7 +1090,7 @@ func ruleSetDomains(view RuleSetDrawerView, allowed bool) templ.Component {
 			var templ_7745c5c3_Var36 string
 			templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.ResolveAttributeValue(kind)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 272, Col: 49}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 310, Col: 49}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var36)
 			if templ_7745c5c3_Err != nil {
@@ -1059,7 +1103,7 @@ func ruleSetDomains(view RuleSetDrawerView, allowed bool) templ.Component {
 			var templ_7745c5c3_Var37 string
 			templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.ResolveAttributeValue("rule-set-add-" + kind)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 273, Col: 55}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 311, Col: 55}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var37)
 			if templ_7745c5c3_Err != nil {
@@ -1072,7 +1116,7 @@ func ruleSetDomains(view RuleSetDrawerView, allowed bool) templ.Component {
 			var templ_7745c5c3_Var38 string
 			templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(allowed, "Domain to allow", "Domain to block"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 273, Col: 113}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 311, Col: 113}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
 			if templ_7745c5c3_Err != nil {
@@ -1085,7 +1129,7 @@ func ruleSetDomains(view RuleSetDrawerView, allowed bool) templ.Component {
 			var templ_7745c5c3_Var39 string
 			templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.ResolveAttributeValue("rule-set-add-" + kind)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 274, Col: 38}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 312, Col: 38}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var39)
 			if templ_7745c5c3_Err != nil {
@@ -1098,7 +1142,7 @@ func ruleSetDomains(view RuleSetDrawerView, allowed bool) templ.Component {
 			var templ_7745c5c3_Var40 string
 			templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.ResolveAttributeValue(ifThen(allowed, "*.school.example", "games.example"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 274, Col: 121}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 312, Col: 121}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var40)
 			if templ_7745c5c3_Err != nil {
@@ -1125,7 +1169,7 @@ func ruleSetDomains(view RuleSetDrawerView, allowed bool) templ.Component {
 			var templ_7745c5c3_Var41 string
 			templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(allowed, "No allowed domains of its own.", "No blocked domains of its own."))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 279, Col: 122}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 317, Col: 122}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 			if templ_7745c5c3_Err != nil {
@@ -1166,7 +1210,9 @@ func ruleSetDomains(view RuleSetDrawerView, allowed bool) templ.Component {
 	})
 }
 
-func ruleSetFooter(view RuleSetDrawerView) templ.Component {
+// ruleSetDeviceSection lists the devices, addresses, and networks in a rule
+// set, with a field to add one.
+func ruleSetDeviceSection(view RuleSetDrawerView) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -1187,8 +1233,244 @@ func ruleSetFooter(view RuleSetDrawerView) templ.Component {
 			templ_7745c5c3_Var42 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 83, "<section class=\"query-detail-answer rule-set-domains rule-set-devices-section\" aria-labelledby=\"rule-set-devices-title\"><div class=\"rule-set-domains-heading\"><h3 id=\"rule-set-devices-title\">Devices</h3>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if len(view.Set.Devices) > 0 {
+			templ_7745c5c3_Err = components.Badge(components.BadgeProps{Label: formatNumber(uint64(len(view.Set.Devices)))}).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 84, "</div><p class=\"rule-set-domains-help\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var43 string
+		templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.JoinStringErrs("These use " + view.Set.Name + " instead of the Default rules. A network brings in every device on it that has no rule set of its own.")
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 342, Col: 172}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var43))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 85, "</p>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if view.CanWrite {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 86, "<form class=\"rule-set-domain-form rule-set-device-form\" hx-post=\"/ui/blocking/rule-sets/devices/add\" hx-target=\"#rule-set-drawer-content\" hx-swap=\"innerHTML\" hx-disable=\"find button\"><input type=\"hidden\" name=\"name\" value=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var44 string
+			templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.Set.Name)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 345, Col: 58}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var44)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 87, "\"> <label class=\"sr-only\" for=\"rule-set-add-device\">Device to add</label> <input id=\"rule-set-add-device\" name=\"device\" list=\"rule-set-device-options\" placeholder=\"Device, IP address, or network\" autocomplete=\"off\" spellcheck=\"false\" required> <datalist id=\"rule-set-device-options\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			for _, option := range view.DeviceOptions {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 88, "<option value=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var45 string
+				templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.ResolveAttributeValue(option.Value)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 350, Col: 34}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var45)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 89, "\" label=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var46 string
+				templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.ResolveAttributeValue(option.Label)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 350, Col: 57}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var46)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 90, "\"></option>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 91, "</datalist>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = components.Button(components.ButtonProps{Label: "Add", Icon: "plus", Variant: components.ButtonOutline, Compact: true, Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}}).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 92, "</form>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		if len(view.Set.Devices) == 0 {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 93, "<p class=\"rule-set-domains-empty\">No devices yet.</p>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		} else {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 94, "<div class=\"blocked-domain-list rule-set-device-list\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			for _, device := range view.Set.Devices {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 95, "<div class=\"rule-set-device-row\" data-rule-set-device=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var47 string
+				templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.ResolveAttributeValue(device.Entry)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 361, Col: 73}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var47)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 96, "\"><span class=\"rule-set-device-icon\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = Icon(ruleSetDeviceIcon(device)).Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 97, "</span> <span class=\"rule-set-device-name\"><strong>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var48 string
+				templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs(device.Label)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 364, Col: 29}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 98, "</strong> ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				if detail := ruleSetDeviceDetail(device); detail != "" {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 99, "<small>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var49 string
+					templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinStringErrs(detail)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 366, Col: 23}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 100, "</small>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 101, "</span> ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				if view.CanWrite {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 102, "<button class=\"icon-button danger\" type=\"button\" aria-label=\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var50 string
+					templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.ResolveAttributeValue("Remove " + device.Label)
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_rule_sets.templ`, Line: 370, Col: 93}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var50)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 103, "\"")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templ.RenderAttributes(ctx, templ_7745c5c3_Buffer, ruleSetDeviceRemoveAttrs(view.Set.Name, device))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 104, ">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = Icon("trash").Render(ctx, templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 105, "</button>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 106, "</div>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 107, "</div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 108, "</section>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+func ruleSetFooter(view RuleSetDrawerView) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var51 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var51 == nil {
+			templ_7745c5c3_Var51 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
 		if !view.Missing {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 83, "<div class=\"query-detail-policy-actions insight-drawer-actions\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 109, "<div class=\"query-detail-policy-actions insight-drawer-actions\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1202,7 +1484,7 @@ func ruleSetFooter(view RuleSetDrawerView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 84, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 110, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1225,11 +1507,36 @@ func ruleSetDomainsHelp(name string, allowed bool) string {
 	return "Blocked for " + name + " devices, along with every name under them."
 }
 
-func ruleSetDeviceFact(devices []string) string {
-	if len(devices) == 0 {
-		return "None yet. Pick this rule set from a device's panel in Insights → Devices."
+func ruleSetDeviceIcon(device RuleSetDevice) string {
+	if device.Kind == "network" {
+		return "router"
 	}
-	return strings.Join(devices, ", ")
+	return insightTypeIcon(device.Type)
+}
+
+// ruleSetDeviceDetail says what puts a device in the rule set, under its
+// name; a device without a name already shows it.
+func ruleSetDeviceDetail(device RuleSetDevice) string {
+	switch {
+	case device.Kind == "network":
+		return "Every device on " + device.Entry
+	case device.Label == device.Entry:
+		return ""
+	case device.Kind == "mac":
+		return "Hardware address " + device.Entry
+	default:
+		return "Address " + device.Entry
+	}
+}
+
+// ruleSetDeviceRemoveAttrs asks before taking a device out of a rule set.
+func ruleSetDeviceRemoveAttrs(name string, device RuleSetDevice) templ.Attributes {
+	return templ.Attributes{
+		"hx-post": "/ui/blocking/rule-sets/devices/delete", "hx-vals": fmt.Sprintf(`{"name":%q,"device":%q}`, name, device.Entry),
+		"hx-target": "#rule-set-drawer-content", "hx-swap": "innerHTML",
+		"hx-confirm":         "Take " + device.Label + " out of " + name + "? It goes back to the Default rules unless a network it's on has a rule set.",
+		"data-confirm-title": "Remove device?", "data-confirm-action": "Remove Device", "data-replica-primary-action": true,
+	}
 }
 
 // ruleSetRemoveAttrs takes a domain off one of a rule set's own lists.

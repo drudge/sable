@@ -16,12 +16,19 @@ const maximumRuleSetNameLength = maximumClientNameLength
 // a rule set. No rule set may take it.
 const DefaultRuleSetName = "Default"
 
+// NoBlockingRuleSetName is the rule set the old bypass_clients move into.
+const NoBlockingRuleSetName = "No Blocking"
+
 // RuleSet is a blocking policy that devices join through their [[clients]]
 // entry. The operator's own blocked and allowed domains apply to every rule
 // set; a rule set picks its block lists and adds domains of its own, which
 // win over the global ones.
 type RuleSet struct {
-	Name           string   `toml:"name"`
+	Name string `toml:"name"`
+	// Off turns blocking off for the rule set's devices: no block list or
+	// blocked domain applies to them, though a hold still does. The rule set
+	// keeps its lists and domains for when blocking is turned back on.
+	Off            bool     `toml:"off,omitempty"`
 	Lists          []string `toml:"lists"`
 	Domains        []string `toml:"domains,omitempty"`
 	AllowedDomains []string `toml:"allowed_domains,omitempty"`
@@ -35,6 +42,7 @@ func cloneRuleSets(sets []RuleSet) []RuleSet {
 	for index, set := range sets {
 		cloned[index] = RuleSet{
 			Name:           set.Name,
+			Off:            set.Off,
 			Lists:          append([]string(nil), set.Lists...),
 			Domains:        append([]string(nil), set.Domains...),
 			AllowedDomains: append([]string(nil), set.AllowedDomains...),
@@ -205,4 +213,43 @@ func (settings *Blocking) RemoveList(name string) error {
 		set.Lists = slices.DeleteFunc(set.Lists, func(list string) bool { return list == name })
 	}
 	return nil
+}
+
+// migrateBypassClients moves the old bypass_clients into a rule set with
+// blocking off, one [[clients]] entry per address or network, so there is one
+// way to turn blocking off for a device. A bypass used to win over a rule set
+// that named the same address, so the entry moves to the new rule set. An
+// entry Sable cannot read stays behind for validation to report.
+func (configuration *Config) migrateBypassClients() {
+	if len(configuration.Blocking.BypassClients) == 0 {
+		return
+	}
+	name := configuration.Blocking.noBlockingRuleSet()
+	var unreadable []string
+	for _, entry := range uniqueTrimmed(configuration.Blocking.BypassClients) {
+		clients, err := SetClientRuleSet(configuration.Clients, Client{Address: entry, RuleSet: name})
+		if err != nil {
+			unreadable = append(unreadable, entry)
+			continue
+		}
+		configuration.Clients = clients
+	}
+	configuration.Blocking.BypassClients = unreadable
+}
+
+// noBlockingRuleSet returns the name of a rule set with blocking off for the
+// old bypass clients, adding one when there is none by that name.
+func (settings *Blocking) noBlockingRuleSet() string {
+	name := NoBlockingRuleSetName
+	for suffix := 2; ; suffix++ {
+		index := slices.IndexFunc(settings.RuleSets, func(set RuleSet) bool { return strings.EqualFold(set.Name, name) })
+		if index < 0 {
+			settings.RuleSets = append(cloneRuleSets(settings.RuleSets), RuleSet{Name: name, Off: true})
+			return name
+		}
+		if settings.RuleSets[index].Off {
+			return settings.RuleSets[index].Name
+		}
+		name = fmt.Sprintf("%s %d", NoBlockingRuleSetName, suffix)
+	}
 }

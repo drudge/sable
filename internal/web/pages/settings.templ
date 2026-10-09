@@ -18,7 +18,6 @@ var (
 	settingsRecursionClientsField      = components.FieldProps{ID: "settings-recursion-clients", Label: "Allowed Recursive Clients", Help: "Used with “Listed clients only”. Enter one IP address or CIDR network per line. An empty list denies all client recursion."}
 	settingsRootHintsField             = components.FieldProps{ID: "settings-root-hints", Label: "Root Server Addresses", Help: "Optional IP:port seed addresses, one per line. Leave empty to use the bundled root hints."}
 	settingsForwardersField            = components.FieldProps{ID: "settings-forwarders", Label: "Forwarder Addresses", Help: "Required in forwarding mode. Conditional routes and forwarder zones remain active in iterative mode."}
-	settingsBlockingBypassClientsField = components.FieldProps{ID: "settings-blocking-bypass-clients", Label: "IP Addresses and Networks", Help: "Enter one IP address or CIDR network per line."}
 	settingsServerLogLevelField        = components.FieldProps{ID: "settings-server-log-level", Label: "Minimum Log Level", Help: "Applies to both persisted history and stderr.", Class: "narrow-control"}
 )
 
@@ -109,7 +108,6 @@ type SettingsPageView struct {
 	BlockingResponseType string
 	BlockingResponseTTL uint32
 	BlockingCustomAddresses string
-	BlockingBypassClients string
 	BlockingAllowTXTReport bool
 	Backup                 SettingsBackupView
 	// Alerts is the Alerts tab, which saves on its own like TSIG and Backup.
@@ -478,9 +476,6 @@ templ SettingsBlockingPanel(view SettingsPageView) {
 		}
 		@SettingsCard("refresh", "Block List Updates", "Configure automatic refreshes for remote block lists") {
 			<div class="isotope-card-content">@components.Field(components.FieldProps{ID: "settings-blocking-update-hours", Label: "Update Interval (hours)", Help: "Remote block lists are downloaded and compiled on this schedule.", Class: "narrow-control", Input: templ.Attributes{"type": "number", "name": "blocking_update_hours", "min": "1", "max": "8760", "value": fmt.Sprint(view.BlockingUpdateHours), "required": true}})</div>
-		}
-		@SettingsCard("server", "Bypass Clients", "Exclude trusted clients and networks from DNS blocking") {
-			<div class="isotope-card-content">@components.Field(settingsBlockingBypassClientsField) {<textarea { components.FieldAttrs(settingsBlockingBypassClientsField)... } name="blocking_bypass_clients" rows="4" placeholder={ "192.168.1.100\n10.0.0.0/8" }>{ view.BlockingBypassClients }</textarea>}</div>
 		}
 		@SettingsCard("sliders", "Advanced Options", "Additional blocking response behavior") {
 			<div class="isotope-card-content">@components.SwitchField(components.SwitchFieldProps{ID: "settings-blocking-allow-txt-report", Title: "Allow TXT Blocking Report", Description: "Return blocking information when a blocked name is queried for TXT records.", Name: "blocking_allow_txt_report", Checked: view.BlockingAllowTXTReport})</div>

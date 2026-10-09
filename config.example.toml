@@ -90,7 +90,6 @@ update_interval = "1d"
 response_type = "nxdomain"
 response_ttl = 30
 custom_addresses = []
-bypass_clients = []
 allow_txt_report = true
 
 # [[blocking.lists]]

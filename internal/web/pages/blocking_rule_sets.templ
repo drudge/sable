@@ -11,13 +11,34 @@ import (
 
 // RuleSetView is one blocking rule set and the devices that use it.
 type RuleSetView struct {
-	Name           string
+	Name string
+	// Off says the rule set turns blocking off for its devices.
+	Off            bool
 	Lists          []string
 	Domains        []string
 	AllowedDomains []string
-	// Devices names each device in the set as the operator named it, or by
-	// its address when it has no name.
-	Devices []string
+	Devices        []RuleSetDevice
+}
+
+// RuleSetDevice is one device, address, or network in a rule set.
+type RuleSetDevice struct {
+	// Label is the name the operator or UniFi gave the device, or Entry when
+	// it has none.
+	Label string
+	// Entry is the hardware address, IP address, or network that puts the
+	// device in the rule set.
+	Entry string
+	// Kind is "mac", "address", or "network", for how Entry is described.
+	Kind string
+	// Type is the kind of device the operator set, for its icon.
+	Type string
+}
+
+// RuleSetDeviceOption is a device Sable has seen, offered when adding one to
+// a rule set: Value is what the form sends, Label how it reads.
+type RuleSetDeviceOption struct {
+	Value string
+	Label string
 }
 
 // RuleSetFormView fills the rule set dialog. Default edits the block lists
@@ -38,7 +59,7 @@ type RuleSetFormView struct {
 templ RuleSetsPanel(view BlockingPageView) {
 	<div class="blocking-panel rule-set-panel" id="blocking-panel-rule-sets" role="tabpanel" aria-labelledby="blocking-tab-rule-sets" data-blocking-panel="rule-sets" hidden?={ view.ActiveTab != "rule-sets" }>
 		<div class="blocking-list-toolbar rule-set-toolbar">
-			<p class="field-help">Give some devices their own block lists and domains. Pick a device's rule set from its panel in <a href="/insights?tab=devices">Insights → Devices</a>.</p>
+			<p class="field-help">Give some devices their own block lists and domains, or turn blocking off for them. Open a rule set to add its devices.</p>
 			@components.Button(components.ButtonProps{Label: "Add Rule Set", Icon: "plus", Attrs: ruleSetFormAttrs("/ui/blocking/rule-sets/form", "rule-set-add")})
 		</div>
 		<div class="blocking-source-list rule-set-list">
@@ -64,7 +85,7 @@ templ RuleSetsPanel(view BlockingPageView) {
 
 templ RuleSetRow(set RuleSetView, index int) {
 	<article class="blocking-source-row rule-set-row" data-rule-set={ set.Name }>
-		<span class="blocking-source-icon">@Icon("users")</span>
+		<span class="blocking-source-icon">@Icon(ifThen(set.Off, "shield-off", "users"))</span>
 		<div>
 			<button class="blocking-source-name rule-set-name" type="button" { drawerOpener(RuleSetDrawerLink(set.Name))... } aria-label={ "View details for " + set.Name }>{ set.Name }</button>
 			<small>{ ruleSetSummary(set) }</small>
@@ -106,13 +127,14 @@ templ RuleSetForm(form RuleSetFormView) {
 		</form>
 	} else {
 		<form class="rule-set-form" hx-post="/ui/blocking/rule-sets/save" hx-target="#blocking-content" hx-swap="outerHTML" hx-disable="find button[type='submit']">
-			@components.DialogHeader(components.DialogProps{TitleID: "rule-set-title", Title: ifThen(form.Original == "", "Add Rule Set", "Edit "+form.Original), Description: "Devices in a rule set use only its block lists, plus its own blocked and allowed domains."})
+			@components.DialogHeader(components.DialogProps{TitleID: "rule-set-title", Title: ifThen(form.Original == "", "Add Rule Set", "Edit "+form.Original), Description: "Devices in a rule set use only its block lists, plus its own blocked and allowed domains, or skip blocking altogether."})
 			if form.Original != "" {
 				<input type="hidden" name="original" value={ form.Original }/>
 			}
 			<div class="isotope-dialog-body rule-set-body">
 				<div class="rule-set-notice" id="rule-set-notice"></div>
 				@components.Field(components.FieldProps{ID: "rule-set-name", Label: "Name", Input: templ.Attributes{"name": "name", "value": form.Set.Name, "placeholder": "Kids", "maxlength": "64", "autocomplete": "off", "required": true}})
+				@components.SwitchField(components.SwitchFieldProps{ID: "rule-set-off", Title: "Turn Off Blocking", Description: "Its devices skip every block list and blocked domain. Blocking everything for one of them still works.", Name: "off", Checked: form.Set.Off, Class: "rule-set-off"})
 				<fieldset class="field-control rule-set-lists">
 					<legend>Block Lists</legend>
 					if len(form.Lists) == 0 {
@@ -123,7 +145,7 @@ templ RuleSetForm(form RuleSetFormView) {
 					<small class="field-help">Leave them all off to use only its own domains and the Blocked tab.</small>
 				</fieldset>
 				if form.Original == "" {
-					<p class="field-help">Add its own blocked and allowed domains from its panel once it's saved.</p>
+					<p class="field-help">Add its devices, and its own blocked and allowed domains, from its panel once it's saved.</p>
 				}
 			</div>
 			@components.DialogFooter("Cancel") {
@@ -159,6 +181,9 @@ func defaultListsSummary(lists []string) string {
 }
 
 func ruleSetSummary(set RuleSetView) string {
+	if set.Off {
+		return "Blocking off"
+	}
 	parts := []string{ifThen(len(set.Lists) == 0, "No block lists", "Lists: "+strings.Join(set.Lists, ", "))}
 	if len(set.Domains) > 0 {
 		parts = append(parts, countLabel(uint64(len(set.Domains)), "blocked domain", "blocked domains"))
@@ -169,11 +194,15 @@ func ruleSetSummary(set RuleSetView) string {
 	return strings.Join(parts, " · ")
 }
 
-func ruleSetDevices(devices []string) string {
+func ruleSetDevices(devices []RuleSetDevice) string {
 	if len(devices) == 0 {
 		return "No devices yet"
 	}
-	return "Devices: " + strings.Join(devices, ", ")
+	labels := make([]string, len(devices))
+	for index, device := range devices {
+		labels[index] = device.Label
+	}
+	return "Devices: " + strings.Join(labels, ", ")
 }
 
 func ruleSetDeleteQuestion(set RuleSetView) string {
@@ -204,6 +233,9 @@ func ruleSetDrawerRoute() templ.Attributes {
 // and its own blocked and allowed domains, which are changed here.
 type RuleSetDrawerView struct {
 	Set RuleSetView
+	// DeviceOptions are the devices Sable has seen that are not in the rule
+	// set yet, offered as the Add Device field is filled in.
+	DeviceOptions []RuleSetDeviceOption
 	// Missing is set when no rule set has the requested name.
 	Missing  bool
 	CanWrite bool
@@ -246,11 +278,17 @@ templ RuleSetDrawer(view RuleSetDrawerView) {
 			<div class="query-detail-section-heading"><p>No rule set has this name. It may have been deleted or renamed.</p></div>
 		} else {
 			@components.FactList(components.FactListProps{Class: "query-detail-grid"}) {
-				@components.Fact(components.FactProps{Label: "Devices", Value: ruleSetDeviceFact(view.Set.Devices), Full: true})
-				@components.Fact(components.FactProps{Label: "Block lists", Value: ifThen(len(view.Set.Lists) == 0, "None, only its own domains and the Blocked tab", strings.Join(view.Set.Lists, ", ")), Full: true})
+				if view.Set.Off {
+					@components.Fact(components.FactProps{Label: "Blocking", Value: "Off for its devices. Blocking everything for one of them still works.", Full: true})
+				} else {
+					@components.Fact(components.FactProps{Label: "Block lists", Value: ifThen(len(view.Set.Lists) == 0, "None, only its own domains and the Blocked tab", strings.Join(view.Set.Lists, ", ")), Full: true})
+				}
 			}
-			@ruleSetDomains(view, false)
-			@ruleSetDomains(view, true)
+			@ruleSetDeviceSection(view)
+			if !view.Set.Off {
+				@ruleSetDomains(view, false)
+				@ruleSetDomains(view, true)
+			}
 		}
 	}
 }
@@ -291,6 +329,53 @@ templ ruleSetDomains(view RuleSetDrawerView, allowed bool) {
 	</section>
 }
 
+// ruleSetDeviceSection lists the devices, addresses, and networks in a rule
+// set, with a field to add one.
+templ ruleSetDeviceSection(view RuleSetDrawerView) {
+	<section class="query-detail-answer rule-set-domains rule-set-devices-section" aria-labelledby="rule-set-devices-title">
+		<div class="rule-set-domains-heading">
+			<h3 id="rule-set-devices-title">Devices</h3>
+			if len(view.Set.Devices) > 0 {
+				@components.Badge(components.BadgeProps{Label: formatNumber(uint64(len(view.Set.Devices)))})
+			}
+		</div>
+		<p class="rule-set-domains-help">{ "These use " + view.Set.Name + " instead of the Default rules. A network brings in every device on it that has no rule set of its own." }</p>
+		if view.CanWrite {
+			<form class="rule-set-domain-form rule-set-device-form" hx-post="/ui/blocking/rule-sets/devices/add" hx-target="#rule-set-drawer-content" hx-swap="innerHTML" hx-disable="find button">
+				<input type="hidden" name="name" value={ view.Set.Name }/>
+				<label class="sr-only" for="rule-set-add-device">Device to add</label>
+				<input id="rule-set-add-device" name="device" list="rule-set-device-options" placeholder="Device, IP address, or network" autocomplete="off" spellcheck="false" required/>
+				<datalist id="rule-set-device-options">
+					for _, option := range view.DeviceOptions {
+						<option value={ option.Value } label={ option.Label }></option>
+					}
+				</datalist>
+				@components.Button(components.ButtonProps{Label: "Add", Icon: "plus", Variant: components.ButtonOutline, Compact: true, Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
+			</form>
+		}
+		if len(view.Set.Devices) == 0 {
+			<p class="rule-set-domains-empty">No devices yet.</p>
+		} else {
+			<div class="blocked-domain-list rule-set-device-list">
+				for _, device := range view.Set.Devices {
+					<div class="rule-set-device-row" data-rule-set-device={ device.Entry }>
+						<span class="rule-set-device-icon">@Icon(ruleSetDeviceIcon(device))</span>
+						<span class="rule-set-device-name">
+							<strong>{ device.Label }</strong>
+							if detail := ruleSetDeviceDetail(device); detail != "" {
+								<small>{ detail }</small>
+							}
+						</span>
+						if view.CanWrite {
+							<button class="icon-button danger" type="button" aria-label={ "Remove " + device.Label } { ruleSetDeviceRemoveAttrs(view.Set.Name, device)... }>@Icon("trash")</button>
+						}
+					</div>
+				}
+			</div>
+		}
+	</section>
+}
+
 templ ruleSetFooter(view RuleSetDrawerView) {
 	if !view.Missing {
 		<div class="query-detail-policy-actions insight-drawer-actions">
@@ -316,11 +401,36 @@ func ruleSetDomainsHelp(name string, allowed bool) string {
 	return "Blocked for " + name + " devices, along with every name under them."
 }
 
-func ruleSetDeviceFact(devices []string) string {
-	if len(devices) == 0 {
-		return "None yet. Pick this rule set from a device's panel in Insights → Devices."
+func ruleSetDeviceIcon(device RuleSetDevice) string {
+	if device.Kind == "network" {
+		return "router"
 	}
-	return strings.Join(devices, ", ")
+	return insightTypeIcon(device.Type)
+}
+
+// ruleSetDeviceDetail says what puts a device in the rule set, under its
+// name; a device without a name already shows it.
+func ruleSetDeviceDetail(device RuleSetDevice) string {
+	switch {
+	case device.Kind == "network":
+		return "Every device on " + device.Entry
+	case device.Label == device.Entry:
+		return ""
+	case device.Kind == "mac":
+		return "Hardware address " + device.Entry
+	default:
+		return "Address " + device.Entry
+	}
+}
+
+// ruleSetDeviceRemoveAttrs asks before taking a device out of a rule set.
+func ruleSetDeviceRemoveAttrs(name string, device RuleSetDevice) templ.Attributes {
+	return templ.Attributes{
+		"hx-post": "/ui/blocking/rule-sets/devices/delete", "hx-vals": fmt.Sprintf(`{"name":%q,"device":%q}`, name, device.Entry),
+		"hx-target": "#rule-set-drawer-content", "hx-swap": "innerHTML",
+		"hx-confirm":         "Take " + device.Label + " out of " + name + "? It goes back to the Default rules unless a network it's on has a rule set.",
+		"data-confirm-title": "Remove device?", "data-confirm-action": "Remove Device", "data-replica-primary-action": true,
+	}
 }
 
 // ruleSetRemoveAttrs takes a domain off one of a rule set's own lists.

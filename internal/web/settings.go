@@ -344,7 +344,6 @@ func applyLogAndBlockingSettings(request *http.Request, candidate *config.Config
 	candidate.Blocking.ResponseType = form.blockingResponseType
 	candidate.Blocking.ResponseTTL = form.blockingResponseTTL
 	candidate.Blocking.CustomAddresses = formLines(request.FormValue("blocking_custom_addresses"))
-	candidate.Blocking.BypassClients = formLines(request.FormValue("blocking_bypass_clients"))
 	candidate.Blocking.AllowTXTReport = request.FormValue("blocking_allow_txt_report") == "true"
 }
 
@@ -572,9 +571,9 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		BlockingUpdateHours:  max(1, int(configuration.Blocking.UpdateInterval.Duration/time.Hour)),
 		BlockingResponseType: configuration.Blocking.ResponseType, BlockingResponseTTL: configuration.Blocking.ResponseTTL,
 		BlockingCustomAddresses: strings.Join(configuration.Blocking.CustomAddresses, "\n"),
-		BlockingBypassClients:   strings.Join(configuration.Blocking.BypassClients, "\n"), BlockingAllowTXTReport: configuration.Blocking.AllowTXTReport,
-		TSIGKeys:       server.tsigKeyViews(request.Context()),
-		TSIGAlgorithms: tsig.Algorithms(),
+		BlockingAllowTXTReport:  configuration.Blocking.AllowTXTReport,
+		TSIGKeys:                server.tsigKeyViews(request.Context()),
+		TSIGAlgorithms:          tsig.Algorithms(),
 	}
 	view.Alerts = server.alertsView(request.Context(), view.Console)
 	if view.Alerts.Available && view.Alerts.CanEdit {

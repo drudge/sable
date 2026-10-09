@@ -1629,7 +1629,7 @@ func settingsCommandKeywords(tab string) string {
 	case "cache":
 		return "settings configuration cache caching ttl stale prefetch"
 	case "blocking":
-		return "settings configuration blocking filtering policy lists response bypass clients"
+		return "settings configuration blocking filtering policy lists response"
 	case "logging":
 		return "settings configuration logging logs query retention"
 	case "alerts":

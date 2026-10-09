@@ -684,7 +684,6 @@ update_interval = "1d"
 response_type = "nxdomain"
 response_ttl = 30
 custom_addresses = []
-bypass_clients = ["192.0.2.20", "10.0.0.0/8"]
 allow_txt_report = true
 
 [[blocking.lists]]
@@ -722,7 +721,8 @@ manual refresh, and the configured automatic refresh interval.
 ### Rule sets
 
 A rule set gives some devices a different blocking policy: their own choice of
-block lists, and blocked and allowed domains of their own.
+block lists, and blocked and allowed domains of their own, or no blocking at
+all.
 
 ```toml
 [blocking]
@@ -739,6 +739,11 @@ name = "Work"
 lists = []
 allowed_domains = ["*.tracker.example"]
 
+[[blocking.rule_sets]]
+name = "No Blocking"
+off = true
+lists = []
+
 [[clients]]
 name = "Leo's Switch"
 address = "192.0.2.20"
@@ -748,6 +753,10 @@ rule_set = "Kids"
 name = "Guest Wi-Fi"
 address = "10.20.40.0/24"
 rule_set = "Work"
+
+[[clients]]
+address = "10.0.0.0/8"
+rule_set = "No Blocking"
 ```
 
 A device joins a rule set through its [`[[clients]]`](#devices-and-insights) entry. When
@@ -767,8 +776,16 @@ doesn't tie addresses to hardware, so only devices named by `address` are in a
 rule set. An address named in `[[clients]]` wins over one Sable learned, and
 both win over a network.
 
-`bypass_clients` is a rule set with blocking off: those clients skip blocking
-entirely, and an address there wins over every rule set's.
+A rule set with `off = true` turns blocking off for its devices: no block list
+or blocked domain applies to them. It keeps its `lists` and domains for when
+`off` is removed. In the console, open a rule set on **Blocked → Rule Sets** to
+add or remove its devices, addresses, and networks.
+
+The old `blocking.bypass_clients` list moves into a rule set called
+`No Blocking` with `off = true` the first time Sable loads it, one
+`[[clients]]` entry per address or network, and the key is dropped on the next
+save. An address that already had a rule set moves to `No Blocking`, since a
+bypass used to win.
 
 ### Blocking everything for a device
 
@@ -789,7 +806,7 @@ address = "192.0.2.20"   # no until: held until the hold is removed
 A hold names its device the way a [`[[clients]]`](#devices-and-insights) entry
 does, by `mac` or by `address`, which can be a network. A hold by `mac` follows
 the device to every address Sable has tied to it, so it needs Insights on. A
-hold wins over the device's rule set and over `bypass_clients`, and it keeps
+hold wins over the device's rule set, even one with blocking off, and it keeps
 blocking while blocking is paused; with blocking turned off it does nothing.
 Once `until` passes the hold stops applying, and the next hold change removes
 it. Holds replicate to every node and each change shows in the Change Center.
@@ -826,8 +843,7 @@ failure count and retry deadline, and exported to Prometheus as
 `sable_block_list_source_last_success_timestamp_seconds`, each labelled with
 `list` and `url`, plus the `sable_block_list_sources_degraded` total.
 
-Allowed domains override matching block-list and custom rules. Bypass entries
-accept individual client IP addresses or CIDR networks. Response types are
+Allowed domains override matching block-list and custom rules. Response types are
 `nxdomain`, `zero` (0.0.0.0 and ::), and `custom`; `response_ttl` applies to
 address and optional TXT blocking-report answers. Console pause/resume is an
 in-memory operational control and intentionally resets when Sable restarts.

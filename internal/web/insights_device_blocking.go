@@ -34,7 +34,7 @@ func deviceBlockingView(configuration config.Config, device pages.InsightDeviceV
 	if entry, found := dnsserver.MatchClient(entries, address, device.MAC); found {
 		view.RuleSet, view.Off = sets[entry].name, sets[entry].off
 		view.MatchedBy = clientEntryPhrase(entry)
-		if own[normalizedEntry(entry)] && !sets[entry].off {
+		if own[normalizedEntry(entry)] {
 			view.Own = view.RuleSet
 		}
 	}
@@ -48,7 +48,7 @@ func deviceBlockingView(configuration config.Config, device pages.InsightDeviceV
 		}
 	}
 	if entry, found := dnsserver.MatchClient(others, address, device.MAC); found {
-		view.Inherited = cmp.Or(sets[entry].name, "Blocking off") + " (from " + clientEntryPhrase(entry) + ")"
+		view.Inherited = sets[entry].name + " (from " + clientEntryPhrase(entry) + ")"
 	}
 
 	holds := make([]string, 0, len(configuration.Blocking.Holds))
@@ -81,8 +81,8 @@ type ruleSetEntry struct {
 	off  bool
 }
 
-// ruleSetEntries lists every client that names a rule set, bypass clients
-// first, in the order the DNS server reads them.
+// ruleSetEntries lists every client that names a rule set, in the order the
+// DNS server reads them.
 func ruleSetEntries(configuration config.Config) ([]string, map[string]ruleSetEntry) {
 	var entries []string
 	sets := make(map[string]ruleSetEntry)
@@ -92,13 +92,10 @@ func ruleSetEntries(configuration config.Config) ([]string, map[string]ruleSetEn
 		}
 		entries = append(entries, entry)
 	}
-	for _, entry := range configuration.Blocking.BypassClients {
-		add(entry, ruleSetEntry{off: true})
-	}
 	for _, set := range configuration.Blocking.RuleSets {
 		for _, client := range configuration.Clients {
 			if client.RuleSet == set.Name {
-				add(cmp.Or(client.MAC, client.Address), ruleSetEntry{name: set.Name})
+				add(cmp.Or(client.MAC, client.Address), ruleSetEntry{name: set.Name, off: set.Off})
 			}
 		}
 	}

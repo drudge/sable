@@ -141,7 +141,6 @@ type RuntimeConfig struct {
 	BlockingType            string
 	BlockingTTL             uint32
 	BlockingAddrs           []string
-	BypassClients           []string
 	RuleSets                []RuleSetPolicy
 	// DefaultLists names the block-list sources for clients without a rule
 	// set. Nil applies every source.
