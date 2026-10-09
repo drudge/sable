@@ -285,6 +285,9 @@ func (server *Server) mcpCheckDomain(request *http.Request, arguments json.RawMe
 	if check.Policy.RuleSet != "" {
 		output["rule_set"] = check.Policy.RuleSet
 	}
+	if check.Policy.Schedule != "" {
+		output["schedule"] = check.Policy.Schedule
+	}
 	if check.Policy.OwnRule && check.Policy.Decision == querylog.PolicyBlocked {
 		if app := ownRuleApp(check.Policy.Rule); app != "" {
 			output["app"] = app

@@ -256,7 +256,10 @@ func BenchmarkPolicyDecision(b *testing.B) {
 	withSets := configuration
 	withSets.RuleSets = []RuleSetPolicy{
 		configuration.RuleSets[0],
-		{Name: "Kids", Lists: []string{"Strict"}, Domains: []string{"games.example"}, Clients: []string{"192.0.2.0/24"}},
+		{Name: "Kids", Lists: []string{"Strict"}, Domains: []string{"games.example"}, Clients: []string{"192.0.2.0/24"}, Schedules: []SchedulePolicy{
+			{Name: "Bedtime", Days: []time.Weekday{0, 1, 2, 3, 4, 5, 6}, Start: minutesFromNow(120), End: minutesFromNow(180), Location: time.UTC, Everything: true},
+			{Name: "Homework", Days: []time.Weekday{0, 1, 2, 3, 4, 5, 6}, Start: minutesFromNow(-60), End: minutesFromNow(60), Location: time.UTC, Domains: []string{"tiktok.example"}},
+		}},
 		{Name: "Work", Lists: []string{"Ads"}, Clients: []string{"192.0.2.50", "2001:db8::/32", "da:a1:19:00:00:01"}},
 	}
 	withSets.Holds = []HoldPolicy{{Client: "192.0.2.77", Until: time.Now().Add(time.Hour)}, {Client: "da:a1:19:00:00:02"}}

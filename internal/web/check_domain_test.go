@@ -13,6 +13,7 @@ import (
 
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsserver"
+	"github.com/drudge/sable/internal/querylog"
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
@@ -133,4 +134,27 @@ func TestCheckDomainPanelChecksADevice(t *testing.T) {
 
 	unknown := getDetailsPanel(server, "/ui/blocking/check?domain=tiktokcdn.com&device=nobody", true).Body.String()
 	expectContains(t, "unknown device", unknown, "Could not check that", "device must be")
+}
+
+func TestCheckDomainExplainsSchedules(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		policy dnsserver.DomainPolicy
+		want   string
+	}{
+		{dnsserver.DomainPolicy{Decision: querylog.PolicyHeld, RuleSet: "Kids", Schedule: "Bedtime"},
+			"Everything is blocked for devices in the Kids rule set until its Bedtime schedule ends, apart from their allowed domains."},
+		{dnsserver.DomainPolicy{Decision: querylog.PolicyBlocked, Rule: "tiktokcdn.com", RuleSet: "Kids", OwnRule: true, Schedule: "Homework"},
+			"Blocked because the Kids rule set's Homework schedule blocks TikTok, and tiktokcdn.com is one of its domains."},
+		{dnsserver.DomainPolicy{Decision: querylog.PolicyBlocked, Rule: "games.example", RuleSet: "Kids", OwnRule: true},
+			"Blocked because the Kids rule set blocks games.example."},
+	} {
+		check := domainCheck{Domain: test.policy.Rule, Policy: test.policy}
+		if got := check.Explanation(func(time.Time) string { return "" }); got != test.want {
+			t.Errorf("Explanation() = %q, want %q", got, test.want)
+		}
+		if !check.Blocked() {
+			t.Errorf("Blocked() = false for %+v", test.policy)
+		}
+	}
 }

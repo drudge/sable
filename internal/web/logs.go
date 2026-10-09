@@ -647,16 +647,19 @@ func queryDecisionView(decision querylog.Decision) pages.QueryDecisionView {
 			if app := ownRuleApp(decision.PolicyRule); app != "" {
 				view.PolicyDetail += ", one of " + app + "'s domains"
 			}
-			view.PolicyDetail += ", blocked by the " + decision.RuleSet + " rule set"
+			view.PolicyDetail += ", blocked by " + ruleSetBlocker(decision.RuleSet, decision.Schedule)
 		}
 	case querylog.PolicyHeld:
 		view.Policy = "Everything blocked for this device"
 		view.PolicyDetail = "The device has a hold that blocks everything but its allowed domains."
+		if decision.Schedule != "" {
+			view.PolicyDetail = "The " + decision.RuleSet + " rule set's " + decision.Schedule + " schedule blocks everything but the device's allowed domains."
+		}
 	case querylog.PolicyNoMatch:
 		view.Policy = "No blocking rule matched"
 	}
 	// Any other answer under a rule set says which one the device used.
-	if decision.RuleSet != "" && !decision.OwnRule && decision.Policy != querylog.PolicyClientBypass {
+	if decision.RuleSet != "" && !decision.OwnRule && decision.Schedule == "" && decision.Policy != querylog.PolicyClientBypass {
 		note := "The device uses the " + decision.RuleSet + " rule set."
 		if view.PolicyDetail == "" {
 			view.PolicyDetail = note

@@ -463,6 +463,7 @@ func runtimeRuleSets(configuration config.Config) []dnsserver.RuleSetPolicy {
 		policy := dnsserver.RuleSetPolicy{
 			Name: set.Name, Off: set.Off, Lists: append(slices.Clone(set.Lists), blockcompiler.CustomSourceName),
 			Domains: append(slices.Clone(set.Domains), services.Suffixes(set.Apps)...), AllowedDomains: set.AllowedDomains,
+			Schedules: runtimeSchedules(set.Schedules),
 		}
 		for _, client := range configuration.Clients {
 			if client.RuleSet == set.Name {
@@ -472,6 +473,32 @@ func runtimeRuleSets(configuration config.Config) []dnsserver.RuleSetPolicy {
 		sets = append(sets, policy)
 	}
 	return sets
+}
+
+// runtimeSchedules reads each schedule's days, times and time zone. Config
+// validation has already checked them, so a zone that doesn't load is left
+// out rather than stopping blocking.
+func runtimeSchedules(schedules []config.Schedule) []dnsserver.SchedulePolicy {
+	if len(schedules) == 0 {
+		return nil
+	}
+	policies := make([]dnsserver.SchedulePolicy, 0, len(schedules))
+	for _, schedule := range schedules {
+		location, err := time.LoadLocation(schedule.TimeZone)
+		if err != nil {
+			continue
+		}
+		start, end := schedule.Minutes()
+		policy := dnsserver.SchedulePolicy{
+			Name: schedule.Name, Days: schedule.Weekdays(), Start: start, End: end, Location: location,
+			Everything: schedule.Block == config.ScheduleBlockEverything,
+		}
+		if !policy.Everything {
+			policy.Domains = services.Suffixes(schedule.Apps)
+		}
+		policies = append(policies, policy)
+	}
+	return policies
 }
 
 func runtimeHolds(holds []config.Hold) []dnsserver.HoldPolicy {
