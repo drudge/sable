@@ -159,3 +159,52 @@ func TestDefaultListsDialog(t *testing.T) {
 		t.Fatalf("remove a rule set's list = %d, sets %+v", removed.Code, configuration.Current().Config.Blocking.RuleSets)
 	}
 }
+
+func TestDomainTabsApplyToARuleSet(t *testing.T) {
+	t.Parallel()
+	server, configuration := newRuleSetTestServer(t)
+	kids := func() config.RuleSet { return configuration.snapshot.Config.Blocking.RuleSets[0] }
+
+	page := serveRuleSetRequest(server, http.MethodGet, "/blocked?tab=domains", nil).Body.String()
+	for _, want := range []string{`<option value="" selected>Everyone</option>`, `<option value="Kids">Kids rule set</option>`, "These domains are blocked for every device."} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("Domains tab is missing %q", want)
+		}
+	}
+	scoped := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/domains?tab=domains&rule_set=Kids", nil).Body.String()
+	for _, want := range []string{`data-policy-domain="games.example"`, `<option value="Kids" selected>Kids rule set</option>`, "only to devices in the Kids rule set", `/ui/blocking/domains/export?rule_set=Kids`} {
+		if !strings.Contains(scoped, want) {
+			t.Fatalf("the Kids scope is missing %q", want)
+		}
+	}
+
+	response := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/allowed/add", url.Values{"domain": {"games.example"}, "rule_set": {"Kids"}})
+	body := response.Body.String()
+	if response.Code != http.StatusOK || !strings.Contains(body, "games.example is now allowed and was taken off the block list for the Kids rule set") {
+		t.Fatalf("allow for Kids = %d %s", response.Code, body)
+	}
+	if set := kids(); !slices.Equal(set.AllowedDomains, []string{"games.example"}) || len(set.Domains) != 0 {
+		t.Fatalf("Kids = %+v", set)
+	}
+	if blocking := configuration.snapshot.Config.Blocking; len(blocking.AllowedDomains) != 0 || len(blocking.Domains) != 0 {
+		t.Fatalf("everyone's lists changed: %+v %+v", blocking.Domains, blocking.AllowedDomains)
+	}
+
+	export := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/allowed/export?rule_set=Kids", nil)
+	if export.Body.String() != "games.example\n" || !strings.Contains(export.Header().Get("Content-Disposition"), "kids-allowed-domains.txt") {
+		t.Fatalf("export = %q %q", export.Body.String(), export.Header().Get("Content-Disposition"))
+	}
+	if missing := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/allowed/export?rule_set=Nope", nil); missing.Code != http.StatusNotFound {
+		t.Fatalf("export of an unknown rule set = %d", missing.Code)
+	}
+
+	response = serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/allowed/delete", url.Values{"domain": {"games.example"}, "rule_set": {"Kids"}})
+	if response.Code != http.StatusOK || len(kids().AllowedDomains) != 0 {
+		t.Fatalf("delete for Kids = %d %+v", response.Code, kids())
+	}
+
+	unknown := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/domains/add", url.Values{"domain": {"x.example"}, "rule_set": {"Nope"}})
+	if unknown.Code != http.StatusUnprocessableEntity || !strings.Contains(unknown.Body.String(), "There is no rule set called Nope.") {
+		t.Fatalf("unknown rule set = %d %s", unknown.Code, unknown.Body.String())
+	}
+}

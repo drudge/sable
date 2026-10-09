@@ -268,27 +268,27 @@ func TestPolicyServiceListsAreExclusive(t *testing.T) {
 		return policy.Domains, policy.AllowedDomains
 	}
 
-	if change, err := service.Allow(ctx, serviceAdmin, "Shop.Example."); err != nil || !change.Changed || change.Domain != "shop.example" {
+	if change, err := service.Allow(ctx, serviceAdmin, "", "Shop.Example."); err != nil || !change.Changed || change.Domain != "shop.example" {
 		t.Fatalf("allow = %+v %v", change, err)
 	}
 	revision := configuration.snapshot.Revision
-	if change, err := service.Allow(ctx, serviceAdmin, "shop.example"); err != nil || change.Changed || configuration.snapshot.Revision != revision {
+	if change, err := service.Allow(ctx, serviceAdmin, "", "shop.example"); err != nil || change.Changed || configuration.snapshot.Revision != revision {
 		t.Fatalf("repeated allow = %+v %v", change, err)
 	}
-	if change, err := service.Block(ctx, serviceAdmin, "shop.example"); err != nil || !change.Changed || !strings.Contains(change.Message, "allow list") {
+	if change, err := service.Block(ctx, serviceAdmin, "", "shop.example"); err != nil || !change.Changed || !strings.Contains(change.Message, "allow list") {
 		t.Fatalf("block = %+v %v", change, err)
 	}
 	if blocked, allowed := lists(); !slices.Contains(blocked, "shop.example") || slices.Contains(allowed, "shop.example") {
 		t.Fatalf("after block: blocked=%v allowed=%v", blocked, allowed)
 	}
-	if _, err := service.Allow(ctx, serviceAdmin, "shop.example"); err != nil {
+	if _, err := service.Allow(ctx, serviceAdmin, "", "shop.example"); err != nil {
 		t.Fatal(err)
 	}
 	if blocked, allowed := lists(); slices.Contains(blocked, "shop.example") || !slices.Contains(allowed, "shop.example") {
 		t.Fatalf("after allow: blocked=%v allowed=%v", blocked, allowed)
 	}
 
-	message, err := service.Import(ctx, serviceAdmin, []string{"shop.example", "ads.example"}, 2, false)
+	message, err := service.Import(ctx, serviceAdmin, "", []string{"shop.example", "ads.example"}, 2, false)
 	if err != nil || message != "Imported 2 domains to the blocked list and took 1 off the allow list (2 invalid lines skipped)" {
 		t.Fatalf("import = %q %v", message, err)
 	}
@@ -296,13 +296,13 @@ func TestPolicyServiceListsAreExclusive(t *testing.T) {
 		t.Fatalf("after import: blocked=%v allowed=%v", blocked, allowed)
 	}
 
-	if change, err := service.Remove(ctx, serviceAdmin, "ads.example", true); err != nil || change.Changed {
+	if change, err := service.Remove(ctx, serviceAdmin, "", "ads.example", true); err != nil || change.Changed {
 		t.Fatalf("remove from the wrong list = %+v %v", change, err)
 	}
-	if change, err := service.RemoveRule(ctx, serviceAdmin, "ads.example"); err != nil || !change.Changed {
+	if change, err := service.RemoveRule(ctx, serviceAdmin, "", "ads.example"); err != nil || !change.Changed {
 		t.Fatalf("remove rule = %+v %v", change, err)
 	}
-	if _, err := service.Clear(ctx, serviceAdmin, false); err != nil {
+	if _, err := service.Clear(ctx, serviceAdmin, "", false); err != nil {
 		t.Fatal(err)
 	}
 	if blocked, _ := lists(); len(blocked) != 0 {
@@ -316,15 +316,15 @@ func TestPolicyServiceRefusals(t *testing.T) {
 	service := server.policyService()
 	ctx := context.Background()
 	reader := actor{principal: auth.Principal{UserID: 2, Permissions: []string{auth.PermissionBlockingRead}}}
-	if _, err := service.Block(ctx, reader, "x.example"); serviceStatus(err) != http.StatusForbidden || !strings.Contains(err.Error(), auth.PermissionBlockingWrite) {
+	if _, err := service.Block(ctx, reader, "", "x.example"); serviceStatus(err) != http.StatusForbidden || !strings.Contains(err.Error(), auth.PermissionBlockingWrite) {
 		t.Fatalf("reader block = %v", err)
 	}
-	if _, err := service.Block(ctx, serviceAdmin, "not a domain"); err == nil || !strings.Contains(err.Error(), "domain is invalid") {
+	if _, err := service.Block(ctx, serviceAdmin, "", "not a domain"); err == nil || !strings.Contains(err.Error(), "domain is invalid") {
 		t.Fatalf("invalid block = %v", err)
 	}
 	server.SetClusterController(testReplicaClusterController{})
 	var refusal *serviceError
-	if _, err := service.Allow(ctx, serviceAdmin, "x.example"); !errors.As(err, &refusal) || err.Error() != replicaWriteMessage {
+	if _, err := service.Allow(ctx, serviceAdmin, "", "x.example"); !errors.As(err, &refusal) || err.Error() != replicaWriteMessage {
 		t.Fatalf("replica allow = %v", err)
 	}
 }

@@ -639,6 +639,11 @@ button.ranking-row { width: 100%; border-width: 1px 0 0; background: none; color
 .icon-button.danger { color: var(--muted-foreground); }
 .icon-button.danger:hover { background: rgb(239 68 68 / .12); color: var(--danger); }
 .domain-list-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-4); }
+.domain-scope { display: grid; gap: var(--space-2); margin-bottom: var(--space-4); }
+.domain-scope > .field-control { display: flex; align-items: center; gap: var(--space-3); }
+.domain-scope > .field-control > span { flex: none; color: var(--foreground); font-size: .875rem; font-weight: 500; }
+.domain-scope > .field-control > :is(select, .styled-select) { flex: 0 1 16rem; min-width: 0; }
+.domain-scope > p { margin: 0; color: var(--muted-foreground); font-size: .8125rem; line-height: 1.4; }
 .domain-list-toolbar .button { display: inline-flex; width: auto; height: 2.25rem; min-height: 2.25rem; box-sizing: border-box; align-items: center; justify-content: center; gap: .45rem; padding-block: 0; line-height: 1; }
 .domain-list-toolbar .button .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; }
 .domain-import-form { display: inline-flex; height: 2.25rem; min-height: 2.25rem; align-items: stretch; }

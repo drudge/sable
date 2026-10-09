@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/web/pages/components"
@@ -16,6 +17,9 @@ type BlockingPageView struct {
 	PausedUntil time.Time
 	CompiledDomains int
 	BlockedQueries uint64
+	// Scope names the rule set whose own blocked and allowed domains the
+	// Domains and Allowed tabs show and change; empty means everyone's.
+	Scope string
 	Domains []string
 	AllowedDomains []string
 	Lists []BlockListSourceView
@@ -137,8 +141,8 @@ templ BlockingContent(view BlockingPageView) {
 							}
 						</div>
 					</div>
-					@DomainPanel("domains", view.Domains, view.ActiveTab, false)
-					@DomainPanel("allowed", view.AllowedDomains, view.ActiveTab, true)
+					@DomainPanel(view, "domains", view.Domains, false)
+					@DomainPanel(view, "allowed", view.AllowedDomains, true)
 					@RuleSetsPanel(view)
 				</section>
 			</div>
@@ -153,11 +157,11 @@ templ BlockingContent(view BlockingPageView) {
 			</aside>
 		</div>
 		@AddBlockListDialog(view.Lists)
-		@DomainDialog("add-blocked-domain-dialog", "Add Blocked Domain", "/ui/blocking/domains/add", "Block Domain", "Enter a domain to block. Use a wildcard such as *.example.com to represent subdomains.")
-		@DomainDialog("add-allowed-domain-dialog", "Add Allowed Domain", "/ui/blocking/allowed/add", "Allow Domain", "Exact entries allow only that name. Use *.example.com to allow its subdomains.")
-		@FlushDomainDialog("flush-blocked-dialog", "Clear Custom Blocked Domains?", "/ui/blocking/domains/flush", len(view.Domains))
+		@DomainDialog(view, "add-blocked-domain-dialog", "Add Blocked Domain", "/ui/blocking/domains/add", "Block Domain", "Enter a domain to block. Use a wildcard such as *.example.com to represent subdomains.")
+		@DomainDialog(view, "add-allowed-domain-dialog", "Add Allowed Domain", "/ui/blocking/allowed/add", "Allow Domain", "Exact entries allow only that name. Use *.example.com to allow its subdomains.")
+		@FlushDomainDialog(view, "flush-blocked-dialog", "Clear Custom Blocked Domains?", "/ui/blocking/domains/flush", len(view.Domains))
 		@RuleSetDialog()
-		@FlushDomainDialog("flush-allowed-dialog", "Clear Allowed Domains?", "/ui/blocking/allowed/flush", len(view.AllowedDomains))
+		@FlushDomainDialog(view, "flush-allowed-dialog", "Clear Allowed Domains?", "/ui/blocking/allowed/flush", len(view.AllowedDomains))
 	</div>
 }
 
@@ -203,13 +207,24 @@ templ BlockListRow(list BlockListSourceView) {
 	</article>
 }
 
-templ DomainPanel(value string, domains []string, active string, allowed bool) {
-	<div class="blocking-panel isotope-domain-panel" id={ "blocking-panel-" + value } role="tabpanel" aria-labelledby={ "blocking-tab-" + value } data-blocking-panel={ value } hidden?={ active != value }>
+templ DomainPanel(view BlockingPageView, value string, domains []string, allowed bool) {
+	<div class="blocking-panel isotope-domain-panel" id={ "blocking-panel-" + value } role="tabpanel" aria-labelledby={ "blocking-tab-" + value } data-blocking-panel={ value } hidden?={ view.ActiveTab != value }>
+		if len(view.RuleSets) > 0 {
+			<div class="domain-scope">
+				<label class="field-control">
+					<span>Applies to</span>
+					<select name="rule_set" data-styled-select hx-get={ "/ui/blocking/domains?tab=" + value } hx-include="this" hx-trigger="change" hx-target="#blocking-content" hx-swap="outerHTML">
+						@ruleSetScopeOptions(view)
+					</select>
+				</label>
+				<p>{ domainScopeHelp(view.Scope, allowed) }</p>
+			</div>
+		}
 		<div class="domain-list-toolbar">
 			@components.Button(components.ButtonProps{Label: "Add Domain", Icon: "plus", Class: "domain-list-add", Attrs: templ.Attributes{"data-dialog-open": ifThen(allowed, "add-allowed-domain-dialog", "add-blocked-domain-dialog"), "data-replica-primary-action": true}})
-			<form class="domain-import-form domain-list-import" hx-post={ ifThen(allowed, "/ui/blocking/allowed/import", "/ui/blocking/domains/import") } hx-encoding="multipart/form-data" hx-target="#blocking-content" hx-swap="outerHTML"><label class="button outline" data-replica-primary-action>@Icon("upload")<span>Import</span><input class="sr-only" type="file" name="file" accept=".txt,.hosts,text/plain" data-domain-import required/></label></form>
+			<form class="domain-import-form domain-list-import" hx-post={ ifThen(allowed, "/ui/blocking/allowed/import", "/ui/blocking/domains/import") } hx-encoding="multipart/form-data" hx-target="#blocking-content" hx-swap="outerHTML"><input type="hidden" name="rule_set" value={ view.Scope }/><label class="button outline" data-replica-primary-action>@Icon("upload")<span>Import</span><input class="sr-only" type="file" name="file" accept=".txt,.hosts,text/plain" data-domain-import required/></label></form>
 			if len(domains) > 0 {
-				@components.Button(components.ButtonProps{Label: "Export", Icon: "download", Variant: components.ButtonOutline, Href: templ.SafeURL(ifThen(allowed, "/ui/blocking/allowed/export", "/ui/blocking/domains/export")), Class: "domain-list-export", Attrs: templ.Attributes{"download": ifThen(allowed, "allowed-domains.txt", "blocked-domains.txt")}})
+				@components.Button(components.ButtonProps{Label: "Export", Icon: "download", Variant: components.ButtonOutline, Href: templ.SafeURL(domainExportURL(allowed, view.Scope)), Class: "domain-list-export", Attrs: templ.Attributes{"download": DomainExportFilename(allowed, view.Scope)}})
 			} else {
 				<span class="button outline disabled domain-list-export" aria-disabled="true">@Icon("download")<span>Export</span></span>
 			}
@@ -218,14 +233,14 @@ templ DomainPanel(value string, domains []string, active string, allowed bool) {
 		@SearchField("Search " + domainPolicyKind(allowed) + " domains", "Search " + domainPolicyKind(allowed) + " domains...", "", "blocking-search", templ.Attributes{"data-domain-search": value})
 		<div class="blocked-domain-list">
 			if len(domains) == 0 {
-				@components.EmptyState(components.EmptyStateProps{Description: "No " + domainPolicyKind(allowed) + " domains yet. Add your first domain to get started.", Class: "blocking-empty domain-list-empty"})
+				@components.EmptyState(components.EmptyStateProps{Description: domainEmptyText(view.Scope, allowed), Class: "blocking-empty domain-list-empty"})
 			}
 			for _, domain := range domains {
-				<div class={ ifThen(allowed, "blocked-domain-row allowed", "blocked-domain-row") } data-policy-domain={ domain } data-domain-kind={ value }><span>@Icon(ifThen(allowed, "shield-check", "shield-x"))</span><strong>{ domain }</strong><span class={ ifThen(allowed, "domain-policy-badge allowed", "domain-policy-badge blocked") }>{ ifThen(allowed, "allowed", "blocked") }</span><button class="icon-button danger" type="button" hx-post={ ifThen(allowed, "/ui/blocking/allowed/delete", "/ui/blocking/domains/delete") } hx-vals={ fmt.Sprintf("{\"domain\":%q}", domain) } hx-target="#blocking-content" hx-swap="outerHTML" hx-confirm={ "Remove " + domain + " from the " + domainPolicyKind(allowed) + " list?" } data-confirm-title={ "Remove " + domainPolicyKind(allowed) + " domain?" } data-confirm-action="Remove Domain" aria-label={ "Remove " + domain }>@Icon("trash")</button></div>
+				<div class={ ifThen(allowed, "blocked-domain-row allowed", "blocked-domain-row") } data-policy-domain={ domain } data-domain-kind={ value }><span>@Icon(ifThen(allowed, "shield-check", "shield-x"))</span><strong>{ domain }</strong><span class={ ifThen(allowed, "domain-policy-badge allowed", "domain-policy-badge blocked") }>{ ifThen(allowed, "allowed", "blocked") }</span><button class="icon-button danger" type="button" hx-post={ ifThen(allowed, "/ui/blocking/allowed/delete", "/ui/blocking/domains/delete") } hx-vals={ fmt.Sprintf("{\"domain\":%q,\"rule_set\":%q}", domain, view.Scope) } hx-target="#blocking-content" hx-swap="outerHTML" hx-confirm={ "Remove " + domain + " from the " + domainPolicyKind(allowed) + " list" + ruleSetSuffix(view.Scope) + "?" } data-confirm-title={ "Remove " + domainPolicyKind(allowed) + " domain?" } data-confirm-action="Remove Domain" aria-label={ "Remove " + domain }>@Icon("trash")</button></div>
 			}
 			@components.EmptyState(components.EmptyStateProps{Description: "No domains match your search.", Class: "blocking-filter-empty", Attrs: templ.Attributes{"data-domain-empty": value, "hidden": true}})
 		</div>
-		<p class="domain-list-count"><span data-domain-total={ value }>{ formatNumber(uint64(len(domains))) }</span> { plural(len(domains), "domain", "domains") } in { domainPolicyKind(allowed) } list <span data-domain-shown={ value } hidden></span></p>
+		<p class="domain-list-count"><span data-domain-total={ value }>{ formatNumber(uint64(len(domains))) }</span> { plural(len(domains), "domain", "domains") } in { domainPolicyKind(allowed) } list{ ruleSetSuffix(view.Scope) } <span data-domain-shown={ value } hidden></span></p>
 	</div>
 }
 
@@ -276,9 +291,12 @@ templ CatalogRow(item BlockListCatalogItem, added bool) {
 	</article>
 }
 
-templ DomainDialog(id, title, endpoint, action, description string) {
+templ DomainDialog(view BlockingPageView, id, title, endpoint, action, description string) {
 	@components.Dialog(components.DialogProps{ID: id, Title: title, Description: description, Class: "blocking-dialog"}) {
 		<form class="blocking-dialog-form" hx-post={ endpoint } hx-target="#blocking-content" hx-swap="outerHTML"><label><span>Domain</span><input name="domain" placeholder="telemetry.example" autocomplete="off" required/></label>
+			if len(view.RuleSets) > 0 {
+				<label><span>Applies to</span><select name="rule_set" data-styled-select>@ruleSetScopeOptions(view)</select></label>
+			}
 			@components.DialogFooter("Cancel") {
 				@components.Button(components.ButtonProps{Label: action, Type: "submit"})
 			}
@@ -286,10 +304,10 @@ templ DomainDialog(id, title, endpoint, action, description string) {
 	}
 }
 
-templ FlushDomainDialog(id, title, endpoint string, count int) {
-	@components.Dialog(components.DialogProps{ID: id, Title: title, Description: "This removes all " + formatNumber(uint64(count)) + " custom entries. Block-list subscriptions are not affected.", Class: "blocking-dialog", NoClose: true}) {
+templ FlushDomainDialog(view BlockingPageView, id, title, endpoint string, count int) {
+	@components.Dialog(components.DialogProps{ID: id, Title: title, Description: "This removes all " + formatNumber(uint64(count)) + " custom entries" + ruleSetSuffix(view.Scope) + ". Block-list subscriptions are not affected.", Class: "blocking-dialog", NoClose: true}) {
 		@components.DialogFooter("Cancel") {
-			@components.Button(components.ButtonProps{Label: "Clear Domains", Destructive: true, Attrs: templ.Attributes{"hx-post": endpoint, "hx-target": "#blocking-content", "hx-swap": "outerHTML"}})
+			@components.Button(components.ButtonProps{Label: "Clear Domains", Destructive: true, Attrs: templ.Attributes{"hx-post": endpoint, "hx-vals": fmt.Sprintf("{\"rule_set\":%q}", view.Scope), "hx-target": "#blocking-content", "hx-swap": "outerHTML"}})
 		}
 	}
 }
@@ -436,4 +454,59 @@ func blockListFormatLabel(format string) string {
 	default:
 		return format
 	}
+}
+
+// ruleSetScopeOptions offers everyone and each rule set, with the scope the
+// page shows chosen.
+templ ruleSetScopeOptions(view BlockingPageView) {
+	<option value="" selected?={ view.Scope == "" }>Everyone</option>
+	for _, set := range view.RuleSets {
+		<option value={ set.Name } selected?={ view.Scope == set.Name }>{ set.Name + " rule set" }</option>
+	}
+}
+
+// ruleSetSuffix finishes a phrase about a list with the rule set it belongs
+// to, or nothing for everyone's.
+func ruleSetSuffix(scope string) string { return ifThen(scope == "", "", " for the "+scope+" rule set") }
+
+func domainScopeHelp(scope string, allowed bool) string {
+	if scope == "" {
+		return ifThen(allowed, "These domains are allowed for every device.", "These domains are blocked for every device.")
+	}
+	return "These apply only to devices in the " + scope + " rule set, and win over the domains for everyone."
+}
+
+func domainEmptyText(scope string, allowed bool) string {
+	if scope == "" {
+		return "No " + domainPolicyKind(allowed) + " domains yet. Add your first domain to get started."
+	}
+	return "No " + domainPolicyKind(allowed) + " domains for the " + scope + " rule set yet."
+}
+
+func domainExportURL(allowed bool, scope string) string {
+	path := ifThen(allowed, "/ui/blocking/allowed/export", "/ui/blocking/domains/export")
+	if scope == "" {
+		return path
+	}
+	return path + "?rule_set=" + url.QueryEscape(scope)
+}
+
+// DomainExportFilename names the file a domain list exports to.
+func DomainExportFilename(allowed bool, scope string) string {
+	name := ifThen(allowed, "allowed-domains.txt", "blocked-domains.txt")
+	if scope == "" {
+		return name
+	}
+	return ruleSetFileSlug(scope) + "-" + name
+}
+
+// ruleSetFileSlug turns a rule set's name into part of a file name.
+func ruleSetFileSlug(name string) string {
+	slug := strings.Trim(strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return unicode.ToLower(r)
+		}
+		return '-'
+	}, name), "-")
+	return ifThen(slug == "", "rule-set", slug)
 }

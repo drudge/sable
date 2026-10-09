@@ -117,6 +117,9 @@ func TestMCPDomainRules(t *testing.T) {
 	if result := change("remove_domain_rule", "shop.example"); result["changed"] != true {
 		t.Fatalf("remove = %v", result)
 	}
+	if _, failure := callMCPToolForTest(t, server, token, "block_domain", map[string]any{"domain": "x.example", "rule_set": "Nope"}); !strings.Contains(failure, "There is no rule set called Nope.") {
+		t.Fatalf("block for an unknown rule set = %q", failure)
+	}
 
 	if _, failure := callMCPToolForTest(t, server, "sable_pat_reader", "block_domain", map[string]any{"domain": "x.example"}); !strings.Contains(failure, "blocking.write") {
 		t.Fatalf("reader block = %q", failure)

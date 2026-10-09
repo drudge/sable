@@ -279,6 +279,7 @@ func routeTable() []route {
 		{pattern: "GET /ui/blocking/list", handler: (*Server).blockListPanel, perm: auth.PermissionBlockingRead},
 		{pattern: "GET /ui/blocking/check", handler: (*Server).checkDomainPanel, perm: auth.PermissionBlockingRead},
 		{pattern: "GET /ui/blocking/rule-sets/form", handler: (*Server).ruleSetFormPanel, perm: auth.PermissionBlockingRead},
+		{pattern: "GET /ui/blocking/domains", handler: (*Server).blockingContent, perm: auth.PermissionBlockingRead},
 		{pattern: "GET /ui/blocking/domains/export", handler: (*Server).exportBlockedDomains, perm: auth.PermissionBlockingRead},
 		{pattern: "GET /ui/blocking/allowed/export", handler: (*Server).exportAllowedDomains, perm: auth.PermissionBlockingRead},
 		{pattern: "GET /api/v1/policy", handler: (*Server).policyAPI, perm: auth.PermissionBlockingRead},
