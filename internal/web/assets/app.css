@@ -4491,3 +4491,26 @@ input[type="checkbox"]:not([role="switch"], .switch > input):checked { border-co
 input[type="checkbox"]:not([role="switch"], .switch > input):checked::after { position: absolute; inset: 0; background: var(--primary-foreground); content: ""; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='black' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / .75rem no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='black' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / .75rem no-repeat; }
 input[type="checkbox"]:not([role="switch"], .switch > input):focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 input[type="checkbox"]:not([role="switch"], .switch > input):disabled { cursor: not-allowed; opacity: .5; }
+.query-detail-answer > .rule-set-apps-actions { display: flex; }
+.rule-set-app-row { grid-template-columns: 1.75rem minmax(0, 1fr) auto; }
+.rule-set-app-row > .app-icon { width: 1.75rem; height: 1.75rem; flex-basis: 1.75rem; }
+.rule-set-app-row .rule-set-device-name small { font-family: inherit; }
+/* The app picker fills a rule set's panel: a search, then each category's
+   apps as tiles that check when chosen. */
+.rule-set-app-form { display: grid; gap: var(--space-4); }
+.rule-set-app-form .rule-set-domains-help { margin: 0; color: var(--muted-foreground); font-size: .8125rem; line-height: 1.4; }
+.rule-set-app-group { display: grid; min-width: 0; gap: var(--space-2); margin: 0; border: 0; padding: 0; }
+.rule-set-app-group > legend { margin-bottom: var(--space-2); padding: 0; color: var(--muted-foreground); font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.rule-set-app-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: var(--space-2); }
+.rule-set-app-choice { position: relative; display: flex; min-width: 0; min-height: 2.75rem; align-items: center; gap: .6rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); padding: .45rem .6rem; cursor: pointer; font-size: .8125rem; font-weight: 500; transition: border-color 120ms ease, background 120ms ease; }
+.rule-set-app-choice:hover { background: color-mix(in oklch, var(--muted) 45%, transparent); }
+/* The tile is the checkbox, so the box itself steps out of the row. */
+.rule-set-app-choice > input[type="checkbox"][name="app"] { position: absolute; width: 1px; min-width: 0; height: 1px; min-height: 0; margin: 0; opacity: 0; pointer-events: none; }
+.rule-set-app-choice > .app-icon { width: 1.75rem; height: 1.75rem; flex-basis: 1.75rem; }
+.rule-set-app-choice > span:not(.rule-set-app-check, .app-icon) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rule-set-app-check { display: grid; width: 1.125rem; height: 1.125rem; flex: 0 0 1.125rem; place-items: center; border: 1px solid var(--input); border-radius: 999px; color: transparent; }
+.rule-set-app-check .nav-icon { width: .75rem; height: .75rem; }
+.rule-set-app-choice:has(> input:checked) { border-color: var(--foreground); background: color-mix(in oklch, var(--muted) 55%, transparent); }
+.rule-set-app-choice:has(> input:checked) .rule-set-app-check { border-color: var(--foreground); background: var(--foreground); color: var(--background); }
+.rule-set-app-choice:has(> input:focus-visible) { outline: 2px solid var(--ring); outline-offset: 2px; }
+:is(.rule-set-app-group, .rule-set-app-choice)[hidden] { display: none; }

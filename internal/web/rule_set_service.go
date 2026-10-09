@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/insights/services"
 )
 
 // ruleSetService changes blocking rule sets and the default policy for every
@@ -17,7 +18,7 @@ func (server *Server) ruleSetService() ruleSetService { return ruleSetService{se
 
 // Save adds a rule set, or renames the one called original and replaces its
 // block lists. A rule set's own domains are changed one at a time through
-// policyService, so Save keeps the ones it has.
+// policyService, and its apps through SetApps, so Save keeps the ones it has.
 func (service ruleSetService) Save(ctx context.Context, who actor, original string, set config.RuleSet) (string, error) {
 	action, message := "blocking.rule_set.add", "Rule set "+set.Name+" added"
 	if original != "" {
@@ -27,6 +28,7 @@ func (service ruleSetService) Save(ctx context.Context, who actor, original stri
 		if index := slices.IndexFunc(configuration.Blocking.RuleSets, func(existing config.RuleSet) bool { return existing.Name == original }); original != "" && index >= 0 {
 			existing := configuration.Blocking.RuleSets[index]
 			set.Domains, set.AllowedDomains = slices.Clone(existing.Domains), slices.Clone(existing.AllowedDomains)
+			set.Apps = slices.Clone(existing.Apps)
 		}
 		return configuration.SaveRuleSet(original, set)
 	})
@@ -48,6 +50,31 @@ func (service ruleSetService) Delete(ctx context.Context, who actor, name string
 	}
 	service.server.policyService().finish(ctx, who, action, "", message)
 	return message, nil
+}
+
+// SetApps replaces the apps a rule set blocks. message says what changed.
+func (service ruleSetService) SetApps(ctx context.Context, who actor, name string, apps []string, message string) error {
+	action := "blocking.rule_set.apps"
+	err := service.update(ctx, who, action, func(configuration *config.Config) error {
+		index := slices.IndexFunc(configuration.Blocking.RuleSets, func(set config.RuleSet) bool { return set.Name == name })
+		if index < 0 {
+			return refuse(http.StatusNotFound, "There is no rule set called %s.", name)
+		}
+		for _, app := range apps {
+			if _, found := services.Find(app); !found {
+				return refuse(http.StatusUnprocessableEntity, "Sable doesn't know an app called %s.", app)
+			}
+		}
+		sets := slices.Clone(configuration.Blocking.RuleSets)
+		sets[index].Apps = slices.Compact(slices.Sorted(slices.Values(apps)))
+		configuration.Blocking.RuleSets = sets
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	service.server.policyService().finish(ctx, who, action, "", message)
+	return nil
 }
 
 // SetDefaultLists picks the block lists for devices without a rule set. No

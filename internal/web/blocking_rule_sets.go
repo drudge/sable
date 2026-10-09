@@ -3,6 +3,7 @@ package web
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"maps"
 	"net"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/insights/devices"
+	"github.com/drudge/sable/internal/insights/services"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/web/pages"
 )
@@ -145,9 +147,120 @@ func clientEntryKind(client config.Client) string {
 }
 
 func ruleSetView(set config.RuleSet) pages.RuleSetView {
-	return pages.RuleSetView{
+	view := pages.RuleSetView{
 		Name: set.Name, Off: set.Off, Lists: slices.Clone(set.Lists),
 		Domains: slices.Clone(set.Domains), AllowedDomains: slices.Clone(set.AllowedDomains),
+	}
+	for _, id := range set.Apps {
+		if service, found := services.Find(id); found {
+			view.Apps = append(view.Apps, ruleSetApp(service))
+		}
+	}
+	slices.SortFunc(view.Apps, func(left, right pages.RuleSetApp) int { return strings.Compare(left.Name, right.Name) })
+	return view
+}
+
+func ruleSetApp(service services.Service) pages.RuleSetApp {
+	return pages.RuleSetApp{ID: service.ID, Name: service.Name, Category: service.Category}
+}
+
+// ruleSetAppPicker swaps a rule set's panel for the app picker.
+func (server *Server) ruleSetAppPicker(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	name := request.URL.Query().Get("name")
+	set, found := server.ruleSet(name)
+	if !found {
+		server.renderRuleSetChange(writer, request, name, "", refuse(http.StatusNotFound, "There is no rule set called %s.", name))
+		return
+	}
+	server.render(writer, request, pages.RuleSetAppPicker(ruleSetAppPickerView(set)))
+}
+
+// ruleSet finds a rule set by name in the current config.
+func (server *Server) ruleSet(name string) (config.RuleSet, bool) {
+	sets := server.config.Current().Config.Blocking.RuleSets
+	index := slices.IndexFunc(sets, func(set config.RuleSet) bool { return set.Name == name })
+	if index < 0 {
+		return config.RuleSet{}, false
+	}
+	return sets[index], true
+}
+
+// ruleSetAppPickerView offers the apps in the categories a rule set can
+// block, plus any other app the rule set already blocks, so saving the
+// picker never drops one set in the config file.
+func ruleSetAppPickerView(set config.RuleSet) pages.RuleSetAppPickerView {
+	categories := slices.Clone(services.BlockCategories)
+	for _, id := range set.Apps {
+		if service, found := services.Find(id); found && !slices.Contains(categories, service.Category) {
+			categories = append(categories, service.Category)
+		}
+	}
+	groups := make([]pages.RuleSetAppGroup, len(categories))
+	for index, category := range categories {
+		groups[index].Category = category
+	}
+	for _, service := range services.All() {
+		index := slices.Index(categories, service.Category)
+		chosen := slices.Contains(set.Apps, service.ID)
+		if index < 0 || (!chosen && !slices.Contains(services.BlockCategories, service.Category)) {
+			continue
+		}
+		app := ruleSetApp(service)
+		app.Chosen = chosen
+		groups[index].Apps = append(groups[index].Apps, app)
+	}
+	for index := range groups {
+		slices.SortFunc(groups[index].Apps, func(left, right pages.RuleSetApp) int { return strings.Compare(left.Name, right.Name) })
+	}
+	return pages.RuleSetAppPickerView{Name: set.Name, Groups: groups}
+}
+
+// saveRuleSetApps replaces the apps a rule set blocks with the ones checked
+// in the picker, then shows its panel again.
+func (server *Server) saveRuleSetApps(writer http.ResponseWriter, request *http.Request) {
+	if err := request.ParseForm(); err != nil {
+		server.renderRuleSetChange(writer, request, "", "", refuse(http.StatusBadRequest, "Sable could not read the form."))
+		return
+	}
+	name, apps := request.FormValue("name"), request.Form["app"]
+	err := server.ruleSetService().SetApps(request.Context(), requestActor(request, ""), name, apps, ruleSetAppsMessage(name, apps))
+	server.renderRuleSetChange(writer, request, name, ruleSetAppsMessage(name, apps), err)
+}
+
+// deleteRuleSetApp stops a rule set blocking one app.
+func (server *Server) deleteRuleSetApp(writer http.ResponseWriter, request *http.Request) {
+	if err := request.ParseForm(); err != nil {
+		server.renderRuleSetChange(writer, request, "", "", refuse(http.StatusBadRequest, "Sable could not read the form."))
+		return
+	}
+	name, app := request.FormValue("name"), request.FormValue("app")
+	set, found := server.ruleSet(name)
+	if !found {
+		server.renderRuleSetChange(writer, request, name, "", refuse(http.StatusNotFound, "There is no rule set called %s.", name))
+		return
+	}
+	apps := set.Apps
+	service, _ := services.Find(app)
+	label := cmp.Or(service.Name, app)
+	if !slices.Contains(apps, app) {
+		server.renderRuleSetChange(writer, request, name, "", refuse(http.StatusUnprocessableEntity, "%s doesn't block %s.", name, label))
+		return
+	}
+	message := name + " no longer blocks " + label
+	err := server.ruleSetService().SetApps(request.Context(), requestActor(request, ""), name, slices.DeleteFunc(slices.Clone(apps), func(id string) bool { return id == app }), message)
+	server.renderRuleSetChange(writer, request, name, message, err)
+}
+
+func ruleSetAppsMessage(name string, apps []string) string {
+	switch len(apps) {
+	case 0:
+		return name + " no longer blocks any apps"
+	case 1:
+		service, _ := services.Find(apps[0])
+		return name + " blocks " + cmp.Or(service.Name, apps[0])
+	default:
+		return fmt.Sprintf("%s blocks %d apps", name, len(apps))
 	}
 }
 

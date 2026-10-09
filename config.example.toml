@@ -97,12 +97,14 @@ allow_txt_report = true
 # path = "lists/block.txt"
 # format = "auto"
 
-# A rule set gives some devices their own lists and domains. A device joins
-# one through its [[clients]] entry's rule_set.
+# A rule set gives some devices their own lists, apps, and domains. A device
+# joins one through its [[clients]] entry's rule_set. apps block every domain
+# of an app Insights knows, by its ID.
 # [[blocking.rule_sets]]
 # name = "Kids"
 # lists = ["local"]
-# domains = ["youtube.com"]
+# apps = ["youtube", "tiktok"]
+# domains = ["coolmathgames.com"]
 
 # A hold blocks everything but allowed domains for one device, until a time or
 # until it is removed.

@@ -13,7 +13,7 @@ func TestRuleSetsValidateAndNormalize(t *testing.T) {
 	configuration.Blocking.DefaultLists = []string{" Ads ", "Ads"}
 	configuration.Blocking.RuleSets = []RuleSet{
 		{Name: " Work ", Domains: []string{"Tracker.Example."}},
-		{Name: "Kids", Lists: []string{"Strict", "Ads"}, AllowedDomains: []string{"*.School.Example"}},
+		{Name: "Kids", Lists: []string{"Strict", "Ads"}, AllowedDomains: []string{"*.School.Example"}, Apps: []string{" youtube", "tiktok", "youtube"}},
 	}
 	configuration.Clients = []Client{{MAC: "da:a1:19:00:00:01", RuleSet: " Kids "}}
 	configuration.normalize()
@@ -24,13 +24,15 @@ func TestRuleSetsValidateAndNormalize(t *testing.T) {
 	if !slices.Equal(blocking.DefaultLists, []string{"Ads"}) || blocking.RuleSets[0].Name != "Kids" ||
 		!slices.Equal(blocking.RuleSets[0].Lists, []string{"Ads", "Strict"}) ||
 		!slices.Equal(blocking.RuleSets[0].AllowedDomains, []string{"*.school.example"}) ||
+		!slices.Equal(blocking.RuleSets[0].Apps, []string{"tiktok", "youtube"}) ||
 		!slices.Equal(blocking.RuleSets[1].Domains, []string{"tracker.example"}) || configuration.Clients[0].RuleSet != "Kids" {
 		t.Fatalf("normalized rule sets = %+v, clients = %+v", blocking.RuleSets, configuration.Clients)
 	}
 	cloned := cloneConfig(configuration)
 	cloned.Blocking.RuleSets[0].Lists[0] = "changed"
-	if configuration.Blocking.RuleSets[0].Lists[0] != "Ads" {
-		t.Fatal("Clone shared a rule set's lists")
+	cloned.Blocking.RuleSets[0].Apps[0] = "changed"
+	if configuration.Blocking.RuleSets[0].Lists[0] != "Ads" || configuration.Blocking.RuleSets[0].Apps[0] != "tiktok" {
+		t.Fatal("Clone shared a rule set's lists or apps")
 	}
 
 	for _, test := range []struct {
@@ -44,6 +46,7 @@ func TestRuleSetsValidateAndNormalize(t *testing.T) {
 		{func(c *Config) { c.Blocking.DefaultLists = []string{"Missing"} }, "blocking.default_lists[0]"},
 		{func(c *Config) { c.Blocking.RuleSets[0].Domains = []string{"bad..example"} }, "rule_sets[0].domains[0]"},
 		{func(c *Config) { c.Clients[0].RuleSet = "Guests" }, `names no rule set called "Guests"`},
+		{func(c *Config) { c.Blocking.RuleSets[0].Apps = []string{"YouTube"} }, `rule_sets[0].apps[0] names no app called "YouTube"`},
 	} {
 		candidate := cloneConfig(configuration)
 		test.change(&candidate)

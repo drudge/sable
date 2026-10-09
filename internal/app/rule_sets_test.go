@@ -28,6 +28,14 @@ func TestRuntimeRuleSetsJoinTheirDevices(t *testing.T) {
 		!slices.Equal(sets[1].Lists, []string{blockcompiler.CustomSourceName}) || sets[1].Clients != nil {
 		t.Fatalf("rule set lists = %v and %v, want the operator's domains in each", sets[0].Lists, sets[1].Lists)
 	}
+	configuration.Blocking.RuleSets[0].Domains, configuration.Blocking.RuleSets[0].Apps = []string{"games.example"}, []string{"tiktok"}
+	domains := runtimeRuleSets(configuration)[0].Domains
+	if !slices.Contains(domains, "games.example") || !slices.Contains(domains, "tiktok.com") || !slices.Contains(domains, "tiktokcdn.com") {
+		t.Fatalf("Kids blocks %v, want its own domain and every TikTok domain", domains)
+	}
+	if !slices.Equal(configuration.Blocking.RuleSets[0].Domains, []string{"games.example"}) {
+		t.Fatalf("runtimeRuleSets changed the config's domains to %v", configuration.Blocking.RuleSets[0].Domains)
+	}
 	until := time.Date(2026, 10, 8, 20, 0, 0, 0, time.UTC)
 	holds := runtimeHolds([]config.Hold{{MAC: "da:a1:19:00:00:01", Until: until}, {Address: "192.0.2.20"}})
 	if len(holds) != 2 || holds[0] != (dnsserver.HoldPolicy{Client: "da:a1:19:00:00:01", Until: until}) || holds[1] != (dnsserver.HoldPolicy{Client: "192.0.2.20"}) {

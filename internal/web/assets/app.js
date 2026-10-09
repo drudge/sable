@@ -1779,6 +1779,31 @@
   document.addEventListener("htmx:after:swap", () => showPushState(alertPushPanel()));
   showPushState(alertPushPanel());
 
+  // A rule set's app picker narrows its tiles to the apps whose names match
+  // what was typed, and hides a category with none left.
+  document.addEventListener("input", (event) => {
+    const search = event.target.closest?.("[data-app-picker-search]");
+    if (!search) return;
+    const form = search.closest("form");
+    const typed = search.value.trim().toLowerCase();
+    let shown = 0;
+    form.querySelectorAll("[data-app-group]").forEach((group) => {
+      let matches = 0;
+      group.querySelectorAll("[data-app-name]").forEach((choice) => {
+        const match = choice.dataset.appName.includes(typed);
+        choice.hidden = !match;
+        if (match) matches++;
+      });
+      group.hidden = matches === 0;
+      shown += matches;
+    });
+    form.querySelector("[data-app-picker-empty]").hidden = shown > 0;
+  });
+  // Enter in the search narrows the tiles; it does not save the picker.
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && event.target.closest?.("[data-app-picker-search]")) event.preventDefault();
+  });
+
   // Add Destination and each Edit button load a fresh form into the dialog,
   // then open it, so the dialog never shows the form it held before and focus
   // lands on the new form's first field.

@@ -17,7 +17,31 @@ type RuleSetView struct {
 	Lists          []string
 	Domains        []string
 	AllowedDomains []string
-	Devices        []RuleSetDevice
+	// Apps are the apps the rule set blocks, by name.
+	Apps    []RuleSetApp
+	Devices []RuleSetDevice
+}
+
+// RuleSetApp is one app a rule set can block.
+type RuleSetApp struct {
+	ID       string
+	Name     string
+	Category string
+	// Chosen marks an app the rule set blocks, in the app picker.
+	Chosen bool
+}
+
+// RuleSetAppGroup is one category of apps in the app picker.
+type RuleSetAppGroup struct {
+	Category string
+	Apps     []RuleSetApp
+}
+
+// RuleSetAppPickerView fills a rule set's panel with every app it can block,
+// each one checked when the rule set blocks it.
+type RuleSetAppPickerView struct {
+	Name   string
+	Groups []RuleSetAppGroup
 }
 
 // RuleSetDevice is one device, address, or network in a rule set.
@@ -185,6 +209,9 @@ func ruleSetSummary(set RuleSetView) string {
 		return "Blocking off"
 	}
 	parts := []string{ifThen(len(set.Lists) == 0, "No block lists", "Lists: "+strings.Join(set.Lists, ", "))}
+	if len(set.Apps) > 0 {
+		parts = append(parts, countLabel(uint64(len(set.Apps)), "blocked app", "blocked apps"))
+	}
 	if len(set.Domains) > 0 {
 		parts = append(parts, countLabel(uint64(len(set.Domains)), "blocked domain", "blocked domains"))
 	}
@@ -286,11 +313,104 @@ templ RuleSetDrawer(view RuleSetDrawerView) {
 			}
 			@ruleSetDeviceSection(view)
 			if !view.Set.Off {
+				@ruleSetApps(view)
 				@ruleSetDomains(view, false)
 				@ruleSetDomains(view, true)
 			}
 		}
 	}
+}
+
+// ruleSetApps lists the apps a rule set blocks, with a button that swaps the
+// panel for the app picker.
+templ ruleSetApps(view RuleSetDrawerView) {
+	<section class="query-detail-answer rule-set-domains rule-set-apps-section" aria-labelledby="rule-set-apps-title">
+		<div class="rule-set-domains-heading">
+			<h3 id="rule-set-apps-title">Blocked Apps</h3>
+			if len(view.Set.Apps) > 0 {
+				@components.Badge(components.BadgeProps{Label: formatNumber(uint64(len(view.Set.Apps)))})
+			}
+		</div>
+		<p class="rule-set-domains-help">{ "Blocked for " + view.Set.Name + " devices, with every domain Sable knows each app uses." }</p>
+		if view.CanWrite {
+			<div class="rule-set-apps-actions">
+				@components.Button(components.ButtonProps{Label: ifThen(len(view.Set.Apps) == 0, "Choose Apps", "Change Apps"), Icon: "plus", Variant: components.ButtonOutline, Compact: true, Attrs: ruleSetAppPickerAttrs(view.Set.Name)})
+			</div>
+		}
+		if len(view.Set.Apps) == 0 {
+			<p class="rule-set-domains-empty">No blocked apps.</p>
+		} else {
+			<div class="blocked-domain-list rule-set-app-list">
+				for _, app := range view.Set.Apps {
+					<div class="rule-set-device-row rule-set-app-row" data-rule-set-app={ app.ID }>
+						@AppIcon(app.ID, app.Category)
+						<span class="rule-set-device-name">
+							<strong>{ app.Name }</strong>
+							<small>{ app.Category }</small>
+						</span>
+						if view.CanWrite {
+							<button class="icon-button danger" type="button" aria-label={ "Unblock " + app.Name } { ruleSetAppRemoveAttrs(view.Set.Name, app)... }>@Icon("trash")</button>
+						}
+					</div>
+				}
+			</div>
+		}
+	</section>
+}
+
+func ruleSetAppPickerAttrs(name string) templ.Attributes {
+	return templ.Attributes{
+		"hx-get": "/ui/blocking/rule-sets/apps?" + url.Values{"name": []string{name}}.Encode(), "hx-target": "#rule-set-drawer-content",
+		"hx-swap": "innerHTML", "id": "rule-set-choose-apps", "data-replica-primary-action": true,
+	}
+}
+
+// ruleSetAppRemoveAttrs asks before a rule set stops blocking an app.
+func ruleSetAppRemoveAttrs(name string, app RuleSetApp) templ.Attributes {
+	return templ.Attributes{
+		"hx-post": "/ui/blocking/rule-sets/apps/delete", "hx-vals": fmt.Sprintf(`{"name":%q,"app":%q}`, name, app.ID),
+		"hx-target": "#rule-set-drawer-content", "hx-swap": "innerHTML",
+		"hx-confirm":         "Unblock " + app.Name + " for " + name + "? Its domains are still blocked when a block list or a blocked domain has them.",
+		"data-confirm-title": "Unblock app?", "data-confirm-action": "Unblock App", "data-replica-primary-action": true,
+	}
+}
+
+// RuleSetAppPicker fills a rule set's panel with every app it can block, by
+// category, and a search that narrows them.
+templ RuleSetAppPicker(view RuleSetAppPickerView) {
+	@DetailDrawerContent(DetailDrawerView{ID: "rule-set-drawer", TitleID: "rule-set-drawer-title", Eyebrow: "Block Apps", Title: view.Name, CloseLabel: "Close rule set details"}, ruleSetAppPickerFooter(view)) {
+		<form id="rule-set-app-form" class="rule-set-app-form" hx-post="/ui/blocking/rule-sets/apps" hx-target="#rule-set-drawer-content" hx-swap="innerHTML" hx-disable="find button">
+			<input type="hidden" name="name" value={ view.Name }/>
+			<p class="rule-set-domains-help">{ "Pick the apps " + view.Name + " devices can't use. Each one blocks every domain Sable knows the app uses." }</p>
+			<label class="sr-only" for="rule-set-app-search">Search apps</label>
+			<input id="rule-set-app-search" class="rule-set-app-search" type="search" placeholder="Search apps" autocomplete="off" spellcheck="false" data-app-picker-search/>
+			for _, group := range view.Groups {
+				<fieldset class="rule-set-app-group" data-app-group>
+					<legend>{ group.Category }</legend>
+					<div class="rule-set-app-grid">
+						for _, app := range group.Apps {
+							<label class="rule-set-app-choice" data-app-name={ strings.ToLower(app.Name) }>
+								<input type="checkbox" name="app" value={ app.ID } checked?={ app.Chosen }/>
+								@AppIcon(app.ID, app.Category)
+								<span>{ app.Name }</span>
+								<span class="rule-set-app-check" aria-hidden="true">@Icon("check")</span>
+							</label>
+						}
+					</div>
+				</fieldset>
+			}
+			<p class="rule-set-domains-empty" data-app-picker-empty hidden>No apps match.</p>
+		</form>
+	}
+}
+
+templ ruleSetAppPickerFooter(view RuleSetAppPickerView) {
+	<div class="query-detail-policy-actions insight-drawer-actions">
+		@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Attrs: templ.Attributes{
+			"hx-get": "/ui/blocking/rule-set?" + url.Values{"name": []string{view.Name}}.Encode(), "hx-target": "#rule-set-drawer-content", "hx-swap": "innerHTML",
+		}})
+		@components.Button(components.ButtonProps{Label: "Save Apps", Icon: "check", Type: "submit", Attrs: templ.Attributes{"form": "rule-set-app-form", "data-replica-primary-action": true}})
+	</div>
 }
 
 // ruleSetDomains is one of a rule set's own lists, with a field to add to it.
