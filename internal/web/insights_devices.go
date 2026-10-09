@@ -207,7 +207,8 @@ func (server *Server) insightsDevicePanel(writer http.ResponseWriter, request *h
 }
 
 // renderDeviceDrawer shows one device. edit is "1" while its name is being
-// edited and "type" while its type is.
+// edited, "type" while its type is, and "rule-set" or "hold" while its
+// blocking is.
 func (server *Server) renderDeviceDrawer(writer http.ResponseWriter, request *http.Request, console pages.DashboardView, window insightWindow, key, edit, message, errorMessage string) {
 	view := pages.InsightDeviceDrawerView{
 		Range: window.Range, RangeLabel: window.Label, TimeDisplay: console.TimeDisplay, CanName: console.CanWriteSettings,
@@ -261,6 +262,10 @@ func (server *Server) renderDeviceDrawer(writer http.ResponseWriter, request *ht
 		view.Device.NotUsingSable = silentDeviceLine(coverage)
 	}
 	view.Device.TypeOptions = devices.TypeLabels()
+	view.Blocking = deviceBlockingView(server.config.Current().Config, view.Device, console.TimeDisplay, time.Now())
+	view.Blocking.CanEdit = console.CanWriteBlocking && !console.ControlPlaneReadOnly
+	view.Blocking.Editing = ifEditing(edit, view.Blocking.CanEdit)
+	view.Blocking.BlockingOff = !console.BlockingEnabled
 	// A device without a type of its own takes its network's, if the operator
 	// gave that one, rather than Sable's guess.
 	if message == typeReturnedMessage && device.NetworkType != "" {
@@ -464,4 +469,12 @@ func insightAppViews(domains []querylog.ClientDomain) []pages.InsightAppView {
 		})
 	}
 	return views
+}
+
+// ifEditing keeps a blocking editor open only for someone who may use it.
+func ifEditing(edit string, allowed bool) string {
+	if allowed && (edit == "rule-set" || edit == "hold") {
+		return edit
+	}
+	return ""
 }

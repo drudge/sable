@@ -5545,6 +5545,37 @@
 	document.body.addEventListener("htmx:after:swap", tickBackupExpiry);
 	tickBackupExpiry();
 
+	// Count down a hold to its end, in the words timeLeft uses on the server,
+	// then load the panel again so it shows the device's blocking as it is.
+	const timeLeft = (milliseconds) => {
+	  let minutes = Math.round(milliseconds / 60000);
+	  if (minutes < 1) return "under a minute left";
+	  const parts = [];
+	  for (const [size, one, many] of [[1440, "day", "days"], [60, "hour", "hours"], [1, "minute", "minutes"]]) {
+		const count = Math.floor(minutes / size);
+		minutes -= count * size;
+		if (count > 0 && parts.length < 2) parts.push(`${count} ${count === 1 ? one : many}`);
+	  }
+	  return `${parts.join(" ")} left`;
+	};
+	const tickCountdowns = () => {
+	  document.querySelectorAll("[data-countdown-until]").forEach((element) => {
+		const remaining = Number(element.dataset.countdownUntil) - Date.now();
+		if (remaining > 0) {
+		  element.textContent = timeLeft(remaining);
+		  return;
+		}
+		element.textContent = "ending now";
+		const {countdownRefresh: refresh, countdownTarget: target} = element.dataset;
+		if (!refresh || element.dataset.countdownEnded) return;
+		element.dataset.countdownEnded = "true";
+		htmx.ajax("GET", refresh, {target, swap: "innerHTML"});
+	  });
+	};
+	window.setInterval(tickCountdowns, 10000);
+	document.body.addEventListener("htmx:after:swap", tickCountdowns);
+	tickCountdowns();
+
 	// Fetch does not expose upload progress. Backup restores therefore provide a
 	// fetch-compatible XHR transport to htmx for this one request so large files
 	// retain their real transfer meter without changing the rest of htmx 4.

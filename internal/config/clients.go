@@ -148,6 +148,14 @@ func SetClientType(clients []Client, typed Client, addresses ...string) ([]Clien
 	return updateClient(clients, typed, addresses, strings.TrimSpace(typed.Type), func(client *Client, kind string) { client.Type = kind })
 }
 
+// SetClientRuleSet puts a device in a rule set, keeping its name and type. An
+// empty rule set leaves the device to whatever else names it, or the default.
+// addresses clears the rule sets kept on a device's addresses the way
+// SetClientName clears names.
+func SetClientRuleSet(clients []Client, member Client, addresses ...string) ([]Client, error) {
+	return updateClient(clients, member, addresses, strings.TrimSpace(member.RuleSet), func(client *Client, set string) { client.RuleSet = set })
+}
+
 // updateClient sets one field of the entry for a device. A device known by
 // hardware address takes the field over from the entries of its addresses.
 func updateClient(clients []Client, target Client, addresses []string, value string, set func(*Client, string)) ([]Client, error) {

@@ -130,3 +130,16 @@ func TestSetClientTypeKeepsTheName(t *testing.T) {
 		t.Fatal("an unknown type was accepted")
 	}
 }
+
+func TestSetClientRuleSetKeepsTheNameAndTakesOverAddresses(t *testing.T) {
+	t.Parallel()
+	clients := []Client{{Name: "Laptop", MAC: "3c:22:fb:01:02:03"}, {Address: "10.0.0.5", RuleSet: "Guests"}}
+	joined, err := SetClientRuleSet(clients, Client{MAC: "3C:22:FB:01:02:03", RuleSet: "Kids"}, "10.0.0.5")
+	if err != nil || len(joined) != 1 || joined[0] != (Client{Name: "Laptop", MAC: "3c:22:fb:01:02:03", RuleSet: "Kids"}) {
+		t.Fatalf("joined = %+v, %v", joined, err)
+	}
+	left, err := SetClientRuleSet(joined, Client{MAC: "3c:22:fb:01:02:03"})
+	if err != nil || len(left) != 1 || left[0].RuleSet != "" || left[0].Name != "Laptop" {
+		t.Fatalf("left = %+v, %v", left, err)
+	}
+}
