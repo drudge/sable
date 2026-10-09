@@ -4448,6 +4448,12 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .rule-set-device-name strong { font-size: .875rem; font-weight: 500; }
 .rule-set-device-name small { color: var(--muted-foreground); font: .75rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 .rule-set-device-form input { font-family: inherit; font-size: .875rem; }
+/* An input with suggestions wears the select chevron. The browser's own
+   arrow stays clickable under it, so it still opens the list. */
+.suggest-input { position: relative; display: flex; min-width: 0; flex: 1; }
+.suggest-input input { padding-right: 2.25rem; }
+.suggest-input input::-webkit-calendar-picker-indicator { position: absolute; top: 0; right: 0; width: 2.25rem; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.suggest-input .styled-select-chevron { position: absolute; top: 50%; right: var(--space-3); margin-top: -.2rem; pointer-events: none; }
 .rule-set-form:has(.rule-set-off input:checked) .rule-set-lists { display: none; }
 .rule-set-domains-note { margin-top: var(--space-3); }
 .rule-set-domains-note button { border: 0; background: none; padding: 0; color: var(--primary); cursor: pointer; font: inherit; font-weight: 600; }

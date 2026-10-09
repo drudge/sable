@@ -344,7 +344,10 @@ templ ruleSetDeviceSection(view RuleSetDrawerView) {
 			<form class="rule-set-domain-form rule-set-device-form" hx-post="/ui/blocking/rule-sets/devices/add" hx-target="#rule-set-drawer-content" hx-swap="innerHTML" hx-disable="find button">
 				<input type="hidden" name="name" value={ view.Set.Name }/>
 				<label class="sr-only" for="rule-set-add-device">Device to add</label>
-				<input id="rule-set-add-device" name="device" list="rule-set-device-options" placeholder="Device, IP address, or network" autocomplete="off" spellcheck="false" required/>
+				<span class="suggest-input">
+					<input id="rule-set-add-device" name="device" list="rule-set-device-options" placeholder="Device, IP address, or network" autocomplete="off" spellcheck="false" required/>
+					<span class="styled-select-chevron" aria-hidden="true"></span>
+				</span>
 				<datalist id="rule-set-device-options">
 					for _, option := range view.DeviceOptions {
 						<option value={ option.Value } label={ option.Label }></option>
