@@ -100,3 +100,37 @@ func TestCheckDomainPanel(t *testing.T) {
 	expectContains(t, "allow response", allowed.Body.String(),
 		"cdn.tracker.example is now allowed.", `id="blocking-content"`, `hx-swap-oob="outerHTML"`, `id="check-domain-verdict"`)
 }
+
+// Once devices are in rule sets, the panel asks which device to check for,
+// and names the rule set that decided.
+func TestCheckDomainPanelChecksADevice(t *testing.T) {
+	t.Parallel()
+	server, configuration := newCheckDomainTestServer(t)
+	blank := getDetailsPanel(server, "/ui/blocking/check", true).Body.String()
+	if strings.Contains(blank, `id="check-domain-device"`) {
+		t.Error("the panel asks for a device with no rule sets")
+	}
+
+	configuration.snapshot.Config.Blocking.RuleSets = []config.RuleSet{{Name: "Kids", Apps: []string{"tiktok"}}}
+	configuration.snapshot.Config.Clients = []config.Client{{Name: "Kid's iPad", Address: "192.0.2.4", RuleSet: "Kids"}}
+	page := getDetailsPanel(server, "/blocked/check/tiktokcdn.com?device=Kid%27s+iPad", false).Body.String()
+	expectContains(t, "Blocking page", page, `data-drawer-forward="device"`)
+
+	blocked := getDetailsPanel(server, "/ui/blocking/check?domain=tiktokcdn.com&device=Kid%27s+iPad", true).Body.String()
+	expectContains(t, "device check", blocked,
+		`id="check-domain-device"`, `value="Kid&#39;s iPad"`, `<option value="192.0.2.4" label="Kid&#39;s iPad">`,
+		`class="source-pill source-blocked">Blocked</span>`,
+		"Blocked because the Kids rule set blocks TikTok, and tiktokcdn.com is one of its domains.",
+		`data-dialog-url="/blocked/rule-sets/Kids"`, "This is the answer for Kid&#39;s iPad, which uses the Kids rule set.",
+		`data-copy-url="/blocked/check/tiktokcdn.com?device=Kid%27s+iPad"`)
+	// Allowing it everywhere wouldn't beat the rule set's own block.
+	if strings.Contains(blocked, `name="action"`) {
+		t.Error("a rule set's own block offers Allow")
+	}
+
+	typical := getDetailsPanel(server, "/ui/blocking/check?domain=tiktokcdn.com", true).Body.String()
+	expectContains(t, "typical check", typical, `id="check-domain-device"`, ">Not blocked</span>", "This is the answer for a device on the Default rules.")
+
+	unknown := getDetailsPanel(server, "/ui/blocking/check?domain=tiktokcdn.com&device=nobody", true).Body.String()
+	expectContains(t, "unknown device", unknown, "Could not check that", "device must be")
+}

@@ -790,6 +790,12 @@ or blocked domain applies to them. It keeps its `lists` and domains for when
 `off` is removed. In the console, open a rule set on **Blocked → Rule Sets** to
 add or remove its devices, addresses, and networks.
 
+The query log's explanation names the rule set a device used, and when a
+rule set's own domain or app blocked a query, it names that rule set and the
+app. **Check a Domain** on the Blocking page, and MCP's `check_domain` with
+its `device` argument, give the answer for one device once any devices are in
+rule sets.
+
 The old `blocking.bypass_clients` list moves into a rule set called
 `No Blocking` with `off = true` the first time Sable loads it, one
 `[[clients]]` entry per address or network, and the key is dropped on the next

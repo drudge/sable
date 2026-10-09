@@ -30,6 +30,8 @@ When a needed service breaks, identify the exact blocked host in the query log. 
 
 ![Allowed-domain overrides in the DNS Blocking page](../assets/guide-screenshots/blocking-allowed.webp "Use an allowed-domain entry for an intentional exception, rather than disabling the entire policy.")
 
+When the device is in a rule set, the explanation names it. A block from the rule set's own domains or apps is changed in that rule set (**Blocked → Rule Sets**), not under **Allowed**, since a rule set's own blocks win over the allowed domains. **Check a Domain** at the top of the Blocking page answers for one device when you pick it.
+
 Retest the client. DNS and application caches can delay the visible effect; distinguish a cached negative answer from a new blocked request. Do not allow a broad parent domain unless that whole subtree is intended to bypass the rule.
 
 ## Blocked ads come back on iPhones

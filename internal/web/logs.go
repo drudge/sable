@@ -589,6 +589,10 @@ func queryLogEntryViews(entries []querylog.Entry, display pages.TimeDisplay) []p
 		if status == "" {
 			status = strconv.Itoa(entry.ResponseCode)
 		}
+		decision := queryDecisionView(entry.Decision)
+		if entry.Decision.RuleSet != "" {
+			decision.CheckDevice = entry.ClientIP
+		}
 		views = append(views, pages.QueryLogEntryView{
 			ID:         entry.ID,
 			OccurredAt: pages.FormatClock(entry.OccurredAt, display, true),
@@ -600,7 +604,7 @@ func queryLogEntryViews(entries []querylog.Entry, display pages.TimeDisplay) []p
 			Protocol:   entry.Protocol,
 			Answers:    strings.Split(entry.Answer, "\n"),
 			Duration:   entry.Duration.Round(time.Microsecond).String(),
-			Decision:   queryDecisionView(entry.Decision),
+			Decision:   decision,
 		})
 	}
 	return views
@@ -608,7 +612,8 @@ func queryLogEntryViews(entries []querylog.Entry, display pages.TimeDisplay) []p
 
 func queryDecisionView(decision querylog.Decision) pages.QueryDecisionView {
 	view := pages.QueryDecisionView{
-		Available: decision.Policy != "" || decision.Cache != "" || decision.Resolver != "" || decision.DNSSEC != "",
+		Available:    decision.Policy != "" || decision.Cache != "" || decision.Resolver != "" || decision.DNSSEC != "",
+		RuleSetBlock: decision.OwnRule && decision.Policy == querylog.PolicyBlocked,
 	}
 	switch decision.Policy {
 	case querylog.PolicyNotEvaluated:
@@ -620,11 +625,17 @@ func queryDecisionView(decision querylog.Decision) pages.QueryDecisionView {
 		view.Policy = "Blocking paused"
 	case querylog.PolicyClientBypass:
 		view.Policy = "Client bypassed blocking"
+		if decision.RuleSet != "" {
+			view.PolicyDetail = "The device is in the " + decision.RuleSet + " rule set, which turns blocking off."
+		}
 	case querylog.PolicyAllowed:
 		view.Policy = "Allowed by policy"
 		view.PolicyDetail = matchedDecisionRule(decision.PolicyRule)
 		if sources := joinSourceNames(decision.PolicySources); sources != "" && view.PolicyDetail != "" {
 			view.PolicyDetail += ", an exception on " + sources
+		}
+		if decision.OwnRule && view.PolicyDetail != "" {
+			view.PolicyDetail += ", allowed by the " + decision.RuleSet + " rule set"
 		}
 	case querylog.PolicyBlocked:
 		view.Policy = "Blocked by policy"
@@ -632,11 +643,26 @@ func queryDecisionView(decision querylog.Decision) pages.QueryDecisionView {
 		if sources := joinSourceNames(decision.PolicySources); sources != "" && view.PolicyDetail != "" {
 			view.PolicyDetail += " from " + sources
 		}
+		if decision.OwnRule && view.PolicyDetail != "" {
+			if app := ownRuleApp(decision.PolicyRule); app != "" {
+				view.PolicyDetail += ", one of " + app + "'s domains"
+			}
+			view.PolicyDetail += ", blocked by the " + decision.RuleSet + " rule set"
+		}
 	case querylog.PolicyHeld:
 		view.Policy = "Everything blocked for this device"
 		view.PolicyDetail = "The device has a hold that blocks everything but its allowed domains."
 	case querylog.PolicyNoMatch:
 		view.Policy = "No blocking rule matched"
+	}
+	// Any other answer under a rule set says which one the device used.
+	if decision.RuleSet != "" && !decision.OwnRule && decision.Policy != querylog.PolicyClientBypass {
+		note := "The device uses the " + decision.RuleSet + " rule set."
+		if view.PolicyDetail == "" {
+			view.PolicyDetail = note
+		} else {
+			view.PolicyDetail += ". " + note
+		}
 	}
 	switch decision.Cache {
 	case querylog.CacheHit:

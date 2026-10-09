@@ -18,7 +18,7 @@ You choose each tool in the first step of the setup wizard, and a token still ne
 | `delete_record` | On | Removes one record | `zones.records.write` |
 | `create_zone` | Off | Creates a Primary zone | `zones.create` |
 | `delete_zone` | Off | Deletes a zone and its records | `zones.delete` |
-| `check_domain` | On | Says whether blocking stops a domain, and why | `blocking.read` |
+| `check_domain` | On | Says whether blocking stops a domain, and why, for a typical device or the one named by `device` | `blocking.read` |
 | `allow_domain`, `block_domain`, `remove_domain_rule` | On | Change the allow and block lists. Allowing a domain takes it off the block list, and blocking takes it off the allow list. An optional `rule_set` changes only that rule set's own lists | `blocking.write` |
 | `list_block_lists` | On | Lists block lists and their health | `blocking.read` |
 | `add_block_list`, `remove_block_list`, `refresh_block_lists` | Off | Change and refresh block lists | `blocking.write` |

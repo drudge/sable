@@ -189,6 +189,14 @@ func (set *ruleSet) allowedRule(name string) string {
 	return set.allowed.match(name)
 }
 
+// ruleSetName names the rule set, "" for none or the Default rules.
+func (set *ruleSet) ruleSetName() string {
+	if set == nil {
+		return ""
+	}
+	return set.name
+}
+
 // ownerMask is the owner sets a client's rule set applies, nil for all.
 func (set *ruleSet) ownerMask() []bool {
 	if set == nil {

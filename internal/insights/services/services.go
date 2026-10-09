@@ -55,6 +55,16 @@ type Service struct {
 	Category string
 }
 
+// ForSuffix names the service one of whose own domains is exactly domain,
+// not a parent of it, so a rule that blocks that domain can name the app.
+func ForSuffix(domain string) (Service, bool) {
+	index, found := bySuffix[strings.TrimSuffix(strings.ToLower(strings.TrimSpace(domain)), ".")]
+	if !found {
+		return Service{}, false
+	}
+	return catalog[index].service, true
+}
+
 // Lookup names the service that owns a domain, matching the domain itself and
 // then each parent, so "rr3---sn-abc.googlevideo.com" is YouTube.
 func Lookup(name string) (Service, bool) {

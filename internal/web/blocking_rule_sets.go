@@ -293,11 +293,11 @@ const ruleSetDeviceLimit = 500
 
 // ruleSetDeviceOptions offers the devices Sable has seen, by hardware
 // address when it knows one, and the ones the operator named, leaving out
-// those already in the rule set.
+// those already in the rule set called name. An empty name leaves none out.
 func (server *Server) ruleSetDeviceOptions(ctx context.Context, configuration config.Config, name string) []pages.RuleSetDeviceOption {
 	taken := map[string]bool{}
 	for _, client := range configuration.Clients {
-		if client.RuleSet == name {
+		if name != "" && client.RuleSet == name {
 			taken[cmp.Or(client.MAC, client.Address)] = true
 		}
 	}

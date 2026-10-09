@@ -4001,6 +4001,9 @@ svg.app-icon { display: block; border-radius: .5rem; }
 .check-domain-form { display: flex; gap: var(--space-2); }
 .blocking-check-search .search-field input { width: 100%; }
 .check-domain-form .search-field { flex: 1; }
+/* With a device field, the domain takes the first row and the device shares the second with Check. */
+.check-domain-form:has(.suggest-input) { flex-wrap: wrap; }
+.check-domain-form:has(.suggest-input) .search-field { flex-basis: 100%; }
 .check-domain-result { display: grid; gap: .6rem; }
 .check-domain-result p { margin: 0; line-height: 1.5; }
 .query-detail-answer > .check-domain-lists { display: flex; flex-wrap: wrap; gap: var(--space-2); }

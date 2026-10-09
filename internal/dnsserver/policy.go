@@ -37,21 +37,49 @@ func (handler *Handler) BlockingPaused() bool {
 	return true
 }
 
-// DomainPolicy explains how the blocking policy treats a name for a client
-// without a bypass.
+// DomainPolicy explains how the blocking policy treats a name for a client.
 type DomainPolicy struct {
 	Decision querylog.PolicyDecision
 	Rule     string
 	Sources  []string
+	// RuleSet names the rule set the client uses, empty on the Default rules
+	// or while a hold or pause decides.
+	RuleSet string
+	// OwnRule says Rule is one of the rule set's own blocked or allowed
+	// domains rather than a global one or a block list's.
+	OwnRule bool
 }
 
-func (handler *Handler) DomainPolicy(name string) DomainPolicy {
+// decision records the policy in the query log beside how the query was
+// answered.
+func (policy DomainPolicy) decision(cache querylog.CacheDecision, resolver querylog.ResolverDecision) querylog.Decision {
+	decision := querylog.Decision{Cache: cache, Resolver: resolver}
+	policy.record(&decision)
+	return decision
+}
+
+// record fills decision's policy fields.
+func (policy DomainPolicy) record(decision *querylog.Decision) {
+	decision.Policy, decision.PolicyRule, decision.PolicySources = policy.Decision, policy.Rule, policy.Sources
+	decision.RuleSet, decision.OwnRule = policy.RuleSet, policy.OwnRule
+}
+
+// DomainPolicy explains how blocking treats name for a device: one at
+// address, behind hardware address mac. Without either it is a device on the
+// Default rules. Given only an address, the device's hardware address comes
+// from the device address table, as it does for a query.
+func (handler *Handler) DomainPolicy(name, address, mac string) DomainPolicy {
 	runtime := handler.runtime.Load()
 	if runtime == nil {
 		return DomainPolicy{Decision: querylog.PolicyNotEvaluated}
 	}
-	decision, rule, sources := runtime.policyDecision(name, "", nil, handler.BlockingPaused())
-	return DomainPolicy{Decision: decision, Rule: rule, Sources: append([]string(nil), sources...)}
+	client, identified := identifyClient(address, handler.DeviceAddressTable())
+	if parsed, err := net.ParseMAC(mac); err == nil {
+		client.mac, identified = parsed.String(), true
+	}
+	policy := runtime.policyFor(name, client, identified, handler.BlockingPaused())
+	policy.Sources = append([]string(nil), policy.Sources...)
+	return policy
 }
 
 func (runtime *Runtime) matchesBlocked(name string) bool {
@@ -93,48 +121,55 @@ func (runtime *Runtime) blockedSources(owner uint32) []string {
 // the client blocks everything but its allowed domains, even while blocking
 // is paused. Otherwise the client's rule set comes first: its own allowed and
 // blocked domains win over the global ones, and only its block lists apply.
-func (runtime *Runtime) policyDecision(name, clientIP string, devices DeviceAddresses, paused bool) (querylog.PolicyDecision, string, []string) {
-	if !runtime.blocking {
-		return querylog.PolicyDisabled, "", nil
-	}
+// The returned Sources are shared with the runtime; don't change them.
+func (runtime *Runtime) policyDecision(name, clientIP string, devices DeviceAddresses, paused bool) DomainPolicy {
 	client, identified := identifyClient(clientIP, devices)
+	return runtime.policyFor(name, client, identified, paused)
+}
+
+func (runtime *Runtime) policyFor(name string, client policyClient, identified, paused bool) DomainPolicy {
+	if !runtime.blocking {
+		return DomainPolicy{Decision: querylog.PolicyDisabled}
+	}
 	set := runtime.ruleSetFor(client, identified)
 	if identified && !runtime.holds.empty() && runtime.held(client, time.Now) {
 		if rule := set.allowedRule(name); rule != "" {
-			return querylog.PolicyAllowed, rule, nil
+			return DomainPolicy{Decision: querylog.PolicyAllowed, Rule: rule, RuleSet: set.ruleSetName(), OwnRule: true}
 		}
 		if rule := runtime.allowed.match(name); rule != "" {
-			return querylog.PolicyAllowed, rule, nil
+			return DomainPolicy{Decision: querylog.PolicyAllowed, Rule: rule}
 		}
-		return querylog.PolicyHeld, "", nil
+		return DomainPolicy{Decision: querylog.PolicyHeld}
 	}
 	if paused {
-		return querylog.PolicyPaused, "", nil
+		return DomainPolicy{Decision: querylog.PolicyPaused}
 	}
+	// The default set, when the Default rules choose their lists, has no name.
+	ruleSet := set.ruleSetName()
 	if set != nil {
 		if set.off {
 			// The fact that the client bypassed policy is useful; persisting the
 			// matching address or network would duplicate sensitive configuration.
-			return querylog.PolicyClientBypass, "", nil
+			return DomainPolicy{Decision: querylog.PolicyClientBypass, RuleSet: ruleSet}
 		}
 		if rule := set.allowed.match(name); rule != "" {
-			return querylog.PolicyAllowed, rule, nil
+			return DomainPolicy{Decision: querylog.PolicyAllowed, Rule: rule, RuleSet: ruleSet, OwnRule: true}
 		}
 		if rule, _ := matchingDomainRule(set.blocked, name, nil); rule != "" {
-			return querylog.PolicyBlocked, rule, nil
+			return DomainPolicy{Decision: querylog.PolicyBlocked, Rule: rule, RuleSet: ruleSet, OwnRule: true}
 		}
 	}
 	if rule := runtime.allowed.match(name); rule != "" {
-		return querylog.PolicyAllowed, rule, nil
+		return DomainPolicy{Decision: querylog.PolicyAllowed, Rule: rule, RuleSet: ruleSet}
 	}
 	applies := set.ownerMask()
 	if rule, owner := matchingDomainRule(runtime.blocked, name, applies); rule != "" {
 		if exception, exceptionOwner := runtime.matchingException(name, applies); exception != "" {
-			return querylog.PolicyAllowed, exception, set.ownerSources(runtime, exceptionOwner)
+			return DomainPolicy{Decision: querylog.PolicyAllowed, Rule: exception, Sources: set.ownerSources(runtime, exceptionOwner), RuleSet: ruleSet}
 		}
-		return querylog.PolicyBlocked, rule, set.ownerSources(runtime, owner)
+		return DomainPolicy{Decision: querylog.PolicyBlocked, Rule: rule, Sources: set.ownerSources(runtime, owner), RuleSet: ruleSet}
 	}
-	return querylog.PolicyNoMatch, "", nil
+	return DomainPolicy{Decision: querylog.PolicyNoMatch, RuleSet: ruleSet}
 }
 
 // matchingException finds a block list's @@ exception for a blocked name. An

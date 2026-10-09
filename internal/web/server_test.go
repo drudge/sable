@@ -269,6 +269,30 @@ func TestQueryDecisionViewNamesTheBlockListsBehindABlock(t *testing.T) {
 	}
 }
 
+func TestQueryDecisionViewNamesTheRuleSet(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		decision querylog.Decision
+		want     string
+	}{
+		{querylog.Decision{Policy: querylog.PolicyBlocked, PolicyRule: "tiktokcdn.com", RuleSet: "Kids", OwnRule: true},
+			"Matched tiktokcdn.com, one of TikTok's domains, blocked by the Kids rule set"},
+		{querylog.Decision{Policy: querylog.PolicyBlocked, PolicyRule: "espn.com", RuleSet: "Kids", OwnRule: true},
+			"Matched espn.com, blocked by the Kids rule set"},
+		{querylog.Decision{Policy: querylog.PolicyAllowed, PolicyRule: "school.example", RuleSet: "Kids", OwnRule: true},
+			"Matched school.example, allowed by the Kids rule set"},
+		{querylog.Decision{Policy: querylog.PolicyBlocked, PolicyRule: "ads.example", PolicySources: []string{"OISD Big"}, RuleSet: "Kids"},
+			"Matched ads.example from OISD Big. The device uses the Kids rule set."},
+		{querylog.Decision{Policy: querylog.PolicyNoMatch, RuleSet: "Kids"}, "The device uses the Kids rule set."},
+		{querylog.Decision{Policy: querylog.PolicyClientBypass, RuleSet: "No Blocking"},
+			"The device is in the No Blocking rule set, which turns blocking off."},
+	} {
+		if got := queryDecisionView(test.decision).PolicyDetail; got != test.want {
+			t.Errorf("%+v: detail = %q, want %q", test.decision, got, test.want)
+		}
+	}
+}
+
 func TestDNSQueryResultIncludesIsotopeActionsAndCopyTargets(t *testing.T) {
 	t.Parallel()
 
