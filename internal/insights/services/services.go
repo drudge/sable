@@ -38,6 +38,16 @@ const (
 	CategoryRemoteAccess = "Remote access"
 )
 
+// BlockCategories are the categories a rule set offers to block, in the
+// order the console shows them: apps people limit for kids, guests, or work.
+// Device platforms, smart home, cameras, security, and work tools are left
+// out, since blocking them breaks the devices that rely on them, though a
+// rule set may still name any app in the catalog.
+var BlockCategories = []string{
+	CategorySocial, CategoryStreaming, CategoryGaming, CategoryMessaging, CategoryMusic,
+	CategoryCalls, CategoryAI, CategoryShopping, CategoryNews, CategoryRemoteAccess,
+}
+
 // Service is one app or service people would recognize by name.
 type Service struct {
 	ID       string

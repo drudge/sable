@@ -18,6 +18,7 @@ import (
 	"github.com/drudge/sable/internal/certificates"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsserver"
+	"github.com/drudge/sable/internal/insights/services"
 	"github.com/drudge/sable/internal/serverlog"
 	"github.com/drudge/sable/internal/store"
 	"github.com/drudge/sable/internal/tsig"
@@ -461,7 +462,7 @@ func runtimeRuleSets(configuration config.Config) []dnsserver.RuleSetPolicy {
 	for _, set := range configuration.Blocking.RuleSets {
 		policy := dnsserver.RuleSetPolicy{
 			Name: set.Name, Off: set.Off, Lists: append(slices.Clone(set.Lists), blockcompiler.CustomSourceName),
-			Domains: set.Domains, AllowedDomains: set.AllowedDomains,
+			Domains: append(slices.Clone(set.Domains), services.Suffixes(set.Apps)...), AllowedDomains: set.AllowedDomains,
 		}
 		for _, client := range configuration.Clients {
 			if client.RuleSet == set.Name {

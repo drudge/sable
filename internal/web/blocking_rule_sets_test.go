@@ -299,3 +299,65 @@ func TestRuleSetWithBlockingOffSkipsItsListsAndDomains(t *testing.T) {
 		t.Fatalf("panel for a rule set with blocking off:\n%s", panel)
 	}
 }
+
+func TestRuleSetPanelBlocksApps(t *testing.T) {
+	t.Parallel()
+	server, configuration := newRuleSetTestServer(t)
+	kids := func() config.RuleSet { return configuration.Current().Config.Blocking.RuleSets[0] }
+
+	panel := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-set?name=Kids", nil).Body.String()
+	if !strings.Contains(panel, "No blocked apps.") || !strings.Contains(panel, `hx-get="/ui/blocking/rule-sets/apps?name=Kids"`) {
+		t.Fatalf("panel has no way to choose apps:\n%s", panel)
+	}
+	// The picker offers the categories people block, not device platforms.
+	picker := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-sets/apps?name=Kids", nil)
+	if picker.Code != http.StatusOK || !strings.Contains(picker.Body.String(), `value="tiktok"`) || strings.Contains(picker.Body.String(), `value="windows-update"`) ||
+		!strings.Contains(picker.Body.String(), "<legend>Social</legend>") {
+		t.Fatalf("picker = %d %s", picker.Code, picker.Body.String())
+	}
+
+	saved := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/apps", url.Values{"name": {"Kids"}, "app": {"youtube", "tiktok"}})
+	if saved.Code != http.StatusOK || !strings.Contains(saved.Body.String(), "Kids blocks 2 apps") || !strings.Contains(saved.Body.String(), `data-rule-set-app="tiktok"`) ||
+		!strings.Contains(saved.Body.String(), "hx-swap-oob") {
+		t.Fatalf("save = %d %s", saved.Code, saved.Body.String())
+	}
+	if !slices.Equal(kids().Apps, []string{"tiktok", "youtube"}) {
+		t.Fatalf("Kids blocks %v", kids().Apps)
+	}
+	// The picker checks what the rule set blocks, and keeps an app outside
+	// its categories that the config file names, so saving never drops it.
+	if err := configuration.Update(context.Background(), func(candidate *config.Config) error {
+		candidate.Blocking.RuleSets[0].Apps = append(candidate.Blocking.RuleSets[0].Apps, "windows-update")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	picker = serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-sets/apps?name=Kids", nil)
+	if !strings.Contains(picker.Body.String(), `value="tiktok" checked`) || !strings.Contains(picker.Body.String(), `value="windows-update" checked`) {
+		t.Fatalf("picker after saving = %s", picker.Body.String())
+	}
+
+	// Editing the rule set in its dialog keeps its apps.
+	if response := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/save", url.Values{"original": {"Kids"}, "name": {"Kids"}, "lists": {"Ads"}}); response.Code != http.StatusOK {
+		t.Fatalf("save the dialog = %d %s", response.Code, response.Body.String())
+	}
+	if !slices.Equal(slices.Sorted(slices.Values(kids().Apps)), []string{"tiktok", "windows-update", "youtube"}) {
+		t.Fatalf("Kids blocks %v after the dialog saved", kids().Apps)
+	}
+
+	removed := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/apps/delete", url.Values{"name": {"Kids"}, "app": {"tiktok"}})
+	if removed.Code != http.StatusOK || !strings.Contains(removed.Body.String(), "Kids no longer blocks TikTok") || slices.Contains(kids().Apps, "tiktok") {
+		t.Fatalf("remove = %d %s, apps %v", removed.Code, removed.Body.String(), kids().Apps)
+	}
+	if again := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/apps/delete", url.Values{"name": {"Kids"}, "app": {"tiktok"}}); again.Code != http.StatusUnprocessableEntity ||
+		!strings.Contains(again.Body.String(), "Kids doesn&#39;t block TikTok") {
+		t.Fatalf("remove twice = %d %s", again.Code, again.Body.String())
+	}
+	if unknown := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/apps", url.Values{"name": {"Kids"}, "app": {"myspace"}}); unknown.Code != http.StatusUnprocessableEntity ||
+		!strings.Contains(unknown.Body.String(), "know an app called myspace") {
+		t.Fatalf("an unknown app = %d %s", unknown.Code, unknown.Body.String())
+	}
+	if missing := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-sets/apps?name=Nope", nil); missing.Code != http.StatusNotFound {
+		t.Fatalf("picker for an unknown rule set = %d", missing.Code)
+	}
+}

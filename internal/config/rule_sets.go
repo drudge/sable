@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+
+	"github.com/drudge/sable/internal/insights/services"
 )
 
 // maximumRuleSetNameLength bounds a rule set's name so it fits the console's
@@ -32,6 +34,10 @@ type RuleSet struct {
 	Lists          []string `toml:"lists"`
 	Domains        []string `toml:"domains,omitempty"`
 	AllowedDomains []string `toml:"allowed_domains,omitempty"`
+	// Apps are apps from the catalog Insights names apps by, such as
+	// "youtube". Each blocks every domain the app owns, as if it were one of
+	// the rule set's own blocked domains.
+	Apps []string `toml:"apps,omitempty"`
 }
 
 func cloneRuleSets(sets []RuleSet) []RuleSet {
@@ -46,6 +52,7 @@ func cloneRuleSets(sets []RuleSet) []RuleSet {
 			Lists:          append([]string(nil), set.Lists...),
 			Domains:        append([]string(nil), set.Domains...),
 			AllowedDomains: append([]string(nil), set.AllowedDomains...),
+			Apps:           append([]string(nil), set.Apps...),
 		}
 	}
 	return cloned
@@ -59,6 +66,7 @@ func (settings *Blocking) normalizeRuleSets() {
 		set.Lists = sortedUnique(set.Lists)
 		set.Domains = normalizePolicyDomains(set.Domains)
 		set.AllowedDomains = normalizePolicyDomains(set.AllowedDomains)
+		set.Apps = sortedUnique(set.Apps)
 	}
 	slices.SortFunc(settings.RuleSets, func(left, right RuleSet) int {
 		return strings.Compare(left.Name, right.Name)
@@ -100,6 +108,11 @@ func (settings Blocking) validateRuleSets() []error {
 		checkLists(field+".lists", set.Lists)
 		validationErrors = append(validationErrors, validatePolicyDomains(field+".domains", set.Domains)...)
 		validationErrors = append(validationErrors, validatePolicyDomains(field+".allowed_domains", set.AllowedDomains)...)
+		for appIndex, app := range set.Apps {
+			if _, found := services.Find(app); !found {
+				validationErrors = append(validationErrors, fmt.Errorf("%s.apps[%d] names no app called %q", field, appIndex, app))
+			}
+		}
 	}
 	return validationErrors
 }

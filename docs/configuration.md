@@ -721,8 +721,8 @@ manual refresh, and the configured automatic refresh interval.
 ### Rule sets
 
 A rule set gives some devices a different blocking policy: their own choice of
-block lists, and blocked and allowed domains of their own, or no blocking at
-all.
+block lists, apps and blocked and allowed domains of their own, or no blocking
+at all.
 
 ```toml
 [blocking]
@@ -732,7 +732,8 @@ default_lists = ["OISD Big"]
 [[blocking.rule_sets]]
 name = "Kids"
 lists = ["OISD Big", "filters"]
-domains = ["youtube.com", "tiktok.com"]
+apps = ["youtube", "tiktok"]
+domains = ["coolmathgames.com"]
 
 [[blocking.rule_sets]]
 name = "Work"
@@ -775,6 +776,14 @@ is usually within a minute. With [Insights](#devices-and-insights) off Sable
 doesn't tie addresses to hardware, so only devices named by `address` are in a
 rule set. An address named in `[[clients]]` wins over one Sable learned, and
 both win over a network.
+
+`apps` blocks every domain Sable knows an app uses, from the same catalog
+Insights names apps by, as if each were one of the rule set's own `domains`, so
+the rule set's `allowed_domains` still win. Each entry is an app's ID, such as
+`youtube`, `tiktok`, `roblox`, or `chatgpt` (Fortnite is under `epic-games`). In
+the console, open a rule set and use **Choose Apps** to pick them from a grid;
+the IDs are in [`internal/insights/services/catalog.go`](../internal/insights/services/catalog.go).
+An unknown ID fails validation.
 
 A rule set with `off = true` turns blocking off for its devices: no block list
 or blocked domain applies to them. It keeps its `lists` and domains for when

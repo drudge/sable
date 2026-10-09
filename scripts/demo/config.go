@@ -71,7 +71,7 @@ var ruleSetsFixture = []config.RuleSet{
 	{Name: "Guests", Lists: []string{"OISD Big"}, Domains: []string{"bittorrent.com"}},
 	{Name: "IoT", Lists: []string{"Steven Black Unified"}, AllowedDomains: []string{"*.ubnt.com"}},
 	{Name: config.NoBlockingRuleSetName, Off: true},
-	{Name: "Warehouse", Lists: []string{"AdGuard DNS Filter", "OISD Big"}, Domains: []string{"tiktok.com", "youtube.com"}},
+	{Name: "Warehouse", Lists: []string{"AdGuard DNS Filter", "OISD Big"}, Domains: []string{"espn.com"}, Apps: []string{"netflix", "tiktok", "youtube"}},
 }
 
 // ruleSetClients puts devices in those rule sets: by hardware address, so
