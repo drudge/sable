@@ -4349,9 +4349,14 @@
 	  }
 	  const blockAction = dialog.querySelector('[data-query-detail-policy="block"]');
 	  if (blockAction) blockAction.hidden = source === "blocked";
+	  // Allowing everywhere can't beat a rule set's own block.
+	  const allowAction = dialog.querySelector('[data-query-detail-policy="allow"]');
+	  if (allowAction) allowAction.hidden = row.dataset.queryDetailRuleSetBlock === "true";
 	  const why = dialog.querySelector("[data-query-detail-why]");
 	  if (why) {
-		why.href = `/blocked/check/${encodeURIComponent(domain.replace(/\.$/, ""))}`;
+		// A device in a rule set gets the answer for that device.
+		const device = row.dataset.queryDetailCheckDevice;
+		why.href = `/blocked/check/${encodeURIComponent(domain.replace(/\.$/, ""))}${device ? `?${new URLSearchParams({device})}` : ""}`;
 		why.hidden = source !== "blocked" || !domain;
 	  }
 	  // The row fills the panel at once, and the address still changes to
@@ -4982,17 +4987,23 @@
 	window.addEventListener("hashchange", showLinkedCard);
 	// A search for a drawer's record, such as the Blocking page's Check a
 	// domain box or the box in that drawer, opens the record it names at that
-	// record's address. The first one opened from the page
-	// adds to history and the rest replace it, so closing returns to the
-	// page.
+	// record's address. The form's other fields, such as the device a domain
+	// is checked for, go in the address's query. The first one opened from
+	// the page adds to history and the rest replace it, so closing returns to
+	// the page.
 	document.body.addEventListener("submit", (event) => {
 	  const form = event.target.closest?.("form[data-drawer-navigate]");
 	  if (!form) return;
 	  event.preventDefault();
 	  const dialog = form.closest("dialog[data-drawer-route]") || document.getElementById(form.dataset.drawerDialog || "");
-	  const value = String(new FormData(form).get(form.dataset.drawerNavigate) || "").trim();
+	  const fields = new FormData(form);
+	  const value = String(fields.get(form.dataset.drawerNavigate) || "").trim();
 	  if (!dialog || !value) return;
-	  const path = dialog.dataset.drawerRoute + encodeURIComponent(value);
+	  const query = new URLSearchParams();
+	  fields.forEach((field, name) => {
+		if (name !== form.dataset.drawerNavigate && typeof field === "string" && field.trim()) query.set(name, field.trim());
+	  });
+	  const path = dialog.dataset.drawerRoute + encodeURIComponent(value) + (query.size ? `?${query}` : "");
 	  if (drawerRecord(dialog, window.location.pathname) !== null) {
 		window.history.replaceState(window.history.state, "", path);
 	  } else {

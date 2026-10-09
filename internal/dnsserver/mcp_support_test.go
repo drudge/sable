@@ -56,15 +56,15 @@ func TestHandlerDomainPolicyExplainsDecision(t *testing.T) {
 		"ok.ads.example":    querylog.PolicyAllowed,
 		"example.org":       querylog.PolicyNoMatch,
 	} {
-		if got := handler.DomainPolicy(name); got.Decision != want {
+		if got := handler.DomainPolicy(name, "", ""); got.Decision != want {
 			t.Errorf("DomainPolicy(%s) = %+v, want %s", name, got, want)
 		}
 	}
-	if got := handler.DomainPolicy("pixel.ads.example"); got.Rule != "ads.example" {
+	if got := handler.DomainPolicy("pixel.ads.example", "", ""); got.Rule != "ads.example" {
 		t.Fatalf("blocked rule = %q", got.Rule)
 	}
 	handler.PauseBlocking(60_000_000_000)
-	if got := handler.DomainPolicy("ads.example"); got.Decision != querylog.PolicyPaused {
+	if got := handler.DomainPolicy("ads.example", "", ""); got.Decision != querylog.PolicyPaused {
 		t.Fatalf("paused decision = %s", got.Decision)
 	}
 }
@@ -100,7 +100,7 @@ func TestBlockListExceptionOverridesAnotherListsBlock(t *testing.T) {
 		{"pixel.example", querylog.PolicyBlocked, "pixel.example", []string{"EasyList"}},
 		{"tracker.example", querylog.PolicyBlocked, "tracker.example", []string{"EasyPrivacy"}},
 	} {
-		got := handler.DomainPolicy(test.name)
+		got := handler.DomainPolicy(test.name, "", "")
 		if got.Decision != test.decision || got.Rule != test.rule || !slices.Equal(got.Sources, test.sources) {
 			t.Errorf("DomainPolicy(%s) = %+v, want %s %s from %v", test.name, got, test.decision, test.rule, test.sources)
 		}
@@ -111,7 +111,7 @@ func TestBlockListExceptionOverridesAnotherListsBlock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := NewHandler(runtime).DomainPolicy("tracker.example"); got.Decision != querylog.PolicyAllowed || len(got.Sources) != 0 {
+	if got := NewHandler(runtime).DomainPolicy("tracker.example", "", ""); got.Decision != querylog.PolicyAllowed || len(got.Sources) != 0 {
 		t.Fatalf("allow-listed DomainPolicy = %+v", got)
 	}
 }

@@ -64,10 +64,70 @@ func TestRuleSetsDecidePolicyPerClient(t *testing.T) {
 		{"no client", "", "games.example", querylog.PolicyNoMatch, "", nil},
 	}
 	for _, test := range tests {
-		decision, rule, sources := runtime.policyDecision(test.query, test.client, nil, false)
+		decision, rule, sources := policyParts(runtime.policyDecision(test.query, test.client, nil, false))
 		if decision != test.decision || rule != test.rule || !slices.Equal(sources, test.sources) {
 			t.Errorf("%s: policyDecision(%q, %q) = %q %q %v, want %q %q %v", test.name, test.query, test.client,
 				decision, rule, sources, test.decision, test.rule, test.sources)
+		}
+	}
+}
+
+func TestPolicyNamesTheRuleSetThatDecided(t *testing.T) {
+	t.Parallel()
+	configuration := ruleSetTestConfig()
+	configuration.DefaultLists = []string{"Ads", "Custom"}
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	for _, test := range []struct {
+		name, client, query string
+		ruleSet             string
+		ownRule             bool
+	}{
+		{"own block", "192.0.2.4", "www.games.example", "Kids", true},
+		{"own allow", "192.0.2.4", "school.ads.example", "Kids", true},
+		{"global allow", "192.0.2.4", "allowed.example", "Kids", false},
+		{"list block", "198.51.100.7", "tracker.example", "Strict only", false},
+		{"nothing matched", "198.51.100.7", "example.com", "Strict only", false},
+		{"blocking off", "192.0.2.99", "ads.example", "No Blocking", false},
+		{"Default rules", "10.0.0.1", "ads.example", "", false},
+	} {
+		policy := runtime.policyDecision(test.query, test.client, nil, false)
+		if policy.RuleSet != test.ruleSet || policy.OwnRule != test.ownRule {
+			t.Errorf("%s: policyDecision(%q, %q) = %+v, want rule set %q, own rule %t", test.name, test.query, test.client, policy, test.ruleSet, test.ownRule)
+		}
+	}
+	if policy := runtime.policyDecision("www.games.example", "192.0.2.4", nil, true); policy.RuleSet != "" {
+		t.Errorf("policyDecision while paused = %+v, want no rule set", policy)
+	}
+	decision := runtime.policyDecision("www.games.example", "192.0.2.4", nil, false).decision(querylog.CacheMiss, querylog.ResolverBlocked)
+	if decision.RuleSet != "Kids" || !decision.OwnRule || decision.PolicyRule != "games.example" || decision.Resolver != querylog.ResolverBlocked {
+		t.Errorf("decision() = %+v, want Kids's own rule", decision)
+	}
+}
+
+func TestDomainPolicyChecksADevice(t *testing.T) {
+	t.Parallel()
+	runtime, err := Compile(ruleSetTestConfig())
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	handler := NewHandler(runtime)
+	handler.SetDeviceAddresses(DeviceAddresses{netip.MustParseAddr("10.0.0.8"): "da:a1:19:00:00:01"})
+	for _, test := range []struct {
+		name, address, mac string
+		decision           querylog.PolicyDecision
+		ruleSet            string
+	}{
+		{"Default rules", "", "", querylog.PolicyBlocked, ""},
+		{"by address", "192.0.2.99", "", querylog.PolicyClientBypass, "No Blocking"},
+		{"by hardware address", "", "DA-A1-19-00-00-01", querylog.PolicyBlocked, "Tablets"},
+		{"by an address Sable knows the device by", "10.0.0.8", "", querylog.PolicyBlocked, "Tablets"},
+	} {
+		policy := handler.DomainPolicy("video.example", test.address, test.mac)
+		if policy.Decision != test.decision || policy.RuleSet != test.ruleSet {
+			t.Errorf("%s: DomainPolicy(video.example, %q, %q) = %+v, want %q in %q", test.name, test.address, test.mac, policy, test.decision, test.ruleSet)
 		}
 	}
 }
@@ -81,14 +141,14 @@ func TestDefaultListsNarrowPolicyForClientsWithoutRuleSet(t *testing.T) {
 		t.Fatalf("Compile() error = %v", err)
 	}
 	handler := NewHandler(runtime)
-	if policy := handler.DomainPolicy("video.example"); policy.Decision != querylog.PolicyNoMatch {
+	if policy := handler.DomainPolicy("video.example", "", ""); policy.Decision != querylog.PolicyNoMatch {
 		t.Errorf("DomainPolicy(video.example) = %+v, want no match outside the default lists", policy)
 	}
-	if decision, rule, sources := runtime.policyDecision("tracker.example", "10.0.0.1", nil, false); decision != querylog.PolicyBlocked ||
+	if decision, rule, sources := policyParts(runtime.policyDecision("tracker.example", "10.0.0.1", nil, false)); decision != querylog.PolicyBlocked ||
 		rule != "tracker.example" || !slices.Equal(sources, []string{"Ads"}) {
 		t.Errorf("policyDecision(tracker.example) = %q %q %v, want blocked by Ads alone", decision, rule, sources)
 	}
-	if decision, _, _ := runtime.policyDecision("video.example", "198.51.100.7", nil, false); decision != querylog.PolicyBlocked {
+	if decision, _, _ := policyParts(runtime.policyDecision("video.example", "198.51.100.7", nil, false)); decision != querylog.PolicyBlocked {
 		t.Errorf("policyDecision(video.example) for a rule set = %q, want its own lists to apply", decision)
 	}
 }
@@ -119,11 +179,11 @@ func TestDeviceAddressesPutDevicesInRuleSets(t *testing.T) {
 		{"10.0.0.9", querylog.PolicyNoMatch},     // a device in no rule set
 		{"fe80::1%eth0", querylog.PolicyNoMatch}, // zones are ignored
 	} {
-		if decision, _, _ := runtime.policyDecision("games.example", test.client, devices, false); decision != test.decision {
+		if decision, _, _ := policyParts(runtime.policyDecision("games.example", test.client, devices, false)); decision != test.decision {
 			t.Errorf("policyDecision(games.example) for %s = %q, want %q", test.client, decision, test.decision)
 		}
 	}
-	if decision, _, sources := runtime.policyDecision("video.example", "10.0.0.8", devices, false); decision != querylog.PolicyBlocked ||
+	if decision, _, sources := policyParts(runtime.policyDecision("video.example", "10.0.0.8", devices, false)); decision != querylog.PolicyBlocked ||
 		!slices.Equal(sources, []string{"Strict"}) {
 		t.Errorf("policyDecision(video.example) for a tablet = %q %v, want blocked by Strict", decision, sources)
 	}
@@ -167,7 +227,7 @@ func TestPolicyDecisionDoesNotAllocateWithRuleSets(t *testing.T) {
 	devices := DeviceAddresses{netip.MustParseAddr("10.0.0.7"): "da:a1:19:00:00:01"}
 	for _, client := range []string{"10.0.0.1", "10.0.0.7", "192.0.2.4", "192.0.2.50", "198.51.100.7", "192.0.2.99"} {
 		if allocations := testing.AllocsPerRun(100, func() {
-			_, _, _ = runtime.policyDecision("pixel.shorts.video.example.", client, devices, false)
+			_ = runtime.policyDecision("pixel.shorts.video.example.", client, devices, false)
 		}); allocations != 0 {
 			t.Errorf("policyDecision for %s allocated %.0f times, want 0", client, allocations)
 		}
@@ -218,7 +278,7 @@ func BenchmarkPolicyDecision(b *testing.B) {
 		b.Run(run.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
-				_, _, _ = run.runtime.policyDecision("pixel.host-99999.example.", run.client, devices, false)
+				_ = run.runtime.policyDecision("pixel.host-99999.example.", run.client, devices, false)
 			}
 		})
 	}
@@ -240,4 +300,9 @@ func TestMatchClientPicksLikeTheRuleSetTable(t *testing.T) {
 			t.Errorf("MatchClient(%s, %q) = %q, want %q", test.address, test.mac, got, test.want)
 		}
 	}
+}
+
+// policyParts splits a decision for comparison.
+func policyParts(policy DomainPolicy) (querylog.PolicyDecision, string, []string) {
+	return policy.Decision, policy.Rule, policy.Sources
 }

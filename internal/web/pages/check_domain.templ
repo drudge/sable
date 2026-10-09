@@ -16,6 +16,15 @@ func CheckDomainPath(domain string) string {
 	return CheckDomainRoute + url.PathEscape(strings.TrimSuffix(domain, "."))
 }
 
+// checkDomainLink is the address of the panel's answer, for the device it
+// was checked for.
+func checkDomainLink(view CheckDomainView) string {
+	if view.DeviceInput == "" {
+		return CheckDomainPath(view.Domain)
+	}
+	return CheckDomainPath(view.Domain) + "?" + url.Values{"device": {view.DeviceInput}}.Encode()
+}
+
 // CheckDomainVerdict is what blocking does with a domain.
 type CheckDomainVerdict string
 
@@ -34,8 +43,13 @@ const (
 // it asks for one.
 type CheckDomainView struct {
 	// Input is the domain as it was asked about.
-	Input   string
-	Checked bool
+	Input string
+	// DeviceInput is the device it was asked about for, if any, and
+	// DeviceOptions the devices the panel offers. Without options the panel
+	// doesn't ask for a device.
+	DeviceInput   string
+	DeviceOptions []RuleSetDeviceOption
+	Checked       bool
 	// Domain is Input as blocking reads it.
 	Domain      string
 	Verdict     CheckDomainVerdict
@@ -50,6 +64,11 @@ type CheckDomainView struct {
 	// panel doesn't offer to block it again.
 	OnBlockList bool
 	Zone        string
+	// Device names the device checked for, empty for a typical one. RuleSet
+	// names the rule set that applied, and OwnRule says Rule is one of its own.
+	Device  string
+	RuleSet string
+	OwnRule bool
 	// CanWrite offers Allow and Block.
 	CanWrite bool
 	Message  string
@@ -65,7 +84,9 @@ templ checkDomainSearch() {
 }
 
 func checkDomainDrawerRoute() templ.Attributes {
-	return insightDrawerRoute(CheckDomainRoute, "/ui/blocking/check", "domain", "check-domain-content", "check-domain-loading", "/blocked")
+	attributes := insightDrawerRoute(CheckDomainRoute, "/ui/blocking/check", "domain", "check-domain-content", "check-domain-loading", "/blocked")
+	attributes["data-drawer-forward"] = "device"
+	return attributes
 }
 
 // checkDomainDialog is the panel's shell on the Blocking page.
@@ -97,6 +118,18 @@ templ CheckDomainDrawer(view CheckDomainView) {
 		// Checking another domain gives the panel that domain's address.
 		<form class="check-domain-form" data-drawer-navigate="domain" role="search">
 			@SearchField("Domain to check", "ads.example.com", ifThen(view.Checked, view.Domain, view.Input), "", templ.Attributes{"name": "domain", "id": "check-domain-input", "autocapitalize": "off", "spellcheck": "false", "data-drawer-focus": true})
+			if len(view.DeviceOptions) > 0 {
+				<label class="sr-only" for="check-domain-device">Device to check for</label>
+				<span class="suggest-input">
+					<input id="check-domain-device" name="device" list="check-domain-device-options" value={ view.DeviceInput } placeholder="Any device" autocomplete="off" spellcheck="false"/>
+					<span class="styled-select-chevron" aria-hidden="true"></span>
+				</span>
+				<datalist id="check-domain-device-options">
+					for _, option := range view.DeviceOptions {
+						<option value={ option.Value } label={ option.Label }></option>
+					}
+				</datalist>
+			}
 			@components.Button(components.ButtonProps{Label: "Check", Type: "submit"})
 		</form>
 		@Toast(view.Message, "success")
@@ -122,6 +155,14 @@ templ CheckDomainDrawer(view CheckDomainView) {
 					}
 				}
 			}
+			if view.RuleSet != "" {
+				<section class="query-detail-answer" aria-labelledby="check-domain-rule-set">
+					<h3 id="check-domain-rule-set">Rule set</h3>
+					<div class="check-domain-lists">
+						<button class="button outline compact" type="button" { drawerOpener(RuleSetDrawerLink(view.RuleSet))... } aria-label={ "View details for " + view.RuleSet }>@Icon("users")<span>{ view.RuleSet }</span></button>
+					</div>
+				</section>
+			}
 			if len(view.Lists) > 0 || view.CustomBlocked {
 				<section class="query-detail-answer" aria-labelledby="check-domain-lists">
 					<h3 id="check-domain-lists">Block lists</h3>
@@ -135,7 +176,16 @@ templ CheckDomainDrawer(view CheckDomainView) {
 					</div>
 				</section>
 			}
-			<p class="check-domain-note">This is the answer for a device on the Default rules. A device in a <a class="inline-link" href="/blocked?tab=rule-sets">rule set</a> can get a different one.</p>
+			<p class="check-domain-note">
+				switch {
+					case view.Device != "" && view.RuleSet != "":
+						{ "This is the answer for " + view.Device + ", which uses the " + view.RuleSet + " rule set." }
+					case view.Device != "":
+						{ "This is the answer for " + view.Device + "." }
+					default:
+						This is the answer for a device on the Default rules. A device in a <a class="inline-link" href="/blocked?tab=rule-sets">rule set</a> can get a different one.
+				}
+			</p>
 		}
 	}
 }
@@ -143,23 +193,28 @@ templ CheckDomainDrawer(view CheckDomainView) {
 templ checkDomainFooter(view CheckDomainView) {
 	if view.Checked {
 		<div class="query-detail-policy-actions insight-drawer-actions">
-			@CopyLinkButton(CheckDomainPath(view.Domain))
+			@CopyLinkButton(checkDomainLink(view))
 			// One way out of each answer: a blocked domain can be allowed,
 			// and any other blocked.
-			if view.CanWrite && view.Zone == "" {
+			// Allowing everywhere can't beat a rule set's own block; that rule
+			// set's panel can.
+			if view.CanWrite && view.Zone == "" && !(view.OwnRule && view.Verdict == CheckDomainBlocked) {
 				if view.Verdict == CheckDomainBlocked {
-					@checkDomainRuleButton(view.Domain, "allow")
+					@checkDomainRuleButton(view, "allow")
 				} else if !view.OnBlockList {
-					@checkDomainRuleButton(view.Domain, "block")
+					@checkDomainRuleButton(view, "block")
 				}
 			}
 		</div>
 	}
 }
 
-templ checkDomainRuleButton(domain, action string) {
+templ checkDomainRuleButton(view CheckDomainView, action string) {
 	<form hx-post="/ui/blocking/check/rule" hx-target="#check-domain-content" hx-swap="innerHTML" hx-disable="find button">
-		<input type="hidden" name="domain" value={ domain }/>
+		<input type="hidden" name="domain" value={ view.Domain }/>
+		if view.DeviceInput != "" {
+			<input type="hidden" name="device" value={ view.DeviceInput }/>
+		}
 		<input type="hidden" name="action" value={ action }/>
 		if action == "block" {
 			@components.Button(components.ButtonProps{Label: "Block", Icon: "shield-x", Variant: components.ButtonOutline, Destructive: true, Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})

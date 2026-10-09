@@ -282,11 +282,11 @@ func (handler *Handler) resolveRequest(request *dns.Msg, name string, runtime *R
 	if !recursionAllowed {
 		return recursionNotAllowed(request)
 	}
-	policy, policyRule, policySources := runtime.policyDecision(name, clientIP, handler.DeviceAddressTable(), handler.BlockingPaused())
-	if policy == querylog.PolicyBlocked || policy == querylog.PolicyHeld {
+	policy := runtime.policyDecision(name, clientIP, handler.DeviceAddressTable(), handler.BlockingPaused())
+	if policy.Decision == querylog.PolicyBlocked || policy.Decision == querylog.PolicyHeld {
 		handler.blocked.Add(1)
 		return resolution{response: runtime.blockedResponse(request), source: querylog.SourceBlocked,
-			decision: querylog.Decision{Policy: policy, PolicyRule: policyRule, PolicySources: policySources, Resolver: querylog.ResolverBlocked}}
+			decision: policy.decision("", querylog.ResolverBlocked)}
 	}
 	if response, found, prefetch := runtime.cache.GetWithPrefetch(request); found {
 		handler.cacheHits.Add(1)
@@ -298,7 +298,7 @@ func (handler *Handler) resolveRequest(request *dns.Msg, name string, runtime *R
 			}
 		}
 		return resolution{response: response, source: querylog.SourceCache,
-			decision: querylog.Decision{Policy: policy, PolicyRule: policyRule, PolicySources: policySources, Cache: querylog.CacheHit, Resolver: querylog.ResolverCache}}
+			decision: policy.decision(querylog.CacheHit, querylog.ResolverCache)}
 	}
 	if !request.RecursionDesired {
 		return recursionRefused(request)
@@ -316,7 +316,7 @@ func (handler *Handler) resolveRequest(request *dns.Msg, name string, runtime *R
 		if zone, found := locallyServedZone(request.Question[0].Name); found {
 			handler.localAnswers.Add(1)
 			return resolution{response: locallyServedResponse(request, zone), source: querylog.SourceLocal,
-				decision: querylog.Decision{Policy: policy, PolicyRule: policyRule, PolicySources: policySources, Cache: querylog.CacheMiss, Resolver: querylog.ResolverLocallyServed}}
+				decision: policy.decision(querylog.CacheMiss, querylog.ResolverLocallyServed)}
 		}
 	}
 	release, admitted := handler.admission.acquire(clientIP, runtime.maxConcurrent, runtime.maxConcurrentPerClient)
@@ -329,9 +329,7 @@ func (handler *Handler) resolveRequest(request *dns.Msg, name string, runtime *R
 		defer release()
 		result = handler.resolveShared(context.Background(), request, name, runtime, forwarders, true, clientIP)
 	}
-	result.decision.Policy = policy
-	result.decision.PolicyRule = policyRule
-	result.decision.PolicySources = policySources
+	policy.record(&result.decision)
 	if result.decision.Cache == "" {
 		result.decision.Cache = querylog.CacheMiss
 	}

@@ -279,6 +279,8 @@ templ QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) {
 		data-query-detail-resolver-label={ entry.Decision.Resolver }
 		data-query-detail-resolver-detail={ entry.Decision.ResolverDetail }
 		data-query-detail-dnssec-label={ entry.Decision.DNSSEC }
+		data-query-detail-check-device={ entry.Decision.CheckDevice }
+		data-query-detail-rule-set-block={ fmt.Sprint(entry.Decision.RuleSetBlock) }
 		if entry.ID > 0 {
 			data-query-detail-id={ strconv.FormatInt(entry.ID, 10) }
 			data-query-detail-link={ QueryPath(entry.ID, entry.Name) }
@@ -296,7 +298,9 @@ templ QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) {
 					if entry.Source != "blocked" {
 						@QueryPolicyAction(entry.Name, "block", "shield-x", "Block "+entry.Name)
 					}
-					@QueryPolicyAction(entry.Name, "allow", "shield-check", "Allow "+entry.Name)
+					if !entry.Decision.RuleSetBlock {
+						@QueryPolicyAction(entry.Name, "allow", "shield-check", "Allow "+entry.Name)
+					}
 				}
 			</div>
 		</td>
@@ -415,7 +419,7 @@ templ QueryDetail(view QueryDetailView) {
 				<p class="query-detail-explain-legacy" data-query-detail-explain-legacy hidden?={ !view.Loaded || entry.Decision.Available }>Decision details were not recorded for this older query.</p>
 				// The page's script points it at the open query's domain, and
 				// shows it only for a blocked query.
-				<a class="inline-link query-detail-why" href={ templ.SafeURL(CheckDomainPath(entry.Name)) } data-query-detail-why hidden?={ !view.Loaded || entry.Source != "blocked" }>@Icon("shield-question")<span>Why is this blocked?</span></a>
+				<a class="inline-link query-detail-why" href={ templ.SafeURL(checkDomainLink(CheckDomainView{Domain: entry.Name, DeviceInput: entry.Decision.CheckDevice})) } data-query-detail-why hidden?={ !view.Loaded || entry.Source != "blocked" }>@Icon("shield-question")<span>Why is this blocked?</span></a>
 			</section>
 		}
 	}
@@ -473,7 +477,7 @@ templ queryDetailFooter(view QueryDetailView) {
 		}
 		if view.CanBlocking {
 			<form data-query-detail-policy="block" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend" hidden?={ view.Entry.Source == "blocked" }><input type="hidden" name="domain" value={ view.Entry.Name } data-query-detail-domain/><input type="hidden" name="action" value="block"/>@components.Button(components.ButtonProps{Label: "Block", Icon: "shield-x", Variant: components.ButtonOutline, Destructive: true, Type: "submit"})</form>
-			<form data-query-detail-policy="allow" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" value={ view.Entry.Name } data-query-detail-domain/><input type="hidden" name="action" value="allow"/>@components.Button(components.ButtonProps{Label: "Allow", Icon: "shield-check", Type: "submit"})</form>
+			<form data-query-detail-policy="allow" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend" hidden?={ view.Entry.Decision.RuleSetBlock }><input type="hidden" name="domain" value={ view.Entry.Name } data-query-detail-domain/><input type="hidden" name="action" value="allow"/>@components.Button(components.ButtonProps{Label: "Allow", Icon: "shield-check", Type: "submit"})</form>
 		}
 	</div>
 }

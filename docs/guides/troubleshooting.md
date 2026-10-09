@@ -21,7 +21,7 @@ Open **Logs → Queries**, constrain the time range, and filter by client, name,
 
 | Signal | What to investigate |
 | --- | --- |
-| Blocked by policy | Matching list or custom rule, allowed override, and client bypass |
+| Blocked by policy | Matching list or custom rule, allowed override, and the device's rule set, which the explanation names along with any app it blocks |
 | Cache hit | Whether this is an older answer; check TTL and the original upstream or local source |
 | Authoritative/local answer | The most-specific matching zone or host override, including disabled or expired records |
 | Forwarded answer | Selected route, upstream reachability, transport, and timeout |

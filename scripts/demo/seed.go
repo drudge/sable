@@ -62,6 +62,9 @@ func seedTraffic(ctx context.Context, dsn string, policy *demoBlockPolicy) error
 	if err := backing.WriteQueryEvents(ctx, seedRefusedLookups(now)); err != nil {
 		return fmt.Errorf("write demo refused lookups: %w", err)
 	}
+	if err := backing.WriteQueryEvents(ctx, seedRuleSetBlocks(now)); err != nil {
+		return fmt.Errorf("write demo rule set blocks: %w", err)
+	}
 	if err := seedUniFiTraffic(ctx, backing); err != nil {
 		return err
 	}
@@ -226,6 +229,25 @@ func seedRefusedLookups(now time.Time) []querylog.Event {
 				Decision: querylog.Decision{Policy: querylog.PolicyNotEvaluated, Resolver: querylog.ResolverNotAllowed},
 			})
 		}
+	}
+	return events
+}
+
+// seedRuleSetBlocks is a warehouse handheld trying TikTok and YouTube on
+// breaks over the last few hours, blocked each time by the Warehouse rule
+// set's apps, so the query log names the rule set and the app.
+func seedRuleSetBlocks(now time.Time) []querylog.Event {
+	names := []string{"www.tiktok.com.", "v16-webapp.tiktokcdn.com.", "www.youtube.com.", "i.ytimg.com."}
+	rules := []string{"tiktok.com", "tiktokcdn.com", "youtube.com", "ytimg.com"}
+	events := make([]querylog.Event, 0, 12*len(names))
+	for step := range 12 {
+		at := now.Add(-time.Duration(step)*17*time.Minute - 90*time.Second)
+		index := step % len(names)
+		events = append(events, querylog.Event{
+			OccurredAt: at, ClientIP: "10.20.20.118", Name: names[index], RecordType: dns.TypeA, Class: dns.ClassINET,
+			ResponseCode: dns.RcodeNameError, Source: querylog.SourceBlocked, Protocol: "UDP", Duration: 140 * time.Microsecond,
+			Decision: querylog.Decision{Policy: querylog.PolicyBlocked, PolicyRule: rules[index], RuleSet: "Warehouse", OwnRule: true, Resolver: querylog.ResolverBlocked},
+		})
 	}
 	return events
 }

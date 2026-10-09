@@ -1046,6 +1046,25 @@ func TestHandlerRecordsWhichBlockListsSuppliedTheRule(t *testing.T) {
 	}
 }
 
+func TestHandlerRecordsTheRuleSetThatDecided(t *testing.T) {
+	t.Parallel()
+	configuration := ruleSetTestConfig()
+	configuration.Forwarders = []string{"127.0.0.1:1"}
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(runtime)
+	for name, own := range map[string]bool{"www.games.example.": true, "unlisted.example.": false} {
+		request := new(dns.Msg)
+		request.SetQuestion(name, dns.TypeA)
+		got := handler.resolveForClient(request, runtime, "192.0.2.4")
+		if got.decision.RuleSet != "Kids" || got.decision.OwnRule != own || got.decision.Resolver == "" {
+			t.Errorf("%s decision = %+v, want Kids, own rule %t", name, got.decision, own)
+		}
+	}
+}
+
 func TestHandlerCapturesClientAddressOncePerQuery(t *testing.T) {
 	t.Parallel()
 

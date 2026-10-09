@@ -63,6 +63,18 @@ func TestLookupPrefersTheMostSpecificOwner(t *testing.T) {
 	}
 }
 
+func TestForSuffixNamesOnlyAnAppsOwnDomain(t *testing.T) {
+	t.Parallel()
+	if service, found := ForSuffix("TikTokCDN.com."); !found || service.ID != "tiktok" {
+		t.Errorf("ForSuffix(tiktokcdn.com) = %q, %t; want tiktok", service.ID, found)
+	}
+	for _, name := range []string{"www.tiktok.com", "example.com", ""} {
+		if service, found := ForSuffix(name); found {
+			t.Errorf("ForSuffix(%q) = %q, want no app", name, service.ID)
+		}
+	}
+}
+
 func TestGroupSumsDomainsIntoServices(t *testing.T) {
 	t.Parallel()
 	usages := Group([]Domain{

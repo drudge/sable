@@ -25,7 +25,7 @@ type mcpCacheNamePurger interface {
 }
 
 type domainPolicyChecker interface {
-	DomainPolicy(string) dnsserver.DomainPolicy
+	DomainPolicy(name, address, mac string) dnsserver.DomainPolicy
 }
 
 type mcpAnswer struct {
@@ -68,13 +68,15 @@ var mcpDNSTools = []mcpTool{
 	{
 		Name:  "check_domain",
 		Title: "Check whether a domain is blocked",
-		Description: "Say whether blocking stops a domain for a typical device, which rule and block list cause it, " +
+		Description: "Say whether blocking stops a domain for a device, which rule and block list cause it, " +
 			"and whether the domain has its own exact entry among the allowed domains (on_allow_list) or the custom blocked " +
-			"domains (on_block_list), apart from any wildcard entry or subscribed block list. This is the answer for " +
-			"devices on the Default rules; a device in a rule set can get a different one. " +
+			"domains (on_block_list), apart from any wildcard entry or subscribed block list. Without a device this is the " +
+			"answer for a device on the Default rules; with one it follows that device's rule set (rule_set) and any hold, " +
+			"and app names the app when the rule set blocks it by app. " +
 			"Use it when an app or site will not load.",
 		InputSchema: mcpObjectSchema(map[string]any{
 			"domain": mcpString("Domain to check, for example ads.example.com."),
+			"device": mcpString("Optional device to check for: its name, IP address, or hardware address."),
 		}, []string{"domain"}),
 		Annotations: mcpToolAnnotations{Title: "Check whether a domain is blocked", ReadOnlyHint: true, IdempotentHint: true},
 		call:        (*Server).mcpCheckDomain,
@@ -251,17 +253,18 @@ func (server *Server) mcpPurgeCache(request *http.Request, arguments json.RawMes
 func (server *Server) mcpCheckDomain(request *http.Request, arguments json.RawMessage) (any, error) {
 	var input struct {
 		Domain string `json:"domain"`
+		Device string `json:"device"`
 	}
 	if err := decodeMCPArguments(arguments, &input); err != nil {
 		return nil, err
 	}
-	check, err := server.checkDomain(request, input.Domain)
+	check, err := server.checkDomain(request, input.Domain, input.Device)
 	if err != nil {
 		return nil, err
 	}
 	output := map[string]any{
 		"domain":        check.Domain,
-		"blocked":       check.Policy.Decision == querylog.PolicyBlocked,
+		"blocked":       check.Blocked(),
 		"decision":      string(check.Policy.Decision),
 		"on_allow_list": check.OnAllowList,
 		"on_block_list": check.OnBlockList,
@@ -275,6 +278,17 @@ func (server *Server) mcpCheckDomain(request *http.Request, arguments json.RawMe
 	}
 	if check.Zone != "" {
 		output["answered_by_zone"] = check.Zone
+	}
+	if check.Device != "" {
+		output["device"] = check.Device
+	}
+	if check.Policy.RuleSet != "" {
+		output["rule_set"] = check.Policy.RuleSet
+	}
+	if check.Policy.OwnRule && check.Policy.Decision == querylog.PolicyBlocked {
+		if app := ownRuleApp(check.Policy.Rule); app != "" {
+			output["app"] = app
+		}
 	}
 	return output, nil
 }

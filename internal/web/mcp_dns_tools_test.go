@@ -29,7 +29,11 @@ func (mcpTestStats) Lookup(name string, recordType uint16) (dnsserver.LookupResu
 
 func (mcpTestStats) PurgeCacheName(string) int { return 2 }
 
-func (mcpTestStats) DomainPolicy(name string) dnsserver.DomainPolicy {
+func (mcpTestStats) DomainPolicy(name, address, mac string) dnsserver.DomainPolicy {
+	// The device at 192.0.2.4 is in Kids, which blocks TikTok by app.
+	if address == "192.0.2.4" && name == "tiktokcdn.com" {
+		return dnsserver.DomainPolicy{Decision: querylog.PolicyBlocked, Rule: name, RuleSet: "Kids", OwnRule: true}
+	}
 	if name == "tracker.example" || strings.HasSuffix(name, ".tracker.example") {
 		return dnsserver.DomainPolicy{Decision: querylog.PolicyBlocked, Rule: "tracker.example", Sources: []string{"Hagezi Pro"}}
 	}
@@ -83,6 +87,17 @@ func TestMCPCheckDomain(t *testing.T) {
 	zoned, failure := callMCPToolForTest(t, server, "sable_pat_admin", "check_domain", map[string]any{"domain": "www.example.test"})
 	if failure != "" || zoned["answered_by_zone"] != "example.test" {
 		t.Fatalf("zone check = %v %q", zoned, failure)
+	}
+	kids, failure := callMCPToolForTest(t, server, "sable_pat_blocking", "check_domain", map[string]any{"domain": "tiktokcdn.com", "device": "192.0.2.4"})
+	if failure != "" || kids["blocked"] != true || kids["rule_set"] != "Kids" || kids["app"] != "TikTok" || kids["device"] == nil ||
+		kids["explanation"] != "Blocked because the Kids rule set blocks TikTok, and tiktokcdn.com is one of its domains." {
+		t.Fatalf("device check = %v %q", kids, failure)
+	}
+	if typical, _ := callMCPToolForTest(t, server, "sable_pat_blocking", "check_domain", map[string]any{"domain": "tiktokcdn.com"}); typical["blocked"] != false || typical["rule_set"] != nil {
+		t.Fatalf("typical device check = %v", typical)
+	}
+	if _, failure := callMCPToolForTest(t, server, "sable_pat_blocking", "check_domain", map[string]any{"domain": "tiktokcdn.com", "device": "nobody"}); !strings.Contains(failure, "device must be") {
+		t.Fatalf("unknown device check = %q", failure)
 	}
 	if _, failure := callMCPToolForTest(t, server, "sable_pat_scoped", "check_domain", map[string]any{"domain": "example.org"}); !strings.Contains(failure, "blocking.read") {
 		t.Fatalf("scoped check = %q", failure)

@@ -78,11 +78,15 @@ type Decision struct {
 	// custom blocked domains, when a query was blocked. When a block list's
 	// exception allowed it, it names the lists that carry the exception. More
 	// than one source can list the same rule, and every one is recorded.
-	PolicySources []string         `json:"policy_sources,omitempty"`
-	Cache         CacheDecision    `json:"cache,omitempty"`
-	Resolver      ResolverDecision `json:"resolver,omitempty"`
-	Route         string           `json:"route,omitempty"`
-	DNSSEC        DNSSECDecision   `json:"dnssec,omitempty"`
+	PolicySources []string `json:"policy_sources,omitempty"`
+	// RuleSet names the blocking rule set the client used. OwnRule says
+	// PolicyRule is one of that rule set's own domains.
+	RuleSet  string           `json:"rule_set,omitempty"`
+	OwnRule  bool             `json:"own_rule,omitzero"`
+	Cache    CacheDecision    `json:"cache,omitempty"`
+	Resolver ResolverDecision `json:"resolver,omitempty"`
+	Route    string           `json:"route,omitempty"`
+	DNSSEC   DNSSECDecision   `json:"dnssec,omitempty"`
 }
 
 type Event struct {
