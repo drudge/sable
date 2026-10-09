@@ -1,0 +1,182 @@
+package pages
+
+import (
+	"fmt"
+
+	"github.com/drudge/sable/internal/web/pages/components"
+)
+
+// InsightDeviceBlockingView is how blocking treats one device: the rule set
+// it uses and what put it there, and whether everything is blocked for it.
+type InsightDeviceBlockingView struct {
+	// RuleSet names the rule set the device uses, empty for the default.
+	RuleSet string
+	// Off says Bypass Clients turns blocking off for the device.
+	Off bool
+	// MatchedBy says which entry chose the rule set, such as "its hardware
+	// address" or "the network 10.20.40.0/24". Empty means none did.
+	MatchedBy string
+	// Own is the rule set the device has by an entry of its own, if any.
+	Own string
+	// Inherited is what the device uses without an entry of its own, such as
+	// "Default" or "Guests (from the network 10.20.40.0/24)".
+	Inherited string
+	RuleSets  []string
+
+	Held bool
+	// HoldEntry is the hardware address, address or network the hold is on.
+	HoldEntry string
+	// HoldFrom says which network or address the hold comes from when it is
+	// not on the device itself.
+	HoldFrom string
+	// HoldUntil says when the hold ends, such as "9:40 PM"; empty when it
+	// lasts until turned off. HoldEndsAt is the same moment in Unix
+	// milliseconds, for the countdown, and HoldLeft what the countdown shows
+	// first.
+	HoldUntil  string
+	HoldEndsAt int64
+	HoldLeft   string
+	// DefaultUntil is the time the Until choice starts at, as HH:MM.
+	DefaultUntil string
+
+	CanEdit bool
+	// Editing is "rule-set" or "hold" while that editor is open.
+	Editing string
+	// BlockingOff says blocking is off for everyone.
+	BlockingOff bool
+}
+
+templ insightDeviceBlocking(view InsightDeviceDrawerView) {
+	<section class="query-detail-answer insight-device-blocking" aria-labelledby="insight-device-blocking-title">
+		<h3 id="insight-device-blocking-title">Blocking</h3>
+		if view.Blocking.BlockingOff {
+			<p class="insight-blocking-note">@Icon("info")<span>Blocking is off for everyone, so none of this applies until it's back on.</span></p>
+		}
+		@insightDeviceRuleSet(view)
+		@insightDeviceHold(view)
+	</section>
+}
+
+templ insightDeviceRuleSet(view InsightDeviceDrawerView) {
+	{{ blocking := view.Blocking }}
+	<div class="insight-blocking-row">
+		<span class="insight-blocking-icon">@Icon(ifThen(blocking.Off, "shield-x", "shield"))</span>
+		<div class="insight-blocking-detail">
+			<strong>{ insightRuleSetTitle(blocking) }</strong>
+			<small>{ insightRuleSetReason(blocking) }</small>
+		</div>
+		if blocking.CanEdit && blocking.Editing != "rule-set" && !blocking.Off {
+			<button class="query-detail-title-action" type="button" hx-get={ insightDeviceURL(view.Device.Key, view.Range) + "&edit=rule-set" } hx-target="#insight-device-content" hx-swap="innerHTML" hx-indicator="#insight-device-content" aria-label={ "Change the rule set of " + view.Device.Label } title="Change rule set" data-replica-primary-action>@Icon("pencil")</button>
+		}
+	</div>
+	if blocking.CanEdit && blocking.Editing == "rule-set" {
+		<form class="insight-type-form insight-rule-set-form" hx-post="/ui/insights/devices/rule-set" hx-target="#insight-device-content" hx-swap="innerHTML" hx-disable="#insight-device-content .insight-rule-set-form button" data-escape-click="#insight-device-content [data-rule-set-cancel]">
+			<input type="hidden" name="key" value={ view.Device.Key }/>
+			<input type="hidden" name="range" value={ view.Range }/>
+			<label class="field-control">
+				<span class="sr-only">Rule set</span>
+				<select name="rule_set" data-styled-select>
+					<option value="" selected?={ blocking.Own == "" }>{ blocking.Inherited }</option>
+					for _, name := range blocking.RuleSets {
+						<option value={ name } selected?={ blocking.Own == name }>{ name }</option>
+					}
+				</select>
+			</label>
+			@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"hx-get": insightDeviceURL(view.Device.Key, view.Range), "hx-target": "#insight-device-content", "hx-swap": "innerHTML", "hx-indicator": "#insight-device-content", "data-rule-set-cancel": true}})
+			<button class="button compact insight-action" type="submit" data-replica-primary-action>@insightActionLabel("Save", "Saving…")</button>
+		</form>
+		if len(blocking.RuleSets) == 0 {
+			<p class="insight-blocking-note">@Icon("info")<span>There are no rule sets yet. Add one in <a href="/blocked?tab=rule-sets">Blocked → Rule Sets</a>.</span></p>
+		}
+	}
+}
+
+templ insightDeviceHold(view InsightDeviceDrawerView) {
+	{{ blocking := view.Blocking }}
+	if blocking.Held {
+		<div class="insight-blocking-row insight-hold" role="status">
+			<span class="insight-blocking-icon">@Icon("shield-x")</span>
+			<div class="insight-blocking-detail">
+				<strong>Everything is blocked</strong>
+				if blocking.HoldUntil == "" {
+					<small>Until you turn it off. Allowed domains still work.</small>
+				} else {
+					<small>
+						{ "Until " + blocking.HoldUntil }
+						<span class="alert-destination-separator" aria-hidden="true">·</span>
+						<span data-countdown-until={ fmt.Sprint(blocking.HoldEndsAt) } data-countdown-refresh={ insightDeviceURL(view.Device.Key, view.Range) } data-countdown-target="#insight-device-content">{ blocking.HoldLeft }</span>
+					</small>
+				}
+				if blocking.HoldFrom != "" {
+					<small>{ "The hold is on " + blocking.HoldFrom + ", so ending it ends it for every device there." }</small>
+				}
+			</div>
+		</div>
+		if blocking.CanEdit {
+			<div class="insight-hold-actions">
+				if blocking.HoldUntil != "" {
+					@components.Button(components.ButtonProps{Label: "Add 30 Minutes", Icon: "plus", Variant: components.ButtonOutline, Compact: true, Attrs: insightHoldAttrs(view, "extend")})
+				}
+				@components.Button(components.ButtonProps{Label: "End Now", Icon: "x", Variant: components.ButtonOutline, Compact: true, Attrs: insightHoldAttrs(view, "end")})
+			</div>
+		}
+	} else if blocking.CanEdit && blocking.Editing == "hold" {
+		<form class="insight-hold-form" hx-post="/ui/insights/devices/hold" hx-target="#insight-device-content" hx-swap="innerHTML" hx-disable="#insight-device-content .insight-hold-form button" data-escape-click="#insight-device-content [data-hold-cancel]">
+			<input type="hidden" name="key" value={ view.Device.Key }/>
+			<input type="hidden" name="range" value={ view.Range }/>
+			<fieldset class="field-control insight-hold-choices">
+				<legend>Block everything for this device</legend>
+				<label><input type="radio" name="hold" value="30m" checked/><span>30 Minutes</span></label>
+				<label><input type="radio" name="hold" value="1h"/><span>1 Hour</span></label>
+				<label class="insight-hold-until">
+					<input type="radio" name="hold" value="until"/><span>Until</span>
+					<input type="time" name="until" value={ blocking.DefaultUntil } aria-label="Block until this time"/>
+				</label>
+				<label><input type="radio" name="hold" value="off"/><span>Until I Turn It Off</span></label>
+				<small>Allowed domains still work.</small>
+			</fieldset>
+			<div class="insight-hold-actions">
+				@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"hx-get": insightDeviceURL(view.Device.Key, view.Range), "hx-target": "#insight-device-content", "hx-swap": "innerHTML", "hx-indicator": "#insight-device-content", "data-hold-cancel": true}})
+				<button class="button compact destructive insight-action" type="submit" data-replica-primary-action>@insightActionLabel("Block Everything", "Blocking…")</button>
+			</div>
+		</form>
+	} else if blocking.CanEdit {
+		<div class="insight-hold-actions">
+			@components.Button(components.ButtonProps{Label: "Block Everything", Icon: "shield-x", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"hx-get": insightDeviceURL(view.Device.Key, view.Range) + "&edit=hold", "hx-target": "#insight-device-content", "hx-swap": "innerHTML", "hx-indicator": "#insight-device-content", "aria-label": "Block everything for " + view.Device.Label, "data-replica-primary-action": true}})
+		</div>
+	}
+}
+
+// insightHoldAttrs posts one change to the device's hold: extend or end.
+func insightHoldAttrs(view InsightDeviceDrawerView, action string) templ.Attributes {
+	values := fmt.Sprintf(`{"key":%q,"range":%q,"entry":%q,"action":%q}`, view.Device.Key, view.Range, view.Blocking.HoldEntry, action)
+	return templ.Attributes{
+		"id": "insight-hold-" + action, "hx-post": "/ui/insights/devices/hold", "hx-vals": values,
+		"hx-target": "#insight-device-content", "hx-swap": "innerHTML", "hx-disable": "#insight-device-content .insight-hold-actions button",
+		"data-replica-primary-action": true,
+	}
+}
+
+func insightRuleSetTitle(blocking InsightDeviceBlockingView) string {
+	switch {
+	case blocking.Off:
+		return "Blocking off"
+	case blocking.RuleSet == "":
+		return "Default rule set"
+	default:
+		return blocking.RuleSet + " rule set"
+	}
+}
+
+func insightRuleSetReason(blocking InsightDeviceBlockingView) string {
+	switch {
+	case blocking.Off:
+		return "Bypass Clients names " + blocking.MatchedBy + "."
+	case blocking.MatchedBy == "":
+		return "No rule set names this device, so it uses the default block lists."
+	case blocking.Own != "":
+		return "Set by " + blocking.MatchedBy + "."
+	default:
+		return "From " + blocking.MatchedBy + "."
+	}
+}

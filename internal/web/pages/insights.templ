@@ -233,6 +233,8 @@ type InsightDeviceDrawerView struct {
 	TopDomains     []InsightDeviceDomainView
 	NewDomains     []InsightDeviceDomainView
 	Apps           []InsightAppView
+	// Blocking is the device's rule set and hold.
+	Blocking InsightDeviceBlockingView
 }
 
 // InsightAppView is one app a device used and how much.
@@ -1705,6 +1707,7 @@ templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
 				@components.Fact(components.FactProps{Label: "Last seen", Value: insightDeviceTime(view.Device.LastSeen, view.TimeDisplay), Wide: true})
 			}
 			@insightDeviceType(view)
+			@insightDeviceBlocking(view)
 			<section class="query-detail-answer" aria-labelledby="insight-device-addresses">
 				<h3 id="insight-device-addresses">{ ifThen(len(view.Device.Addresses) == 1, "Address", "Addresses") }</h3>
 				<div class="insight-client-list">

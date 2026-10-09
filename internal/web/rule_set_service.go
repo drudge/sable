@@ -62,6 +62,30 @@ func (service ruleSetService) SetDefaultLists(ctx context.Context, who actor, li
 	return message, nil
 }
 
+// Assign puts a device in a rule set, or takes it out of the one it has with
+// an empty name. label names the device in the message. addresses are the
+// device's own addresses when it is known by hardware address; see
+// config.SetClientRuleSet.
+func (service ruleSetService) Assign(ctx context.Context, who actor, device config.Client, addresses []string, label string) (string, error) {
+	action, message := "blocking.rule_set.assign", label+" uses the "+device.RuleSet+" rule set"
+	if device.RuleSet == "" {
+		action, message = "blocking.rule_set.unassign", label+" no longer has a rule set of its own"
+	}
+	err := service.update(ctx, who, action, func(configuration *config.Config) error {
+		if device.RuleSet != "" && !slices.ContainsFunc(configuration.Blocking.RuleSets, func(set config.RuleSet) bool { return set.Name == device.RuleSet }) {
+			return refuse(http.StatusUnprocessableEntity, "There is no rule set called %s.", device.RuleSet)
+		}
+		var err error
+		configuration.Clients, err = config.SetClientRuleSet(configuration.Clients, device, addresses...)
+		return err
+	})
+	if err != nil {
+		return "", err
+	}
+	service.server.policyService().finish(ctx, who, action, "", message)
+	return message, nil
+}
+
 func (service ruleSetService) update(ctx context.Context, who actor, action string, change func(*config.Config) error) error {
 	if err := service.server.policyService().ready(who); err != nil {
 		return err

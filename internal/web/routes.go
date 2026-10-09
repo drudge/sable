@@ -226,6 +226,8 @@ func routeTable() []route {
 		{pattern: "GET /ui/insights/app", handler: (*Server).insightsAppPanel, anyPerm: insightsPermissions, insights: true},
 		{pattern: "POST /ui/insights/devices/name", handler: (*Server).nameInsightsDevice, anyPerm: insightsPermissions, insights: true},
 		{pattern: "POST /ui/insights/devices/type", handler: (*Server).typeInsightsDevice, anyPerm: insightsPermissions, insights: true},
+		{pattern: "POST /ui/insights/devices/rule-set", handler: (*Server).deviceRuleSet, perm: auth.PermissionBlockingWrite, insights: true},
+		{pattern: "POST /ui/insights/devices/hold", handler: (*Server).deviceHold, perm: auth.PermissionBlockingWrite, insights: true},
 		{pattern: "POST /ui/insights/feedback", handler: (*Server).hideInsightFinding, anyPerm: insightsPermissions, insights: true},
 		{pattern: "POST /ui/insights/feedback/remove", handler: (*Server).showInsightFinding, anyPerm: insightsPermissions, insights: true},
 		{pattern: "GET /ui/insights/settings", handler: (*Server).insightSettingsPanel, anyPerm: insightsPermissions, insights: true},

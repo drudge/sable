@@ -222,3 +222,21 @@ func BenchmarkPolicyDecision(b *testing.B) {
 		})
 	}
 }
+
+func TestMatchClientPicksLikeTheRuleSetTable(t *testing.T) {
+	t.Parallel()
+	clients := []string{"10.0.0.0/16", "10.0.1.0/24", "3c:22:fb:01:02:03", "10.0.1.9", "not a client"}
+	for _, test := range []struct {
+		address, mac, want string
+	}{
+		{"10.0.1.9", "3c:22:fb:01:02:03", "10.0.1.9"},
+		{"10.0.1.5", "3c:22:fb:01:02:03", "3c:22:fb:01:02:03"},
+		{"10.0.1.5", "", "10.0.1.0/24"},
+		{"10.0.2.5", "", "10.0.0.0/16"},
+		{"192.0.2.1", "", ""},
+	} {
+		if got, _ := MatchClient(clients, test.address, test.mac); got != test.want {
+			t.Errorf("MatchClient(%s, %q) = %q, want %q", test.address, test.mac, got, test.want)
+		}
+	}
+}

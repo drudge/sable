@@ -48,6 +48,25 @@ func identifyClient(clientIP string, devices DeviceAddresses) (policyClient, boo
 	return policyClient{address: address, mac: devices[address]}, true
 }
 
+// MatchClient returns the entry of clients that a client at address, behind
+// hardware address mac, uses, the way rule sets and holds pick one. The first
+// entry naming a client keeps it. Entries Sable cannot read are skipped.
+func MatchClient(clients []string, address, mac string) (string, bool) {
+	client, ok := identifyClient(address, nil)
+	if !ok {
+		return "", false
+	}
+	if parsed, err := net.ParseMAC(mac); err == nil {
+		client.mac = parsed.String()
+	}
+	var table clientTable[string]
+	for _, entry := range clients {
+		_ = table.add(entry, entry)
+	}
+	table.sort()
+	return table.lookup(client)
+}
+
 // clientTable finds the entry for a client: by its exact address, then by the
 // hardware address of the device behind it, then by the most specific
 // network. Lookups run on every query, so they must not allocate.

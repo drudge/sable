@@ -4095,6 +4095,26 @@ html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !i
 .query-detail-header .insight-name-source { flex: 0 0 auto; margin-left: var(--space-1); padding: .1rem .45rem; font-size: .625rem; letter-spacing: normal; text-transform: none; white-space: nowrap; }
 /* App names and other plain words keep the body face. */
 .insight-row-value.plain > strong { font-family: inherit; font-size: .875rem; font-weight: 500; }
+/* How blocking treats a device: its rule set, any hold, and their editors. */
+.insight-device-blocking { display: grid; gap: var(--space-3); }
+.query-detail-answer > .insight-blocking-row { display: flex; align-items: flex-start; gap: var(--space-3); }
+.insight-blocking-icon { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; border-radius: .5rem; background: var(--muted); color: var(--muted-foreground); }
+.insight-blocking-icon .nav-icon { width: 1rem; height: 1rem; }
+.insight-hold .insight-blocking-icon { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+.insight-blocking-detail { display: grid; min-width: 0; flex: 1; gap: .15rem; }
+.query-detail-answer .insight-blocking-detail strong { color: var(--foreground); font-size: .9375rem; font-weight: 600; }
+.query-detail-answer .insight-blocking-detail small { color: var(--muted-foreground); font-size: .8125rem; line-height: 1.4; text-transform: none; }
+.insight-blocking-row > .query-detail-title-action { margin-left: auto; }
+.insight-blocking-note { display: flex; align-items: flex-start; gap: var(--space-2); margin: 0; color: var(--muted-foreground); font-size: .8125rem; line-height: 1.4; }
+.insight-blocking-note .nav-icon { width: .9rem; height: .9rem; flex: 0 0 .9rem; margin-top: .15rem; }
+.query-detail-answer > .insight-hold-actions, .insight-hold-form > .insight-hold-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
+.insight-hold-form { display: grid; gap: var(--space-3); }
+.insight-hold-choices { display: grid; gap: var(--space-2); margin: 0; border: 0; padding: 0; }
+.insight-hold-choices legend { margin-bottom: var(--space-1); padding: 0; color: var(--foreground); font-size: .875rem; font-weight: 500; }
+.insight-hold-choices label { display: flex; align-items: center; gap: var(--space-2); font-size: .875rem; }
+.insight-hold-choices input[type="time"] { width: 8rem; margin-left: var(--space-1); }
+.insight-hold-choices small { color: var(--muted-foreground); font-size: .8125rem; }
+.insight-hold-form button:disabled, .insight-hold-actions button:disabled { cursor: wait; }
 /* What a device is: the guess, its evidence, and the correction. */
 .insight-device-type { display: grid; gap: .6rem; }
 .query-detail-answer.insight-device-type > .insight-type-summary { display: flex; }
@@ -4366,7 +4386,7 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .alert-format:has(input:disabled) { cursor: not-allowed; opacity: .5; }
 :is(.alert-sends-choice, .rule-set-choice) { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); font-size: .8125rem; font-weight: 400; }
 :is(.alert-sends-choice, .alert-sends-groups, .rule-set-choice, .rule-set-list-choices) label { display: inline-flex; align-items: center; gap: .45rem; cursor: pointer; }
-:is(.alert-sends, .rule-set-lists) :is(input[type="radio"], input[type="checkbox"]) { width: 1rem; height: 1rem; flex: 0 0 1rem; margin: 0; padding: 0; accent-color: var(--foreground); }
+:is(.alert-sends, .rule-set-lists, .insight-hold-choices) :is(input[type="radio"], input[type="checkbox"]) { width: 1rem; height: 1rem; flex: 0 0 1rem; margin: 0; padding: 0; accent-color: var(--foreground); }
 :is(.alert-sends-groups, .rule-set-list-choices) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem var(--space-4); margin-top: .65rem; border-top: 1px solid var(--border); padding-top: .65rem; font-size: .8125rem; font-weight: 400; }
 .alert-sends-groups small { color: var(--muted-foreground); font-size: .68rem; }
 /* Everything needs no list of groups. */
