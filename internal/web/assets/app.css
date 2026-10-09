@@ -4504,7 +4504,8 @@ input[type="checkbox"]:not([role="switch"], .switch > input):disabled { cursor: 
 .rule-set-app-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: var(--space-2); }
 .rule-set-app-choice { position: relative; display: flex; min-width: 0; min-height: 2.75rem; align-items: center; gap: .6rem; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); padding: .45rem .6rem; cursor: pointer; font-size: .8125rem; font-weight: 500; transition: border-color 120ms ease, background 120ms ease; }
 .rule-set-app-choice:hover { background: color-mix(in oklch, var(--muted) 45%, transparent); }
-.rule-set-app-choice > input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
+/* The tile is the checkbox, so the box itself steps out of the row. */
+.rule-set-app-choice > input[type="checkbox"][name="app"] { position: absolute; width: 1px; min-width: 0; height: 1px; min-height: 0; margin: 0; opacity: 0; pointer-events: none; }
 .rule-set-app-choice > .app-icon { width: 1.75rem; height: 1.75rem; flex-basis: 1.75rem; }
 .rule-set-app-choice > span:not(.rule-set-app-check, .app-icon) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rule-set-app-check { display: grid; width: 1.125rem; height: 1.125rem; flex: 0 0 1.125rem; place-items: center; border: 1px solid var(--input); border-radius: 999px; color: transparent; }
