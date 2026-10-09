@@ -37,18 +37,14 @@ type blockingPauser interface {
 }
 
 func (server *Server) blockingPage(writer http.ResponseWriter, request *http.Request) {
-	view := server.blockingView(request, "", "", request.URL.Query().Get("tab"))
-	server.render(writer, request, pages.BlockingPage(view))
+	tab := request.URL.Query().Get("tab")
+	// A rule set's address opens its panel over the tab that lists it.
+	if tab == "" && strings.HasPrefix(request.URL.Path, pages.RuleSetRoute) {
+		tab = ruleSetsTab
+	}
+	server.render(writer, request, pages.BlockingPage(server.blockingView(request, "", "", tab)))
 }
 
-// blockingContent shows the Blocking page's content again, for the Applies to
-// picker on the Domains and Allowed tabs.
-func (server *Server) blockingContent(writer http.ResponseWriter, request *http.Request) {
-	server.render(writer, request, pages.BlockingContent(server.blockingView(request, "", "", request.URL.Query().Get("tab"))))
-}
-
-// blockingView builds the Blocking page. Its Domains and Allowed tabs show the
-// lists the request's rule_set names, or everyone's.
 func (server *Server) blockingView(request *http.Request, message, errorMessage, activeTab string) pages.BlockingPageView {
 	console := server.consoleView(request)
 	snapshot := server.config.Current()
@@ -91,17 +87,12 @@ func (server *Server) blockingView(request *http.Request, message, errorMessage,
 			pausedUntil = time.Time{}
 		}
 	}
-	scope := strings.TrimSpace(request.FormValue("rule_set"))
-	domains, err := ruleSetLists(&snapshot.Config.Blocking, scope)
-	if err != nil {
-		scope = ""
-		domains, _ = ruleSetLists(&snapshot.Config.Blocking, scope)
-	}
 	return pages.BlockingPageView{
 		Console: console, Enabled: snapshot.Config.Blocking.Enabled, PausedUntil: pausedUntil,
 		CompiledDomains: stats.BlockedDomains,
 		BlockedQueries:  server.history.blockedSince(request.Context(), time.Hour, time.Now(), stats),
-		Scope:           scope, Domains: slices.Clone(*domains.blocked), AllowedDomains: slices.Clone(*domains.allowed), Lists: lists,
+		Domains:         append([]string(nil), snapshot.Config.Blocking.Domains...),
+		AllowedDomains:  append([]string(nil), snapshot.Config.Blocking.AllowedDomains...), Lists: lists,
 		RemoteListCount: len(remoteBlockSources(snapshot.Config.Blocking)),
 		UpdateHours:     max(1, int(snapshot.Config.Blocking.UpdateInterval.Duration/time.Hour)),
 		LastUpdate:      updateStatus.LastUpdate, NextUpdate: updateStatus.NextUpdate, Updating: updateStatus.Updating,
@@ -284,7 +275,7 @@ func (server *Server) changePolicyDomain(
 		server.renderPolicyChange(writer, request, tab, "", refuse(http.StatusBadRequest, "Invalid blocking form."))
 		return
 	}
-	result, err := change(request.Context(), requestActor(request, ""), request.FormValue("rule_set"), request.FormValue("domain"), allowed)
+	result, err := change(request.Context(), requestActor(request, ""), "", request.FormValue("domain"), allowed)
 	if err == nil && !result.Changed {
 		err = refuse(http.StatusUnprocessableEntity, "%s", sentence(result.Message))
 	}
@@ -326,7 +317,7 @@ func (server *Server) flushAllowedDomains(writer http.ResponseWriter, request *h
 }
 
 func (server *Server) flushPolicyDomains(writer http.ResponseWriter, request *http.Request, allowed bool) {
-	message, err := server.policyService().Clear(request.Context(), requestActor(request, ""), request.FormValue("rule_set"), allowed)
+	message, err := server.policyService().Clear(request.Context(), requestActor(request, ""), "", allowed)
 	server.renderPolicyChange(writer, request, policyTab(allowed), message, err)
 }
 
@@ -373,7 +364,7 @@ func (server *Server) importPolicyDomains(writer http.ResponseWriter, request *h
 		server.render(writer, request, pages.BlockingContent(server.blockingView(request, "", "The selected file does not contain any valid domains.", tab)))
 		return
 	}
-	message, err := server.policyService().Import(request.Context(), requestActor(request, ""), request.FormValue("rule_set"), domains, invalid, allowed)
+	message, err := server.policyService().Import(request.Context(), requestActor(request, ""), "", domains, invalid, allowed)
 	server.renderPolicyChange(writer, request, tab, message, err)
 }
 
@@ -437,14 +428,12 @@ func (server *Server) exportAllowedDomains(writer http.ResponseWriter, request *
 
 func (server *Server) exportPolicyDomains(writer http.ResponseWriter, request *http.Request, allowed bool) {
 	policy := server.config.Current().Config.Blocking
-	scope := request.URL.Query().Get("rule_set")
-	lists, err := ruleSetLists(&policy, scope)
-	if err != nil {
-		http.NotFound(writer, request)
-		return
+	domains := policy.Domains
+	filename := "blocked-domains.txt"
+	if allowed {
+		domains = policy.AllowedDomains
+		filename = "allowed-domains.txt"
 	}
-	domains := *lists.list(allowed)
-	filename := pages.DomainExportFilename(allowed, scope)
 	writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 	if len(domains) > 0 {

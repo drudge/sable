@@ -66,7 +66,7 @@ templ RuleSetRow(set RuleSetView, index int) {
 	<article class="blocking-source-row rule-set-row" data-rule-set={ set.Name }>
 		<span class="blocking-source-icon">@Icon("users")</span>
 		<div>
-			<strong class="rule-set-name">{ set.Name }</strong>
+			<button class="blocking-source-name rule-set-name" type="button" { drawerOpener(RuleSetDrawerLink(set.Name))... } aria-label={ "View details for " + set.Name }>{ set.Name }</button>
 			<small>{ ruleSetSummary(set) }</small>
 			<small class={ ifThen(len(set.Devices) == 0, "rule-set-devices empty", "rule-set-devices") }>{ ruleSetDevices(set.Devices) }</small>
 		</div>
@@ -106,7 +106,7 @@ templ RuleSetForm(form RuleSetFormView) {
 		</form>
 	} else {
 		<form class="rule-set-form" hx-post="/ui/blocking/rule-sets/save" hx-target="#blocking-content" hx-swap="outerHTML" hx-disable="find button[type='submit']">
-			@components.DialogHeader(components.DialogProps{TitleID: "rule-set-title", Title: ifThen(form.Original == "", "Add Rule Set", "Edit "+form.Original), Description: "Devices in a rule set use only its block lists, plus its own domains."})
+			@components.DialogHeader(components.DialogProps{TitleID: "rule-set-title", Title: ifThen(form.Original == "", "Add Rule Set", "Edit "+form.Original), Description: "Devices in a rule set use only its block lists, plus its own blocked and allowed domains."})
 			if form.Original != "" {
 				<input type="hidden" name="original" value={ form.Original }/>
 			}
@@ -120,13 +120,10 @@ templ RuleSetForm(form RuleSetFormView) {
 					} else {
 						@ruleSetListChoices(form.Lists, form.Set.Lists)
 					}
-					<small class="field-help">Leave them all off to use only the rule set's own domains and the Blocked tab.</small>
+					<small class="field-help">Leave them all off to use only its own domains and the Blocked tab.</small>
 				</fieldset>
-				@components.Field(ruleSetDomainsField) {
-					<textarea name="domains" rows="3" placeholder={ "youtube.com\ntiktok.com" } autocomplete="off" spellcheck="false" { components.FieldAttrs(ruleSetDomainsField)... }>{ strings.Join(form.Set.Domains, "\n") }</textarea>
-				}
-				@components.Field(ruleSetAllowedField) {
-					<textarea name="allowed_domains" rows="3" placeholder="*.school.example" autocomplete="off" spellcheck="false" { components.FieldAttrs(ruleSetAllowedField)... }>{ strings.Join(form.Set.AllowedDomains, "\n") }</textarea>
+				if form.Original == "" {
+					<p class="field-help">Add its own blocked and allowed domains from its panel once it's saved.</p>
 				}
 			</div>
 			@components.DialogFooter("Cancel") {
@@ -143,10 +140,6 @@ templ ruleSetListChoices(lists, chosen []string) {
 		}
 	</div>
 }
-
-var ruleSetDomainsField = components.FieldProps{ID: "rule-set-domains", Label: "Blocked Domains", Help: "One per line. Each also blocks every name under it."}
-
-var ruleSetAllowedField = components.FieldProps{ID: "rule-set-allowed", Label: "Allowed Domains", Help: "One per line. Use *.example.com to allow every name under it."}
 
 // ruleSetFormAttrs makes a button load the rule set form into the dialog
 // and open it.
@@ -188,4 +181,151 @@ func ruleSetDeleteQuestion(set RuleSetView) string {
 		return "Delete " + set.Name + "?"
 	}
 	return "Delete " + set.Name + "? " + plural(len(set.Devices), "Its device goes", "Its devices go") + " back to the Default rules."
+}
+
+const RuleSetRoute = "/blocked/rule-sets/"
+
+// RuleSetPath is the address of one rule set's panel.
+func RuleSetPath(name string) string { return RuleSetRoute + url.PathEscape(name) }
+
+// RuleSetDrawerLink opens a rule set's panel on the Blocking page.
+func RuleSetDrawerLink(name string) *DrawerLink {
+	return &DrawerLink{
+		Dialog: "rule-set-drawer", Loading: "rule-set-drawer-loading", Target: "rule-set-drawer-content",
+		URL: "/ui/blocking/rule-set?" + url.Values{"name": []string{name}}.Encode(), Link: RuleSetPath(name),
+	}
+}
+
+func ruleSetDrawerRoute() templ.Attributes {
+	return insightDrawerRoute(RuleSetRoute, "/ui/blocking/rule-set", "name", "rule-set-drawer-content", "rule-set-drawer-loading", "/blocked?tab=rule-sets")
+}
+
+// RuleSetDrawerView is one rule set's panel: who it covers, its block lists,
+// and its own blocked and allowed domains, which are changed here.
+type RuleSetDrawerView struct {
+	Set RuleSetView
+	// Missing is set when no rule set has the requested name.
+	Missing  bool
+	CanWrite bool
+	Message  string
+	Error    string
+}
+
+// ruleSetDrawer is the panel a rule set opens in, kept outside the page
+// content so the page can refresh beneath it.
+templ ruleSetDrawer() {
+	<dialog class="query-detail-dialog rule-set-drawer" id="rule-set-drawer" aria-labelledby="rule-set-drawer-title" { ruleSetDrawerRoute()... }>
+		<div class="query-detail-content" id="rule-set-drawer-content">
+			@ruleSetLoading()
+		</div>
+	</dialog>
+	<template id="rule-set-drawer-loading">
+		@ruleSetLoading()
+	</template>
+}
+
+templ ruleSetLoading() {
+	@DetailDrawerContent(DetailDrawerView{ID: "rule-set-drawer", TitleID: "rule-set-drawer-title", Eyebrow: "Rule Set", Title: "Loading…", CloseLabel: "Close rule set details"}, templ.NopComponent) {
+		<div class="insight-device-loading" role="status" aria-live="polite">
+			<span class="sr-only">Loading rule set details…</span>
+			<span class="insight-skeleton-line insights-skeleton-block"></span>
+			<span class="insight-skeleton-title insights-skeleton-block"></span>
+			<span class="insight-skeleton-line insights-skeleton-block"></span>
+		</div>
+	}
+}
+
+// RuleSetDrawer is one rule set's details, loaded into the open panel.
+templ RuleSetDrawer(view RuleSetDrawerView) {
+	@DetailDrawerContent(DetailDrawerView{ID: "rule-set-drawer", TitleID: "rule-set-drawer-title", Eyebrow: "Rule Set", Title: ifThen(view.Missing, "Rule set not found", view.Set.Name), CloseLabel: "Close rule set details"}, ruleSetFooter(view)) {
+		@Toast(view.Message, "success")
+		if view.Error != "" {
+			<div class="query-error" role="alert"><strong>Something went wrong</strong><span>{ view.Error }</span></div>
+		}
+		if view.Missing {
+			<div class="query-detail-section-heading"><p>No rule set has this name. It may have been deleted or renamed.</p></div>
+		} else {
+			@components.FactList(components.FactListProps{Class: "query-detail-grid"}) {
+				@components.Fact(components.FactProps{Label: "Devices", Value: ruleSetDeviceFact(view.Set.Devices), Full: true})
+				@components.Fact(components.FactProps{Label: "Block lists", Value: ifThen(len(view.Set.Lists) == 0, "None, only its own domains and the Blocked tab", strings.Join(view.Set.Lists, ", ")), Full: true})
+			}
+			@ruleSetDomains(view, false)
+			@ruleSetDomains(view, true)
+		}
+	}
+}
+
+// ruleSetDomains is one of a rule set's own lists, with a field to add to it.
+templ ruleSetDomains(view RuleSetDrawerView, allowed bool) {
+	{{ kind := domainPolicyKind(allowed) }}
+	<section class="query-detail-answer rule-set-domains" aria-labelledby={ "rule-set-" + kind + "-title" }>
+		<div class="rule-set-domains-heading">
+			<h3 id={ "rule-set-" + kind + "-title" }>{ ifThen(allowed, "Allowed Domains", "Blocked Domains") }</h3>
+			if len(ruleSetList(view.Set, allowed)) > 0 {
+				@components.Badge(components.BadgeProps{Label: formatNumber(uint64(len(ruleSetList(view.Set, allowed))))})
+			}
+		</div>
+		<p class="rule-set-domains-help">{ ruleSetDomainsHelp(view.Set.Name, allowed) }</p>
+		if view.CanWrite {
+			<form class="rule-set-domain-form" hx-post="/ui/blocking/rule-sets/domains/add" hx-target="#rule-set-drawer-content" hx-swap="innerHTML" hx-disable="find button">
+				<input type="hidden" name="name" value={ view.Set.Name }/>
+				<input type="hidden" name="kind" value={ kind }/>
+				<label class="sr-only" for={ "rule-set-add-" + kind }>{ ifThen(allowed, "Domain to allow", "Domain to block") }</label>
+				<input id={ "rule-set-add-" + kind } name="domain" placeholder={ ifThen(allowed, "*.school.example", "games.example") } autocomplete="off" spellcheck="false" required/>
+				@components.Button(components.ButtonProps{Label: ifThen(allowed, "Allow", "Block"), Icon: "plus", Variant: components.ButtonOutline, Compact: true, Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
+			</form>
+		}
+		if len(ruleSetList(view.Set, allowed)) == 0 {
+			<p class="rule-set-domains-empty">{ ifThen(allowed, "No allowed domains of its own.", "No blocked domains of its own.") }</p>
+		} else {
+			<div class="blocked-domain-list rule-set-domain-list">
+				for _, domain := range ruleSetList(view.Set, allowed) {
+					if view.CanWrite {
+						@PolicyDomainRow(domain, allowed, "", ruleSetRemoveAttrs(view.Set.Name, domain, allowed))
+					} else {
+						@PolicyDomainRow(domain, allowed, "", nil)
+					}
+				}
+			</div>
+		}
+	</section>
+}
+
+templ ruleSetFooter(view RuleSetDrawerView) {
+	if !view.Missing {
+		<div class="query-detail-policy-actions insight-drawer-actions">
+			@CopyLinkButton(RuleSetPath(view.Set.Name))
+			if view.CanWrite {
+				@components.Button(components.ButtonProps{Label: "Edit Rule Set", Icon: "pencil", Variant: components.ButtonOutline, Attrs: ruleSetFormAttrs("/ui/blocking/rule-sets/form?"+url.Values{"name": []string{view.Set.Name}}.Encode(), "rule-set-drawer-edit")})
+			}
+		</div>
+	}
+}
+
+func ruleSetList(set RuleSetView, allowed bool) []string {
+	if allowed {
+		return set.AllowedDomains
+	}
+	return set.Domains
+}
+
+func ruleSetDomainsHelp(name string, allowed bool) string {
+	if allowed {
+		return "Allowed for " + name + " devices, even when a block list has them."
+	}
+	return "Blocked for " + name + " devices, along with every name under them."
+}
+
+func ruleSetDeviceFact(devices []string) string {
+	if len(devices) == 0 {
+		return "None yet. Pick this rule set from a device's panel in Insights → Devices."
+	}
+	return strings.Join(devices, ", ")
+}
+
+// ruleSetRemoveAttrs takes a domain off one of a rule set's own lists.
+func ruleSetRemoveAttrs(name, domain string, allowed bool) templ.Attributes {
+	attributes := policyRemoveAttrs(domain, allowed, "/ui/blocking/rule-sets/domains/delete", fmt.Sprintf(`{"name":%q,"domain":%q,"kind":%q}`, name, domain, domainPolicyKind(allowed)), "#rule-set-drawer-content", "innerHTML", " for "+name)
+	attributes["data-replica-primary-action"] = true
+	return attributes
 }

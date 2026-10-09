@@ -43,14 +43,7 @@ func (server *Server) saveRuleSet(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 	set := config.RuleSet{Name: strings.TrimSpace(request.FormValue("name")), Lists: request.Form["lists"]}
-	var err error
-	if set.Domains, err = ruleSetDomains(request.FormValue("domains"), "blocked"); err == nil {
-		set.AllowedDomains, err = ruleSetDomains(request.FormValue("allowed_domains"), "allowed")
-	}
-	message := ""
-	if err == nil {
-		message, err = server.ruleSetService().Save(request.Context(), requestActor(request, ""), request.FormValue("original"), set)
-	}
+	message, err := server.ruleSetService().Save(request.Context(), requestActor(request, ""), request.FormValue("original"), set)
 	if err != nil {
 		server.renderRuleSetProblem(writer, request, err)
 		return
@@ -98,25 +91,6 @@ func (server *Server) renderRuleSetProblem(writer http.ResponseWriter, request *
 	server.render(writer, request, pages.ToastSticky(sentence(err.Error()), "error"))
 }
 
-// ruleSetDomains reads one domain per line, or separated by commas, as the
-// rule set dialog's text boxes take them.
-func ruleSetDomains(value, kind string) ([]string, error) {
-	var domains []string
-	for _, line := range splitFormLines(value) {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		domain, err := normalizePolicyEntry(strings.TrimSuffix(strings.TrimSpace(line), "."))
-		if err != nil {
-			return nil, refuse(http.StatusUnprocessableEntity, "%s is not a valid %s domain: %v", strings.TrimSpace(line), kind, err)
-		}
-		if !slices.Contains(domains, domain) {
-			domains = append(domains, domain)
-		}
-	}
-	return domains, nil
-}
-
 // ruleSetViews describes each rule set with the devices in it, by the name
 // the operator or UniFi gave each one, or its address.
 func (server *Server) ruleSetViews(ctx context.Context, configuration config.Config) []pages.RuleSetView {
@@ -152,4 +126,67 @@ func ruleSetView(set config.RuleSet) pages.RuleSetView {
 		Name: set.Name, Lists: slices.Clone(set.Lists),
 		Domains: slices.Clone(set.Domains), AllowedDomains: slices.Clone(set.AllowedDomains),
 	}
+}
+
+// ruleSetPanel fills a rule set's panel.
+func (server *Server) ruleSetPanel(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	server.render(writer, request, pages.RuleSetDrawer(server.ruleSetDrawerView(request, request.URL.Query().Get("name"))))
+}
+
+func (server *Server) ruleSetDrawerView(request *http.Request, name string) pages.RuleSetDrawerView {
+	configuration := server.config.Current().Config
+	view := pages.RuleSetDrawerView{CanWrite: server.consoleView(request).CanWriteBlocking}
+	index := slices.IndexFunc(configuration.Blocking.RuleSets, func(set config.RuleSet) bool { return set.Name == name })
+	if index < 0 {
+		view.Missing = true
+		return view
+	}
+	set := configuration.Blocking.RuleSets[index]
+	configuration.Blocking.RuleSets = []config.RuleSet{set}
+	view.Set = server.ruleSetViews(request.Context(), configuration)[0]
+	return view
+}
+
+func (server *Server) addRuleSetDomain(writer http.ResponseWriter, request *http.Request) {
+	server.changeRuleSetDomain(writer, request, server.policyService().Add)
+}
+
+func (server *Server) deleteRuleSetDomain(writer http.ResponseWriter, request *http.Request) {
+	server.changeRuleSetDomain(writer, request, server.policyService().Remove)
+}
+
+// changeRuleSetDomain adds a domain to, or takes one off, a rule set's own
+// blocked or allowed list, then shows its panel again with the page beneath.
+func (server *Server) changeRuleSetDomain(
+	writer http.ResponseWriter,
+	request *http.Request,
+	change func(context.Context, actor, string, string, bool) (domainRuleChange, error),
+) {
+	if err := request.ParseForm(); err != nil {
+		server.renderRuleSetChange(writer, request, "", "", refuse(http.StatusBadRequest, "Sable could not read the form."))
+		return
+	}
+	name := request.FormValue("name")
+	result, err := change(request.Context(), requestActor(request, ""), name, request.FormValue("domain"), request.FormValue("kind") == "allowed")
+	if err == nil && !result.Changed {
+		err = refuse(http.StatusUnprocessableEntity, "%s", sentence(result.Message))
+	}
+	server.renderRuleSetChange(writer, request, name, result.Message, err)
+}
+
+func (server *Server) renderRuleSetChange(writer http.ResponseWriter, request *http.Request, name, message string, err error) {
+	view := server.ruleSetDrawerView(request, name)
+	if err != nil {
+		view.Error = sentence(err.Error())
+		writeFragmentStatus(writer, serviceStatus(err))
+	} else {
+		view.Message = sentence(message)
+	}
+	if !server.render(writer, request, pages.RuleSetDrawer(view)) {
+		return
+	}
+	page := server.blockingView(request, "", "", ruleSetsTab)
+	page.OutOfBand = true
+	server.render(writer, request, pages.BlockingContent(page))
 }
