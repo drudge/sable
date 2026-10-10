@@ -59,11 +59,11 @@ func TestRuntimeSchedulesReadTheirTimes(t *testing.T) {
 		t.Fatalf("runtimeSchedules() = %+v", schedules)
 	}
 	bedtime, homework := schedules[0], schedules[1]
-	if bedtime.Name != "Bedtime" || !slices.Equal(bedtime.Days, []time.Weekday{time.Sunday, time.Thursday}) || bedtime.Start != 21*60 || bedtime.End != 7*60 ||
-		bedtime.Location.String() != "America/New_York" || !bedtime.Everything || bedtime.Domains != nil {
+	if bedtime.Name != "Bedtime" || bedtime.Window.Days != [7]bool{time.Sunday: true, time.Thursday: true} || bedtime.Window.Start != 21*60 || bedtime.Window.End != 7*60 ||
+		bedtime.Window.Location.String() != "America/New_York" || !bedtime.Everything || bedtime.Domains != nil {
 		t.Fatalf("Bedtime = %+v", bedtime)
 	}
-	if homework.Everything || homework.Start != 15*60+30 || !slices.Contains(homework.Domains, "tiktok.com") {
+	if homework.Everything || homework.Window.Start != 15*60+30 || !slices.Contains(homework.Domains, "tiktok.com") {
 		t.Fatalf("Homework = %+v", homework)
 	}
 	if got := runtimeSchedules(nil); got != nil {

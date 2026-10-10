@@ -4389,7 +4389,7 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .alert-format:has(input:disabled) { cursor: not-allowed; opacity: .5; }
 :is(.alert-sends-choice, .rule-set-choice) { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); font-size: .8125rem; font-weight: 400; }
 :is(.alert-sends-choice, .alert-sends-groups, .rule-set-choice, .rule-set-list-choices) label { display: inline-flex; align-items: center; gap: .45rem; cursor: pointer; }
-:is(.alert-sends, .rule-set-lists, .insight-hold-choices) :is(input[type="radio"], input[type="checkbox"]) { width: 1rem; height: 1rem; flex: 0 0 1rem; margin: 0; padding: 0; accent-color: var(--foreground); }
+:is(.alert-sends, .rule-set-lists, .rule-set-schedule-blocks, .insight-hold-choices) :is(input[type="radio"], input[type="checkbox"]) { width: 1rem; height: 1rem; flex: 0 0 1rem; margin: 0; padding: 0; accent-color: var(--foreground); }
 :is(.alert-sends-groups, .rule-set-list-choices) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem var(--space-4); margin-top: .65rem; border-top: 1px solid var(--border); padding-top: .65rem; font-size: .8125rem; font-weight: 400; }
 .alert-sends-groups small { color: var(--muted-foreground); font-size: .68rem; }
 /* Everything needs no list of groups. */
@@ -4517,3 +4517,25 @@ input[type="checkbox"]:not([role="switch"], .switch > input):disabled { cursor: 
 .rule-set-app-choice:has(> input:checked) .rule-set-app-check { border-color: var(--foreground); background: var(--foreground); color: var(--background); }
 .rule-set-app-choice:has(> input:focus-visible) { outline: 2px solid var(--ring); outline-offset: 2px; }
 :is(.rule-set-app-group, .rule-set-app-choice)[hidden] { display: none; }
+/* A rule set's schedules: each row says when it runs and what it blocks,
+   with whether it is on now beside Edit and Delete. Its form reuses the app
+   picker's tiles for the days and apps. */
+.rule-set-schedule-row { grid-template-columns: 1.25rem minmax(0, 1fr) auto; }
+.rule-set-schedule-row .rule-set-device-name strong { display: flex; align-items: center; gap: var(--space-2); }
+.rule-set-schedule-row .rule-set-device-name small { font-family: inherit; white-space: normal; }
+.rule-set-schedule-actions { display: flex; align-items: center; gap: var(--space-1); }
+.rule-set-schedule-days, .rule-set-schedule-blocks { margin: 0; border: 0; padding: 0; }
+.rule-set-schedule-days > legend, .rule-set-schedule-blocks > legend { margin-bottom: var(--space-2); padding: 0; }
+.rule-set-schedule-blocks > small { display: block; margin-top: var(--space-2); }
+.rule-set-schedule-day-grid { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.rule-set-schedule-day { width: 2.5rem; height: 2.5rem; min-height: 0; flex: none; justify-content: center; border-radius: 999px; padding: 0; }
+.rule-set-schedule-day > input[type="checkbox"][name="day"] { position: absolute; width: 1px; min-width: 0; height: 1px; min-height: 0; margin: 0; opacity: 0; pointer-events: none; }
+.rule-set-schedule-day > span:not(.app-icon) { flex: 0 1 auto; text-align: center; }
+.rule-set-schedule-day:has(> input:checked) { border-color: var(--foreground); background: var(--foreground); color: var(--background); }
+.rule-set-schedule-times { gap: var(--space-3); }
+.rule-set-schedule-apps { display: grid; gap: var(--space-4); }
+/* Everything needs no apps to pick from. */
+.rule-set-schedule-form:has(input[name="block"][value="everything"]:checked) .rule-set-schedule-apps { display: none; }
+@media (max-width: 640px) {
+	.rule-set-schedule-day-grid { gap: var(--space-1); }
+}

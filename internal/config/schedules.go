@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/drudge/sable/internal/insights/services"
+	"github.com/drudge/sable/internal/weekly"
 )
 
 // What a schedule blocks while it is on.
@@ -46,15 +47,20 @@ type Schedule struct {
 	Apps  []string `toml:"apps,omitempty"`
 }
 
-// Weekdays returns the schedule's days.
-func (schedule Schedule) Weekdays() []time.Weekday {
-	days := make([]time.Weekday, 0, len(schedule.Days))
+// Window returns the schedule's weekly window, read in its time zone.
+func (schedule Schedule) Window() (weekly.Window, error) {
+	location, err := time.LoadLocation(schedule.TimeZone)
+	if err != nil {
+		return weekly.Window{}, err
+	}
+	window := weekly.Window{Location: location}
+	window.Start, window.End = schedule.Minutes()
 	for _, day := range schedule.Days {
 		if index := slices.Index(scheduleDays, day); index >= 0 {
-			days = append(days, time.Weekday(index))
+			window.Days[index] = true
 		}
 	}
-	return days
+	return window, nil
 }
 
 // Minutes returns the schedule's start and end as minutes past midnight.
@@ -193,5 +199,59 @@ func validateScheduleName(field, name string) error {
 	case strings.IndexFunc(name, unicode.IsControl) >= 0:
 		return fmt.Errorf("%s.name must not contain control characters", field)
 	}
+	return nil
+}
+
+// SaveSchedule adds a schedule to the rule set called set, or replaces its
+// schedule called original.
+func (configuration *Config) SaveSchedule(set, original string, schedule Schedule) error {
+	index := slices.IndexFunc(configuration.Blocking.RuleSets, func(existing RuleSet) bool { return existing.Name == set })
+	if index < 0 {
+		return fmt.Errorf("no rule set is called %q", set)
+	}
+	sets := cloneRuleSets(configuration.Blocking.RuleSets)
+	schedules := sets[index].Schedules
+	position := -1
+	if original != "" {
+		position = slices.IndexFunc(schedules, func(existing Schedule) bool { return existing.Name == original })
+		if position < 0 {
+			return fmt.Errorf("%s has no schedule called %q", set, original)
+		}
+	}
+	normalized := cloneSchedules([]Schedule{schedule})
+	normalizeSchedules(normalized)
+	schedule = normalized[0]
+	for other, existing := range schedules {
+		if other != position && strings.EqualFold(existing.Name, schedule.Name) {
+			return fmt.Errorf("%s already has a schedule called %q", set, existing.Name)
+		}
+	}
+	if position < 0 {
+		schedules = append(schedules, schedule)
+	} else {
+		schedules[position] = schedule
+	}
+	sets[index].Schedules = schedules
+	configuration.Blocking.RuleSets = sets
+	return nil
+}
+
+// DeleteSchedule removes the schedule called name from the rule set called
+// set.
+func (configuration *Config) DeleteSchedule(set, name string) error {
+	index := slices.IndexFunc(configuration.Blocking.RuleSets, func(existing RuleSet) bool { return existing.Name == set })
+	if index < 0 {
+		return fmt.Errorf("no rule set is called %q", set)
+	}
+	sets := cloneRuleSets(configuration.Blocking.RuleSets)
+	position := slices.IndexFunc(sets[index].Schedules, func(existing Schedule) bool { return existing.Name == name })
+	if position < 0 {
+		return fmt.Errorf("%s has no schedule called %q", set, name)
+	}
+	sets[index].Schedules = slices.Delete(sets[index].Schedules, position, position+1)
+	if len(sets[index].Schedules) == 0 {
+		sets[index].Schedules = nil
+	}
+	configuration.Blocking.RuleSets = sets
 	return nil
 }

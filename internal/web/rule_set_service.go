@@ -135,3 +135,40 @@ func (service ruleSetService) update(ctx context.Context, who actor, action stri
 	}
 	return err
 }
+
+// SaveSchedule adds a schedule to the rule set called name, or replaces its
+// schedule called original.
+func (service ruleSetService) SaveSchedule(ctx context.Context, who actor, name, original string, schedule config.Schedule) (string, error) {
+	action, message := "blocking.rule_set.schedule.add", name+" has a "+schedule.Name+" schedule"
+	if original != "" {
+		action, message = "blocking.rule_set.schedule.update", name+"'s "+schedule.Name+" schedule saved"
+	}
+	err := service.update(ctx, who, action, func(configuration *config.Config) error {
+		if err := configuration.SaveSchedule(name, original, schedule); err != nil {
+			return refuse(http.StatusUnprocessableEntity, "%s", sentence(err.Error()))
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	service.server.policyService().finish(ctx, who, action, "", message)
+	return message, nil
+}
+
+// DeleteSchedule removes the schedule called schedule from the rule set
+// called name.
+func (service ruleSetService) DeleteSchedule(ctx context.Context, who actor, name, schedule string) (string, error) {
+	action, message := "blocking.rule_set.schedule.delete", name+"'s "+schedule+" schedule deleted"
+	err := service.update(ctx, who, action, func(configuration *config.Config) error {
+		if err := configuration.DeleteSchedule(name, schedule); err != nil {
+			return refuse(http.StatusNotFound, "%s", sentence(err.Error()))
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	service.server.policyService().finish(ctx, who, action, "", message)
+	return message, nil
+}

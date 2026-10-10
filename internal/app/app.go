@@ -484,15 +484,11 @@ func runtimeSchedules(schedules []config.Schedule) []dnsserver.SchedulePolicy {
 	}
 	policies := make([]dnsserver.SchedulePolicy, 0, len(schedules))
 	for _, schedule := range schedules {
-		location, err := time.LoadLocation(schedule.TimeZone)
+		window, err := schedule.Window()
 		if err != nil {
 			continue
 		}
-		start, end := schedule.Minutes()
-		policy := dnsserver.SchedulePolicy{
-			Name: schedule.Name, Days: schedule.Weekdays(), Start: start, End: end, Location: location,
-			Everything: schedule.Block == config.ScheduleBlockEverything,
-		}
+		policy := dnsserver.SchedulePolicy{Name: schedule.Name, Window: window, Everything: schedule.Block == config.ScheduleBlockEverything}
 		if !policy.Everything {
 			policy.Domains = services.Suffixes(schedule.Apps)
 		}

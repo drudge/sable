@@ -23,8 +23,8 @@ func TestSchedulesValidateAndNormalize(t *testing.T) {
 		bedtime.Block != ScheduleBlockEverything || homework.Block != ScheduleBlockApps || !slices.Equal(homework.Apps, []string{"roblox", "youtube"}) {
 		t.Fatalf("normalized schedules = %+v", configuration.Blocking.RuleSets[0].Schedules)
 	}
-	if days := bedtime.Weekdays(); !slices.Equal(days, []time.Weekday{time.Sunday, time.Monday, time.Thursday}) {
-		t.Fatalf("Weekdays() = %v", days)
+	if window, err := bedtime.Window(); err != nil || window.Days != [7]bool{time.Sunday: true, time.Monday: true, time.Thursday: true} || window.Location.String() != "America/New_York" {
+		t.Fatalf("Window() = %+v, %v", window, err)
 	}
 	if start, end := bedtime.Minutes(); start != 21*60 || end != 7*60 {
 		t.Fatalf("Minutes() = %d, %d", start, end)
@@ -110,4 +110,38 @@ block = "everything"
 func equalSchedules(left, right Schedule) bool {
 	return left.Name == right.Name && slices.Equal(left.Days, right.Days) && left.Start == right.Start && left.End == right.End &&
 		left.TimeZone == right.TimeZone && left.Block == right.Block && slices.Equal(left.Apps, right.Apps)
+}
+
+func TestSaveAndDeleteSchedules(t *testing.T) {
+	t.Parallel()
+	configuration := Config{Blocking: Blocking{RuleSets: []RuleSet{{Name: "Kids"}}}}
+	bedtime := Schedule{Name: "Bedtime", Days: []string{"mon"}, Start: "21:00", End: "07:00", TimeZone: "UTC", Block: ScheduleBlockEverything}
+	if err := configuration.SaveSchedule("Kids", "", bedtime); err != nil {
+		t.Fatal(err)
+	}
+	before := configuration.Blocking.RuleSets
+	if err := configuration.SaveSchedule("Kids", "", Schedule{Name: " bedtime "}); err == nil || !strings.Contains(err.Error(), "already has a schedule") {
+		t.Fatalf("SaveSchedule(duplicate) = %v", err)
+	}
+	renamed := bedtime
+	renamed.Name, renamed.Days = "School nights", []string{"sun", "mon"}
+	if err := configuration.SaveSchedule("Kids", "Bedtime", renamed); err != nil {
+		t.Fatal(err)
+	}
+	if schedules := configuration.Blocking.RuleSets[0].Schedules; len(schedules) != 1 || schedules[0].Name != "School nights" || len(before[0].Schedules[0].Days) != 1 {
+		t.Fatalf("schedules = %+v, before = %+v", schedules, before[0].Schedules)
+	}
+	for _, err := range []error{
+		configuration.SaveSchedule("Guests", "", bedtime),
+		configuration.SaveSchedule("Kids", "Bedtime", bedtime),
+		configuration.DeleteSchedule("Kids", "Bedtime"),
+		configuration.DeleteSchedule("Guests", "School nights"),
+	} {
+		if err == nil {
+			t.Fatal("a change to a missing rule set or schedule went through")
+		}
+	}
+	if err := configuration.DeleteSchedule("Kids", "School nights"); err != nil || configuration.Blocking.RuleSets[0].Schedules != nil {
+		t.Fatalf("DeleteSchedule() = %v, schedules %+v", err, configuration.Blocking.RuleSets[0].Schedules)
+	}
 }
