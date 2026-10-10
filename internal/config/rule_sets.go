@@ -38,6 +38,9 @@ type RuleSet struct {
 	// "youtube". Each blocks every domain the app owns, as if it were one of
 	// the rule set's own blocked domains.
 	Apps []string `toml:"apps,omitempty"`
+	// Schedules turn blocking on for the rule set's devices at set times,
+	// such as a bedtime.
+	Schedules []Schedule `toml:"schedules,omitempty"`
 }
 
 func cloneRuleSets(sets []RuleSet) []RuleSet {
@@ -53,6 +56,7 @@ func cloneRuleSets(sets []RuleSet) []RuleSet {
 			Domains:        append([]string(nil), set.Domains...),
 			AllowedDomains: append([]string(nil), set.AllowedDomains...),
 			Apps:           append([]string(nil), set.Apps...),
+			Schedules:      cloneSchedules(set.Schedules),
 		}
 	}
 	return cloned
@@ -67,6 +71,7 @@ func (settings *Blocking) normalizeRuleSets() {
 		set.Domains = normalizePolicyDomains(set.Domains)
 		set.AllowedDomains = normalizePolicyDomains(set.AllowedDomains)
 		set.Apps = sortedUnique(set.Apps)
+		normalizeSchedules(set.Schedules)
 	}
 	slices.SortFunc(settings.RuleSets, func(left, right RuleSet) int {
 		return strings.Compare(left.Name, right.Name)
@@ -113,6 +118,7 @@ func (settings Blocking) validateRuleSets() []error {
 				validationErrors = append(validationErrors, fmt.Errorf("%s.apps[%d] names no app called %q", field, appIndex, app))
 			}
 		}
+		validationErrors = append(validationErrors, validateSchedules(field, set.Schedules)...)
 	}
 	return validationErrors
 }
@@ -149,6 +155,7 @@ func validateClientRuleSets(clients []Client, sets []RuleSet) []error {
 // carries the rule set's devices with it.
 func (configuration *Config) SaveRuleSet(original string, set RuleSet) error {
 	set.Name = strings.TrimSpace(set.Name)
+	set.Schedules = cloneSchedules(set.Schedules)
 	if err := validateRuleSetName("rule set", set.Name); err != nil {
 		return err
 	}

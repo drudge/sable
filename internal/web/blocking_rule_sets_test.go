@@ -57,7 +57,7 @@ func TestRuleSetsTabListsRuleSetsAndTheirDevices(t *testing.T) {
 	response := serveRuleSetRequest(server, http.MethodGet, "/blocked?tab=rule-sets", nil)
 	body := response.Body.String()
 	for _, want := range []string{
-		`id="blocking-tab-rule-sets"`, `data-blocking-panel="rule-sets"`, `data-rule-set="Default"`, "Every block list",
+		`id="blocking-tab-rule-sets"`, `data-blocking-panel="rule-sets"`, `data-rule-set="Default"`, "All your block lists",
 		`data-rule-set="Kids"`, "Lists: Strict · 1 blocked domain", "Devices: Leo&#39;s Switch, 10.20.40.0/24",
 	} {
 		if !strings.Contains(body, want) {
@@ -279,7 +279,7 @@ func TestRuleSetPanelAddsAndRemovesDevices(t *testing.T) {
 func TestRuleSetWithBlockingOffSkipsItsListsAndDomains(t *testing.T) {
 	t.Parallel()
 	server, configuration := newRuleSetTestServer(t)
-	saved := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/save", url.Values{"original": {"Kids"}, "name": {"Kids"}, "off": {"true"}, "lists": {"Strict"}})
+	saved := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/save", url.Values{"original": {"Kids"}, "name": {"Kids"}, "blocking": {"off"}, "lists": {"Strict"}})
 	if saved.Code != http.StatusOK {
 		t.Fatalf("save = %d %s", saved.Code, saved.Body.String())
 	}
@@ -291,7 +291,7 @@ func TestRuleSetWithBlockingOffSkipsItsListsAndDomains(t *testing.T) {
 		t.Fatalf("the Rule Sets tab doesn't say blocking is off:\n%s", saved.Body.String())
 	}
 	form := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-sets/form?name=Kids", nil).Body.String()
-	if !strings.Contains(form, `name="off" value="true" checked`) {
+	if !strings.Contains(form, `name="blocking" value="on"`) || strings.Contains(form, `name="blocking" value="on" checked`) {
 		t.Fatalf("form doesn't show blocking off:\n%s", form)
 	}
 	panel := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-set?name=Kids", nil).Body.String()

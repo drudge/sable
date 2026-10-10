@@ -139,7 +139,7 @@ templ RuleSetForm(form RuleSetFormView) {
 				<fieldset class="field-control rule-set-lists rule-set-scope">
 					<legend>Block Lists</legend>
 					<div class="rule-set-choice">
-						<label><input type="radio" name="scope" value="all" checked?={ len(form.DefaultLists) == 0 }/><span>Every Block List</span></label>
+						<label><input type="radio" name="scope" value="all" checked?={ len(form.DefaultLists) == 0 }/><span>All Your Block Lists</span></label>
 						<label><input type="radio" name="scope" value="chosen" checked?={ len(form.DefaultLists) > 0 }/><span>Only These Lists</span></label>
 					</div>
 					@ruleSetListChoices(form.Lists, form.DefaultLists)
@@ -158,7 +158,8 @@ templ RuleSetForm(form RuleSetFormView) {
 			<div class="isotope-dialog-body rule-set-body">
 				<div class="rule-set-notice" id="rule-set-notice"></div>
 				@components.Field(components.FieldProps{ID: "rule-set-name", Label: "Name", Input: templ.Attributes{"name": "name", "value": form.Set.Name, "placeholder": "Kids", "maxlength": "64", "autocomplete": "off", "required": true}})
-				@components.SwitchField(components.SwitchFieldProps{ID: "rule-set-off", Title: "Turn Off Blocking", Description: "Its devices skip every block list and blocked domain. Blocking everything for one of them still works.", Name: "off", Checked: form.Set.Off, Class: "rule-set-off"})
+				<input type="hidden" name="blocking" value="off"/>
+				@components.SwitchField(components.SwitchFieldProps{ID: "rule-set-blocking", Title: "Blocking", Description: "Its devices use the block lists below and its own blocked domains. Turn it off to let everything through for them; blocking everything for one of them still works.", Name: "blocking", Value: "on", Checked: !form.Set.Off, Class: "rule-set-blocking"})
 				<fieldset class="field-control rule-set-lists">
 					<legend>Block Lists</legend>
 					if len(form.Lists) == 0 {
@@ -199,7 +200,7 @@ func ruleSetFormAttrs(endpoint, id string, more ...string) templ.Attributes {
 
 func defaultListsSummary(lists []string) string {
 	if len(lists) == 0 {
-		return "Every block list"
+		return "All your block lists"
 	}
 	return "Lists: " + strings.Join(lists, ", ")
 }

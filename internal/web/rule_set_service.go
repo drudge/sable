@@ -18,7 +18,8 @@ func (server *Server) ruleSetService() ruleSetService { return ruleSetService{se
 
 // Save adds a rule set, or renames the one called original and replaces its
 // block lists. A rule set's own domains are changed one at a time through
-// policyService, and its apps through SetApps, so Save keeps the ones it has.
+// policyService, and its apps through SetApps, so Save keeps the ones it has,
+// and its schedules.
 func (service ruleSetService) Save(ctx context.Context, who actor, original string, set config.RuleSet) (string, error) {
 	action, message := "blocking.rule_set.add", "Rule set "+set.Name+" added"
 	if original != "" {
@@ -29,6 +30,7 @@ func (service ruleSetService) Save(ctx context.Context, who actor, original stri
 			existing := configuration.Blocking.RuleSets[index]
 			set.Domains, set.AllowedDomains = slices.Clone(existing.Domains), slices.Clone(existing.AllowedDomains)
 			set.Apps = slices.Clone(existing.Apps)
+			set.Schedules = existing.Schedules
 		}
 		return configuration.SaveRuleSet(original, set)
 	})
@@ -80,7 +82,7 @@ func (service ruleSetService) SetApps(ctx context.Context, who actor, name strin
 // SetDefaultLists picks the block lists for devices without a rule set. No
 // lists means every list.
 func (service ruleSetService) SetDefaultLists(ctx context.Context, who actor, lists []string) (string, error) {
-	action, message := "blocking.default_lists.update", "Every block list applies to devices without a rule set"
+	action, message := "blocking.default_lists.update", "All your block lists apply to devices without a rule set"
 	if len(lists) > 0 {
 		message = "Block lists for devices without a rule set saved"
 	}

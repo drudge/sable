@@ -23,6 +23,10 @@ type RuleSetPolicy struct {
 	// Clients are the IP addresses, CIDR networks and hardware addresses the
 	// set applies to.
 	Clients []string
+	// Schedules turn blocking on for the set's clients at set times. One that
+	// blocks everything applies even when the set's blocking is off, as a
+	// hold does.
+	Schedules []SchedulePolicy
 }
 
 // ruleSet is a RuleSetPolicy compiled against the runtime's block lists.
@@ -36,6 +40,9 @@ type ruleSet struct {
 	sources [][]string
 	blocked map[string]uint32
 	allowed allowList
+	// schedules is nil for a set without any, so a query checks the clock
+	// only when one could apply.
+	schedules []*schedule
 }
 
 // allowList holds allowed names: exact ones, and wildcards that allow every
@@ -116,6 +123,13 @@ func (runtime *Runtime) compileRuleSets(configuration RuntimeConfig) error {
 
 func (runtime *Runtime) compileRuleSet(policy RuleSetPolicy) (ruleSet, error) {
 	set := ruleSet{name: policy.Name, off: policy.Off}
+	for _, schedulePolicy := range policy.Schedules {
+		compiled, err := compileSchedule(policy.Name, schedulePolicy)
+		if err != nil {
+			return ruleSet{}, err
+		}
+		set.schedules = append(set.schedules, compiled)
+	}
 	if policy.Off {
 		return set, nil
 	}

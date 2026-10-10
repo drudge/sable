@@ -95,6 +95,9 @@ func (check domainCheck) Explanation(at func(time.Time) string) string {
 	case querylog.PolicyDisabled:
 		return "Blocking is turned off, so nothing is blocked."
 	case querylog.PolicyHeld:
+		if policy.Schedule != "" {
+			return "Everything is blocked for devices in the " + policy.RuleSet + " rule set until its " + policy.Schedule + " schedule ends, apart from their allowed domains."
+		}
 		return "Everything is blocked for this device until its hold ends, apart from its allowed domains."
 	case querylog.PolicyClientBypass:
 		return "Blocking is off for devices in the " + policy.RuleSet + " rule set, so nothing is blocked."
@@ -114,9 +117,9 @@ func (check domainCheck) Explanation(at func(time.Time) string) string {
 	case querylog.PolicyBlocked:
 		if policy.OwnRule {
 			if app := ownRuleApp(policy.Rule); app != "" {
-				return "Blocked because the " + policy.RuleSet + " rule set blocks " + app + ", and " + policy.Rule + " is one of its domains."
+				return "Blocked because " + ruleSetBlocker(policy.RuleSet, policy.Schedule) + " blocks " + app + ", and " + policy.Rule + " is one of its domains."
 			}
-			return "Blocked because the " + policy.RuleSet + " rule set blocks " + policy.Rule + "."
+			return "Blocked because " + ruleSetBlocker(policy.RuleSet, policy.Schedule) + " blocks " + policy.Rule + "."
 		}
 		if len(policy.Sources) > 0 {
 			return "Blocked because " + policy.Rule + " is on " + strings.Join(policy.Sources, ", ") + "."
@@ -125,6 +128,15 @@ func (check domainCheck) Explanation(at func(time.Time) string) string {
 	default:
 		return "Nothing blocks this domain."
 	}
+}
+
+// ruleSetBlocker names what in a rule set blocked a name: the rule set, or
+// one of its schedules.
+func ruleSetBlocker(ruleSet, schedule string) string {
+	if schedule != "" {
+		return "the " + ruleSet + " rule set's " + schedule + " schedule"
+	}
+	return "the " + ruleSet + " rule set"
 }
 
 // ownRuleApp names the app a rule set's own rule blocks, when the rule is

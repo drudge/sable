@@ -286,6 +286,11 @@ func TestQueryDecisionViewNamesTheRuleSet(t *testing.T) {
 		{querylog.Decision{Policy: querylog.PolicyNoMatch, RuleSet: "Kids"}, "The device uses the Kids rule set."},
 		{querylog.Decision{Policy: querylog.PolicyClientBypass, RuleSet: "No Blocking"},
 			"The device is in the No Blocking rule set, which turns blocking off."},
+		{querylog.Decision{Policy: querylog.PolicyBlocked, PolicyRule: "tiktokcdn.com", RuleSet: "Kids", OwnRule: true, Schedule: "Homework"},
+			"Matched tiktokcdn.com, one of TikTok's domains, blocked by the Kids rule set's Homework schedule"},
+		{querylog.Decision{Policy: querylog.PolicyHeld, RuleSet: "Kids", Schedule: "Bedtime"},
+			"The Kids rule set's Bedtime schedule blocks everything but the device's allowed domains."},
+		{querylog.Decision{Policy: querylog.PolicyHeld}, "The device has a hold that blocks everything but its allowed domains."},
 	} {
 		if got := queryDecisionView(test.decision).PolicyDetail; got != test.want {
 			t.Errorf("%+v: detail = %q, want %q", test.decision, got, test.want)

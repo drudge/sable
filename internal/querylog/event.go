@@ -27,7 +27,7 @@ const (
 	PolicyAllowed      PolicyDecision = "allowed"
 	PolicyBlocked      PolicyDecision = "blocked"
 	// PolicyHeld blocked a query because everything is blocked for its client
-	// for a while.
+	// for a while, by a hold or a rule set's schedule.
 	PolicyHeld    PolicyDecision = "held"
 	PolicyNoMatch PolicyDecision = "no_match"
 )
@@ -80,9 +80,11 @@ type Decision struct {
 	// than one source can list the same rule, and every one is recorded.
 	PolicySources []string `json:"policy_sources,omitempty"`
 	// RuleSet names the blocking rule set the client used. OwnRule says
-	// PolicyRule is one of that rule set's own domains.
+	// PolicyRule is one of that rule set's own domains. Schedule names the
+	// rule set's schedule that blocked the query.
 	RuleSet  string           `json:"rule_set,omitempty"`
 	OwnRule  bool             `json:"own_rule,omitzero"`
+	Schedule string           `json:"schedule,omitempty"`
 	Cache    CacheDecision    `json:"cache,omitempty"`
 	Resolver ResolverDecision `json:"resolver,omitempty"`
 	Route    string           `json:"route,omitempty"`

@@ -48,3 +48,25 @@ func TestRuntimeRuleSetsJoinTheirDevices(t *testing.T) {
 		t.Fatalf("defaultLists(Ads) = %v", got)
 	}
 }
+
+func TestRuntimeSchedulesReadTheirTimes(t *testing.T) {
+	t.Parallel()
+	schedules := runtimeSchedules([]config.Schedule{
+		{Name: "Bedtime", Days: []string{"sun", "thu"}, Start: "21:00", End: "07:00", TimeZone: "America/New_York", Block: config.ScheduleBlockEverything},
+		{Name: "Homework", Days: []string{"mon"}, Start: "15:30", End: "17:30", TimeZone: "UTC", Block: config.ScheduleBlockApps, Apps: []string{"tiktok"}},
+	})
+	if len(schedules) != 2 {
+		t.Fatalf("runtimeSchedules() = %+v", schedules)
+	}
+	bedtime, homework := schedules[0], schedules[1]
+	if bedtime.Name != "Bedtime" || !slices.Equal(bedtime.Days, []time.Weekday{time.Sunday, time.Thursday}) || bedtime.Start != 21*60 || bedtime.End != 7*60 ||
+		bedtime.Location.String() != "America/New_York" || !bedtime.Everything || bedtime.Domains != nil {
+		t.Fatalf("Bedtime = %+v", bedtime)
+	}
+	if homework.Everything || homework.Start != 15*60+30 || !slices.Contains(homework.Domains, "tiktok.com") {
+		t.Fatalf("Homework = %+v", homework)
+	}
+	if got := runtimeSchedules(nil); got != nil {
+		t.Fatalf("runtimeSchedules(nil) = %+v, want nil", got)
+	}
+}

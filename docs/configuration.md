@@ -790,9 +790,45 @@ or blocked domain applies to them. It keeps its `lists` and domains for when
 `off` is removed. In the console, open a rule set on **Blocked → Rule Sets** to
 add or remove its devices, addresses, and networks.
 
+A schedule turns blocking on for a rule set's devices at set times each week,
+such as a bedtime:
+
+```toml
+[[blocking.rule_sets]]
+name = "Kids"
+lists = ["OISD Big"]
+
+[[blocking.rule_sets.schedules]]
+name = "Bedtime"
+days = ["sun", "mon", "tue", "wed", "thu"]
+start = "21:00"
+end = "07:00"
+time_zone = "America/New_York"
+block = "everything"
+
+[[blocking.rule_sets.schedules]]
+name = "Homework"
+days = ["mon", "tue", "wed", "thu", "fri"]
+start = "15:30"
+end = "17:30"
+time_zone = "America/New_York"
+block = "apps"
+apps = ["youtube", "roblox"]
+```
+
+A schedule follows the `[[blocking.rule_sets]]` entry it belongs to. It starts
+at `start` on each of its `days` and ends at `end`, using a 24-hour clock; an
+`end` before `start` ends the next morning, so the Bedtime above runs from
+Sunday night to Friday morning. Times are read in `time_zone`, an IANA name,
+so a schedule keeps its hours across daylight saving time. `block =
+"everything"` blocks everything but the rule set's and the global allowed
+domains, the way a hold does, even while blocking is paused or the rule set's
+blocking is off. `block = "apps"` blocks its `apps` like the rule set's own
+`apps`, only while the schedule is on.
+
 The query log's explanation names the rule set a device used, and when a
-rule set's own domain or app blocked a query, it names that rule set and the
-app. **Check a Domain** on the Blocking page, and MCP's `check_domain` with
+rule set's own domain, app, or schedule blocked a query, it names that rule
+set, the app, and the schedule. **Check a Domain** on the Blocking page, and MCP's `check_domain` with
 its `device` argument, give the answer for one device once any devices are in
 rule sets.
 

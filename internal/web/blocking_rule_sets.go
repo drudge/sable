@@ -48,7 +48,11 @@ func (server *Server) saveRuleSet(writer http.ResponseWriter, request *http.Requ
 		server.renderRuleSetProblem(writer, request, refuse(http.StatusBadRequest, "Sable could not read the form."))
 		return
 	}
-	set := config.RuleSet{Name: strings.TrimSpace(request.FormValue("name")), Off: request.FormValue("off") == "true", Lists: request.Form["lists"]}
+	// The Blocking switch sends "on" beside a hidden "off", so a switch left
+	// off sends only "off".
+	blocking := request.Form["blocking"]
+	off := slices.Contains(blocking, "off") && !slices.Contains(blocking, "on")
+	set := config.RuleSet{Name: strings.TrimSpace(request.FormValue("name")), Off: off, Lists: request.Form["lists"]}
 	message, err := server.ruleSetService().Save(request.Context(), requestActor(request, ""), request.FormValue("original"), set)
 	if err != nil {
 		server.renderRuleSetProblem(writer, request, err)
@@ -76,7 +80,7 @@ func (server *Server) saveDefaultLists(writer http.ResponseWriter, request *http
 	if request.FormValue("scope") == "chosen" {
 		lists = request.Form["lists"]
 		if len(lists) == 0 {
-			server.renderRuleSetProblem(writer, request, refuse(http.StatusUnprocessableEntity, "Choose at least one block list, or Every Block List."))
+			server.renderRuleSetProblem(writer, request, refuse(http.StatusUnprocessableEntity, "Choose at least one block list, or All Your Block Lists."))
 			return
 		}
 	}

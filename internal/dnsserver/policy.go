@@ -48,6 +48,8 @@ type DomainPolicy struct {
 	// OwnRule says Rule is one of the rule set's own blocked or allowed
 	// domains rather than a global one or a block list's.
 	OwnRule bool
+	// Schedule names the rule set's schedule that blocked the name.
+	Schedule string
 }
 
 // decision records the policy in the query log beside how the query was
@@ -61,7 +63,7 @@ func (policy DomainPolicy) decision(cache querylog.CacheDecision, resolver query
 // record fills decision's policy fields.
 func (policy DomainPolicy) record(decision *querylog.Decision) {
 	decision.Policy, decision.PolicyRule, decision.PolicySources = policy.Decision, policy.Rule, policy.Sources
-	decision.RuleSet, decision.OwnRule = policy.RuleSet, policy.OwnRule
+	decision.RuleSet, decision.OwnRule, decision.Schedule = policy.RuleSet, policy.OwnRule, policy.Schedule
 }
 
 // DomainPolicy explains how blocking treats name for a device: one at
@@ -118,8 +120,9 @@ func (runtime *Runtime) blockedSources(owner uint32) []string {
 }
 
 // policyDecision decides how blocking treats name for a client. A hold on
-// the client blocks everything but its allowed domains, even while blocking
-// is paused. Otherwise the client's rule set comes first: its own allowed and
+// the client, or a schedule of its rule set that blocks everything, blocks
+// everything but its allowed domains, even while blocking is paused.
+// Otherwise the client's rule set comes first: its own allowed and
 // blocked domains win over the global ones, and only its block lists apply.
 // The returned Sources are shared with the runtime; don't change them.
 func (runtime *Runtime) policyDecision(name, clientIP string, devices DeviceAddresses, paused bool) DomainPolicy {
@@ -133,13 +136,15 @@ func (runtime *Runtime) policyFor(name string, client policyClient, identified, 
 	}
 	set := runtime.ruleSetFor(client, identified)
 	if identified && !runtime.holds.empty() && runtime.held(client, time.Now) {
-		if rule := set.allowedRule(name); rule != "" {
-			return DomainPolicy{Decision: querylog.PolicyAllowed, Rule: rule, RuleSet: set.ruleSetName(), OwnRule: true}
+		return runtime.heldPolicy(name, set, nil)
+	}
+	// Only a set with schedules reads the clock.
+	var now time.Time
+	if set != nil && set.schedules != nil {
+		now = time.Now()
+		if schedule := set.scheduleBlockingEverything(now); schedule != nil {
+			return runtime.heldPolicy(name, set, schedule)
 		}
-		if rule := runtime.allowed.match(name); rule != "" {
-			return DomainPolicy{Decision: querylog.PolicyAllowed, Rule: rule}
-		}
-		return DomainPolicy{Decision: querylog.PolicyHeld}
 	}
 	if paused {
 		return DomainPolicy{Decision: querylog.PolicyPaused}
@@ -158,6 +163,11 @@ func (runtime *Runtime) policyFor(name string, client policyClient, identified, 
 		if rule, _ := matchingDomainRule(set.blocked, name, nil); rule != "" {
 			return DomainPolicy{Decision: querylog.PolicyBlocked, Rule: rule, RuleSet: ruleSet, OwnRule: true}
 		}
+		if set.schedules != nil {
+			if rule, schedule := set.scheduledBlock(name, now); schedule != nil {
+				return DomainPolicy{Decision: querylog.PolicyBlocked, Rule: rule, RuleSet: ruleSet, OwnRule: true, Schedule: schedule.name}
+			}
+		}
 	}
 	if rule := runtime.allowed.match(name); rule != "" {
 		return DomainPolicy{Decision: querylog.PolicyAllowed, Rule: rule, RuleSet: ruleSet}
@@ -170,6 +180,24 @@ func (runtime *Runtime) policyFor(name string, client policyClient, identified, 
 		return DomainPolicy{Decision: querylog.PolicyBlocked, Rule: rule, Sources: set.ownerSources(runtime, owner), RuleSet: ruleSet}
 	}
 	return DomainPolicy{Decision: querylog.PolicyNoMatch, RuleSet: ruleSet}
+}
+
+// heldPolicy blocks everything for a client but the domains it is allowed:
+// by a hold on the client when schedule is nil, or by its rule set's
+// schedule. A hold is the device's own, so it names no rule set unless the
+// set's own allowed domain lets the name through.
+func (runtime *Runtime) heldPolicy(name string, set *ruleSet, schedule *schedule) DomainPolicy {
+	if rule := set.allowedRule(name); rule != "" {
+		return DomainPolicy{Decision: querylog.PolicyAllowed, Rule: rule, RuleSet: set.ruleSetName(), OwnRule: true}
+	}
+	var ruleSet, scheduleName string
+	if schedule != nil {
+		ruleSet, scheduleName = set.name, schedule.name
+	}
+	if rule := runtime.allowed.match(name); rule != "" {
+		return DomainPolicy{Decision: querylog.PolicyAllowed, Rule: rule, RuleSet: ruleSet}
+	}
+	return DomainPolicy{Decision: querylog.PolicyHeld, RuleSet: ruleSet, Schedule: scheduleName}
 }
 
 // matchingException finds a block list's @@ exception for a blocked name. An
