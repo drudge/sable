@@ -42,6 +42,12 @@ Turn it off for the networks Sable serves: open **Settings → Wi-Fi**, tap the 
 
 Changing the blocking response type does not help. NXDOMAIN, zero-address, and custom-address answers all make the request fail, and a custom address pointed at a server that drops connections looks like slow Wi-Fi, which is what Connectivity Assist exists to rescue.
 
+## Block at set times
+
+A rule set can block everything, or just some apps, for its devices at set times each week, such as a bedtime. Open the rule set on **Blocked → Rule Sets** and choose **Add Schedule**: pick its days, start and end times, and whether it blocks everything or chosen apps. An end before the start runs into the next morning. While a schedule blocks everything, its devices still reach their allowed domains.
+
+For one night off, use the buttons on the schedule's row instead of editing it. **Skip** passes over the next window, **Delay 30 Minutes** starts it later or gives 30 more minutes once it's on, and **End Now** stops it until the window would have ended. **Resume** undoes them. The schedule runs as usual from its next window. Each device's panel in **Insights** shows its rule set's schedules too. The settings behind schedules are in the [configuration reference](../configuration.md#rule-sets).
+
 ## Pause or bypass deliberately
 
 **Pause Blocking** is a temporary diagnostic control. Resume promptly after the test; the in-memory pause resets on restart. For a persistent client exception, add the device, address, or network to a rule set with its **Blocking** switch off (**Blocked → Rule Sets**), and remember that a router proxy may hide the individual client address.

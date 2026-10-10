@@ -174,17 +174,21 @@ func (service ruleSetService) DeleteSchedule(ctx context.Context, who actor, nam
 	return message, nil
 }
 
-// SetScheduleOff keeps the schedule called schedule in the rule set called
-// name off until until, or turns it back to its days and times when until is
-// zero. action is the console's word for the change: skip, delay, end or
-// resume.
-func (service ruleSetService) SetScheduleOff(ctx context.Context, who actor, name, schedule, action string, until time.Time) (string, error) {
+// OverrideSchedule skips, delays, ends or resumes the schedule called
+// schedule in the rule set called name, as of now, and says when it is off
+// until: zero once resumed. The console's row buttons and MCP's
+// override_schedule both use it.
+func (service ruleSetService) OverrideSchedule(ctx context.Context, who actor, name, schedule, action string, now time.Time) (string, error) {
+	until, err := service.server.scheduleOffUntil(name, schedule, action, now)
+	if err != nil {
+		return "", err
+	}
 	message := name + "'s " + schedule + " schedule " + map[string]string{
 		scheduleSkip: "skipped", scheduleDelay: "delayed 30 minutes", scheduleEnd: "ended early", scheduleResume: "resumed",
 	}[action]
 	action = "blocking.rule_set.schedule." + action
-	err := service.update(ctx, who, action, func(configuration *config.Config) error {
-		if err := configuration.SetScheduleOff(name, schedule, until, time.Now()); err != nil {
+	err = service.update(ctx, who, action, func(configuration *config.Config) error {
+		if err := configuration.SetScheduleOff(name, schedule, until, now); err != nil {
 			return refuse(http.StatusNotFound, "%s", sentence(err.Error()))
 		}
 		return nil

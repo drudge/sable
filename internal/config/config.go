@@ -159,6 +159,7 @@ type MCP struct {
 var MCPTools = []string{
 	"list_zones", "list_records", "add_record", "set_records", "update_record", "delete_record", "create_zone", "delete_zone",
 	"check_domain", "allow_domain", "block_domain", "remove_domain_rule", "block_device", "unblock_device",
+	"list_schedules", "override_schedule",
 	"list_block_lists", "add_block_list", "remove_block_list", "refresh_block_lists",
 	"lookup", "purge_cache", "list_findings", "search_queries", "search_server_logs",
 	"get_version", "get_stats", "get_dynamic_dns", "sync_dynamic_dns", "get_cluster_status",
@@ -166,12 +167,12 @@ var MCPTools = []string{
 
 // DefaultMCPTools are the tools offered until an operator chooses: records,
 // allow and block rules, lookups, the cache, and how the server is doing.
-// Creating and deleting zones, block lists, blocking a device, updating
+// Creating and deleting zones, block lists, blocking a device, overriding a schedule, updating
 // Dynamic DNS, and the query and runtime logs wait to be added.
 func DefaultMCPTools() []string {
 	return []string{
 		"list_zones", "list_records", "add_record", "set_records", "update_record", "delete_record",
-		"check_domain", "allow_domain", "block_domain", "remove_domain_rule", "list_block_lists",
+		"check_domain", "allow_domain", "block_domain", "remove_domain_rule", "list_schedules", "list_block_lists",
 		"lookup", "purge_cache", "list_findings",
 		"get_version", "get_stats", "get_dynamic_dns", "get_cluster_status",
 	}

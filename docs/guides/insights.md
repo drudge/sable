@@ -41,6 +41,8 @@ The machine Sable runs on is marked **This server**, and the rest of its cluster
 
 Open a device to see its maker, apps, busiest domains, and first-time domains.
 
+Its **Blocking** section names the rule set the device uses and what put it there, with the pencil to change it. Below that, each of the rule set's schedules shows whether it's on or paused and when it next starts or ends. **Block Everything** blocks every domain but the allowed ones for the device for a while; see [Blocking everything for a device](../configuration.md#blocking-everything-for-a-device).
+
 ### Find a device
 
 Search the list by name, hardware or IP address, maker, or type. The filters beside the search narrow it to one type, or to devices that are new, named, unnamed, or not using Sable. The page's address keeps the search and filters, so they last through a range change or a reload.

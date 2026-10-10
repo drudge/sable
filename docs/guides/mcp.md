@@ -23,6 +23,8 @@ You choose each tool in the first step of the setup wizard, and a token still ne
 | `list_block_lists` | On | Lists block lists and their health | `blocking.read` |
 | `add_block_list`, `remove_block_list`, `refresh_block_lists` | Off | Change and refresh block lists | `blocking.write` |
 | `block_device`, `unblock_device` | Off | Block everything but allowed domains for one device, for some minutes, until a time, or until unblocked | `blocking.write` |
+| `list_schedules` | On | Lists each rule set's schedules, whether each is on, and when it next starts or ends | `blocking.read` |
+| `override_schedule` | Off | Skips, delays, ends, or resumes a rule set schedule's current or next window | `blocking.write` |
 | `lookup` | On | Resolves a name through Sable and says where the answer came from | `zones.read` |
 | `purge_cache` | On | Forgets this node's cached answers for one name | `settings.write` |
 | `list_findings` | On | What Insights noticed, with its evidence and a link to each finding | `logs.read` |
