@@ -95,18 +95,27 @@ func (server *Server) saveDefaultLists(writer http.ResponseWriter, request *http
 // renderRuleSetProblem shows why the rule set dialog could not save, inside
 // it, leaving what was typed alone.
 func (server *Server) renderRuleSetProblem(writer http.ResponseWriter, request *http.Request, err error) {
-	writer.Header().Set("HX-Retarget", "#rule-set-notice")
+	server.renderFormProblem(writer, request, "#rule-set-notice", err)
+}
+
+// renderFormProblem shows why a form could not save in its notice, the
+// element target names, leaving what was typed alone.
+func (server *Server) renderFormProblem(writer http.ResponseWriter, request *http.Request, target string, err error) {
+	writer.Header().Set("HX-Retarget", target)
 	writer.Header().Set("HX-Reswap", "innerHTML")
 	writeFragmentStatus(writer, serviceStatus(err))
 	server.render(writer, request, pages.ToastSticky(sentence(err.Error()), "error"))
 }
 
-// ruleSetViews describes each rule set with the devices in it.
-func (server *Server) ruleSetViews(ctx context.Context, configuration config.Config) []pages.RuleSetView {
-	label := server.clientLabeler(ctx)
+// ruleSetViews describes each rule set with the devices in it, and its
+// schedules as they stand now, in the viewer's time format.
+func (server *Server) ruleSetViews(request *http.Request, configuration config.Config) []pages.RuleSetView {
+	label := server.clientLabeler(request.Context())
+	display, now := requestTimeDisplay(request), time.Now()
 	views := make([]pages.RuleSetView, 0, len(configuration.Blocking.RuleSets))
 	for _, set := range configuration.Blocking.RuleSets {
 		view := ruleSetView(set)
+		view.Schedules = ruleSetSchedules(set, display, now)
 		for _, client := range configuration.Clients {
 			if client.RuleSet == set.Name {
 				view.Devices = append(view.Devices, pages.RuleSetDevice{
@@ -190,12 +199,18 @@ func (server *Server) ruleSet(name string) (config.RuleSet, bool) {
 	return sets[index], true
 }
 
-// ruleSetAppPickerView offers the apps in the categories a rule set can
-// block, plus any other app the rule set already blocks, so saving the
-// picker never drops one set in the config file.
+// ruleSetAppPickerView offers the apps a rule set can block, each one
+// checked when it does.
 func ruleSetAppPickerView(set config.RuleSet) pages.RuleSetAppPickerView {
+	return pages.RuleSetAppPickerView{Name: set.Name, Groups: ruleSetAppGroups(set.Apps)}
+}
+
+// ruleSetAppGroups offers the apps in the categories a rule set can block,
+// by category, plus any other app already chosen, so saving never drops one
+// set in the config file.
+func ruleSetAppGroups(chosen []string) []pages.RuleSetAppGroup {
 	categories := slices.Clone(services.BlockCategories)
-	for _, id := range set.Apps {
+	for _, id := range chosen {
 		if service, found := services.Find(id); found && !slices.Contains(categories, service.Category) {
 			categories = append(categories, service.Category)
 		}
@@ -206,18 +221,18 @@ func ruleSetAppPickerView(set config.RuleSet) pages.RuleSetAppPickerView {
 	}
 	for _, service := range services.All() {
 		index := slices.Index(categories, service.Category)
-		chosen := slices.Contains(set.Apps, service.ID)
-		if index < 0 || (!chosen && !slices.Contains(services.BlockCategories, service.Category)) {
+		picked := slices.Contains(chosen, service.ID)
+		if index < 0 || (!picked && !slices.Contains(services.BlockCategories, service.Category)) {
 			continue
 		}
 		app := ruleSetApp(service)
-		app.Chosen = chosen
+		app.Chosen = picked
 		groups[index].Apps = append(groups[index].Apps, app)
 	}
 	for index := range groups {
 		slices.SortFunc(groups[index].Apps, func(left, right pages.RuleSetApp) int { return strings.Compare(left.Name, right.Name) })
 	}
-	return pages.RuleSetAppPickerView{Name: set.Name, Groups: groups}
+	return groups
 }
 
 // saveRuleSetApps replaces the apps a rule set blocks with the ones checked
@@ -284,7 +299,7 @@ func (server *Server) ruleSetDrawerView(request *http.Request, name string) page
 	}
 	set := configuration.Blocking.RuleSets[index]
 	configuration.Blocking.RuleSets = []config.RuleSet{set}
-	view.Set = server.ruleSetViews(request.Context(), configuration)[0]
+	view.Set = server.ruleSetViews(request, configuration)[0]
 	if view.CanWrite {
 		view.DeviceOptions = server.ruleSetDeviceOptions(request.Context(), configuration, set.Name)
 	}

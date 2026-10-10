@@ -18,8 +18,9 @@ type RuleSetView struct {
 	Domains        []string
 	AllowedDomains []string
 	// Apps are the apps the rule set blocks, by name.
-	Apps    []RuleSetApp
-	Devices []RuleSetDevice
+	Apps      []RuleSetApp
+	Devices   []RuleSetDevice
+	Schedules []RuleSetSchedule
 }
 
 // RuleSetApp is one app a rule set can block.
@@ -206,18 +207,21 @@ func defaultListsSummary(lists []string) string {
 }
 
 func ruleSetSummary(set RuleSetView) string {
-	if set.Off {
-		return "Blocking off"
+	parts := []string{"Blocking off"}
+	if !set.Off {
+		parts[0] = ifThen(len(set.Lists) == 0, "No block lists", "Lists: "+strings.Join(set.Lists, ", "))
+		if len(set.Apps) > 0 {
+			parts = append(parts, countLabel(uint64(len(set.Apps)), "blocked app", "blocked apps"))
+		}
+		if len(set.Domains) > 0 {
+			parts = append(parts, countLabel(uint64(len(set.Domains)), "blocked domain", "blocked domains"))
+		}
+		if len(set.AllowedDomains) > 0 {
+			parts = append(parts, countLabel(uint64(len(set.AllowedDomains)), "allowed domain", "allowed domains"))
+		}
 	}
-	parts := []string{ifThen(len(set.Lists) == 0, "No block lists", "Lists: "+strings.Join(set.Lists, ", "))}
-	if len(set.Apps) > 0 {
-		parts = append(parts, countLabel(uint64(len(set.Apps)), "blocked app", "blocked apps"))
-	}
-	if len(set.Domains) > 0 {
-		parts = append(parts, countLabel(uint64(len(set.Domains)), "blocked domain", "blocked domains"))
-	}
-	if len(set.AllowedDomains) > 0 {
-		parts = append(parts, countLabel(uint64(len(set.AllowedDomains)), "allowed domain", "allowed domains"))
+	if len(set.Schedules) > 0 {
+		parts = append(parts, countLabel(uint64(len(set.Schedules)), "schedule", "schedules"))
 	}
 	return strings.Join(parts, " · ")
 }
@@ -315,6 +319,9 @@ templ RuleSetDrawer(view RuleSetDrawerView) {
 			@ruleSetDeviceSection(view)
 			if !view.Set.Off {
 				@ruleSetApps(view)
+			}
+			@ruleSetSchedules(view)
+			if !view.Set.Off {
 				@ruleSetDomains(view, false)
 				@ruleSetDomains(view, true)
 			}
@@ -383,26 +390,32 @@ templ RuleSetAppPicker(view RuleSetAppPickerView) {
 		<form id="rule-set-app-form" class="rule-set-app-form" hx-post="/ui/blocking/rule-sets/apps" hx-target="#rule-set-drawer-content" hx-swap="innerHTML" hx-disable="find button">
 			<input type="hidden" name="name" value={ view.Name }/>
 			<p class="rule-set-domains-help">{ "Pick the apps " + view.Name + " devices can't use. Each one blocks every domain Sable knows the app uses." }</p>
-			<label class="sr-only" for="rule-set-app-search">Search apps</label>
-			<input id="rule-set-app-search" class="rule-set-app-search" type="search" placeholder="Search apps" autocomplete="off" spellcheck="false" data-app-picker-search/>
-			for _, group := range view.Groups {
-				<fieldset class="rule-set-app-group" data-app-group>
-					<legend>{ group.Category }</legend>
-					<div class="rule-set-app-grid">
-						for _, app := range group.Apps {
-							<label class="rule-set-app-choice" data-app-name={ strings.ToLower(app.Name) }>
-								<input type="checkbox" name="app" value={ app.ID } checked?={ app.Chosen }/>
-								@AppIcon(app.ID, app.Category)
-								<span>{ app.Name }</span>
-								<span class="rule-set-app-check" aria-hidden="true">@Icon("check")</span>
-							</label>
-						}
-					</div>
-				</fieldset>
-			}
-			<p class="rule-set-domains-empty" data-app-picker-empty hidden>No apps match.</p>
+			@ruleSetAppChoices(view.Groups)
 		</form>
 	}
+}
+
+// ruleSetAppChoices is every app a rule set can block, by category, as
+// tiles that check when chosen, and a search that narrows them.
+templ ruleSetAppChoices(groups []RuleSetAppGroup) {
+	<label class="sr-only" for="rule-set-app-search">Search apps</label>
+	<input id="rule-set-app-search" class="rule-set-app-search" type="search" placeholder="Search apps" autocomplete="off" spellcheck="false" data-app-picker-search/>
+	for _, group := range groups {
+		<fieldset class="rule-set-app-group" data-app-group>
+			<legend>{ group.Category }</legend>
+			<div class="rule-set-app-grid">
+				for _, app := range group.Apps {
+					<label class="rule-set-app-choice" data-app-name={ strings.ToLower(app.Name) }>
+						<input type="checkbox" name="app" value={ app.ID } checked?={ app.Chosen }/>
+						@AppIcon(app.ID, app.Category)
+						<span>{ app.Name }</span>
+						<span class="rule-set-app-check" aria-hidden="true">@Icon("check")</span>
+					</label>
+				}
+			</div>
+		</fieldset>
+	}
+	<p class="rule-set-domains-empty" data-app-picker-empty hidden>No apps match.</p>
 }
 
 templ ruleSetAppPickerFooter(view RuleSetAppPickerView) {

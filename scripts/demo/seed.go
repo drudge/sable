@@ -235,11 +235,12 @@ func seedRefusedLookups(now time.Time) []querylog.Event {
 
 // seedRuleSetBlocks is a warehouse handheld trying TikTok and YouTube on
 // breaks over the last few hours, blocked each time by the Warehouse rule
-// set's apps, so the query log names the rule set and the app.
+// set's apps, and Instagram during its shift, blocked by the Shift schedule,
+// so the query log names the rule set, the schedule, and the app.
 func seedRuleSetBlocks(now time.Time) []querylog.Event {
 	names := []string{"www.tiktok.com.", "v16-webapp.tiktokcdn.com.", "www.youtube.com.", "i.ytimg.com."}
 	rules := []string{"tiktok.com", "tiktokcdn.com", "youtube.com", "ytimg.com"}
-	events := make([]querylog.Event, 0, 12*len(names))
+	events := make([]querylog.Event, 0, 12*len(names)+6)
 	for step := range 12 {
 		at := now.Add(-time.Duration(step)*17*time.Minute - 90*time.Second)
 		index := step % len(names)
@@ -247,6 +248,18 @@ func seedRuleSetBlocks(now time.Time) []querylog.Event {
 			OccurredAt: at, ClientIP: "10.20.20.118", Name: names[index], RecordType: dns.TypeA, Class: dns.ClassINET,
 			ResponseCode: dns.RcodeNameError, Source: querylog.SourceBlocked, Protocol: "UDP", Duration: 140 * time.Microsecond,
 			Decision: querylog.Decision{Policy: querylog.PolicyBlocked, PolicyRule: rules[index], RuleSet: "Warehouse", OwnRule: true, Resolver: querylog.ResolverBlocked},
+		})
+	}
+	// Instagram is blocked only during the shift, which started two hours
+	// before the demo did.
+	shiftNames := []string{"www.instagram.com.", "scontent.cdninstagram.com."}
+	shiftRules := []string{"instagram.com", "cdninstagram.com"}
+	for step := range 6 {
+		index := step % len(shiftNames)
+		events = append(events, querylog.Event{
+			OccurredAt: now.Add(-time.Duration(step)*19*time.Minute - 4*time.Minute), ClientIP: "10.20.20.118", Name: shiftNames[index], RecordType: dns.TypeA, Class: dns.ClassINET,
+			ResponseCode: dns.RcodeNameError, Source: querylog.SourceBlocked, Protocol: "UDP", Duration: 130 * time.Microsecond,
+			Decision: querylog.Decision{Policy: querylog.PolicyBlocked, PolicyRule: shiftRules[index], RuleSet: "Warehouse", OwnRule: true, Schedule: "Shift", Resolver: querylog.ResolverBlocked},
 		})
 	}
 	return events

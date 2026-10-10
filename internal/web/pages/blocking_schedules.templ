@@ -1,0 +1,189 @@
+package pages
+
+import (
+	"fmt"
+	"net/url"
+
+	"github.com/drudge/sable/internal/web/pages/components"
+)
+
+// RuleSetSchedule is one of a rule set's schedules, as its panel lists it.
+type RuleSetSchedule struct {
+	Name string
+	// When says the days and times, such as "Sun to Thu, 9:00 PM to 7:00 AM".
+	When string
+	// Blocks says what it blocks: everything, or its apps by name.
+	Blocks     string
+	Everything bool
+	// On says the schedule is blocking now, and Next when that changes, such
+	// as "Ends 7:00 AM" or "Starts Sun 9:00 PM".
+	On   bool
+	Next string
+}
+
+// ScheduleDay is one day a schedule can run, as the form offers it.
+type ScheduleDay struct {
+	Value  string
+	Label  string
+	Chosen bool
+}
+
+// RuleSetScheduleFormView fills a rule set's panel with the form for one of
+// its schedules: a new one when Original is empty.
+type RuleSetScheduleFormView struct {
+	Set string
+	// Off says the rule set has blocking off, so its schedules can only block
+	// everything.
+	Off      bool
+	Original string
+	Name     string
+	Days     []ScheduleDay
+	// Start and End are 24-hour times, such as 21:00.
+	Start, End string
+	TimeZone   string
+	// Apps says the schedule blocks the apps checked in Groups instead of
+	// everything.
+	Apps   bool
+	Groups []RuleSetAppGroup
+}
+
+// ruleSetSchedules lists a rule set's schedules, each with whether it is on
+// now, and a button that swaps the panel for the schedule form.
+templ ruleSetSchedules(view RuleSetDrawerView) {
+	<section class="query-detail-answer rule-set-domains rule-set-schedules-section" aria-labelledby="rule-set-schedules-title">
+		<div class="rule-set-domains-heading">
+			<h3 id="rule-set-schedules-title">Schedules</h3>
+			if len(view.Set.Schedules) > 0 {
+				@components.Badge(components.BadgeProps{Label: formatNumber(uint64(len(view.Set.Schedules)))})
+			}
+		</div>
+		<p class="rule-set-domains-help">{ ruleSetSchedulesHelp(view.Set) }</p>
+		if view.CanWrite {
+			<div class="rule-set-apps-actions">
+				@components.Button(components.ButtonProps{Label: "Add Schedule", Icon: "plus", Variant: components.ButtonOutline, Compact: true, Attrs: ruleSetScheduleFormAttrs(view.Set.Name, "", "rule-set-add-schedule")})
+			</div>
+		}
+		if len(view.Set.Schedules) == 0 {
+			<p class="rule-set-domains-empty">No schedules.</p>
+		} else {
+			<div class="blocked-domain-list rule-set-schedule-list">
+				for index, schedule := range view.Set.Schedules {
+					<div class={ "rule-set-device-row rule-set-schedule-row", templ.KV("on", schedule.On) } data-rule-set-schedule={ schedule.Name }>
+						<span class="rule-set-device-icon">@Icon(ifThen(schedule.Everything, "moon", "clock"))</span>
+						<span class="rule-set-device-name">
+							<strong>
+								{ schedule.Name }
+								if schedule.On {
+									@components.Badge(components.BadgeProps{Label: "On", Tone: components.BadgeSuccess, Class: "rule-set-schedule-state"})
+								}
+							</strong>
+							<small>{ schedule.When }</small>
+							<small>{ scheduleDetail(schedule) }</small>
+						</span>
+						if view.CanWrite {
+							<span class="rule-set-schedule-actions">
+								<button class="icon-button" type="button" aria-label={ "Edit " + schedule.Name } { ruleSetScheduleFormAttrs(view.Set.Name, schedule.Name, fmt.Sprintf("rule-set-edit-schedule-%d", index))... }>@Icon("pencil")</button>
+								<button class="icon-button danger" type="button" aria-label={ "Delete " + schedule.Name } { ruleSetScheduleDeleteAttrs(view.Set.Name, schedule)... }>@Icon("trash")</button>
+							</span>
+						}
+					</div>
+				}
+			</div>
+		}
+	</section>
+}
+
+// scheduleDetail says what a schedule blocks and when that next changes.
+func scheduleDetail(schedule RuleSetSchedule) string {
+	if schedule.Next == "" {
+		return schedule.Blocks
+	}
+	return schedule.Blocks + " · " + schedule.Next
+}
+
+func ruleSetSchedulesHelp(set RuleSetView) string {
+	if set.Off {
+		return "Block everything for " + set.Name + " devices at set times each week, such as a bedtime."
+	}
+	return "Block everything, or just some apps, for " + set.Name + " devices at set times each week, such as a bedtime."
+}
+
+// ruleSetScheduleFormAttrs makes a button swap the panel for the form for a
+// new schedule, or the one called schedule.
+func ruleSetScheduleFormAttrs(name, schedule, id string) templ.Attributes {
+	values := url.Values{"name": []string{name}}
+	if schedule != "" {
+		values.Set("schedule", schedule)
+	}
+	return templ.Attributes{
+		"hx-get": "/ui/blocking/rule-sets/schedules/form?" + values.Encode(), "hx-target": "#rule-set-drawer-content",
+		"hx-swap": "innerHTML", "id": id, "data-replica-primary-action": true,
+	}
+}
+
+// ruleSetScheduleDeleteAttrs asks before a rule set loses a schedule.
+func ruleSetScheduleDeleteAttrs(name string, schedule RuleSetSchedule) templ.Attributes {
+	return templ.Attributes{
+		"hx-post": "/ui/blocking/rule-sets/schedules/delete", "hx-vals": fmt.Sprintf(`{"name":%q,"schedule":%q}`, name, schedule.Name),
+		"hx-target": "#rule-set-drawer-content", "hx-swap": "innerHTML",
+		"hx-confirm":         "Delete " + schedule.Name + " from " + name + "?" + ifThen(schedule.On, " It stops blocking now.", ""),
+		"data-confirm-title": "Delete schedule?", "data-confirm-action": "Delete Schedule", "data-replica-primary-action": true,
+	}
+}
+
+// RuleSetScheduleForm fills a rule set's panel with the form for one of its
+// schedules. Saving shows the panel again; a problem shows above the form,
+// leaving what was typed alone.
+templ RuleSetScheduleForm(view RuleSetScheduleFormView) {
+	@DetailDrawerContent(DetailDrawerView{ID: "rule-set-drawer", TitleID: "rule-set-drawer-title", Eyebrow: ifThen(view.Original == "", "Add Schedule", "Edit Schedule"), Title: view.Set, CloseLabel: "Close rule set details"}, ruleSetScheduleFooter(view)) {
+		<form id="rule-set-schedule-form" class="rule-set-app-form rule-set-schedule-form" hx-post="/ui/blocking/rule-sets/schedules" hx-target="#rule-set-drawer-content" hx-swap="innerHTML" hx-disable="find button">
+			<input type="hidden" name="name" value={ view.Set }/>
+			if view.Original != "" {
+				<input type="hidden" name="original" value={ view.Original }/>
+			}
+			<div class="rule-set-notice" id="rule-set-schedule-notice"></div>
+			@components.Field(components.FieldProps{ID: "rule-set-schedule-name", Label: "Name", Input: templ.Attributes{"name": "schedule", "value": view.Name, "placeholder": "Bedtime", "maxlength": "64", "autocomplete": "off", "required": true}})
+			<fieldset class="field-control rule-set-schedule-days">
+				<legend>Days</legend>
+				<div class="rule-set-schedule-day-grid" role="group" aria-label="Days">
+					for _, day := range view.Days {
+						<label class="rule-set-app-choice rule-set-schedule-day">
+							<input type="checkbox" name="day" value={ day.Value } checked?={ day.Chosen }/>
+							<span>{ day.Label }</span>
+						</label>
+					}
+				</div>
+			</fieldset>
+			<div class="field-grid two rule-set-schedule-times">
+				@components.Field(components.FieldProps{ID: "rule-set-schedule-start", Label: "Starts", Input: templ.Attributes{"name": "start", "value": view.Start, "type": "time", "step": "60", "class": "time-field", "data-styled-time": true, "required": true}})
+				@components.Field(components.FieldProps{ID: "rule-set-schedule-end", Label: "Ends", Input: templ.Attributes{"name": "end", "value": view.End, "type": "time", "step": "60", "class": "time-field", "data-styled-time": true, "required": true}})
+			</div>
+			@components.Field(components.FieldProps{ID: "rule-set-schedule-zone", Label: "Time Zone", Help: "An end before the start runs into the next morning. Times follow daylight saving time in this zone.", Input: templ.Attributes{"name": "time_zone", "value": view.TimeZone, "placeholder": "America/New_York", "autocomplete": "off", "spellcheck": "false", "required": true}})
+			if view.Off {
+				<input type="hidden" name="block" value="everything"/>
+				<p class="rule-set-domains-help">{ "Blocking is off for " + view.Set + ", so its schedules block everything but its allowed domains." }</p>
+			} else {
+				<fieldset class="field-control rule-set-schedule-blocks">
+					<legend>Blocks</legend>
+					<div class="rule-set-choice">
+						<label><input type="radio" name="block" value="everything" checked?={ !view.Apps }/><span>Everything</span></label>
+						<label><input type="radio" name="block" value="apps" checked?={ view.Apps }/><span>Only These Apps</span></label>
+					</div>
+					<small class="field-help">Everything works like a hold: only allowed domains get through.</small>
+				</fieldset>
+				<div class="rule-set-schedule-apps">
+					@ruleSetAppChoices(view.Groups)
+				</div>
+			}
+		</form>
+	}
+}
+
+templ ruleSetScheduleFooter(view RuleSetScheduleFormView) {
+	<div class="query-detail-policy-actions insight-drawer-actions">
+		@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Attrs: templ.Attributes{
+			"hx-get": "/ui/blocking/rule-set?" + url.Values{"name": []string{view.Set}}.Encode(), "hx-target": "#rule-set-drawer-content", "hx-swap": "innerHTML",
+		}})
+		@components.Button(components.ButtonProps{Label: ifThen(view.Original == "", "Add Schedule", "Save Schedule"), Icon: "check", Type: "submit", Attrs: templ.Attributes{"form": "rule-set-schedule-form", "data-replica-primary-action": true}})
+	</div>
+}

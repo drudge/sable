@@ -97,7 +97,7 @@ func (server *Server) blockingView(request *http.Request, message, errorMessage,
 		UpdateHours:     max(1, int(snapshot.Config.Blocking.UpdateInterval.Duration/time.Hour)),
 		LastUpdate:      updateStatus.LastUpdate, NextUpdate: updateStatus.NextUpdate, Updating: updateStatus.Updating,
 		DegradedLists: updateStatus.Degraded,
-		RuleSets:      server.ruleSetViews(request.Context(), snapshot.Config), DefaultLists: slices.Clone(snapshot.Config.Blocking.DefaultLists),
+		RuleSets:      server.ruleSetViews(request, snapshot.Config), DefaultLists: slices.Clone(snapshot.Config.Blocking.DefaultLists),
 		ActiveTab: activeTab, Message: message, Error: errorMessage,
 	}
 }

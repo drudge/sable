@@ -2,6 +2,7 @@ package main
 
 import (
 	"slices"
+	"time"
 
 	blockcompiler "github.com/drudge/sable/internal/blocking"
 	"github.com/drudge/sable/internal/config"
@@ -26,6 +27,9 @@ func blockingFixture() config.Blocking {
 	blocking.Domains = blockedDomains
 	blocking.AllowedDomains = allowedDomains
 	blocking.RuleSets = slices.Clone(ruleSetsFixture)
+	for index := range blocking.RuleSets {
+		blocking.RuleSets[index].Schedules = ruleSetSchedules[blocking.RuleSets[index].Name]
+	}
 	blocking.Lists = make([]config.BlockList, 0, len(blockListSources))
 	for _, source := range blockListSources {
 		blocking.Lists = append(blocking.Lists, config.BlockList{
@@ -72,6 +76,31 @@ var ruleSetsFixture = []config.RuleSet{
 	{Name: "IoT", Lists: []string{"Steven Black Unified"}, AllowedDomains: []string{"*.ubnt.com"}},
 	{Name: config.NoBlockingRuleSetName, Off: true},
 	{Name: "Warehouse", Lists: []string{"AdGuard DNS Filter", "OISD Big"}, Domains: []string{"espn.com"}, Apps: []string{"netflix", "tiktok", "youtube"}},
+}
+
+// demoTimeZone is where Vandelay's schedules keep time.
+const demoTimeZone = "America/New_York"
+
+// ruleSetSchedules give guests an overnight cutoff and keep social apps off
+// the warehouse floor during its shift. The shift runs from two hours before
+// the demo started to six hours after, so the demo always shows it on and
+// the query log has its blocks.
+var ruleSetSchedules = map[string][]config.Schedule{
+	"Guests": {{Name: "Overnight", Days: []string{"sun", "mon", "tue", "wed", "thu", "fri", "sat"}, Start: "23:00", End: "06:00", TimeZone: demoTimeZone, Block: config.ScheduleBlockEverything}},
+	"Warehouse": {{
+		Name: "Shift", Days: []string{"sun", "mon", "tue", "wed", "thu", "fri", "sat"}, Start: demoShiftClock(-2), End: demoShiftClock(6),
+		TimeZone: demoTimeZone, Block: config.ScheduleBlockApps, Apps: []string{"instagram", "snapchat"},
+	}},
+}
+
+// demoShiftClock is the hour that many hours from when the demo started, on
+// Vandelay's clock.
+func demoShiftClock(hours int) string {
+	location, err := time.LoadLocation(demoTimeZone)
+	if err != nil {
+		location = time.UTC
+	}
+	return demoStarted.Add(time.Duration(hours) * time.Hour).In(location).Format("15:00")
 }
 
 // ruleSetClients puts devices in those rule sets: by hardware address, so

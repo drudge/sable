@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/querylog"
+	"github.com/drudge/sable/internal/weekly"
 )
 
 // ruleSetTestConfig blocks names from two lists and the operator's own
@@ -257,8 +258,8 @@ func BenchmarkPolicyDecision(b *testing.B) {
 	withSets.RuleSets = []RuleSetPolicy{
 		configuration.RuleSets[0],
 		{Name: "Kids", Lists: []string{"Strict"}, Domains: []string{"games.example"}, Clients: []string{"192.0.2.0/24"}, Schedules: []SchedulePolicy{
-			{Name: "Bedtime", Days: []time.Weekday{0, 1, 2, 3, 4, 5, 6}, Start: minutesFromNow(120), End: minutesFromNow(180), Location: time.UTC, Everything: true},
-			{Name: "Homework", Days: []time.Weekday{0, 1, 2, 3, 4, 5, 6}, Start: minutesFromNow(-60), End: minutesFromNow(60), Location: time.UTC, Domains: []string{"tiktok.example"}},
+			{Name: "Bedtime", Window: weekly.Window{Days: [7]bool{true, true, true, true, true, true, true}, Start: minutesFromNow(120), End: minutesFromNow(180), Location: time.UTC}, Everything: true},
+			{Name: "Homework", Window: weekly.Window{Days: [7]bool{true, true, true, true, true, true, true}, Start: minutesFromNow(-60), End: minutesFromNow(60), Location: time.UTC}, Domains: []string{"tiktok.example"}},
 		}},
 		{Name: "Work", Lists: []string{"Ads"}, Clients: []string{"192.0.2.50", "2001:db8::/32", "da:a1:19:00:00:01"}},
 	}
