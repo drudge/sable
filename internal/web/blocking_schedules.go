@@ -15,8 +15,8 @@ import (
 // scheduleDayLabels name a schedule's days, Sunday first, as the form and
 // its summary show them.
 var scheduleDayLabels = []pages.ScheduleDay{
-	{Value: "sun", Label: "Sun", Name: "Sunday"}, {Value: "mon", Label: "Mon", Name: "Monday"}, {Value: "tue", Label: "Tue", Name: "Tuesday"}, {Value: "wed", Label: "Wed", Name: "Wednesday"},
-	{Value: "thu", Label: "Thu", Name: "Thursday"}, {Value: "fri", Label: "Fri", Name: "Friday"}, {Value: "sat", Label: "Sat", Name: "Saturday"},
+	{Value: "sun", Label: "Sun"}, {Value: "mon", Label: "Mon"}, {Value: "tue", Label: "Tue"}, {Value: "wed", Label: "Wed"},
+	{Value: "thu", Label: "Thu"}, {Value: "fri", Label: "Fri"}, {Value: "sat", Label: "Sat"},
 }
 
 // ruleSetSchedules describes a rule set's schedules for its panel: when each
