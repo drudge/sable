@@ -33,13 +33,20 @@ func ruleSetSchedules(set config.RuleSet, display pages.TimeDisplay, now time.Ti
 			continue
 		}
 		on, _, until := window.At(now)
+		start, _ := window.Next(now)
 		zone := ""
 		if window.Location.String() != display.Zone() {
-			zone = " " + until.In(window.Location).Format("MST")
+			zone = " " + cmp.Or(start, until).In(window.Location).Format("MST")
 		}
 		view.When = scheduleDays(window.Days) + ", " + scheduleClock(window.Start, display) + " to " + scheduleClock(window.End, display) + zone
-		view.On = on
-		view.Next = scheduleNext(on, until.In(window.Location), now.In(window.Location), display) + zone
+		view.On, view.Paused = on, now.Before(schedule.OffUntil)
+		switch {
+		case on:
+			view.Next = "Ends " + scheduleMoment(until.In(window.Location), now.In(window.Location), display) + zone
+		case !start.IsZero():
+			view.Next = "Starts " + scheduleMoment(start.In(window.Location), now.In(window.Location), display) + zone
+		}
+		view.Overrides = scheduleOverrides(on, view.Paused, start, now)
 		views = append(views, view)
 	}
 	return views
@@ -95,19 +102,38 @@ func scheduleClock(minutes int, display pages.TimeDisplay) string {
 	return clock.Format("3:04 PM")
 }
 
-// scheduleNext says when an on schedule ends, or an off one next starts,
-// with the day when it isn't today.
-func scheduleNext(on bool, at, now time.Time, display pages.TimeDisplay) string {
-	verb := ifThenString(on, "Ends ", "Starts ")
+// scheduleMoment writes when a schedule next starts or ends, with the day
+// when it isn't today.
+func scheduleMoment(at, now time.Time, display pages.TimeDisplay) string {
 	clock := scheduleClock(at.Hour()*60+at.Minute(), display)
 	switch {
 	case at.Year() == now.Year() && at.YearDay() == now.YearDay():
-		return verb + clock
+		return clock
 	case at.Sub(now) < 7*24*time.Hour:
-		return verb + at.Format("Mon") + " " + clock
+		return at.Format("Mon") + " " + clock
 	default:
-		return verb + at.Format("Jan 2") + " " + clock
+		return at.Format("Jan 2") + " " + clock
 	}
+}
+
+// scheduleOverrideNotice is how soon a schedule has to start for its row to
+// offer Skip and Delay 30 Minutes.
+const scheduleOverrideNotice = 24 * time.Hour
+
+// scheduleOverrides are the changes a schedule's row offers: Delay 30
+// Minutes and End Now while it is on, Skip and Delay 30 Minutes when it
+// starts within a day, and Resume once one of those has it off.
+func scheduleOverrides(on, paused bool, start, now time.Time) []pages.ScheduleOverride {
+	delay := pages.ScheduleOverride{Action: scheduleDelay, Label: "Delay 30 Minutes", Icon: "timer"}
+	switch {
+	case on:
+		return []pages.ScheduleOverride{delay, {Action: scheduleEnd, Label: "End Now", Icon: "x"}}
+	case paused:
+		return []pages.ScheduleOverride{{Action: scheduleResume, Label: "Resume", Icon: "rotate-ccw"}}
+	case !start.IsZero() && start.Sub(now) <= scheduleOverrideNotice:
+		return []pages.ScheduleOverride{{Action: scheduleSkip, Label: "Skip", Icon: "chevrons-right"}, delay}
+	}
+	return nil
 }
 
 // scheduleBlocks says what a schedule blocks: everything, or its apps by
@@ -240,4 +266,67 @@ func (server *Server) deleteRuleSetSchedule(writer http.ResponseWriter, request 
 	name := request.FormValue("name")
 	message, err := server.ruleSetService().DeleteSchedule(request.Context(), requestActor(request, ""), name, request.FormValue("schedule"))
 	server.renderRuleSetChange(writer, request, name, message, err)
+}
+
+// What a schedule's row can do to it.
+const (
+	scheduleSkip   = "skip"
+	scheduleDelay  = "delay"
+	scheduleEnd    = "end"
+	scheduleResume = "resume"
+)
+
+// scheduleDelayStep is how much Delay 30 Minutes moves a schedule.
+const scheduleDelayStep = 30 * time.Minute
+
+// overrideRuleSetSchedule skips, delays, ends or resumes one of a rule
+// set's schedules, then shows the rule set's panel again.
+func (server *Server) overrideRuleSetSchedule(writer http.ResponseWriter, request *http.Request) {
+	if err := request.ParseForm(); err != nil {
+		server.renderRuleSetChange(writer, request, "", "", refuse(http.StatusBadRequest, "Sable could not read the form."))
+		return
+	}
+	name, scheduleName, action := request.FormValue("name"), request.FormValue("schedule"), request.FormValue("action")
+	until, err := server.scheduleOffUntil(name, scheduleName, action, time.Now())
+	message := ""
+	if err == nil {
+		message, err = server.ruleSetService().SetScheduleOff(request.Context(), requestActor(request, ""), name, scheduleName, action, until)
+	}
+	server.renderRuleSetChange(writer, request, name, message, err)
+}
+
+// scheduleOffUntil works out how long action keeps a schedule off: to the
+// end of the window it is in or starts next for Skip and End Now, 30 minutes
+// past now or the next start for Delay, and no longer for Resume.
+func (server *Server) scheduleOffUntil(name, scheduleName, action string, now time.Time) (time.Time, error) {
+	set, found := server.ruleSet(name)
+	if !found {
+		return time.Time{}, refuse(http.StatusNotFound, "There is no rule set called %s.", name)
+	}
+	index := slices.IndexFunc(set.Schedules, func(existing config.Schedule) bool { return existing.Name == scheduleName })
+	if index < 0 {
+		return time.Time{}, refuse(http.StatusNotFound, "%s has no schedule called %s. It may have been deleted.", name, scheduleName)
+	}
+	window, err := set.Schedules[index].Window()
+	if err != nil {
+		return time.Time{}, refuse(http.StatusConflict, "%s's %s schedule has a time zone Sable doesn't know.", name, scheduleName)
+	}
+	on, _, _ := window.At(now)
+	start, end := window.Next(now)
+	if start.IsZero() && action != scheduleResume {
+		return time.Time{}, refuse(http.StatusConflict, "%s's %s schedule has no days to skip or delay.", name, scheduleName)
+	}
+	switch action {
+	case scheduleSkip, scheduleEnd:
+		return end, nil
+	case scheduleDelay:
+		if on {
+			return now.Add(scheduleDelayStep), nil
+		}
+		return start.Add(scheduleDelayStep), nil
+	case scheduleResume:
+		return time.Time{}, nil
+	default:
+		return time.Time{}, refuse(http.StatusBadRequest, "Sable doesn't know how to %s a schedule.", action)
+	}
 }

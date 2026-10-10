@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strings"
 	"time"
 
@@ -36,6 +37,9 @@ func deviceBlockingView(configuration config.Config, device pages.InsightDeviceV
 		view.MatchedBy = clientEntryPhrase(entry)
 		if own[normalizedEntry(entry)] {
 			view.Own = view.RuleSet
+		}
+		if index := slices.IndexFunc(configuration.Blocking.RuleSets, func(set config.RuleSet) bool { return set.Name == view.RuleSet }); index >= 0 {
+			view.Schedules = ruleSetSchedules(configuration.Blocking.RuleSets[index], display, now)
 		}
 	}
 	// What the device falls back to without an entry of its own: a network's

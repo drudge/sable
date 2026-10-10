@@ -12,6 +12,9 @@ type Window struct {
 	Days       [7]bool
 	Start, End int
 	Location   *time.Location
+	// OffUntil keeps the window off before it, whatever its days say: a
+	// window skipped, delayed or ended early.
+	OffUntil time.Time
 }
 
 // At works out whether the window is on at now, and the span around now
@@ -19,6 +22,39 @@ type Window struct {
 // before and the one after. A window with no days is off for the two weeks
 // around now.
 func (window Window) At(now time.Time) (on bool, from, until time.Time) {
+	if now.Before(window.OffUntil) {
+		return false, now, window.OffUntil
+	}
+	on, from, until = window.weekly(now)
+	return on, later(from, window.OffUntil), until
+}
+
+// Next returns the window that is on at now, or the next one to start,
+// once OffUntil has passed. A window that OffUntil cuts into starts at
+// OffUntil.
+func (window Window) Next(now time.Time) (start, end time.Time) {
+	if now.Before(window.OffUntil) {
+		now = window.OffUntil
+	}
+	on, from, until := window.weekly(now)
+	if on {
+		return later(from, window.OffUntil), until
+	}
+	if on, _, end = window.weekly(until); !on {
+		return time.Time{}, time.Time{}
+	}
+	return until, end
+}
+
+func later(left, right time.Time) time.Time {
+	if right.After(left) {
+		return right
+	}
+	return left
+}
+
+// weekly is At without OffUntil.
+func (window Window) weekly(now time.Time) (on bool, from, until time.Time) {
 	local := now.In(window.Location)
 	today := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, window.Location)
 	from = now.Add(-7 * 24 * time.Hour)

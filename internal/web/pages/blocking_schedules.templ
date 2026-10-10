@@ -19,6 +19,15 @@ type RuleSetSchedule struct {
 	// as "Ends 7:00 AM" or "Starts Sun 9:00 PM".
 	On   bool
 	Next string
+	// Paused says Skip, Delay or End Now has the schedule off for now.
+	Paused bool
+	// Overrides are the changes the row offers, such as End Now.
+	Overrides []ScheduleOverride
+}
+
+// ScheduleOverride is a change a schedule's row offers, such as Skip.
+type ScheduleOverride struct {
+	Action, Label, Icon string
 }
 
 // ScheduleDay is one day a schedule can run, as the form offers it.
@@ -78,6 +87,8 @@ templ ruleSetSchedules(view RuleSetDrawerView) {
 								{ schedule.Name }
 								if schedule.On {
 									@components.Badge(components.BadgeProps{Label: "On", Tone: components.BadgeSuccess, Class: "rule-set-schedule-state"})
+								} else if schedule.Paused {
+									@components.Badge(components.BadgeProps{Label: "Paused", Class: "rule-set-schedule-state"})
 								}
 							</strong>
 							<small>{ schedule.When }</small>
@@ -88,6 +99,13 @@ templ ruleSetSchedules(view RuleSetDrawerView) {
 								<button class="icon-button" type="button" aria-label={ "Edit " + schedule.Name } { ruleSetScheduleFormAttrs(view.Set.Name, schedule.Name, fmt.Sprintf("rule-set-edit-schedule-%d", index))... }>@Icon("pencil")</button>
 								<button class="icon-button danger" type="button" aria-label={ "Delete " + schedule.Name } { ruleSetScheduleDeleteAttrs(view.Set.Name, schedule)... }>@Icon("trash")</button>
 							</span>
+							if len(schedule.Overrides) > 0 {
+								<span class="rule-set-schedule-overrides">
+									for _, override := range schedule.Overrides {
+										@components.Button(components.ButtonProps{Label: override.Label, Icon: override.Icon, Variant: components.ButtonOutline, Compact: true, Attrs: ruleSetScheduleOverrideAttrs(view.Set.Name, schedule.Name, override.Action, index)})
+									}
+								</span>
+							}
 						}
 					</div>
 				}
@@ -121,6 +139,17 @@ func ruleSetScheduleFormAttrs(name, schedule, id string) templ.Attributes {
 	return templ.Attributes{
 		"hx-get": "/ui/blocking/rule-sets/schedules/form?" + values.Encode(), "hx-target": "#rule-set-drawer-content",
 		"hx-swap": "innerHTML", "id": id, "data-replica-primary-action": true,
+	}
+}
+
+// ruleSetScheduleOverrideAttrs posts one change to a schedule: skip, delay,
+// end or resume.
+func ruleSetScheduleOverrideAttrs(name, schedule, action string, index int) templ.Attributes {
+	return templ.Attributes{
+		"id": fmt.Sprintf("rule-set-schedule-%s-%d", action, index), "hx-post": "/ui/blocking/rule-sets/schedules/override",
+		"hx-vals":   fmt.Sprintf(`{"name":%q,"schedule":%q,"action":%q}`, name, schedule, action),
+		"hx-target": "#rule-set-drawer-content", "hx-swap": "innerHTML", "hx-disable": "#rule-set-drawer-content .rule-set-schedule-overrides button",
+		"data-replica-primary-action": true,
 	}
 }
 
