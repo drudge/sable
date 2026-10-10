@@ -23,8 +23,11 @@ type RuleSetSchedule struct {
 
 // ScheduleDay is one day a schedule can run, as the form offers it.
 type ScheduleDay struct {
-	Value  string
+	Value string
+	// Label is the day's short name, such as Sun; the form's chips show its
+	// first letter and Name reads out in full.
 	Label  string
+	Name   string
 	Chosen bool
 }
 
@@ -147,9 +150,10 @@ templ RuleSetScheduleForm(view RuleSetScheduleFormView) {
 				<legend>Days</legend>
 				<div class="rule-set-schedule-day-grid" role="group" aria-label="Days">
 					for _, day := range view.Days {
-						<label class="rule-set-app-choice rule-set-schedule-day">
+						<label class="rule-set-app-choice rule-set-schedule-day" title={ day.Name }>
 							<input type="checkbox" name="day" value={ day.Value } checked?={ day.Chosen }/>
-							<span>{ day.Label }</span>
+							<span aria-hidden="true">{ day.Label[:1] }</span>
+							<span class="sr-only">{ day.Name }</span>
 						</label>
 					}
 				</div>
