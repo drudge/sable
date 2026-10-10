@@ -4428,7 +4428,7 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .rule-set-lists:not(.rule-set-scope) > .rule-set-list-choices { margin-top: 0; border-top: 0; padding-top: 0; }
 .rule-set-list-choices span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rule-set-lists > small { display: block; margin-top: var(--space-2); }
-/* Every Block List needs no list to pick from. */
+/* All Your Block Lists needs no list to pick from. */
 .rule-set-scope:has(input[name="scope"][value="all"]:checked) .rule-set-list-choices { display: none; }
 @media (max-width: 640px) {
 	.rule-set-row { grid-template-columns: 2rem minmax(0, 1fr) auto 2rem; }
@@ -4457,7 +4457,7 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .suggest-input input { padding-right: 2.25rem; }
 .suggest-input input::-webkit-calendar-picker-indicator { position: absolute; top: 0; right: 0; width: 2.25rem; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .suggest-input .styled-select-chevron { position: absolute; top: 50%; right: var(--space-3); margin-top: -.2rem; pointer-events: none; }
-.rule-set-form:has(.rule-set-off input:checked) .rule-set-lists { display: none; }
+.rule-set-form:has(.rule-set-blocking input:not(:checked)) .rule-set-lists { display: none; }
 .rule-set-domains-note { margin-top: var(--space-3); }
 .rule-set-domains-note button { border: 0; background: none; padding: 0; color: var(--primary); cursor: pointer; font: inherit; font-weight: 600; }
 .rule-set-domains-note button:hover { text-decoration: underline; }

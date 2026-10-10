@@ -82,7 +82,7 @@ func (service ruleSetService) SetApps(ctx context.Context, who actor, name strin
 // SetDefaultLists picks the block lists for devices without a rule set. No
 // lists means every list.
 func (service ruleSetService) SetDefaultLists(ctx context.Context, who actor, lists []string) (string, error) {
-	action, message := "blocking.default_lists.update", "Every block list applies to devices without a rule set"
+	action, message := "blocking.default_lists.update", "All your block lists apply to devices without a rule set"
 	if len(lists) > 0 {
 		message = "Block lists for devices without a rule set saved"
 	}

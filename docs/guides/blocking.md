@@ -44,7 +44,7 @@ Changing the blocking response type does not help. NXDOMAIN, zero-address, and c
 
 ## Pause or bypass deliberately
 
-**Pause Blocking** is a temporary diagnostic control. Resume promptly after the test; the in-memory pause resets on restart. For a persistent client exception, add the device, address, or network to a rule set with **Turn Off Blocking** on (**Blocked → Rule Sets**), and remember that a router proxy may hide the individual client address.
+**Pause Blocking** is a temporary diagnostic control. Resume promptly after the test; the in-memory pause resets on restart. For a persistent client exception, add the device, address, or network to a rule set with its **Blocking** switch off (**Blocked → Rule Sets**), and remember that a router proxy may hide the individual client address.
 
 ## Keep subscriptions healthy
 
