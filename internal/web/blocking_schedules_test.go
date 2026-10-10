@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"slices"
 	"strings"
@@ -134,6 +135,28 @@ func TestRuleSetSchedulesDescribeThemselves(t *testing.T) {
 		t.Errorf("Bedtime in 24-hour time = %+v", got)
 	}
 
+	// What each row offers: Delay and End Now while on, Skip and Delay within
+	// a day of starting, nothing further off, and Resume once paused.
+	overrides := func(view pages.RuleSetSchedule) (actions []string) {
+		for _, override := range view.Overrides {
+			actions = append(actions, override.Action)
+		}
+		return actions
+	}
+	if got := overrides(views[0]); !slices.Equal(got, []string{"delay", "end"}) {
+		t.Errorf("Bedtime on offers %v", got)
+	}
+	if got := overrides(ruleSetSchedules(set, eastern, monday.Add(20*time.Hour))[1]); !slices.Equal(got, []string{"skip", "delay"}) {
+		t.Errorf("Homework starting within a day offers %v", got)
+	}
+	if got := overrides(views[1]); got != nil {
+		t.Errorf("Homework starting in two days offers %v", got)
+	}
+	set.Schedules[0].OffUntil = time.Date(2026, time.October, 13, 7, 0, 0, 0, newYork)
+	if got := ruleSetSchedules(set, eastern, monday)[0]; got.On || !got.Paused || got.Next != "Starts Tue 9:00 PM" || !slices.Equal(overrides(got), []string{"resume"}) {
+		t.Errorf("Bedtime ended early = %+v", got)
+	}
+
 	for _, test := range []struct {
 		days []string
 		want string
@@ -152,5 +175,48 @@ func TestRuleSetSchedulesDescribeThemselves(t *testing.T) {
 		if got := scheduleDays(window.Days); got != test.want {
 			t.Errorf("scheduleDays(%v) = %q, want %q", test.days, got, test.want)
 		}
+	}
+}
+
+func TestRuleSetPanelSkipsDelaysAndEndsSchedules(t *testing.T) {
+	t.Parallel()
+	server, configuration := newRuleSetTestServer(t)
+	now := time.Now().UTC()
+	start, end := now.Add(-time.Hour).Truncate(time.Minute), now.Add(2*time.Hour).Truncate(time.Minute)
+	saved := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/schedules", url.Values{
+		"name": {"Kids"}, "schedule": {"Bedtime"}, "day": {"sun", "mon", "tue", "wed", "thu", "fri", "sat"},
+		"start": {start.Format("15:04")}, "end": {end.Format("15:04")}, "time_zone": {"UTC"}, "block": {"everything"},
+	})
+	if saved.Code != http.StatusOK || !strings.Contains(saved.Body.String(), `id="rule-set-schedule-end-0"`) || !strings.Contains(saved.Body.String(), "Delay 30 Minutes") {
+		t.Fatalf("panel with a schedule on = %d %s", saved.Code, saved.Body.String())
+	}
+	offUntil := func() time.Time { return configuration.Current().Config.Blocking.RuleSets[0].Schedules[0].OffUntil }
+	override := func(action string) *httptest.ResponseRecorder {
+		return serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/schedules/override", url.Values{"name": {"Kids"}, "schedule": {"Bedtime"}, "action": {action}})
+	}
+
+	ended := override("end")
+	if ended.Code != http.StatusOK || !strings.Contains(ended.Body.String(), "Bedtime schedule ended early") || !offUntil().Equal(end) ||
+		!strings.Contains(ended.Body.String(), ">Paused<") || !strings.Contains(ended.Body.String(), `id="rule-set-schedule-resume-0"`) {
+		t.Fatalf("end = %d, off until %s, want %s\n%s", ended.Code, offUntil(), end, ended.Body.String())
+	}
+	if resumed := override("resume"); resumed.Code != http.StatusOK || !strings.Contains(resumed.Body.String(), "Bedtime schedule resumed") || !offUntil().IsZero() {
+		t.Fatalf("resume = %d, off until %s", resumed.Code, offUntil())
+	}
+	if delayed := override("delay"); delayed.Code != http.StatusOK || !strings.Contains(delayed.Body.String(), "delayed 30 minutes") ||
+		offUntil().Before(now.Add(scheduleDelayStep)) || offUntil().After(time.Now().Add(scheduleDelayStep)) {
+		t.Fatalf("delay = %d, off until %s", delayed.Code, offUntil())
+	}
+	// Once the window ends early, Skip passes over the next one.
+	override("end")
+	if skipped := override("skip"); skipped.Code != http.StatusOK || !offUntil().Equal(end.Add(24*time.Hour)) {
+		t.Fatalf("skip = %d, off until %s, want %s", skipped.Code, offUntil(), end.Add(24*time.Hour))
+	}
+
+	if response := override("nap"); response.Code != http.StatusBadRequest {
+		t.Fatalf("an unknown change = %d", response.Code)
+	}
+	if response := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/schedules/override", url.Values{"name": {"Kids"}, "schedule": {"Nap"}, "action": {"skip"}}); response.Code != http.StatusNotFound {
+		t.Fatalf("an unknown schedule = %d", response.Code)
 	}
 }

@@ -49,3 +49,48 @@ func TestWindowAt(t *testing.T) {
 		t.Errorf("the night clocks spring forward lasts %s, want 9h", until.Sub(from))
 	}
 }
+
+func TestWindowOffUntil(t *testing.T) {
+	t.Parallel()
+	newYork, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := func(day, hour, minute int) time.Time {
+		return time.Date(2026, time.October, day, hour, minute, 0, 0, newYork)
+	}
+	// Sunday to Thursday, 9:00 PM to 7:00 AM. October 12, 2026 is a Monday.
+	bedtime := Window{Days: [7]bool{true, true, true, true, true}, Start: 21 * 60, End: 7 * 60, Location: newYork}
+	ended, delayed, skipped := bedtime, bedtime, bedtime
+	ended.OffUntil = at(13, 7, 0)
+	delayed.OffUntil = at(12, 21, 30)
+	skipped.OffUntil = at(13, 7, 0)
+	for _, test := range []struct {
+		name        string
+		window      Window
+		now         time.Time
+		on          bool
+		from, until time.Time
+		start, end  time.Time
+	}{
+		{"ended early", ended, at(12, 23, 0), false, at(12, 23, 0), at(13, 7, 0), at(13, 21, 0), at(14, 7, 0)},
+		{"back on the next night", ended, at(13, 22, 0), true, at(13, 21, 0), at(14, 7, 0), at(13, 21, 0), at(14, 7, 0)},
+		{"delayed before it starts", delayed, at(12, 20, 0), false, at(12, 20, 0), at(12, 21, 30), at(12, 21, 30), at(13, 7, 0)},
+		{"delayed while it would be on", delayed, at(12, 21, 10), false, at(12, 21, 10), at(12, 21, 30), at(12, 21, 30), at(13, 7, 0)},
+		{"on once the delay ends", delayed, at(12, 21, 30), true, at(12, 21, 30), at(13, 7, 0), at(12, 21, 30), at(13, 7, 0)},
+		{"skipped tonight", skipped, at(12, 18, 0), false, at(12, 18, 0), at(13, 7, 0), at(13, 21, 0), at(14, 7, 0)},
+		{"no override", bedtime, at(12, 18, 0), false, at(12, 7, 0), at(12, 21, 0), at(12, 21, 0), at(13, 7, 0)},
+	} {
+		on, from, until := test.window.At(test.now)
+		if on != test.on || !from.Equal(test.from) || !until.Equal(test.until) {
+			t.Errorf("%s: At(%s) = %t from %s until %s, want %t from %s until %s", test.name, test.now, on, from, until, test.on, test.from, test.until)
+		}
+		start, end := test.window.Next(test.now)
+		if !start.Equal(test.start) || !end.Equal(test.end) {
+			t.Errorf("%s: Next(%s) = %s to %s, want %s to %s", test.name, test.now, start, end, test.start, test.end)
+		}
+	}
+	if start, end := (Window{Location: newYork}).Next(at(12, 0, 0)); !start.IsZero() || !end.IsZero() {
+		t.Errorf("a window with no days: Next = %s to %s, want none", start, end)
+	}
+}

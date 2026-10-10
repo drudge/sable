@@ -27,6 +27,15 @@ type RuleSetSchedule struct {
 	// as "Ends 7:00 AM" or "Starts Sun 9:00 PM".
 	On   bool
 	Next string
+	// Paused says Skip, Delay or End Now has the schedule off for now.
+	Paused bool
+	// Overrides are the changes the row offers, such as End Now.
+	Overrides []ScheduleOverride
+}
+
+// ScheduleOverride is a change a schedule's row offers, such as Skip.
+type ScheduleOverride struct {
+	Action, Label, Icon string
 }
 
 // ScheduleDay is one day a schedule can run, as the form offers it.
@@ -98,7 +107,7 @@ func ruleSetSchedules(view RuleSetDrawerView) templ.Component {
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(ruleSetSchedulesHelp(view.Set))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 63, Col: 67}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 72, Col: 67}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
@@ -158,7 +167,7 @@ func ruleSetSchedules(view RuleSetDrawerView) templ.Component {
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.ResolveAttributeValue(schedule.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 74, Col: 131}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 83, Col: 131}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
 				if templ_7745c5c3_Err != nil {
@@ -179,7 +188,7 @@ func ruleSetSchedules(view RuleSetDrawerView) templ.Component {
 				var templ_7745c5c3_Var6 string
 				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(schedule.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 78, Col: 23}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 87, Col: 23}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 				if templ_7745c5c3_Err != nil {
@@ -194,6 +203,11 @@ func ruleSetSchedules(view RuleSetDrawerView) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
+				} else if schedule.Paused {
+					templ_7745c5c3_Err = components.Badge(components.BadgeProps{Label: "Paused", Class: "rule-set-schedule-state"}).Render(ctx, templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
 				}
 				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</strong> <small>")
 				if templ_7745c5c3_Err != nil {
@@ -202,7 +216,7 @@ func ruleSetSchedules(view RuleSetDrawerView) templ.Component {
 				var templ_7745c5c3_Var7 string
 				templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(schedule.When)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 83, Col: 29}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 94, Col: 29}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 				if templ_7745c5c3_Err != nil {
@@ -215,7 +229,7 @@ func ruleSetSchedules(view RuleSetDrawerView) templ.Component {
 				var templ_7745c5c3_Var8 string
 				templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(scheduleDetail(schedule))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 84, Col: 40}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 95, Col: 40}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 				if templ_7745c5c3_Err != nil {
@@ -233,7 +247,7 @@ func ruleSetSchedules(view RuleSetDrawerView) templ.Component {
 					var templ_7745c5c3_Var9 string
 					templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.ResolveAttributeValue("Edit " + schedule.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 88, Col: 86}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 99, Col: 86}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
 					if templ_7745c5c3_Err != nil {
@@ -262,7 +276,7 @@ func ruleSetSchedules(view RuleSetDrawerView) templ.Component {
 					var templ_7745c5c3_Var10 string
 					templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue("Delete " + schedule.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 89, Col: 95}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 100, Col: 95}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
 					if templ_7745c5c3_Err != nil {
@@ -284,22 +298,38 @@ func ruleSetSchedules(view RuleSetDrawerView) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</button></span>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</button></span> ")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
+					if len(schedule.Overrides) > 0 {
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<span class=\"rule-set-schedule-overrides\">")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						for _, override := range schedule.Overrides {
+							templ_7745c5c3_Err = components.Button(components.ButtonProps{Label: override.Label, Icon: override.Icon, Variant: components.ButtonOutline, Compact: true, Attrs: ruleSetScheduleOverrideAttrs(view.Set.Name, schedule.Name, override.Action, index)}).Render(ctx, templ_7745c5c3_Buffer)
+							if templ_7745c5c3_Err != nil {
+								return templ_7745c5c3_Err
+							}
+						}
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</span>")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -332,6 +362,17 @@ func ruleSetScheduleFormAttrs(name, schedule, id string) templ.Attributes {
 	return templ.Attributes{
 		"hx-get": "/ui/blocking/rule-sets/schedules/form?" + values.Encode(), "hx-target": "#rule-set-drawer-content",
 		"hx-swap": "innerHTML", "id": id, "data-replica-primary-action": true,
+	}
+}
+
+// ruleSetScheduleOverrideAttrs posts one change to a schedule: skip, delay,
+// end or resume.
+func ruleSetScheduleOverrideAttrs(name, schedule, action string, index int) templ.Attributes {
+	return templ.Attributes{
+		"id": fmt.Sprintf("rule-set-schedule-%s-%d", action, index), "hx-post": "/ui/blocking/rule-sets/schedules/override",
+		"hx-vals":   fmt.Sprintf(`{"name":%q,"schedule":%q,"action":%q}`, name, schedule, action),
+		"hx-target": "#rule-set-drawer-content", "hx-swap": "innerHTML", "hx-disable": "#rule-set-drawer-content .rule-set-schedule-overrides button",
+		"data-replica-primary-action": true,
 	}
 }
 
@@ -381,43 +422,43 @@ func RuleSetScheduleForm(view RuleSetScheduleFormView) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "<form id=\"rule-set-schedule-form\" class=\"rule-set-app-form rule-set-schedule-form\" hx-post=\"/ui/blocking/rule-sets/schedules\" hx-target=\"#rule-set-drawer-content\" hx-swap=\"innerHTML\" hx-disable=\"find button\"><input type=\"hidden\" name=\"name\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "<form id=\"rule-set-schedule-form\" class=\"rule-set-app-form rule-set-schedule-form\" hx-post=\"/ui/blocking/rule-sets/schedules\" hx-target=\"#rule-set-drawer-content\" hx-swap=\"innerHTML\" hx-disable=\"find button\"><input type=\"hidden\" name=\"name\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var13 string
 			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.Set)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 143, Col: 52}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 172, Col: 52}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "\"> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "\"> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if view.Original != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "<input type=\"hidden\" name=\"original\" value=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "<input type=\"hidden\" name=\"original\" value=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var14 string
 				templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.ResolveAttributeValue(view.Original)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 145, Col: 62}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 174, Col: 62}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var14)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "<div class=\"rule-set-notice\" id=\"rule-set-schedule-notice\"></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<div class=\"rule-set-notice\" id=\"rule-set-schedule-notice\"></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -425,79 +466,79 @@ func RuleSetScheduleForm(view RuleSetScheduleFormView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "<fieldset class=\"field-control rule-set-schedule-days\"><legend>Days</legend><div class=\"rule-set-schedule-day-grid\" role=\"group\" aria-label=\"Days\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "<fieldset class=\"field-control rule-set-schedule-days\"><legend>Days</legend><div class=\"rule-set-schedule-day-grid\" role=\"group\" aria-label=\"Days\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			for _, day := range view.Days {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<label class=\"rule-set-app-choice rule-set-schedule-day\" title=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<label class=\"rule-set-app-choice rule-set-schedule-day\" title=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var15 string
 				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.ResolveAttributeValue(day.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 153, Col: 79}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 182, Col: 79}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\"><input type=\"checkbox\" name=\"day\" value=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "\"><input type=\"checkbox\" name=\"day\" value=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var16 string
 				templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.ResolveAttributeValue(day.Value)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 154, Col: 58}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 183, Col: 58}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var16)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if day.Chosen {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, " checked")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, " checked")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "> <span aria-hidden=\"true\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "> <span aria-hidden=\"true\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var17 string
 				templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(day.Label[:1])
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 155, Col: 47}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 184, Col: 47}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "</span> <span class=\"sr-only\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "</span> <span class=\"sr-only\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var18 string
 				templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(day.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 156, Col: 39}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 185, Col: 39}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "</span></label>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "</span></label>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "</div></fieldset><div class=\"field-grid two rule-set-schedule-times\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "</div></fieldset><div class=\"field-grid two rule-set-schedule-times\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -509,7 +550,7 @@ func RuleSetScheduleForm(view RuleSetScheduleFormView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -518,45 +559,45 @@ func RuleSetScheduleForm(view RuleSetScheduleFormView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if view.Off {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "<input type=\"hidden\" name=\"block\" value=\"everything\"><p class=\"rule-set-domains-help\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "<input type=\"hidden\" name=\"block\" value=\"everything\"><p class=\"rule-set-domains-help\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var19 string
 				templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs("Blocking is off for " + view.Set + ", so its schedules block everything but its allowed domains.")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 168, Col: 137}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `blocking_schedules.templ`, Line: 197, Col: 137}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "</p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "<fieldset class=\"field-control rule-set-schedule-blocks\"><legend>Blocks</legend><div class=\"rule-set-choice\"><label><input type=\"radio\" name=\"block\" value=\"everything\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "<fieldset class=\"field-control rule-set-schedule-blocks\"><legend>Blocks</legend><div class=\"rule-set-choice\"><label><input type=\"radio\" name=\"block\" value=\"everything\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if !view.Apps {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, " checked")
-					if templ_7745c5c3_Err != nil {
-						return templ_7745c5c3_Err
-					}
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "><span>Everything</span></label> <label><input type=\"radio\" name=\"block\" value=\"apps\"")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				if view.Apps {
 					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, " checked")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "><span>Only These Apps</span></label></div><small class=\"field-help\">Everything works like a hold: only allowed domains get through.</small></fieldset><div class=\"rule-set-schedule-apps\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "><span>Everything</span></label> <label><input type=\"radio\" name=\"block\" value=\"apps\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				if view.Apps {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, " checked")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "><span>Only These Apps</span></label></div><small class=\"field-help\">Everything works like a hold: only allowed domains get through.</small></fieldset><div class=\"rule-set-schedule-apps\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -564,12 +605,12 @@ func RuleSetScheduleForm(view RuleSetScheduleFormView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "</form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "</form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -604,7 +645,7 @@ func ruleSetScheduleFooter(view RuleSetScheduleFormView) templ.Component {
 			templ_7745c5c3_Var20 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "<div class=\"query-detail-policy-actions insight-drawer-actions\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "<div class=\"query-detail-policy-actions insight-drawer-actions\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -618,7 +659,7 @@ func ruleSetScheduleFooter(view RuleSetScheduleFormView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

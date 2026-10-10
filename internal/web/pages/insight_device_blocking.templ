@@ -22,6 +22,9 @@ type InsightDeviceBlockingView struct {
 	// "Default" or "Guests (from the network 10.20.40.0/24)".
 	Inherited string
 	RuleSets  []string
+	// Schedules are the rule set's schedules, with when each next starts or
+	// ends.
+	Schedules []RuleSetSchedule
 
 	Held bool
 	// HoldEntry is the hardware address, address or network the hold is on.
@@ -53,6 +56,7 @@ templ insightDeviceBlocking(view InsightDeviceDrawerView) {
 			<p class="insight-blocking-note">@Icon("info")<span>Blocking is off for everyone, so none of this applies until it's back on.</span></p>
 		}
 		@insightDeviceRuleSet(view)
+		@insightDeviceSchedules(view.Blocking)
 		@insightDeviceHold(view)
 	</section>
 }
@@ -87,6 +91,29 @@ templ insightDeviceRuleSet(view InsightDeviceDrawerView) {
 		</form>
 		if len(blocking.RuleSets) == 0 {
 			<p class="insight-blocking-note">@Icon("info")<span>There are no rule sets yet. Add one in <a href="/blocked?tab=rule-sets">Blocked → Rule Sets</a>.</span></p>
+		}
+	}
+}
+
+// insightDeviceSchedules shows each of the rule set's schedules, and when
+// it next starts or ends, while the rule set editor is closed.
+templ insightDeviceSchedules(blocking InsightDeviceBlockingView) {
+	if blocking.Editing != "rule-set" {
+		for _, schedule := range blocking.Schedules {
+			<div class="insight-blocking-row" data-insight-schedule={ schedule.Name }>
+				<span class="insight-blocking-icon">@Icon(ifThen(schedule.Everything, "moon", "clock"))</span>
+				<div class="insight-blocking-detail">
+					<strong>
+						{ schedule.Name + " schedule" }
+						if schedule.On {
+							@components.Badge(components.BadgeProps{Label: "On", Tone: components.BadgeSuccess})
+						} else if schedule.Paused {
+							@components.Badge(components.BadgeProps{Label: "Paused"})
+						}
+					</strong>
+					<small>{ scheduleDetail(schedule) }</small>
+				</div>
+			</div>
 		}
 	}
 }

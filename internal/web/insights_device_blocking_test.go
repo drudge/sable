@@ -83,6 +83,27 @@ func TestDeviceDrawerShowsARuleSetWithBlockingOff(t *testing.T) {
 	}
 }
 
+func TestDeviceDrawerShowsTheRuleSetsSchedules(t *testing.T) {
+	t.Parallel()
+	server := newInsightsTestServer(t)
+	now := time.Now().UTC()
+	server.withConfig(t, func(configuration *config.Config) {
+		configuration.Blocking.RuleSets = append(configuration.Blocking.RuleSets, config.RuleSet{Name: "Kids", Schedules: []config.Schedule{{
+			Name: "Bedtime", Days: []string{"sun", "mon", "tue", "wed", "thu", "fri", "sat"}, TimeZone: "UTC", Block: config.ScheduleBlockEverything,
+			Start: now.Add(-time.Hour).Format("15:04"), End: now.Add(2 * time.Hour).Format("15:04"),
+		}}})
+		configuration.Clients = append(configuration.Clients, config.Client{Address: "10.0.0.5", RuleSet: "Kids"})
+	})
+	drawer := server.get(t, "everything", "/ui/insights/device?range=day&key="+url.QueryEscape(insightsTestLaptop), true).Body.String()
+	if !strings.Contains(drawer, `data-insight-schedule="Bedtime"`) || !strings.Contains(drawer, "Bedtime schedule") || !strings.Contains(drawer, ">On<") || !strings.Contains(drawer, "Everything · Ends ") {
+		t.Fatalf("device in a rule set with a schedule on:\n%s", drawer)
+	}
+	editor := server.get(t, "everything", "/ui/insights/device?range=day&edit=rule-set&key="+url.QueryEscape(insightsTestLaptop), true).Body.String()
+	if strings.Contains(editor, `data-insight-schedule="Bedtime"`) {
+		t.Fatal("the rule set editor still shows the old rule set's schedules")
+	}
+}
+
 func TestDeviceDrawerHoldsBlockEverything(t *testing.T) {
 	t.Parallel()
 	server := newInsightsTestServer(t)

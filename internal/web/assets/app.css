@@ -4107,6 +4107,7 @@ html:not([data-passkeys-supported]) [data-passkey-capability] { display: none !i
 .insight-blocking-detail { display: grid; min-width: 0; flex: 1; gap: .15rem; }
 .query-detail-answer .insight-blocking-detail strong { color: var(--foreground); font-size: .9375rem; font-weight: 600; }
 .query-detail-answer .insight-blocking-detail small { color: var(--muted-foreground); font-size: .8125rem; line-height: 1.4; text-transform: none; }
+.insight-blocking-detail strong:has(.status-badge) { display: flex; align-items: center; gap: var(--space-2); }
 .insight-blocking-row > .query-detail-title-action { margin-left: auto; }
 .insight-blocking-note { display: flex; align-items: flex-start; gap: var(--space-2); margin: 0; color: var(--muted-foreground); font-size: .8125rem; line-height: 1.4; }
 .insight-blocking-note .nav-icon { width: .9rem; height: .9rem; flex: 0 0 .9rem; margin-top: .15rem; }
@@ -4524,6 +4525,7 @@ input[type="checkbox"]:not([role="switch"], .switch > input):disabled { cursor: 
 .rule-set-schedule-row .rule-set-device-name strong { display: flex; align-items: center; gap: var(--space-2); }
 .rule-set-schedule-row .rule-set-device-name small { font-family: inherit; white-space: normal; }
 .rule-set-schedule-actions { display: flex; align-items: center; gap: var(--space-1); }
+.rule-set-schedule-overrides { display: flex; flex-wrap: wrap; grid-column: 2 / -1; gap: var(--space-2); padding-bottom: var(--space-1); }
 .rule-set-schedule-days, .rule-set-schedule-blocks { margin: 0; border: 0; padding: 0; }
 .rule-set-schedule-days > legend, .rule-set-schedule-blocks > legend { margin-bottom: var(--space-2); padding: 0; }
 .rule-set-schedule-blocks > small { display: block; margin-top: var(--space-2); }

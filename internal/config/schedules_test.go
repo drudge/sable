@@ -145,3 +145,35 @@ func TestSaveAndDeleteSchedules(t *testing.T) {
 		t.Fatalf("DeleteSchedule() = %v, schedules %+v", err, configuration.Blocking.RuleSets[0].Schedules)
 	}
 }
+
+func TestSetScheduleOff(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, time.October, 12, 22, 0, 0, 0, time.UTC)
+	bedtime := Schedule{Name: "Bedtime", Days: []string{"mon"}, Start: "21:00", End: "07:00", TimeZone: "UTC", Block: ScheduleBlockEverything}
+	stale := bedtime
+	stale.Name, stale.OffUntil = "Homework", now.Add(-time.Hour)
+	configuration := Config{Blocking: Blocking{RuleSets: []RuleSet{{Name: "Kids", Schedules: []Schedule{bedtime, stale}}}}}
+	before := configuration.Blocking.RuleSets
+	until := now.Add(9 * time.Hour)
+	if err := configuration.SetScheduleOff("Kids", "Bedtime", until, now); err != nil {
+		t.Fatal(err)
+	}
+	schedules := configuration.Blocking.RuleSets[0].Schedules
+	if !schedules[0].OffUntil.Equal(until) || !schedules[1].OffUntil.IsZero() || !before[0].Schedules[1].OffUntil.Equal(stale.OffUntil) {
+		t.Fatalf("schedules = %+v, before = %+v", schedules, before[0].Schedules)
+	}
+	if window, err := schedules[0].Window(); err != nil || !window.OffUntil.Equal(until) {
+		t.Fatalf("Window() = %+v, %v", window, err)
+	}
+	if err := configuration.SetScheduleOff("Kids", "Bedtime", time.Time{}, now); err != nil || !configuration.Blocking.RuleSets[0].Schedules[0].OffUntil.IsZero() {
+		t.Fatalf("SetScheduleOff(zero) = %v, schedules %+v", err, configuration.Blocking.RuleSets[0].Schedules)
+	}
+	for _, err := range []error{
+		configuration.SetScheduleOff("Guests", "Bedtime", until, now),
+		configuration.SetScheduleOff("Kids", "Nap", until, now),
+	} {
+		if err == nil {
+			t.Fatal("a change to a missing rule set or schedule went through")
+		}
+	}
+}

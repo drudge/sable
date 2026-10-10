@@ -45,6 +45,10 @@ type Schedule struct {
 	// Block is ScheduleBlockEverything or ScheduleBlockApps.
 	Block string   `toml:"block"`
 	Apps  []string `toml:"apps,omitempty"`
+	// OffUntil keeps the schedule off before it: Skip, Delay 30 Minutes or
+	// End Now from the console. Once it passes it means nothing, and the
+	// next change to the rule set's schedules drops it.
+	OffUntil time.Time `toml:"off_until,omitempty"`
 }
 
 // Window returns the schedule's weekly window, read in its time zone.
@@ -53,7 +57,7 @@ func (schedule Schedule) Window() (weekly.Window, error) {
 	if err != nil {
 		return weekly.Window{}, err
 	}
-	window := weekly.Window{Location: location}
+	window := weekly.Window{Location: location, OffUntil: schedule.OffUntil}
 	window.Start, window.End = schedule.Minutes()
 	for _, day := range schedule.Days {
 		if index := slices.Index(scheduleDays, day); index >= 0 {
@@ -252,6 +256,30 @@ func (configuration *Config) DeleteSchedule(set, name string) error {
 	if len(sets[index].Schedules) == 0 {
 		sets[index].Schedules = nil
 	}
+	configuration.Blocking.RuleSets = sets
+	return nil
+}
+
+// SetScheduleOff keeps the schedule called name in the rule set called set
+// off until until, or clears that when until is zero. Other schedules in the
+// set whose OffUntil has passed by now drop it.
+func (configuration *Config) SetScheduleOff(set, name string, until, now time.Time) error {
+	index := slices.IndexFunc(configuration.Blocking.RuleSets, func(existing RuleSet) bool { return existing.Name == set })
+	if index < 0 {
+		return fmt.Errorf("no rule set is called %q", set)
+	}
+	sets := cloneRuleSets(configuration.Blocking.RuleSets)
+	schedules := sets[index].Schedules
+	position := slices.IndexFunc(schedules, func(existing Schedule) bool { return existing.Name == name })
+	if position < 0 {
+		return fmt.Errorf("%s has no schedule called %q", set, name)
+	}
+	for other := range schedules {
+		if !schedules[other].OffUntil.After(now) {
+			schedules[other].OffUntil = time.Time{}
+		}
+	}
+	schedules[position].OffUntil = until
 	configuration.Blocking.RuleSets = sets
 	return nil
 }

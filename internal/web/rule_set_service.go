@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/insights/services"
@@ -162,6 +163,28 @@ func (service ruleSetService) DeleteSchedule(ctx context.Context, who actor, nam
 	action, message := "blocking.rule_set.schedule.delete", name+"'s "+schedule+" schedule deleted"
 	err := service.update(ctx, who, action, func(configuration *config.Config) error {
 		if err := configuration.DeleteSchedule(name, schedule); err != nil {
+			return refuse(http.StatusNotFound, "%s", sentence(err.Error()))
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	service.server.policyService().finish(ctx, who, action, "", message)
+	return message, nil
+}
+
+// SetScheduleOff keeps the schedule called schedule in the rule set called
+// name off until until, or turns it back to its days and times when until is
+// zero. action is the console's word for the change: skip, delay, end or
+// resume.
+func (service ruleSetService) SetScheduleOff(ctx context.Context, who actor, name, schedule, action string, until time.Time) (string, error) {
+	message := name + "'s " + schedule + " schedule " + map[string]string{
+		scheduleSkip: "skipped", scheduleDelay: "delayed 30 minutes", scheduleEnd: "ended early", scheduleResume: "resumed",
+	}[action]
+	action = "blocking.rule_set.schedule." + action
+	err := service.update(ctx, who, action, func(configuration *config.Config) error {
+		if err := configuration.SetScheduleOff(name, schedule, until, time.Now()); err != nil {
 			return refuse(http.StatusNotFound, "%s", sentence(err.Error()))
 		}
 		return nil
