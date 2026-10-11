@@ -8,6 +8,57 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.0-beta.11] - 2026-10-11
+
+Sable 1.7.0-beta.11 adds rule set schedules. A rule set can block
+everything, or just some apps, for its devices at set times each week, such
+as a bedtime, with buttons to skip, delay, or end a window for one night.
+
+### Upgrading
+
+- Nothing in the config changes going from 1.7.0-beta.10. Schedules live
+  under their rule set as `[[blocking.rule_sets.schedules]]` and replicate
+  like the rest of the rule set, so upgrade every node in a cluster together
+  before adding one.
+- The new MCP tool `list_schedules` is on by default, but an install that
+  already picked its MCP tools (`[mcp] tools`) won't get it until you turn it
+  on under **Integrations**.
+- Coming from 1.6.x, also read the 1.7.0-beta.1 upgrade notes below.
+
+### Blocking
+
+- Add schedules to rule sets. Open a rule set on **Blocked → Rule Sets** and
+  choose **Add Schedule** to pick its days, start and end times, and whether
+  it blocks everything or chosen apps. An end before the start runs into the
+  next morning, and times follow the schedule's own time zone across
+  daylight saving time. The Rule Sets tab counts each rule set's schedules.
+- A schedule that blocks everything works like a hold: its devices still
+  reach their allowed domains, and it outlasts a global pause or a rule set
+  with blocking off.
+- Change one window without editing the schedule. While a schedule is on,
+  **Delay 30 Minutes** gives 30 more minutes and **End Now** stops it until
+  the window would have ended. When it starts within a day, **Skip** passes
+  over that window and **Delay 30 Minutes** starts it late. **Resume** undoes
+  any of these. Overrides are saved as `off_until`, so they replicate and
+  show in the Change Center.
+- List a device's rule set schedules on its **Insights → Devices** panel,
+  with whether each is on and when it next starts or ends.
+- Turn a rule set's blocking off with a **Blocking** switch that reads the
+  right way round, in place of **Turn Off Blocking**, and call the shared
+  lists **All Your Block Lists** instead of **Every Block List**.
+
+### Query log and Check a Domain
+
+- Name the schedule behind a block in the query explanation, **Check a
+  Domain**, and `check_domain`.
+
+### MCP
+
+- Add `list_schedules`, which lists each rule set's schedules, whether each
+  is on, and when it next starts or ends.
+- Add `override_schedule` to skip, delay, end, or resume a schedule's current
+  or next window. It's off by default.
+
 ## [1.7.0-beta.10] - 2026-10-09
 
 Sable 1.7.0-beta.10 adds per-device blocking. Rule sets give some devices
