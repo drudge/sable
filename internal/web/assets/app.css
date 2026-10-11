@@ -186,7 +186,7 @@ button { cursor: pointer; }
 .brand-copy, .user-copy { display: grid; min-width: 0; flex: 1; line-height: 1.25; }
 .brand-copy strong, .user-copy strong { overflow: hidden; font-size: 0.875rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .brand-copy small, .user-copy small { overflow: hidden; color: var(--muted-foreground); font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar-collapse { position: absolute; top: 0.625rem; right: 0.5rem; display: grid; width: 2rem; height: 2rem; place-items: center; border: 0; border-radius: 0.375rem; background: transparent; }
+.sidebar-collapse { position: absolute; top: 0.625rem; right: 0.5rem; display: grid; width: 2rem; height: 2rem; place-items: center; border: 0; border-radius: 50%; background: transparent; }
 .sidebar-collapse:hover, .user-menu:hover { background: var(--sidebar-accent); }
 .sidebar-nav-wrap { position: relative; min-height: 0; flex: 1; }
 /* The list scrolls when the window is too short for it. Scrollbars stay out
@@ -232,9 +232,9 @@ button { cursor: pointer; }
 .command-palette-trigger .nav-icon { width: 1rem; height: 1rem; }
 .command-palette-trigger kbd { border: 1px solid var(--sidebar-border); border-radius: .3rem; background: color-mix(in oklch, var(--sidebar-accent) 55%, transparent); padding: .12rem .35rem; color: inherit; font: 600 .62rem/1.2 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 .sidebar-account { position: relative; min-width: 0; }
-.user-menu { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--space-2); border: 0; border-radius: 0.5rem; background: transparent; padding: var(--space-2); color: inherit; text-align: left; }
+.user-menu { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--space-2); border: 0; border-radius: 999px; background: transparent; padding: var(--space-2); color: inherit; text-align: left; }
 .user-menu:hover { background: var(--sidebar-accent); }
-.avatar { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; border-radius: 0.5rem; background: var(--accent); font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+.avatar { display: grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; border-radius: 50%; background: var(--accent); font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
 .avatar-image { object-fit: cover; background: var(--surface-2, var(--accent)); }
 .user-action { display: grid; width: 1.75rem; height: 1.75rem; place-items: center; border: 0; border-radius: 0.375rem; background: transparent; color: var(--muted-foreground); }
 .user-action .nav-icon { width: 0.9rem; height: 0.9rem; }
@@ -290,7 +290,7 @@ button { cursor: pointer; }
 .sidebar-collapsed .brand-mark, .sidebar-collapsed .avatar { width: 2rem; height: 2rem; }
 @media (min-width: 768px) {
   .sidebar-collapsed .sidebar-bottom { padding-inline: var(--space-1); }
-  .sidebar-collapsed .user-menu { width: 2.5rem; height: 2.5rem; justify-content: center; margin-inline: auto; border-radius: 0.625rem; padding: var(--space-1); }
+  .sidebar-collapsed .user-menu { width: 2.5rem; height: 2.5rem; justify-content: center; margin-inline: auto; border-radius: 50%; padding: var(--space-1); }
   .sidebar-collapsed .nav-item { height: 2.5rem; }
   .sidebar-collapsed .nav-item.active { border-color: transparent; background: var(--sidebar-accent); }
   /* The collapsed rail hides the section labels, so a wider gap is all that
@@ -425,7 +425,7 @@ button { cursor: pointer; }
 .range-tabs button:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 .range-select { display: none; }
 .range-select select, .range-select .styled-select { width: 7rem; }
-.range-custom-mobile { display: none; height: 2rem; border: 1px solid var(--border); border-radius: .375rem; background: var(--background); padding: 0 .65rem; color: var(--foreground); font-size: .75rem; }
+.range-custom-mobile { display: none; height: 2rem; border: 1px solid var(--border); border-radius: 999px; background: var(--background); padding: 0 .65rem; color: var(--foreground); font-size: .75rem; }
 .chart-wrap { position: relative; height: 22rem; padding: 0 var(--space-6) var(--space-4); }
 .chart-wrap::after { position: absolute; inset: .25rem 0 1rem; background: linear-gradient(105deg, transparent 28%, color-mix(in oklch, var(--primary) 14%, transparent) 50%, transparent 72%); content: ""; opacity: 0; pointer-events: none; transform: translateX(-120%); }
 .dashboard-page:has(.dashboard-update-indicator.htmx-request) .chart-wrap::after { opacity: 1; animation: dashboard-update-sweep 1.15s ease-in-out infinite; }
@@ -1821,7 +1821,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .integration-facts .integration-fact-address > dt { grid-column: 1; grid-row: 1; padding-right: 0; }
 .integration-fact-address code { display: block; overflow: hidden; min-width: 0; grid-column: 1 / -1; grid-row: 2; text-overflow: ellipsis; white-space: nowrap; }
 .integration-facts .integration-fact-address .fact-copy { position: static; grid-column: 2; grid-row: 1; }
-.fact-copy { display: grid; width: 1.4rem; height: 1.4rem; grid-column: 2; grid-row: 1; place-items: center; border: 0; border-radius: calc(var(--radius) - 4px); background: transparent; padding: 0; color: var(--muted-foreground); }
+.fact-copy { display: grid; width: 1.4rem; height: 1.4rem; grid-column: 2; grid-row: 1; place-items: center; border: 0; border-radius: 50%; background: transparent; padding: 0; color: var(--muted-foreground); }
 .fact-copy:hover { background: color-mix(in oklch, var(--foreground) 9%, transparent); color: var(--foreground); }
 .fact-copy:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 .fact-copy > span { width: 100%; height: 100%; align-items: center; justify-content: center; line-height: 0; }
@@ -1910,7 +1910,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	/* Mobile navigation is used by touch, so keep the full menu on a deliberate
 	   48px rhythm instead of carrying over the compact desktop controls. */
 	.sidebar-header { flex: 0 0 auto; padding: var(--space-3); }
-	.sidebar-collapse { top: .75rem; right: .75rem; width: 2.75rem; height: 2.75rem; border-radius: .625rem; }
+	.sidebar-collapse { top: .75rem; right: .75rem; width: 2.75rem; height: 2.75rem; }
 	.sidebar-nav-wrap { flex: 1 1 auto; }
 	.nav { padding: var(--space-1) var(--space-3) var(--space-3); }
 	/* Keep the section break visible without spending a full touch target on it. */
@@ -1921,7 +1921,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.nav-icon { width: 1.25rem; height: 1.25rem; flex-basis: 1.25rem; }
 	.sidebar-bottom { flex: 0 0 auto; gap: var(--space-2); margin-top: 0; background: var(--sidebar); padding: var(--space-3) var(--space-3) max(.75rem, env(safe-area-inset-bottom)); }
 	.command-palette-trigger { height: 3rem; padding-inline: var(--space-4); font-size: .875rem; }
-	.user-menu { min-height: 3rem; border-radius: .625rem; padding: .375rem var(--space-3); }
+	.user-menu { min-height: 3rem; padding: .375rem var(--space-3); }
 	.avatar { width: 2.25rem; height: 2.25rem; flex-basis: 2.25rem; }
 	.user-action { width: 2.5rem; height: 2.5rem; border-radius: .625rem; }
 	.account-popover { left: 50%; transform: translateX(-50%); }
@@ -1936,7 +1936,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
   /* The header sticks so navigation stays one tap away, but slides out of the
      way while reading down a long page and comes back on the first scroll up. */
   .mobile-header { position: sticky; top: 0; z-index: 15; display: flex; height: 3.5rem; align-items: center; justify-content: center; border-bottom: 1px solid var(--border); background: var(--background); transition: transform 180ms ease; }
-  .mobile-header button { position: absolute; left: 1rem; display: grid; width: 2.75rem; height: 2.75rem; place-items: center; border: 0; border-radius: 0.625rem; background: transparent; }
+  .mobile-header button { position: absolute; left: 1rem; display: grid; width: 2.75rem; height: 2.75rem; place-items: center; border: 0; border-radius: 50%; background: transparent; }
 	.mobile-header [data-sidebar-toggle] .nav-icon { width: 1.25rem; height: 1.25rem; }
 	.mobile-header .mobile-command-palette-trigger { right: 1rem; left: auto; }
   .mobile-header-brand { display: inline-flex; height: 2.75rem; align-items: center; border-radius: 0.375rem; padding-inline: var(--space-3); font-size: 1.125rem; font-weight: 700; }
@@ -2778,7 +2778,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .about-card-title .nav-icon { width: 1.25rem; height: 1.25rem; flex: 0 0 1.25rem; color: #f1ad47; }
 .about-code-block { position: relative; min-width: 0; }
 .about-code-block pre { max-height: none; padding-right: 2.75rem; background: color-mix(in oklch, var(--muted) 40%, transparent); font-size: .6875rem; }
-.about-copy-button { position: absolute; top: .4rem; right: .4rem; display: grid; width: 1.5rem; height: 1.5rem; place-items: center; border: 0; border-radius: .3rem; background: transparent; padding: 0; color: var(--muted-foreground); transition: background 120ms; }
+.about-copy-button { position: absolute; top: .4rem; right: .4rem; display: grid; width: 1.5rem; height: 1.5rem; place-items: center; border: 0; border-radius: 50%; background: transparent; padding: 0; color: var(--muted-foreground); transition: background 120ms; }
 .about-copy-button:hover { background: var(--accent); color: var(--foreground); }
 /* Center the icon the way the record copy buttons do: without this the
    text-height icon wrappers sit up and to the left of the hover box. */
