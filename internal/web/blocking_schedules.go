@@ -287,11 +287,7 @@ func (server *Server) overrideRuleSetSchedule(writer http.ResponseWriter, reques
 		return
 	}
 	name, scheduleName, action := request.FormValue("name"), request.FormValue("schedule"), request.FormValue("action")
-	until, err := server.scheduleOffUntil(name, scheduleName, action, time.Now())
-	message := ""
-	if err == nil {
-		message, err = server.ruleSetService().SetScheduleOff(request.Context(), requestActor(request, ""), name, scheduleName, action, until)
-	}
+	message, err := server.ruleSetService().OverrideSchedule(request.Context(), requestActor(request, ""), name, scheduleName, action, time.Now())
 	server.renderRuleSetChange(writer, request, name, message, err)
 }
 
