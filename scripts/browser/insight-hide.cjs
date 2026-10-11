@@ -3,7 +3,7 @@ const {chromium} = require('playwright');
 
 // Opens Hide Finding beside Why Sable surfaced this, backs out of its menu
 // with Escape without losing the drawer, checks it fits a phone, and marks the
-// finding normal.
+// finding normal. Then hides another finding for a day from its row.
 (async () => {
   const [baseURL, cookieName] = process.argv.slice(2);
   const browser = await chromium.launch({headless: true, ...(process.env.SABLE_TEST_BROWSER ? {executablePath: process.env.SABLE_TEST_BROWSER} : {})});
@@ -63,8 +63,22 @@ const {chromium} = require('playwright');
     await drawer.waitFor({state: 'hidden'});
     await page.getByText('1 hidden finding').waitFor();
     assert.equal(await findings.count(), listed - 1, 'the finding leaves the list');
+
+    // A row hides its finding from the list too, without opening the drawer,
+    // and on a phone its icon sits above the row's Details tap area.
+    const row = findings.first();
+    const rowHide = row.locator('.insight-row-hide > summary');
+    await rowHide.click();
+    const forADay = row.getByRole('button', {name: /For a Day/});
+    await forADay.waitFor();
+    const hidden = page.waitForResponse(response => response.url().endsWith('/ui/insights/feedback') && response.status() === 204);
+    await forADay.click();
+    await hidden;
+    await page.getByText('2 hidden findings').waitFor();
+    assert.equal(await findings.count(), listed - 2, 'the row hides its finding');
+    assert.equal(await page.locator('dialog[open]').count(), 0, 'hiding from a row opens no drawer');
     assert.deepEqual(errors, []);
-    console.log('PASS a finding hides from the menu beside its reasons, and Escape keeps the drawer');
+    console.log('PASS a finding hides from its row and from the menu beside its reasons, and Escape keeps the drawer');
   } finally {
     await browser.close();
   }

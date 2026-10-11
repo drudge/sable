@@ -3789,6 +3789,10 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .insight-finding-copy strong.mono { font: 500 .875rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 .insight-finding-copy p { margin: 0; color: var(--muted-foreground); font-size: .8125rem; line-height: 1.45; }
 .insight-evidence-button { flex: 0 0 auto; gap: var(--space-1); }
+.insight-finding-actions { display: flex; align-items: center; gap: var(--space-2); }
+/* A row's hide menu is a round icon the height of Details beside it. */
+.insight-row-hide > summary.icon-button { width: 2rem; height: 2rem; flex-basis: 2rem; color: var(--muted-foreground); }
+.insight-row-hide > summary.icon-button:hover, .insight-row-hide[open] > summary.icon-button { color: var(--foreground); }
 .insight-evidence-button .nav-icon { width: .875rem; height: .875rem; }
 .insight-findings-empty, .insight-section-empty { min-height: 11rem; gap: .35rem; padding: var(--space-6) var(--space-4); }
 .insight-findings-empty > .empty-state-icon { width: 2.5rem; height: 2.5rem; margin-bottom: .35rem; border-radius: .6rem; background: color-mix(in oklch, var(--success-strong) 13%, transparent); color: var(--success-strong); }
@@ -4071,7 +4075,11 @@ svg.app-icon { display: block; border-radius: .5rem; }
 	.insights-range .range-select { width: 100%; }
 	.insight-metrics, .insight-metrics[data-metric-count="3"] { grid-template-columns: minmax(0, 1fr); }
 	.insight-metrics[data-metric-count="3"] > :last-child { grid-column: auto; }
-	.insight-finding { grid-template-columns: 2.25rem minmax(0, 1fr) 2rem; align-items: start; gap: var(--space-3); }
+	.insight-finding { grid-template-columns: 2.25rem minmax(0, 1fr) auto; align-items: start; gap: var(--space-3); }
+	.insight-finding-actions { align-self: center; gap: var(--space-1); }
+	/* The hide menu sits above the Details tap area that covers the row. */
+	.insight-row-hide { z-index: 1; }
+	.insight-row-hide[open] { z-index: 30; }
 	.insight-finding-copy strong { white-space: normal; overflow-wrap: anywhere; }
 	/* On a phone the button shrinks to its chevron and stretches its tap area
 	   over the whole finding; the label stays as its accessible name. */
