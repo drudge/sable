@@ -14,8 +14,8 @@ import (
 	"github.com/drudge/sable/internal/insights"
 )
 
-// Open a finding's hide menu, back out of it with Escape, and mark the finding
-// normal.
+// Open a finding's hide menu, back out of it with Escape, mark the finding
+// normal, and hide another from its row.
 func TestBrowserInsightHideMenu(t *testing.T) {
 	app := newInsightsTestServer(t)
 	server := httptest.NewServer(app.httpServer.Handler)
@@ -32,7 +32,16 @@ func TestBrowserInsightHideMenu(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(feedback) != 1 || feedback[0].Action != insights.FeedbackNormal || !strings.HasPrefix(feedback[0].FindingID, "blocking.past-block/") {
+	normal, snoozed := 0, 0
+	for _, entry := range feedback {
+		switch {
+		case entry.Action == insights.FeedbackNormal && strings.HasPrefix(entry.FindingID, "blocking.past-block/"):
+			normal++
+		case entry.Action == insights.FeedbackSnooze:
+			snoozed++
+		}
+	}
+	if len(feedback) != 2 || normal != 1 || snoozed != 1 {
 		t.Fatalf("stored feedback = %+v", feedback)
 	}
 }
