@@ -8,6 +8,22 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.0-beta.12] - 2026-10-11
+
+Sable 1.7.0-beta.12 rounds the console sidebar's selected page into a pill,
+so it matches the pill buttons and segmented controls.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.0-beta.11. Coming from 1.6.x, also read
+the 1.7.0-beta.1 upgrade notes below.
+
+### Console
+
+- Round the highlighted sidebar item and the Commands row into pills on a
+  laptop, in the collapsed rail, and in the phone drawer, with a little more
+  room so icons sit clear of the curve.
+
 ## [1.7.0-beta.11] - 2026-10-11
 
 Sable 1.7.0-beta.11 adds rule set schedules. A rule set can block
