@@ -8,6 +8,31 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.0-beta.13] - 2026-10-11
+
+Sable 1.7.0-beta.13 lets you hide an Insights finding straight from its row,
+and rounds the console's last square buttons to match the pill sidebar.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.0-beta.12. Coming from 1.6.x, also read
+the 1.7.0-beta.1 upgrade notes below.
+
+### Insights
+
+- Hide a finding from its row in **Worth a Look**. A round hide icon beside
+  **Details** opens the same **For a Day**, **For a Week**, and
+  **That's Normal** menu without opening the drawer. The drawer keeps its
+  **Hide Finding** button.
+
+### Console
+
+- Round the remaining square buttons. The sidebar collapse toggle, the phone
+  header's menu and search buttons, and the copy buttons on fact tiles and
+  code blocks are now circles. The phone **Custom** range button and the
+  account button at the foot of the sidebar are pills, the account button is
+  a circle on the collapsed rail, and avatars are round.
+
 ## [1.7.0-beta.12] - 2026-10-11
 
 Sable 1.7.0-beta.12 rounds the console sidebar's selected page into a pill,
