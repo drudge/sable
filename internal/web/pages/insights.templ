@@ -788,14 +788,19 @@ templ InsightFindings(view InsightsOverviewView) {
 							<strong class={ templ.KV("mono", finding.SubjectMonospace) } title={ finding.Subject }>{ finding.Subject }</strong>
 							<p>{ finding.Summary }</p>
 						</div>
-						<button class="button outline compact insight-evidence-button" type="button" data-dialog-open={ finding.ID } aria-label={ "View details for " + finding.Subject }
-							if finding.Link != "" {
-								data-dialog-url={ finding.Link }
+						<div class="insight-finding-actions">
+							if view.canHide(finding) {
+								@insightHideMenu(finding, true)
 							}
-						>
-							<span>Details</span>
-							@Icon("chevron-right")
-						</button>
+							<button class="button outline compact insight-evidence-button" type="button" data-dialog-open={ finding.ID } aria-label={ "View details for " + finding.Subject }
+								if finding.Link != "" {
+									data-dialog-url={ finding.Link }
+								}
+							>
+								<span>Details</span>
+								@Icon("chevron-right")
+							</button>
+						</div>
 					</li>
 				}
 			</ol>
@@ -880,7 +885,7 @@ templ InsightEvidence(finding InsightFindingView, view InsightsOverviewView) {
 				<div class={ "insight-why-heading", templ.KV("has-hide-menu", view.canHide(finding)) }>
 					<h3 id={ finding.ID + "-reasons" }>Why Sable surfaced this</h3>
 					if view.canHide(finding) {
-						@insightHideMenu(finding)
+						@insightHideMenu(finding, false)
 					}
 				</div>
 				if len(finding.Reasons) > 0 || len(finding.Explanations) > 0 {
@@ -932,11 +937,12 @@ func (view InsightsOverviewView) canHide(finding InsightFindingView) bool {
 
 // insightHideMenu lets an operator hide a finding for a day, for a week, or
 // for good because it is normal here. It sits beside Why Sable surfaced
-// this, so the answer to Sable's reasons is next to them. Hiding is shared by
-// everyone who opens Insights, and a finding hidden for a while comes back
-// when the time is up if it still applies.
-templ insightHideMenu(finding InsightFindingView) {
-	@components.Menu(components.MenuProps{Label: "Hide Finding", Icon: "eye-off", Variant: components.ButtonOutline, Compact: true, Class: "insight-hide-menu", TriggerAttrs: templ.Attributes{"data-replica-primary-action": true}}) {
+// this, so the answer to Sable's reasons is next to them, and as an icon
+// beside Details on the finding's row, so hiding takes two clicks from the
+// list. Hiding is shared by everyone who opens Insights, and a finding hidden
+// for a while comes back when the time is up if it still applies.
+templ insightHideMenu(finding InsightFindingView, row bool) {
+	@components.Menu(insightHideMenuProps(finding, row)) {
 		<form hx-post="/ui/insights/feedback" hx-swap="none">
 			<input type="hidden" name="id" value={ finding.FindingID }/>
 			<input type="hidden" name="label" value={ finding.Title + ": " + finding.Subject }/>
@@ -954,6 +960,17 @@ templ insightHideMenu(finding InsightFindingView) {
 			}
 		</form>
 	}
+}
+
+// insightHideMenuProps draws the drawer's Hide Finding button, or on a row
+// the round icon beside Details.
+func insightHideMenuProps(finding InsightFindingView, row bool) components.MenuProps {
+	props := components.MenuProps{Label: "Hide Finding", Icon: "eye-off", Variant: components.ButtonOutline, Compact: true, Class: "insight-hide-menu", TriggerAttrs: templ.Attributes{"data-replica-primary-action": true}}
+	if row {
+		props.Label, props.IconButton, props.Class = "", true, "insight-hide-menu insight-row-hide"
+		props.TriggerAttrs = templ.Attributes{"aria-label": "Hide " + finding.Subject, "title": "Hide finding"}
+	}
+	return props
 }
 
 func insightEvidenceHeader(finding InsightFindingView, rangeName, rangeLabel string) DetailDrawerView {
