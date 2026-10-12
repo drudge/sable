@@ -1,0 +1,71 @@
+package pages
+
+import (
+	"fmt"
+	"slices"
+	"strings"
+)
+
+// DeviceOption is a device Sable has seen, offered by a device picker: Value
+// is what the form sends, Label how it reads, and Type the kind of device,
+// for its icon. Value is a hardware address, an address, or a network.
+type DeviceOption struct {
+	Value string
+	Label string
+	Type  string
+}
+
+// DevicePickerProps describe a field that names a device. Typing narrows the
+// devices it offers, by name or address; anything else typed, such as an
+// address Sable hasn't seen, is sent as typed.
+type DevicePickerProps struct {
+	ID          string
+	Name        string
+	Label       string
+	Placeholder string
+	// Value is the device already chosen, sent as Name.
+	Value    string
+	Required bool
+	Options  []DeviceOption
+}
+
+// DevicePicker shows the chosen device by name while the form sends its
+// value, and lists each device with its icon and address.
+templ DevicePicker(props DevicePickerProps) {
+	<span class="suggest-input device-picker" data-device-picker>
+		<label class="sr-only" for={ props.ID }>{ props.Label }</label>
+		<input id={ props.ID } value={ devicePickerLabel(props) } placeholder={ props.Placeholder } autocomplete="off" spellcheck="false" required?={ props.Required } role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls={ props.ID + "-options" } data-device-picker-input/>
+		<input type="hidden" name={ props.Name } value={ props.Value } data-device-picker-value/>
+		<button class="device-picker-toggle" type="button" tabindex="-1" aria-label={ "Show devices for " + strings.ToLower(props.Label) } data-device-picker-toggle><span class="styled-select-chevron" aria-hidden="true"></span></button>
+		<div class="styled-select-popover device-picker-popover" id={ props.ID + "-options" } role="listbox" aria-label={ props.Label } popover="manual" hidden>
+			for index, option := range props.Options {
+				<div class="styled-select-option device-picker-option" id={ fmt.Sprintf("%s-option-%d", props.ID, index) } role="option" aria-selected="false" data-value={ option.Value } data-label={ option.Label } data-search={ strings.ToLower(option.Label + " " + option.Value) }>
+					<span class="styled-select-icon" aria-hidden="true">@Icon(deviceOptionIcon(option))</span>
+					<span class="device-picker-copy">
+						<span>{ option.Label }</span>
+						if option.Value != option.Label {
+							<small>{ option.Value }</small>
+						}
+					</span>
+				</div>
+			}
+			<p class="device-picker-empty" data-device-picker-empty hidden>No devices match. Sable uses what you typed.</p>
+		</div>
+	</span>
+}
+
+// devicePickerLabel is how the chosen device reads in the field: its name
+// when the picker offers it, else the value as it was typed.
+func devicePickerLabel(props DevicePickerProps) string {
+	if index := slices.IndexFunc(props.Options, func(option DeviceOption) bool { return option.Value == props.Value }); index >= 0 && props.Value != "" {
+		return props.Options[index].Label
+	}
+	return props.Value
+}
+
+func deviceOptionIcon(option DeviceOption) string {
+	if strings.Contains(option.Value, "/") {
+		return "router"
+	}
+	return insightTypeIcon(option.Type)
+}

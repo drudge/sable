@@ -626,6 +626,111 @@
 	let styledTimeSequence = 0;
 	const uses24HourTime = () => document.cookie.split(";")
 	  .some((entry) => entry.trim() === "sable_time_format=24");
+	// A device picker narrows the devices it offers as a name or address is
+	// typed. Choosing one shows its name and sends its value; anything typed
+	// and not chosen is sent as typed. Focus stays in the field while the
+	// arrow keys move through the list.
+	const setupDevicePicker = (root) => {
+	  if (root.dataset.devicePickerReady === "true") return;
+	  root.dataset.devicePickerReady = "true";
+	  const input = root.querySelector("[data-device-picker-input]");
+	  const value = root.querySelector("[data-device-picker-value]");
+	  const toggle = root.querySelector("[data-device-picker-toggle]");
+	  const popover = root.querySelector(".device-picker-popover");
+	  const empty = root.querySelector("[data-device-picker-empty]");
+	  const options = [...popover.querySelectorAll('[role="option"]')];
+	  let active = null;
+	  const shown = () => options.filter((option) => !option.hidden);
+	  const activate = (option) => {
+		active?.setAttribute("aria-selected", "false");
+		active = option || null;
+		if (active) {
+		  active.setAttribute("aria-selected", "true");
+		  input.setAttribute("aria-activedescendant", active.id);
+		  active.scrollIntoView({block: "nearest"});
+		} else {
+		  input.removeAttribute("aria-activedescendant");
+		}
+	  };
+	  const filter = () => {
+		const query = input.value.trim().toLowerCase();
+		options.forEach((option) => { option.hidden = query !== "" && !option.dataset.search.includes(query); });
+		empty.hidden = shown().length > 0;
+		activate(null);
+	  };
+	  const reposition = () => {
+		if (!popover.hidden) positionFloatingPopover(root, input, popover);
+	  };
+	  const {open, close} = createPopover(root, popover, [input, toggle], {
+		focusTarget: input,
+		onOpen: () => {
+		  if (typeof popover.showPopover === "function" && !popover.matches(":popover-open")) popover.showPopover();
+		  positionFloatingPopover(root, input, popover);
+		  document.addEventListener("scroll", reposition, true);
+		  window.addEventListener("resize", reposition);
+		},
+		onClose: () => {
+		  if (typeof popover.hidePopover === "function" && popover.matches(":popover-open")) popover.hidePopover();
+		  document.removeEventListener("scroll", reposition, true);
+		  window.removeEventListener("resize", reposition);
+		  activate(null);
+		},
+	  });
+	  const choose = (option) => {
+		input.value = option.dataset.label;
+		value.value = option.dataset.value;
+		close({restoreFocus: true});
+	  };
+	  input.addEventListener("input", () => {
+		value.value = input.value.trim();
+		filter();
+		if (popover.hidden) open(); else reposition();
+	  });
+	  input.addEventListener("click", () => {
+		if (popover.hidden) {
+		  filter();
+		  open();
+		}
+	  });
+	  toggle.addEventListener("click", () => {
+		if (!popover.hidden) {
+		  close({restoreFocus: true});
+		  return;
+		}
+		input.focus();
+		filter();
+		open();
+	  });
+	  input.addEventListener("keydown", (event) => {
+		const list = shown();
+		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+		  event.preventDefault();
+		  if (popover.hidden) {
+			filter();
+			open();
+		  }
+		  const step = event.key === "ArrowDown" ? 1 : -1;
+		  const current = list.indexOf(active);
+		  activate(list[current < 0 ? (step > 0 ? 0 : list.length - 1) : (current + step + list.length) % list.length]);
+		} else if (event.key === "Enter" && !popover.hidden && active) {
+		  event.preventDefault();
+		  choose(active);
+		} else if (event.key === "Escape" && !popover.hidden) {
+		  event.preventDefault();
+		  event.stopPropagation();
+		  close();
+		} else if (event.key === "Tab") {
+		  close();
+		}
+	  });
+	  // A press on an option keeps focus in the field, so the list stays put
+	  // until the choice lands.
+	  popover.addEventListener("pointerdown", (event) => event.preventDefault());
+	  options.forEach((option) => option.addEventListener("click", () => choose(option)));
+	  input.closest("form")?.addEventListener("reset", () => { value.value = ""; });
+	  root.sableDispose = () => close();
+	};
+
 	const setupStyledTime = (input) => {
 	  if (!input || input.dataset.styledTimeReady === "true") return;
 	  input.dataset.styledTimeReady = "true";
@@ -1991,36 +2096,55 @@
   };
   queueMicrotask(checkForUpdateNotification);
 
-	const UPDATE_SCOPE_MENU_WIDTH = 288;
-	const updateScopePreferenceKey = `sable-update-scope:${document.body.dataset.preferenceUser || ""}`;
-	const setupUpdateScope = (root) => {
-	  if (root.dataset.updateScopeReady === "true") return;
-	  root.dataset.updateScopeReady = "true";
-	  const trigger = root.querySelector("[data-update-scope-trigger]");
+	// A split button runs the action picked last, and its chevron opens a menu
+	// of every action. Picking one runs it: a menu item that is a form's own
+	// submit button runs that form, and any other runs the matching action's
+	// form. data-split-remember keeps the pick per user across pages.
+	const SPLIT_MENU_WIDTH = 288;
+	const setupSplitButton = (root) => {
+	  if (root.dataset.splitReady === "true") return;
+	  root.dataset.splitReady = "true";
+	  const trigger = root.querySelector("[data-split-trigger]");
 	  const menu = root.querySelector('[role="menu"]');
-	  const items = [...menu.querySelectorAll('[data-update-scope-option]')];
-	  const actions = [...root.querySelectorAll(':scope > [data-update-scope-action]')];
-	  const select = (scope) => {
-		const selected = scope === "cluster" ? "cluster" : "node";
-		actions.forEach((action) => { action.hidden = action.dataset.updateScopeAction !== selected; });
-		items.forEach((item) => { item.setAttribute("aria-checked", String(item.dataset.updateScopeOption === selected)); });
+	  const items = () => [...menu.querySelectorAll("[data-split-option]")].filter((item) => !item.hidden);
+	  const actions = [...root.querySelectorAll(":scope > [data-split-action]")];
+	  const preferenceKey = root.dataset.splitRemember && `sable-${root.dataset.splitRemember}:${document.body.dataset.preferenceUser || ""}`;
+	  const select = (choice) => {
+		const offered = actions.filter((action) => !action.hasAttribute("data-split-unavailable"));
+		const selected = offered.find((action) => action.dataset.splitAction === choice) || offered[0];
+		actions.forEach((action) => { action.hidden = action !== selected; });
+		menu.querySelectorAll("[data-split-option]").forEach((item) => {
+		  item.setAttribute("aria-checked", String(item.dataset.splitOption === selected?.dataset.splitAction));
+		});
+		root.classList.toggle("single", offered.length < 2);
+		root.hidden = !selected;
 	  };
-	  try {
-		select(localStorage.getItem(updateScopePreferenceKey));
-	  } catch {
-		// Storage may be disabled; the node action remains the initial default.
-	  }
-	  menu.addEventListener("click", (event) => {
-		const option = event.target.closest("[data-update-scope-option]");
-		if (!option) return;
-		select(option.dataset.updateScopeOption);
+	  const remembered = () => {
 		try {
-		  localStorage.setItem(updateScopePreferenceKey, option.dataset.updateScopeOption);
+		  return preferenceKey ? localStorage.getItem(preferenceKey) : null;
 		} catch {
-		  // The selected action still works for this notification without storage.
+		  // Storage may be disabled; the first action remains the default.
+		  return null;
+		}
+	  };
+	  // A page that changes which actions are offered calls this again.
+	  root.sableSelectSplit = (choice = remembered()) => select(choice);
+	  select(remembered());
+	  menu.addEventListener("click", (event) => {
+		const option = event.target.closest("[data-split-option]");
+		if (!option) return;
+		select(option.dataset.splitOption);
+		try {
+		  if (preferenceKey) localStorage.setItem(preferenceKey, option.dataset.splitOption);
+		} catch {
+		  // The picked action still runs without storage.
+		}
+		if (option.type !== "submit") {
+		  close();
+		  actions.find((action) => action.dataset.splitAction === option.dataset.splitOption)?.querySelector("form")?.requestSubmit();
 		}
 	  });
-	  const position = () => positionFloatingPopover(root, root, menu, UPDATE_SCOPE_MENU_WIDTH);
+	  const position = () => positionFloatingPopover(root, root, menu, SPLIT_MENU_WIDTH);
 	  const close = () => {
 		if (menu.matches(":popover-open")) menu.hidePopover();
 	  };
@@ -2030,7 +2154,7 @@
 	  const open = (last = false) => {
 		menu.showPopover();
 		position();
-		(last ? items.at(-1) : items[0])?.focus();
+		(last ? items().at(-1) : items()[0])?.focus();
 	  };
 	  trigger.addEventListener("click", () => {
 		if (menu.matches(":popover-open")) close(); else open();
@@ -2054,9 +2178,10 @@
 		}
 		if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
 		event.preventDefault();
-		const current = items.indexOf(document.activeElement);
-		const index = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : current + (event.key === "ArrowDown" ? 1 : -1);
-		items[(index + items.length) % items.length]?.focus();
+		const list = items();
+		const current = list.indexOf(document.activeElement);
+		const index = event.key === "Home" ? 0 : event.key === "End" ? list.length - 1 : current + (event.key === "ArrowDown" ? 1 : -1);
+		list[(index + list.length) % list.length]?.focus();
 	  });
 	  // Close before the shared confirmation captures its return-focus control.
 	  menu.addEventListener("htmx:confirm", () => {
@@ -2065,8 +2190,8 @@
 	  });
 	};
 	window.addEventListener("resize", () => {
-	  document.querySelectorAll('[data-update-scope][data-open="true"]').forEach((root) => {
-		positionFloatingPopover(root, root, root.querySelector('[role="menu"]'), UPDATE_SCOPE_MENU_WIDTH);
+	  document.querySelectorAll('[data-split-button][data-open="true"]').forEach((root) => {
+		positionFloatingPopover(root, root, root.querySelector('[role="menu"]'), SPLIT_MENU_WIDTH);
 	  });
 	});
 
@@ -3240,7 +3365,7 @@
 	  if (window.ResizeObserver) new ResizeObserver(sync).observe(region);
 	};
 
-	const interactiveComponentSelector = ".styled-select, .styled-time, [data-resolver-combobox]";
+	const interactiveComponentSelector = ".styled-select, .styled-time, [data-resolver-combobox], [data-device-picker]";
 	const disposeInteractiveComponent = (component) => {
 	  component?.sableDispose?.();
 	};
@@ -3298,11 +3423,12 @@
 	  ["[data-top-stats-dialog]", updateTopStatsDialog],
 	  ["[data-list-filter-root]", applyListFilter],
 	  ['input[type="time"][data-styled-time]', setupStyledTime],
+	  ["[data-device-picker]", setupDevicePicker],
 	  ["[data-chart-plot]", setupQueryChartHover],
 	  ["[data-donut]", setupDonutChart],
 	  ["[data-insight-chart]", setupInsightChart],
 	  ["[data-toast]", setupToast],
-	  ["[data-update-scope]", setupUpdateScope],
+	  ["[data-split-button]", setupSplitButton],
 	  ["[data-dnssec-denial]", syncDNSSECDenial],
 	  ["[data-isotope-tabs]", setupIsotopeTabs],
 	  ["[data-blocking-root]", setupBlockingTabs],
@@ -4347,11 +4473,32 @@
 		watchAction.href = `/settings?${watch}`;
 		watchAction.setAttribute("aria-label", `Watch ${domain}`);
 	  }
-	  const blockAction = dialog.querySelector('[data-query-detail-policy="block"]');
-	  if (blockAction) blockAction.hidden = source === "blocked";
-	  // Allowing everywhere can't beat a rule set's own block.
-	  const allowAction = dialog.querySelector('[data-query-detail-policy="allow"]');
-	  if (allowAction) allowAction.hidden = row.dataset.queryDetailRuleSetBlock === "true";
+	  // A device in a rule set can have the domain blocked or allowed for just
+	  // that rule set or for everyone, from a split button that offers what
+	  // applies. Allowing everywhere can't beat a rule set's own block; the
+	  // rule set's own allowed domains can.
+	  const ruleSet = row.dataset.queryDetailRuleSet || "";
+	  const applies = {
+		block: {"rule-set": source !== "blocked", everyone: source !== "blocked"},
+		allow: {"rule-set": source === "blocked", everyone: row.dataset.queryDetailRuleSetBlock !== "true"},
+	  };
+	  dialog.querySelector("[data-query-policy-row]")?.classList.toggle("scoped", Boolean(ruleSet));
+	  dialog.querySelectorAll("[data-query-policy-split]").forEach((split) => {
+		const verb = split.dataset.queryPolicySplit === "block" ? "Block" : "Allow";
+		split.querySelectorAll(":scope > [data-split-action]").forEach((action) => {
+		  const side = action.dataset.splitAction;
+		  const offered = applies[split.dataset.queryPolicySplit][side] && (side === "everyone" || Boolean(ruleSet));
+		  action.toggleAttribute("data-split-unavailable", !offered);
+		  const ruleSetInput = action.querySelector("[data-query-detail-rule-set]");
+		  if (ruleSetInput) ruleSetInput.value = ruleSet;
+		  const label = action.querySelector("button span");
+		  if (label) label.textContent = !ruleSet ? verb : `${verb} for ${side === "rule-set" ? ruleSet : "Everyone"}`;
+		});
+		const name = split.querySelector("[data-query-policy-rule-set-name]");
+		if (name) name.textContent = ruleSet;
+		setupSplitButton(split);
+		split.sableSelectSplit();
+	  });
 	  const why = dialog.querySelector("[data-query-detail-why]");
 	  if (why) {
 		// A device in a rule set gets the answer for that device.
@@ -5042,6 +5189,26 @@
 	  const loading = document.getElementById(ctx?.sourceElement?.dataset?.drawerLoading || "");
 	  if (event.defaultPrevented || !loading?.content || !ctx.target) return;
 	  ctx.target.replaceChildren(loading.content.cloneNode(true));
+	});
+	// A drawer form that saves as its choices change, such as a rule set's
+	// Blocking switch, brings the drawer back where it was scrolled once the
+	// new content has settled.
+	document.body.addEventListener("htmx:before:request", (event) => {
+	  const ctx = event.detail?.ctx;
+	  if (!ctx?.sourceElement?.closest?.("[data-keep-scroll]") || !ctx.target) return;
+	  ctx.target.sableKeepScroll = ctx.target.querySelector(".query-detail-body")?.scrollTop;
+	});
+	document.body.addEventListener("htmx:after:swap", (event) => {
+	  const target = event.detail?.ctx?.target;
+	  const top = target?.sableKeepScroll;
+	  if (top === undefined) return;
+	  delete target.sableKeepScroll;
+	  const restore = () => {
+		const body = target.querySelector(".query-detail-body");
+		if (body) body.scrollTop = top;
+	  };
+	  restore();
+	  window.requestAnimationFrame(restore);
 	});
 	document.body.addEventListener("htmx:after:swap", () => {
 	  syncRoutedDialogs();

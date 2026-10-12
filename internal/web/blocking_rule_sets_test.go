@@ -68,31 +68,33 @@ func TestRuleSetsTabListsRuleSetsAndTheirDevices(t *testing.T) {
 		t.Error("the Rule Sets tab is hidden although it was asked for")
 	}
 
-	form := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-sets/form?name=Kids", nil).Body.String()
-	for _, want := range []string{"Edit Kids", `name="original" value="Kids"`, `value="Strict" checked`} {
-		if !strings.Contains(form, want) {
-			t.Errorf("rule set form is missing %q", want)
+	// Rule sets are changed in their panels, so the rows have no Edit, and
+	// Default keeps a delete button it can't use.
+	if strings.Contains(body, ">Edit<") || !strings.Contains(body, `disabled aria-label="Can't delete Default"`) {
+		t.Error("the Rule Sets tab still has Edit, or Default has no locked delete button")
+	}
+
+	panel := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-set?name=Kids", nil).Body.String()
+	for _, want := range []string{`aria-label="Rename Kids"`, `name="blocking" value="on" checked`, `value="Strict" checked`, `hx-post="/ui/blocking/rule-sets/lists"`} {
+		if !strings.Contains(panel, want) {
+			t.Errorf("rule set panel is missing %q", want)
 		}
 	}
-	if strings.Contains(form, `value="Ads" checked`) || strings.Contains(form, "<textarea") {
-		t.Error("rule set form checks a list the rule set doesn't use, or still edits its domains")
-	}
-	if missing := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-sets/form?name=Gone", nil); missing.Code != http.StatusNotFound ||
-		missing.Header().Get("HX-Retarget") != "#rule-set-notice" {
-		t.Fatalf("form for a missing rule set = %d %v", missing.Code, missing.Header())
+	if strings.Contains(panel, `value="Ads" checked`) || strings.Contains(panel, "Edit Rule Set") {
+		t.Error("rule set panel checks a list the rule set doesn't use, or still opens the dialog")
 	}
 }
 
-func TestRuleSetDialogSavesRenamesAndDeletes(t *testing.T) {
+func TestRuleSetPanelAddsRenamesAndDeletes(t *testing.T) {
 	t.Parallel()
 	server, configuration := newRuleSetTestServer(t)
 
-	added := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/save", url.Values{
-		"name": {"Work"}, "lists": {"Ads"},
-	})
+	// Adding takes only a name, then opens the new rule set's panel.
+	added := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/add", url.Values{"name": {"Work"}})
 	sets := configuration.Current().Config.Blocking.RuleSets
-	if added.Code != http.StatusOK || !strings.Contains(added.Body.String(), "Rule set Work added") || len(sets) != 2 || !slices.Equal(sets[1].Lists, []string{"Ads"}) {
-		t.Fatalf("add = %d, sets %+v", added.Code, sets)
+	if added.Code != http.StatusOK || !strings.Contains(added.Body.String(), "Rule set Work added") || len(sets) != 2 || sets[1].Name != "Work" ||
+		added.Header().Get("HX-Push-Url") != "/blocked/rule-sets/Work" {
+		t.Fatalf("add = %d %v, sets %+v", added.Code, added.Header(), sets)
 	}
 
 	// A problem shows in the dialog, leaving what was typed alone.
@@ -100,19 +102,38 @@ func TestRuleSetDialogSavesRenamesAndDeletes(t *testing.T) {
 		{"name": {"work"}},
 		{"name": {"Default"}},
 	} {
-		problem := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/save", form)
+		problem := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/add", form)
 		if problem.Code != http.StatusUnprocessableEntity || problem.Header().Get("HX-Retarget") != "#rule-set-notice" ||
 			!strings.Contains(problem.Body.String(), `toast-error`) {
-			t.Errorf("save %v = %d %v %s", form, problem.Code, problem.Header(), problem.Body.String())
+			t.Errorf("add %v = %d %v %s", form, problem.Code, problem.Header(), problem.Body.String())
 		}
 	}
 
-	renamed := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/save", url.Values{"original": {"Kids"}, "name": {"Children"}, "lists": {"Strict", "Ads"}})
+	// The panel's title renames it; a clash keeps the name field open.
+	editor := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-set?name=Kids&edit=name", nil).Body.String()
+	if !strings.Contains(editor, `hx-post="/ui/blocking/rule-sets/rename?edit=name"`) || !strings.Contains(editor, `name="original" value="Kids"`) {
+		t.Fatalf("rename editor:\n%s", editor)
+	}
+	clash := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/rename?edit=name", url.Values{"original": {"Kids"}, "name": {"work"}})
+	if clash.Code != http.StatusUnprocessableEntity || !strings.Contains(clash.Body.String(), "already exists") || !strings.Contains(clash.Body.String(), `name="original" value="Kids"`) {
+		t.Fatalf("rename to a taken name = %d %s", clash.Code, clash.Body.String())
+	}
+	renamed := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/rename?edit=name", url.Values{"original": {"Kids"}, "name": {"Children"}})
 	current := configuration.Current().Config
-	// Renaming keeps the rule set's own domains, which the dialog doesn't edit.
+	// Renaming keeps the rule set's devices, block lists, and domains.
 	if renamed.Code != http.StatusOK || current.Blocking.RuleSets[0].Name != "Children" || current.Clients[0].RuleSet != "Children" ||
+		!slices.Equal(current.Blocking.RuleSets[0].Domains, []string{"games.example"}) || !slices.Equal(current.Blocking.RuleSets[0].Lists, []string{"Strict"}) ||
+		renamed.Header().Get("HX-Replace-Url") != "/blocked/rule-sets/Children" || strings.Contains(renamed.Body.String(), "insight-name-editor") ||
+		!strings.Contains(renamed.Body.String(), "Rule set Kids renamed to Children") {
+		t.Fatalf("rename = %d %v, sets %+v, clients %+v", renamed.Code, renamed.Header(), current.Blocking.RuleSets, current.Clients)
+	}
+
+	// Its block lists change as they're checked, keeping the rest.
+	lists := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/lists", url.Values{"name": {"Children"}, "lists": {"Strict", "Ads"}})
+	current = configuration.Current().Config
+	if lists.Code != http.StatusOK || !slices.Equal(current.Blocking.RuleSets[0].Lists, []string{"Strict", "Ads"}) || !strings.Contains(lists.Body.String(), "Children uses 2 block lists") ||
 		!slices.Equal(current.Blocking.RuleSets[0].Domains, []string{"games.example"}) {
-		t.Fatalf("rename = %d, sets %+v, clients %+v", renamed.Code, current.Blocking.RuleSets, current.Clients)
+		t.Fatalf("lists = %d %s, sets %+v", lists.Code, lists.Body.String(), current.Blocking.RuleSets)
 	}
 
 	deleted := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/delete", url.Values{"name": {"Children"}})
@@ -126,20 +147,26 @@ func TestRuleSetDialogSavesRenamesAndDeletes(t *testing.T) {
 	}
 }
 
-func TestDefaultListsDialog(t *testing.T) {
+func TestDefaultPanelPicksItsBlockLists(t *testing.T) {
 	t.Parallel()
 	server, configuration := newRuleSetTestServer(t)
-	form := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-sets/form?default=1", nil).Body.String()
-	if !strings.Contains(form, "Edit Default") || !strings.Contains(form, `value="all" checked`) {
-		t.Fatalf("default form = %s", form)
+	panel := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-set?name=Default", nil).Body.String()
+	if !strings.Contains(panel, `value="all" checked`) || !strings.Contains(panel, `hx-post="/ui/blocking/rule-sets/default"`) ||
+		strings.Contains(panel, "Rename Default") || strings.Contains(panel, "Devices</h3>") {
+		t.Fatalf("default panel = %s", panel)
+	}
+	// Choosing Only These Lists starts from every list.
+	only := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/default", url.Values{"scope": {"chosen"}})
+	if only.Code != http.StatusOK || !slices.Equal(configuration.Current().Config.Blocking.DefaultLists, []string{"Ads", "Strict"}) {
+		t.Fatalf("only these lists = %d %v", only.Code, configuration.Current().Config.Blocking.DefaultLists)
 	}
 	saved := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/default", url.Values{"scope": {"chosen"}, "lists": {"Ads"}})
 	if saved.Code != http.StatusOK || !slices.Equal(configuration.Current().Config.Blocking.DefaultLists, []string{"Ads"}) || !strings.Contains(saved.Body.String(), "Lists: Ads") {
 		t.Fatalf("save default lists = %d %v", saved.Code, configuration.Current().Config.Blocking.DefaultLists)
 	}
 	if none := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/default", url.Values{"scope": {"chosen"}}); none.Code != http.StatusUnprocessableEntity ||
-		none.Header().Get("HX-Retarget") != "#rule-set-notice" {
-		t.Fatalf("no lists chosen = %d %v", none.Code, none.Header())
+		!strings.Contains(none.Body.String(), "Choose at least one block list") {
+		t.Fatalf("no lists chosen = %d %s", none.Code, none.Body.String())
 	}
 	// Choosing every list keeps no lists, even ones still ticked.
 	every := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/default", url.Values{"scope": {"all"}, "lists": {"Ads"}})
@@ -228,7 +255,7 @@ func TestRuleSetPanelAddsAndRemovesDevices(t *testing.T) {
 	}
 
 	panel := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-set?name=Kids", nil).Body.String()
-	if !strings.Contains(panel, `name="device" list="rule-set-device-options"`) || !strings.Contains(panel, `hx-post="/ui/blocking/rule-sets/devices/delete"`) {
+	if !strings.Contains(panel, `name="device" value="" data-device-picker-value`) || !strings.Contains(panel, `hx-post="/ui/blocking/rule-sets/devices/delete"`) {
 		t.Fatalf("panel has no way to add or remove devices:\n%s", panel)
 	}
 
@@ -279,24 +306,27 @@ func TestRuleSetPanelAddsAndRemovesDevices(t *testing.T) {
 func TestRuleSetWithBlockingOffSkipsItsListsAndDomains(t *testing.T) {
 	t.Parallel()
 	server, configuration := newRuleSetTestServer(t)
-	saved := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/save", url.Values{"original": {"Kids"}, "name": {"Kids"}, "blocking": {"off"}, "lists": {"Strict"}})
+	// The switch sends nothing when it's turned off.
+	saved := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/blocking", url.Values{"name": {"Kids"}})
 	if saved.Code != http.StatusOK {
 		t.Fatalf("save = %d %s", saved.Code, saved.Body.String())
 	}
 	set := configuration.Current().Config.Blocking.RuleSets[0]
-	if !set.Off || !slices.Equal(set.Domains, []string{"games.example"}) {
-		t.Fatalf("rule set = %+v, want blocking off and its domains kept", set)
+	if !set.Off || !slices.Equal(set.Domains, []string{"games.example"}) || !slices.Equal(set.Lists, []string{"Strict"}) {
+		t.Fatalf("rule set = %+v, want blocking off and its lists and domains kept", set)
 	}
-	if !strings.Contains(saved.Body.String(), "Blocking off") {
-		t.Fatalf("the Rule Sets tab doesn't say blocking is off:\n%s", saved.Body.String())
+	panel := saved.Body.String()
+	if !strings.Contains(panel, "Blocking off") || !strings.Contains(panel, "hx-swap-oob") {
+		t.Fatalf("the Rule Sets tab doesn't say blocking is off:\n%s", panel)
 	}
-	form := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-sets/form?name=Kids", nil).Body.String()
-	if !strings.Contains(form, `name="blocking" value="on"`) || strings.Contains(form, `name="blocking" value="on" checked`) {
-		t.Fatalf("form doesn't show blocking off:\n%s", form)
-	}
-	panel := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-set?name=Kids", nil).Body.String()
-	if !strings.Contains(panel, "Off for its devices") || strings.Contains(panel, "Blocked Domains") || !strings.Contains(panel, "Leo&#39;s Switch") {
+	if !strings.Contains(panel, `name="blocking" value="on"`) || strings.Contains(panel, `name="blocking" value="on" checked`) ||
+		!strings.Contains(panel, "Off: everything gets through") || strings.Contains(panel, `id="rule-set-blocked-title"`) || strings.Contains(panel, `id="rule-set-lists-title"`) ||
+		!strings.Contains(panel, "Leo&#39;s Switch") {
 		t.Fatalf("panel for a rule set with blocking off:\n%s", panel)
+	}
+	if on := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/blocking", url.Values{"name": {"Kids"}, "blocking": {"on"}}); on.Code != http.StatusOK ||
+		configuration.Current().Config.Blocking.RuleSets[0].Off || !strings.Contains(on.Body.String(), "Blocking is on for Kids devices") {
+		t.Fatalf("turn blocking on = %d %s", on.Code, on.Body.String())
 	}
 }
 
@@ -337,12 +367,12 @@ func TestRuleSetPanelBlocksApps(t *testing.T) {
 		t.Fatalf("picker after saving = %s", picker.Body.String())
 	}
 
-	// Editing the rule set in its dialog keeps its apps.
-	if response := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/save", url.Values{"original": {"Kids"}, "name": {"Kids"}, "lists": {"Ads"}}); response.Code != http.StatusOK {
-		t.Fatalf("save the dialog = %d %s", response.Code, response.Body.String())
+	// Changing its block lists keeps its apps.
+	if response := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/lists", url.Values{"name": {"Kids"}, "lists": {"Ads"}}); response.Code != http.StatusOK {
+		t.Fatalf("save its lists = %d %s", response.Code, response.Body.String())
 	}
 	if !slices.Equal(slices.Sorted(slices.Values(kids().Apps)), []string{"tiktok", "windows-update", "youtube"}) {
-		t.Fatalf("Kids blocks %v after the dialog saved", kids().Apps)
+		t.Fatalf("Kids blocks %v after its lists changed", kids().Apps)
 	}
 
 	removed := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/apps/delete", url.Values{"name": {"Kids"}, "app": {"tiktok"}})
@@ -359,5 +389,30 @@ func TestRuleSetPanelBlocksApps(t *testing.T) {
 	}
 	if missing := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-sets/apps?name=Nope", nil); missing.Code != http.StatusNotFound {
 		t.Fatalf("picker for an unknown rule set = %d", missing.Code)
+	}
+}
+
+// The query log's Block and Allow can change just the rule set the device
+// used, and Allow for the rule set gets past the rule set's own block.
+func TestQueryLogBlocksAndAllowsForTheRuleSet(t *testing.T) {
+	t.Parallel()
+	server, configuration := newRuleSetTestServer(t)
+	kids := func() config.RuleSet { return configuration.Current().Config.Blocking.RuleSets[0] }
+
+	blocked := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/query-domain", url.Values{"domain": {"videos.example."}, "action": {"block"}, "rule_set": {"Kids"}})
+	if blocked.Code != http.StatusOK || !slices.Contains(kids().Domains, "videos.example") || slices.Contains(configuration.Current().Config.Blocking.Domains, "videos.example") ||
+		!strings.Contains(blocked.Body.String(), "Kids") {
+		t.Fatalf("block for Kids = %d %s, Kids %+v", blocked.Code, blocked.Body.String(), kids())
+	}
+	allowed := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/query-domain", url.Values{"domain": {"games.example"}, "action": {"allow"}, "rule_set": {"Kids"}})
+	if allowed.Code != http.StatusOK || !slices.Contains(kids().AllowedDomains, "games.example") || slices.Contains(kids().Domains, "games.example") {
+		t.Fatalf("allow for Kids = %d %s, Kids %+v", allowed.Code, allowed.Body.String(), kids())
+	}
+	if everyone := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/query-domain", url.Values{"domain": {"ads.example"}, "action": {"block"}}); everyone.Code != http.StatusOK ||
+		!slices.Contains(configuration.Current().Config.Blocking.Domains, "ads.example") || slices.Contains(kids().Domains, "ads.example") {
+		t.Fatalf("block for everyone = %d, Kids %+v", everyone.Code, kids())
+	}
+	if missing := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/query-domain", url.Values{"domain": {"ads.example"}, "action": {"block"}, "rule_set": {"Teens"}}); !strings.Contains(missing.Body.String(), "Teens") {
+		t.Fatalf("a deleted rule set = %s", missing.Body.String())
 	}
 }

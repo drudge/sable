@@ -17,29 +17,39 @@ type ruleSetService struct{ server *Server }
 
 func (server *Server) ruleSetService() ruleSetService { return ruleSetService{server} }
 
-// Save adds a rule set, or renames the one called original and replaces its
-// block lists. A rule set's own domains are changed one at a time through
-// policyService, and its apps through SetApps, so Save keeps the ones it has,
-// and its schedules.
-func (service ruleSetService) Save(ctx context.Context, who actor, original string, set config.RuleSet) (string, error) {
-	action, message := "blocking.rule_set.add", "Rule set "+set.Name+" added"
-	if original != "" {
-		action, message = "blocking.rule_set.update", "Rule set "+set.Name+" saved"
-	}
+// Add adds a rule set with only a name. Its block lists, devices, and
+// domains are set from its panel.
+func (service ruleSetService) Add(ctx context.Context, who actor, name string) (string, error) {
+	action, message := "blocking.rule_set.add", "Rule set "+name+" added"
 	err := service.update(ctx, who, action, func(configuration *config.Config) error {
-		if index := slices.IndexFunc(configuration.Blocking.RuleSets, func(existing config.RuleSet) bool { return existing.Name == original }); original != "" && index >= 0 {
-			existing := configuration.Blocking.RuleSets[index]
-			set.Domains, set.AllowedDomains = slices.Clone(existing.Domains), slices.Clone(existing.AllowedDomains)
-			set.Apps = slices.Clone(existing.Apps)
-			set.Schedules = existing.Schedules
-		}
-		return configuration.SaveRuleSet(original, set)
+		return configuration.SaveRuleSet("", config.RuleSet{Name: name})
 	})
 	if err != nil {
 		return "", err
 	}
 	service.server.policyService().finish(ctx, who, action, "", message)
 	return message, nil
+}
+
+// Change changes one thing about the rule set called name from its panel,
+// such as its name, whether it blocks, or its block lists, keeping the rest.
+func (service ruleSetService) Change(ctx context.Context, who actor, name string, change func(*config.RuleSet), message string) error {
+	action := "blocking.rule_set.update"
+	err := service.update(ctx, who, action, func(configuration *config.Config) error {
+		index := slices.IndexFunc(configuration.Blocking.RuleSets, func(set config.RuleSet) bool { return set.Name == name })
+		if index < 0 {
+			return refuse(http.StatusNotFound, "No rule set is called %s. It may have been deleted.", name)
+		}
+		set := configuration.Blocking.RuleSets[index]
+		set.Lists = slices.Clone(set.Lists)
+		change(&set)
+		return configuration.SaveRuleSet(name, set)
+	})
+	if err != nil {
+		return err
+	}
+	service.server.policyService().finish(ctx, who, action, "", message)
+	return nil
 }
 
 // Delete removes a rule set; its devices go back to the default policy.

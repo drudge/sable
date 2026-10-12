@@ -218,7 +218,7 @@ async function assertDismissAlignment(regions, viewport) {
     await scopeConfirmation.getByRole('button', {name: 'Cancel', exact: true}).click();
     await scopeTrigger.click();
     await scopeTrigger.click();
-    assert.equal(await scopePage.locator('.update-scope-menu:popover-open').count(), 0, 'second click closes the scope menu');
+    assert.equal(await scopePage.locator('.split-menu:popover-open').count(), 0, 'second click closes the scope menu');
     await scopeTrigger.focus();
     await scopeTrigger.press('ArrowUp');
     const scopeMenu = scopePage.getByRole('menu', {name: 'Update scope', exact: true});
@@ -231,7 +231,7 @@ async function assertDismissAlignment(regions, viewport) {
     await scopeMenu.waitFor({state: 'hidden'});
     // Popover toggle events update accessibility state asynchronously.
     await scopePage.waitForFunction(() =>
-      document.querySelector('[data-update-scope-trigger]')?.getAttribute('aria-expanded') === 'false');
+      document.querySelector('[data-split-trigger]')?.getAttribute('aria-expanded') === 'false');
     assert.equal(await scopeTrigger.getAttribute('aria-expanded'), 'false');
     assert.equal(await scopeTrigger.evaluate(element => element === document.activeElement), true);
     await scopeTrigger.click();

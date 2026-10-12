@@ -149,3 +149,62 @@ func TestBlockedQueryLinksToItsCheck(t *testing.T) {
 		t.Errorf("a blocked query does not link to its check: %s", panel)
 	}
 }
+
+// A query from a device in a rule set offers its Block and Allow for that
+// rule set and for everyone; Allow for everyone can't get past the rule
+// set's own block, so only the rule set's is offered then.
+func TestQueryPolicyActionsForARuleSet(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name  string
+		entry QueryLogEntryView
+		want  map[string]bool
+	}{
+		{"no rule set", QueryLogEntryView{Source: "upstream"}, map[string]bool{"block": true, "allow": true}},
+		{"answered", QueryLogEntryView{Source: "upstream", Decision: QueryDecisionView{RuleSet: "Kids"}},
+			map[string]bool{"block": true, "block-rule-set": true, "allow": true}},
+		{"blocked by a list", QueryLogEntryView{Source: "blocked", Decision: QueryDecisionView{RuleSet: "Kids"}},
+			map[string]bool{"allow": true, "allow-rule-set": true}},
+		{"blocked by the rule set", QueryLogEntryView{Source: "blocked", Decision: QueryDecisionView{RuleSet: "Kids", RuleSetBlock: true}},
+			map[string]bool{"allow-rule-set": true}},
+	} {
+		for _, action := range []string{"block", "block-rule-set", "allow", "allow-rule-set"} {
+			verb, forRuleSet := strings.TrimSuffix(action, "-rule-set"), strings.HasSuffix(action, "-rule-set")
+			if got := queryPolicyApplies(test.entry, verb, forRuleSet); got != test.want[action] {
+				t.Errorf("%s: %s applies = %t", test.name, action, got)
+			}
+		}
+	}
+}
+
+// Block and Allow are split buttons offering the rule set or everyone, and
+// a side with nothing to offer is left out, which makes a plain button.
+func TestQueryPolicySplitButtons(t *testing.T) {
+	t.Parallel()
+	page := renderComponent(t, queryDetailFooter(QueryDetailView{CanBlocking: true, Entry: QueryLogEntryView{Name: "games.example", Source: "blocked", Decision: QueryDecisionView{RuleSet: "Kids", RuleSetBlock: true}}}))
+	for _, expected := range []string{
+		`name="rule_set" value="Kids"`,
+		"Allow for Kids",
+		`<strong data-query-policy-rule-set-name>Kids</strong>`,
+		`class="split-button query-policy-split single" data-split-button data-split-remember="query-policy-scope" data-query-policy-split="allow">`,
+		`<div data-split-action="everyone" data-split-unavailable hidden>`,
+		`data-query-policy-split="block" hidden>`,
+	} {
+		if !strings.Contains(page, expected) {
+			t.Errorf("query footer does not contain %q:\n%s", expected, page)
+		}
+	}
+	answered := renderComponent(t, queryDetailFooter(QueryDetailView{CanBlocking: true, Entry: QueryLogEntryView{Name: "games.example", Source: "upstream", Decision: QueryDecisionView{RuleSet: "Kids"}}}))
+	for _, expected := range []string{
+		`class="split-button query-policy-split" data-split-button data-split-remember="query-policy-scope" data-query-policy-split="block">`,
+		"Block for Kids", "Block for Everyone",
+	} {
+		if !strings.Contains(answered, expected) {
+			t.Errorf("answered query footer does not contain %q:\n%s", expected, answered)
+		}
+	}
+	plain := renderComponent(t, queryDetailFooter(QueryDetailView{CanBlocking: true, Entry: QueryLogEntryView{Name: "ads.example", Source: "upstream"}}))
+	if !strings.Contains(plain, `class="split-button query-policy-split single" data-split-button data-split-remember="query-policy-scope" data-query-policy-split="block">`) || strings.Contains(plain, "for Everyone") {
+		t.Errorf("a device with no rule set gets more than a plain Block:\n%s", plain)
+	}
+}

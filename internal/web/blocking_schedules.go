@@ -171,11 +171,13 @@ func (server *Server) ruleSetScheduleForm(writer http.ResponseWriter, request *h
 		}
 		schedule = set.Schedules[index]
 	}
+	// A schedule's times are read in the zone the console shows them in.
+	schedule.TimeZone = browserTimeZone(request)
 	server.render(writer, request, pages.RuleSetScheduleForm(ruleSetScheduleFormView(set, original, schedule)))
 }
 
-// browserTimeZone is the viewer's time zone, for a new schedule, or UTC when
-// the browser hasn't said.
+// browserTimeZone is the viewer's time zone, which a schedule saved from the
+// console is read in, or UTC when the browser hasn't said.
 func browserTimeZone(request *http.Request) string {
 	if zone := requestTimeLocation(request).String(); zone != "Local" {
 		return zone
@@ -208,7 +210,7 @@ func (server *Server) saveRuleSetSchedule(writer http.ResponseWriter, request *h
 	name, original := request.FormValue("name"), request.FormValue("original")
 	schedule := config.Schedule{
 		Name: strings.TrimSpace(request.FormValue("schedule")), Days: request.Form["day"],
-		Start: request.FormValue("start"), End: request.FormValue("end"), TimeZone: strings.TrimSpace(request.FormValue("time_zone")),
+		Start: request.FormValue("start"), End: request.FormValue("end"), TimeZone: browserTimeZone(request),
 		Block: cmp.Or(request.FormValue("block"), config.ScheduleBlockEverything),
 	}
 	// A rule set with blocking off has no apps to block, so its schedules
@@ -244,15 +246,8 @@ func scheduleProblem(schedule config.Schedule) error {
 		return refuse(http.StatusUnprocessableEntity, "Set when the schedule starts and ends.")
 	case start == end:
 		return refuse(http.StatusUnprocessableEntity, "The schedule has to end at a different time than it starts.")
-	case schedule.TimeZone == "":
-		return refuse(http.StatusUnprocessableEntity, "Pick a time zone, such as America/New_York.")
-	case !validZoneName(schedule.TimeZone):
-		return refuse(http.StatusUnprocessableEntity, "Sable doesn't know a time zone called %s.", schedule.TimeZone)
 	case schedule.Block == config.ScheduleBlockApps && len(schedule.Apps) == 0:
 		return refuse(http.StatusUnprocessableEntity, "Pick at least one app to block.")
-	}
-	if _, err := time.LoadLocation(schedule.TimeZone); err != nil {
-		return refuse(http.StatusUnprocessableEntity, "Sable doesn't know a time zone called %s.", schedule.TimeZone)
 	}
 	return nil
 }

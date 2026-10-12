@@ -236,11 +236,12 @@ func seedRefusedLookups(now time.Time) []querylog.Event {
 // seedRuleSetBlocks is a warehouse handheld trying TikTok and YouTube on
 // breaks over the last few hours, blocked each time by the Warehouse rule
 // set's apps, and Instagram during its shift, blocked by the Shift schedule,
-// so the query log names the rule set, the schedule, and the app.
+// so the query log names the rule set, the schedule, and the app. Reddit,
+// which the rule set doesn't block, gets through.
 func seedRuleSetBlocks(now time.Time) []querylog.Event {
 	names := []string{"www.tiktok.com.", "v16-webapp.tiktokcdn.com.", "www.youtube.com.", "i.ytimg.com."}
 	rules := []string{"tiktok.com", "tiktokcdn.com", "youtube.com", "ytimg.com"}
-	events := make([]querylog.Event, 0, 12*len(names)+6)
+	events := make([]querylog.Event, 0, 12*len(names)+10)
 	for step := range 12 {
 		at := now.Add(-time.Duration(step)*17*time.Minute - 90*time.Second)
 		index := step % len(names)
@@ -260,6 +261,13 @@ func seedRuleSetBlocks(now time.Time) []querylog.Event {
 			OccurredAt: now.Add(-time.Duration(step)*19*time.Minute - 4*time.Minute), ClientIP: "10.20.20.118", Name: shiftNames[index], RecordType: dns.TypeA, Class: dns.ClassINET,
 			ResponseCode: dns.RcodeNameError, Source: querylog.SourceBlocked, Protocol: "UDP", Duration: 130 * time.Microsecond,
 			Decision: querylog.Decision{Policy: querylog.PolicyBlocked, PolicyRule: shiftRules[index], RuleSet: "Warehouse", OwnRule: true, Schedule: "Shift", Resolver: querylog.ResolverBlocked},
+		})
+	}
+	for step := range 4 {
+		events = append(events, querylog.Event{
+			OccurredAt: now.Add(-time.Duration(step)*23*time.Minute - 7*time.Minute), ClientIP: "10.20.20.118", Name: "www.reddit.com.", RecordType: dns.TypeA, Class: dns.ClassINET,
+			Source: querylog.SourceUpstream, Protocol: "UDP", Answer: "151.101.1.140", Duration: 18 * time.Millisecond,
+			Decision: querylog.Decision{Policy: querylog.PolicyNoMatch, RuleSet: "Warehouse", Resolver: querylog.ResolverForwarded},
 		})
 	}
 	return events

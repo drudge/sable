@@ -48,7 +48,7 @@ type CheckDomainView struct {
 	// DeviceOptions the devices the panel offers. Without options the panel
 	// doesn't ask for a device.
 	DeviceInput   string
-	DeviceOptions []RuleSetDeviceOption
+	DeviceOptions []DeviceOption
 	Checked       bool
 	// Domain is Input as blocking reads it.
 	Domain      string
@@ -119,16 +119,7 @@ templ CheckDomainDrawer(view CheckDomainView) {
 		<form class="check-domain-form" data-drawer-navigate="domain" role="search">
 			@SearchField("Domain to check", "ads.example.com", ifThen(view.Checked, view.Domain, view.Input), "", templ.Attributes{"name": "domain", "id": "check-domain-input", "autocapitalize": "off", "spellcheck": "false", "data-drawer-focus": true})
 			if len(view.DeviceOptions) > 0 {
-				<label class="sr-only" for="check-domain-device">Device to check for</label>
-				<span class="suggest-input">
-					<input id="check-domain-device" name="device" list="check-domain-device-options" value={ view.DeviceInput } placeholder="Any device" autocomplete="off" spellcheck="false"/>
-					<span class="styled-select-chevron" aria-hidden="true"></span>
-				</span>
-				<datalist id="check-domain-device-options">
-					for _, option := range view.DeviceOptions {
-						<option value={ option.Value } label={ option.Label }></option>
-					}
-				</datalist>
+				@DevicePicker(DevicePickerProps{ID: "check-domain-device", Name: "device", Label: "Device to check for", Placeholder: "Any device", Value: view.DeviceInput, Options: view.DeviceOptions})
 			}
 			@components.Button(components.ButtonProps{Label: "Check", Type: "submit"})
 		</form>

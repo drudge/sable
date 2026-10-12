@@ -281,6 +281,7 @@ templ QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) {
 		data-query-detail-dnssec-label={ entry.Decision.DNSSEC }
 		data-query-detail-check-device={ entry.Decision.CheckDevice }
 		data-query-detail-rule-set-block={ fmt.Sprint(entry.Decision.RuleSetBlock) }
+		data-query-detail-rule-set={ entry.Decision.RuleSet }
 		if entry.ID > 0 {
 			data-query-detail-id={ strconv.FormatInt(entry.ID, 10) }
 			data-query-detail-link={ QueryPath(entry.ID, entry.Name) }
@@ -476,10 +477,106 @@ templ queryDetailFooter(view QueryDetailView) {
 			@components.Button(components.ButtonProps{Label: "Watch", Icon: "eye", Variant: components.ButtonOutline, Href: templ.SafeURL(queryWatchURL(view.Entry)), Attrs: templ.Attributes{"data-query-detail-watch": true, "aria-label": "Watch " + view.Entry.Name}})
 		}
 		if view.CanBlocking {
-			<form data-query-detail-policy="block" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend" hidden?={ view.Entry.Source == "blocked" }><input type="hidden" name="domain" value={ view.Entry.Name } data-query-detail-domain/><input type="hidden" name="action" value="block"/>@components.Button(components.ButtonProps{Label: "Block", Icon: "shield-x", Variant: components.ButtonOutline, Destructive: true, Type: "submit"})</form>
-			<form data-query-detail-policy="allow" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend" hidden?={ view.Entry.Decision.RuleSetBlock }><input type="hidden" name="domain" value={ view.Entry.Name } data-query-detail-domain/><input type="hidden" name="action" value="allow"/>@components.Button(components.ButtonProps{Label: "Allow", Icon: "shield-check", Type: "submit"})</form>
+			<div class={ "query-policy-row", templ.KV("scoped", view.Entry.Decision.RuleSet != "") } data-query-policy-row>
+				@queryPolicySplit(view, "block")
+				@queryPolicySplit(view, "allow")
+			</div>
 		}
 	</div>
+}
+
+// queryPolicySplit is a query's Block or Allow. When the device used a rule
+// set it is a split button: the left part acts for the rule set or for
+// everyone, whichever was picked last, and the chevron offers both. With only
+// one of them on offer it is a plain button.
+templ queryPolicySplit(view QueryDetailView, action string) {
+	{{ entry := view.Entry }}
+	{{ ruleSetOffered, everyoneOffered := queryPolicyApplies(entry, action, true), queryPolicyApplies(entry, action, false) }}
+	<div
+		class={ "split-button query-policy-split", templ.KV("single", !(ruleSetOffered && everyoneOffered)) }
+		data-split-button
+		data-split-remember="query-policy-scope"
+		data-query-policy-split={ action }
+		hidden?={ !ruleSetOffered && !everyoneOffered }
+	>
+		<div data-split-action="rule-set" data-split-unavailable?={ !ruleSetOffered } hidden?={ !ruleSetOffered }>
+			@queryDetailPolicy(view, action, true)
+		</div>
+		<div data-split-action="everyone" data-split-unavailable?={ !everyoneOffered } hidden?={ ruleSetOffered || !everyoneOffered }>
+			@queryDetailPolicy(view, action, false)
+		</div>
+		<button
+			id={ "query-" + action + "-scope" }
+			class={ "button split-button-trigger", templ.KV("outline destructive", action == "block") }
+			type="button"
+			aria-label={ "Choose whom to " + strings.ToLower(queryPolicyVerb(action)) + " for" }
+			aria-haspopup="menu"
+			aria-expanded="false"
+			aria-controls={ "query-" + action + "-scope-menu" }
+			data-split-trigger
+		>@Icon("chevron-down")</button>
+		<div id={ "query-" + action + "-scope-menu" } class="split-menu" role="menu" aria-label={ queryPolicyVerb(action) + " for" } popover="manual">
+			<button class="split-menu-option" type="button" role="menuitemradio" aria-checked="true" data-split-option="rule-set">@Icon("layers")<span><strong data-query-policy-rule-set-name>{ entry.Decision.RuleSet }</strong><small>Only devices in this rule set.</small></span>@Icon("check")</button>
+			<button class="split-menu-option" type="button" role="menuitemradio" aria-checked="false" data-split-option="everyone">@Icon("globe")<span><strong>Everyone</strong><small>Every device on the network.</small></span>@Icon("check")</button>
+		</div>
+	</div>
+}
+
+// queryDetailPolicy blocks or allows the open query's domain for everyone,
+// or, with forRuleSet, for the rule set the device used. The page's script
+// points it at the open query.
+templ queryDetailPolicy(view QueryDetailView, action string, forRuleSet bool) {
+	{{ ruleSet := view.Entry.Decision.RuleSet }}
+	<form data-query-detail-policy={ action + ifThen(forRuleSet, "-rule-set", "") } hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend">
+		<input type="hidden" name="domain" value={ view.Entry.Name } data-query-detail-domain/>
+		<input type="hidden" name="action" value={ action }/>
+		if forRuleSet {
+			<input type="hidden" name="rule_set" value={ ruleSet } data-query-detail-rule-set/>
+		}
+		if action == "block" {
+			@components.Button(components.ButtonProps{Label: queryPolicyLabel("Block", ruleSet, forRuleSet), Icon: "shield-x", Variant: components.ButtonOutline, Destructive: true, Type: "submit"})
+		} else {
+			@components.Button(components.ButtonProps{Label: queryPolicyLabel("Allow", ruleSet, forRuleSet), Icon: "shield-check", Type: "submit"})
+		}
+	</form>
+}
+
+func queryPolicyVerb(action string) string {
+	if action == "block" {
+		return "Block"
+	}
+	return "Allow"
+}
+
+// queryPolicyApplies says whether an action applies to a query: Block unless
+// it was blocked, Allow for everyone unless the rule set's own domain or app
+// blocked it, which only the rule set's allowed domains get past, and the
+// rule set's versions only when the device used one.
+func queryPolicyApplies(entry QueryLogEntryView, action string, forRuleSet bool) bool {
+	if forRuleSet && entry.Decision.RuleSet == "" {
+		return false
+	}
+	switch {
+	case action == "block":
+		return entry.Source != "blocked"
+	case forRuleSet:
+		return entry.Source == "blocked"
+	default:
+		return !entry.Decision.RuleSetBlock
+	}
+}
+
+// queryPolicyLabel names a query panel's Block or Allow: plain when the
+// device used no rule set, and for whom when it did.
+func queryPolicyLabel(verb, ruleSet string, forRuleSet bool) string {
+	switch {
+	case ruleSet == "":
+		return verb
+	case forRuleSet:
+		return verb + " for " + ruleSet
+	default:
+		return verb + " for Everyone"
+	}
 }
 
 // queryCopyLinkButton is CopyLinkButton with the hook the page's script uses

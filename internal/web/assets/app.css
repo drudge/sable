@@ -1331,21 +1331,30 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .toast-update > .notification-actions:empty { display: none; }
 .toast-update > .notification-actions > :only-child { grid-column: 1 / -1; }
 .toast-update .notification-actions .button { width: 100%; min-height: 2.25rem; justify-content: center; }
-.update-split-button { display: grid; grid-template-columns: minmax(0, 1fr) 2rem; min-width: 0; }
-.update-split-button > [data-update-scope-action], .update-split-button > [data-update-scope-action] form { min-width: 0; margin: 0; }
-.update-split-button > [data-update-scope-action] .button { width: 100%; border-top-right-radius: 0; border-bottom-right-radius: 0; white-space: nowrap; }
-.toast-update .update-split-button > [data-update-scope-action] .button { padding-inline: var(--space-2); }
-.update-split-button .update-scope-trigger { justify-content: center; border-top-left-radius: 0; border-bottom-left-radius: 0; border-left-color: color-mix(in srgb, var(--primary-foreground) 22%, var(--primary)); padding: 0; }
-.update-scope-menu { position: fixed; inset: auto; margin: 0; width: 18rem; max-width: calc(100vw - 1rem); overflow: auto; border: 1px solid var(--border); border-radius: .625rem; background: var(--popover); color: var(--popover-foreground); padding: .375rem; box-shadow: 0 12px 32px rgb(0 0 0 / .22); }
-.update-scope-menu form { margin: 0; }
-.update-scope-option { display: flex; align-items: center; gap: var(--space-3); width: 100%; border: 0; border-radius: .375rem; background: transparent; padding: .65rem var(--space-2); color: inherit; text-align: left; }
-.update-scope-option:hover, .update-scope-option:focus-visible { background: var(--accent); color: var(--accent-foreground); }
-.update-scope-option > .nav-icon { width: 1rem; height: 1rem; flex: 0 0 auto; color: var(--muted-foreground); }
-.update-scope-option > span { display: grid; gap: .2rem; }
-.update-scope-option > .icon-check { margin-left: auto; color: inherit; }
-.update-scope-option[aria-checked="false"] > .icon-check { visibility: hidden; }
-.update-scope-option strong { font-size: .8125rem; font-weight: 500; }
-.update-scope-option small { color: var(--muted-foreground); font-size: .6875rem; line-height: 1.4; }
+/* A split button runs one of a few actions: the part on the left runs the
+   one chosen last, and the chevron opens a menu of all of them. */
+.split-button { display: grid; grid-template-columns: minmax(0, 1fr) 2rem; min-width: 0; }
+.split-button > [data-split-action], .split-button > [data-split-action] form { display: flex; min-width: 0; margin: 0; }
+.split-button > [data-split-action] form { flex: 1; }
+.split-button > [data-split-action] .button { width: 100%; border-top-right-radius: 0; border-bottom-right-radius: 0; white-space: nowrap; }
+.toast-update .split-button > [data-split-action] .button { padding-inline: var(--space-2); }
+.split-button .split-button-trigger { justify-content: center; border-top-left-radius: 0; border-bottom-left-radius: 0; padding: 0; }
+.split-button .split-button-trigger:not(.outline) { border-left-color: color-mix(in srgb, var(--primary-foreground) 22%, var(--primary)); }
+.split-button .split-button-trigger.outline { margin-left: -1px; }
+/* With one action left there is nothing to pick, so it fills the button. */
+.split-button.single { grid-template-columns: minmax(0, 1fr); }
+.split-button.single > .split-button-trigger { display: none; }
+.split-button.single > [data-split-action] .button { border-radius: 999px; }
+.split-menu { position: fixed; inset: auto; margin: 0; width: 18rem; max-width: calc(100vw - 1rem); overflow: auto; border: 1px solid var(--border); border-radius: .625rem; background: var(--popover); color: var(--popover-foreground); padding: .375rem; box-shadow: 0 12px 32px rgb(0 0 0 / .22); }
+.split-menu form { margin: 0; }
+.split-menu-option { display: flex; align-items: center; gap: var(--space-3); width: 100%; border: 0; border-radius: .375rem; background: transparent; padding: .65rem var(--space-2); color: inherit; text-align: left; }
+.split-menu-option:hover, .split-menu-option:focus-visible { background: var(--accent); color: var(--accent-foreground); }
+.split-menu-option > .nav-icon { width: 1rem; height: 1rem; flex: 0 0 auto; color: var(--muted-foreground); }
+.split-menu-option > span { display: grid; gap: .2rem; }
+.split-menu-option > .icon-check { margin-left: auto; color: inherit; }
+.split-menu-option[aria-checked="false"] > .icon-check { visibility: hidden; }
+.split-menu-option strong { font-size: .8125rem; font-weight: 500; }
+.split-menu-option small { color: var(--muted-foreground); font-size: .6875rem; line-height: 1.4; }
 
 @media (hover: hover) and (min-width: 640px) {
   .notification-stack {
@@ -3089,6 +3098,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .query-detail-policy-actions .button { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; }
 .query-detail-policy-actions .button .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; }
 .query-detail-policy-actions .button { white-space: nowrap; }
+/* Block and Allow sit together at the width of the wider one. */
+.query-policy-row { display: inline-grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: var(--space-2); min-width: 0; }
+.query-policy-row .button > span { overflow: hidden; text-overflow: ellipsis; }
 .query-log-table.full th, .query-log-table.full td { padding-inline: var(--space-5); }
 .query-log-table.full td { height: 3.25rem; }
 .query-log-table.full code { font-size: .75rem; }
@@ -3184,9 +3196,14 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.query-detail-footer { padding-bottom: max(.85rem, env(safe-area-inset-bottom)); }
 	.query-detail-policy-actions { width: 100%; }
 	.query-detail-policy-actions form, .query-detail-policy-actions .button { flex: 1; }
-	/* With Block showing, a query's four actions pair up. */
-	.query-detail-footer > .query-detail-policy-actions:has(> [data-query-detail-policy="block"]:not([hidden])) { display: grid; grid-template-columns: 1fr 1fr; }
-	.query-detail-policy-actions:has(> [data-query-detail-policy="block"]:not([hidden])) .button { width: 100%; }
+	/* A query's actions pair up, two to a row, and Block and Allow take a
+	   row each when they name a rule set or everyone. */
+	.query-detail-footer > .query-detail-policy-actions:has(> .query-policy-row) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.query-detail-policy-actions:has(> .query-policy-row) .button { min-width: 0; padding-inline: var(--space-3); }
+	.query-detail-policy-actions:has(> .query-policy-row) > .button, .query-policy-split [data-split-action] .button { width: 100%; }
+	.query-policy-row { display: grid; grid-column: 1 / -1; }
+	.query-policy-row.scoped { grid-auto-flow: row; }
+	.query-policy-split .split-button-trigger { padding: 0; }
 	/* A node's Remove and Promote don't fit side by side, so they stack. */
 	.query-detail-footer > .cluster-node-actions { flex-wrap: wrap; }
 	.query-detail-footer > .cluster-node-actions > * { flex: 1 1 auto; }
@@ -4393,8 +4410,8 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 /* A problem arrives as a toast that floats over the dialog, so its slot takes no room. */
 .alert-destination-notice { display: contents; }
 .alert-destination-form .dialog-footer .alert-preview-button { margin-right: auto; }
-.isotope-dialog-body fieldset:is(.alert-formats, .alert-sends, .rule-set-lists) { min-width: 0; margin: 0; border: 0; padding: 0; }
-.isotope-dialog-body :is(.alert-formats, .alert-sends, .rule-set-lists) > legend { margin-bottom: var(--space-2); padding: 0; font-size: .8125rem; font-weight: 500; }
+.isotope-dialog-body fieldset:is(.alert-formats, .alert-sends), fieldset.rule-set-lists { min-width: 0; margin: 0; border: 0; padding: 0; }
+.isotope-dialog-body :is(.alert-formats, .alert-sends) > legend, .rule-set-lists > legend { margin-bottom: var(--space-2); padding: 0; font-size: .8125rem; font-weight: 500; }
 .alert-format-tabs { display: flex; flex-wrap: wrap; width: 100%; align-items: center; gap: .125rem; border-radius: .5rem; background: var(--muted); padding: var(--space-1); }
 .alert-format { display: inline-flex; flex: 1 1 auto; height: 1.75rem; align-items: center; justify-content: center; gap: .4rem; border-radius: .375rem; padding: 0 .6rem; white-space: nowrap; color: var(--muted-foreground); font-size: .8125rem; cursor: pointer; }
 .alert-format .nav-icon { width: .875rem; height: .875rem; flex: 0 0 .875rem; }
@@ -4443,6 +4460,11 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .rule-set-lists:not(.rule-set-scope) > .rule-set-list-choices { margin-top: 0; border-top: 0; padding-top: 0; }
 .rule-set-list-choices span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rule-set-lists > small { display: block; margin-top: var(--space-2); }
+.rule-set-blocking-section { display: grid; gap: var(--space-4); }
+.rule-set-blocking-section .switch-row { margin: 0; }
+.rule-set-blocking-section .rule-set-domains-help { margin: 0; }
+.rule-set-delete-locked { display: inline-flex; cursor: not-allowed; }
+.rule-set-delete-locked .icon-button:disabled { opacity: .4; pointer-events: none; }
 /* All Your Block Lists needs no list to pick from. */
 .rule-set-scope:has(input[name="scope"][value="all"]:checked) .rule-set-list-choices { display: none; }
 @media (max-width: 640px) {
@@ -4466,13 +4488,18 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .rule-set-device-name strong { font-size: .875rem; font-weight: 500; }
 .rule-set-device-name small { color: var(--muted-foreground); font: .75rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 .rule-set-device-form input { font-family: inherit; font-size: .875rem; }
-/* An input with suggestions wears the select chevron. The browser's own
-   arrow stays clickable under it, so it still opens the list. */
+/* A device picker is a field that wears the select chevron and lists
+   devices in the styled select's popover, each with its icon and address. */
 .suggest-input { position: relative; display: flex; min-width: 0; flex: 1; }
-.suggest-input input { padding-right: 2.25rem; }
-.suggest-input input::-webkit-calendar-picker-indicator { position: absolute; top: 0; right: 0; width: 2.25rem; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-.suggest-input .styled-select-chevron { position: absolute; top: 50%; right: var(--space-3); margin-top: -.2rem; pointer-events: none; }
-.rule-set-form:has(.rule-set-blocking input:not(:checked)) .rule-set-lists { display: none; }
+.suggest-input input { width: 100%; padding-right: 2.25rem; }
+.device-picker-toggle { position: absolute; top: 0; right: 0; display: grid; width: 2.25rem; height: 100%; place-items: center; border: 0; background: none; padding: 0; color: var(--muted-foreground); cursor: pointer; }
+.device-picker[data-open="true"] .styled-select-chevron { transform: translateY(.15rem) rotate(225deg); }
+.device-picker-option { gap: 0; cursor: pointer; }
+.device-picker-option .styled-select-icon { margin-right: .65rem; }
+.device-picker-copy { display: grid; min-width: 0; }
+.device-picker-copy > span, .device-picker-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.device-picker-copy small { color: var(--muted-foreground); font: .75rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.device-picker-empty { margin: 0; padding: .55rem .65rem; color: var(--muted-foreground); font-size: .8125rem; }
 .rule-set-domains-note { margin-top: var(--space-3); }
 .rule-set-domains-note button { border: 0; background: none; padding: 0; color: var(--primary); cursor: pointer; font: inherit; font-weight: 600; }
 .rule-set-domains-note button:hover { text-decoration: underline; }

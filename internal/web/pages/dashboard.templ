@@ -358,6 +358,9 @@ type QueryDecisionView struct {
 	// everywhere wouldn't get past.
 	CheckDevice    string
 	RuleSetBlock   bool
+	// RuleSet names the rule set the client used, so the panel can block or
+	// allow the domain for just that rule set.
+	RuleSet        string
 	Summary        string
 	Policy         string
 	PolicyDetail   string

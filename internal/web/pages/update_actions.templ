@@ -78,24 +78,24 @@ templ updateInstallForm(view UpdateView, fromNotification bool) {
 // one offers what was picked last.
 templ updateScopeButton(view UpdateView, fromNotification bool) {
 	{{ prefix := ifThen(fromNotification, "notification", "about") }}
-	<div class="update-split-button" data-update-scope>
-		<div data-update-scope-action="node">
+	<div class="split-button" data-split-button data-split-remember="update-scope">
+		<div data-split-action="node">
 			@updateInstallForm(view, fromNotification) {
 				@components.Button(components.ButtonProps{Label: ifThen(fromNotification, "Install update", "Install v" + view.LatestVersion), Compact: true, Type: "submit", Attrs: templ.Attributes{"id": prefix + "-update-node"}})
 			}
 		</div>
-		<div data-update-scope-action="cluster" hidden>
+		<div data-split-action="cluster" hidden>
 			@clusterUpdateForm(view.LatestVersion, prefix) {
 				@components.Button(components.ButtonProps{Label: "Update cluster", Compact: true, Type: "submit", Attrs: templ.Attributes{"id": prefix + "-update-cluster"}})
 			}
 		</div>
-		<button id={ prefix + "-update-scope" } class="button compact update-scope-trigger" type="button" aria-label="Choose update scope" aria-haspopup="menu" aria-expanded="false" aria-controls={ prefix + "-update-scope-menu" } data-update-scope-trigger>@Icon("chevron-down")</button>
-		<div id={ prefix + "-update-scope-menu" } class="update-scope-menu" role="menu" aria-label="Update scope" popover="manual">
+		<button id={ prefix + "-update-scope" } class="button compact split-button-trigger" type="button" aria-label="Choose update scope" aria-haspopup="menu" aria-expanded="false" aria-controls={ prefix + "-update-scope-menu" } data-split-trigger>@Icon("chevron-down")</button>
+		<div id={ prefix + "-update-scope-menu" } class="split-menu" role="menu" aria-label="Update scope" popover="manual">
 			@updateInstallForm(view, fromNotification) {
-				<button class="update-scope-option" type="submit" role="menuitemradio" aria-checked="true" data-update-scope-option="node">@Icon("server")<span><strong>This node</strong><small>Install here, then restart when ready.</small></span>@Icon("check")</button>
+				<button class="split-menu-option" type="submit" role="menuitemradio" aria-checked="true" data-split-option="node">@Icon("server")<span><strong>This node</strong><small>Install here, then restart when ready.</small></span>@Icon("check")</button>
 			}
 			@clusterUpdateForm(view.LatestVersion, prefix) {
-				<button class="update-scope-option" type="submit" role="menuitemradio" aria-checked="false" data-update-scope-option="cluster">@Icon("cluster")<span><strong>Entire cluster</strong><small>Update all nodes, one at a time.</small></span>@Icon("check")</button>
+				<button class="split-menu-option" type="submit" role="menuitemradio" aria-checked="false" data-split-option="cluster">@Icon("cluster")<span><strong>Entire cluster</strong><small>Update all nodes, one at a time.</small></span>@Icon("check")</button>
 			}
 		</div>
 	</div>

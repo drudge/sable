@@ -24,17 +24,18 @@ func TestRuleSetPanelAddsEditsAndDeletesSchedules(t *testing.T) {
 	}
 	form := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-sets/schedules/form?name=Kids", nil)
 	if form.Code != http.StatusOK || !strings.Contains(form.Body.String(), `name="day" value="sun" checked`) || strings.Contains(form.Body.String(), `name="day" value="sat" checked`) ||
-		!strings.Contains(form.Body.String(), `value="21:00"`) || !strings.Contains(form.Body.String(), `value="tiktok"`) {
+		!strings.Contains(form.Body.String(), `value="21:00"`) || !strings.Contains(form.Body.String(), `value="tiktok"`) ||
+		!strings.Contains(form.Body.String(), "Times are in UTC, the time zone the console shows") || strings.Contains(form.Body.String(), `name="time_zone"`) {
 		t.Fatalf("new schedule form = %d %s", form.Code, form.Body.String())
 	}
 
-	bedtime := url.Values{"name": {"Kids"}, "schedule": {"Bedtime"}, "day": {"thu", "sun"}, "start": {"21:00"}, "end": {"07:00"}, "time_zone": {"America/New_York"}, "block": {"everything"}, "app": {"tiktok"}}
+	bedtime := url.Values{"name": {"Kids"}, "schedule": {"Bedtime"}, "day": {"thu", "sun"}, "start": {"21:00"}, "end": {"07:00"}, "block": {"everything"}, "app": {"tiktok"}}
 	saved := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/schedules", bedtime)
 	if saved.Code != http.StatusOK || !strings.Contains(saved.Body.String(), "Kids has a Bedtime schedule") || !strings.Contains(saved.Body.String(), `data-rule-set-schedule="Bedtime"`) ||
 		!strings.Contains(saved.Body.String(), "1 schedule") {
 		t.Fatalf("add = %d %s", saved.Code, saved.Body.String())
 	}
-	if got := schedules(); len(got) != 1 || !slices.Equal(got[0].Days, []string{"sun", "thu"}) || got[0].Block != config.ScheduleBlockEverything || len(got[0].Apps) != 0 {
+	if got := schedules(); len(got) != 1 || !slices.Equal(got[0].Days, []string{"sun", "thu"}) || got[0].Block != config.ScheduleBlockEverything || len(got[0].Apps) != 0 || got[0].TimeZone != "UTC" {
 		t.Fatalf("schedules = %+v", got)
 	}
 
@@ -46,7 +47,6 @@ func TestRuleSetPanelAddsEditsAndDeletesSchedules(t *testing.T) {
 		{func(form url.Values) { form.Del("day") }, "Pick at least one day"},
 		{func(form url.Values) { form.Set("end", "21:00") }, "end at a different time"},
 		{func(form url.Values) { form.Set("start", "") }, "Set when the schedule starts"},
-		{func(form url.Values) { form.Set("time_zone", "Mars/Olympus") }, "know a time zone called Mars/Olympus"},
 		{func(form url.Values) { form.Set("block", "apps"); form.Del("app") }, "Pick at least one app"},
 		{func(form url.Values) { form.Set("schedule", "bedtime") }, "already has a schedule"},
 	} {
@@ -66,16 +66,16 @@ func TestRuleSetPanelAddsEditsAndDeletesSchedules(t *testing.T) {
 	if !strings.Contains(edit, `name="original" value="Bedtime"`) || !strings.Contains(edit, `name="day" value="thu" checked`) || !strings.Contains(edit, "Save Schedule") {
 		t.Fatalf("edit form:\n%s", edit)
 	}
-	homework := url.Values{"name": {"Kids"}, "original": {"Bedtime"}, "schedule": {"Homework"}, "day": {"mon"}, "start": {"15:30"}, "end": {"17:30"}, "time_zone": {"UTC"}, "block": {"apps"}, "app": {"youtube", "tiktok"}}
+	homework := url.Values{"name": {"Kids"}, "original": {"Bedtime"}, "schedule": {"Homework"}, "day": {"mon"}, "start": {"15:30"}, "end": {"17:30"}, "block": {"apps"}, "app": {"youtube", "tiktok"}}
 	if response := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/schedules", homework); response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Kids&#39;s Homework schedule saved") {
 		t.Fatalf("edit = %d %s", response.Code, response.Body.String())
 	}
 	if got := schedules(); len(got) != 1 || got[0].Name != "Homework" || !slices.Equal(got[0].Apps, []string{"tiktok", "youtube"}) {
 		t.Fatalf("schedules after the edit = %+v", got)
 	}
-	// Editing the rule set in its dialog keeps its schedules.
-	if response := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/save", url.Values{"original": {"Kids"}, "name": {"Kids"}, "lists": {"Ads"}}); response.Code != http.StatusOK || len(schedules()) != 1 {
-		t.Fatalf("save the dialog = %d, schedules %+v", response.Code, schedules())
+	// Changing its block lists keeps its schedules.
+	if response := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/lists", url.Values{"name": {"Kids"}, "lists": {"Ads"}}); response.Code != http.StatusOK || len(schedules()) != 1 {
+		t.Fatalf("save its lists = %d, schedules %+v", response.Code, schedules())
 	}
 
 	deleted := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/schedules/delete", url.Values{"name": {"Kids"}, "schedule": {"Homework"}})
@@ -93,7 +93,7 @@ func TestRuleSetPanelAddsEditsAndDeletesSchedules(t *testing.T) {
 func TestScheduleWithBlockingOffBlocksEverything(t *testing.T) {
 	t.Parallel()
 	server, configuration := newRuleSetTestServer(t)
-	if response := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/save", url.Values{"original": {"Kids"}, "name": {"Kids"}, "blocking": {"off"}}); response.Code != http.StatusOK {
+	if response := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/blocking", url.Values{"name": {"Kids"}}); response.Code != http.StatusOK {
 		t.Fatalf("turn blocking off = %d", response.Code)
 	}
 	form := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-sets/schedules/form?name=Kids", nil).Body.String()
@@ -101,9 +101,9 @@ func TestScheduleWithBlockingOffBlocksEverything(t *testing.T) {
 		t.Fatalf("form for a rule set with blocking off offers apps:\n%s", form)
 	}
 	saved := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/schedules", url.Values{
-		"name": {"Kids"}, "schedule": {"Lights out"}, "day": {"fri"}, "start": {"22:00"}, "end": {"06:00"}, "time_zone": {"UTC"}, "block": {"apps"}, "app": {"tiktok"},
+		"name": {"Kids"}, "schedule": {"Lights out"}, "day": {"fri"}, "start": {"22:00"}, "end": {"06:00"}, "block": {"apps"}, "app": {"tiktok"},
 	})
-	if got := configuration.Current().Config.Blocking.RuleSets[0].Schedules; saved.Code != http.StatusOK || len(got) != 1 || got[0].Block != config.ScheduleBlockEverything || len(got[0].Apps) != 0 {
+	if got := configuration.Current().Config.Blocking.RuleSets[0].Schedules; saved.Code != http.StatusOK || len(got) != 1 || got[0].Block != config.ScheduleBlockEverything || len(got[0].Apps) != 0 || got[0].TimeZone != "UTC" {
 		t.Fatalf("save = %d, schedules %+v", saved.Code, got)
 	}
 	if !strings.Contains(saved.Body.String(), "Blocking off · 1 schedule") || !strings.Contains(saved.Body.String(), `data-rule-set-schedule="Lights out"`) {
@@ -185,7 +185,7 @@ func TestRuleSetPanelSkipsDelaysAndEndsSchedules(t *testing.T) {
 	start, end := now.Add(-time.Hour).Truncate(time.Minute), now.Add(2*time.Hour).Truncate(time.Minute)
 	saved := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/schedules", url.Values{
 		"name": {"Kids"}, "schedule": {"Bedtime"}, "day": {"sun", "mon", "tue", "wed", "thu", "fri", "sat"},
-		"start": {start.Format("15:04")}, "end": {end.Format("15:04")}, "time_zone": {"UTC"}, "block": {"everything"},
+		"start": {start.Format("15:04")}, "end": {end.Format("15:04")}, "block": {"everything"},
 	})
 	if saved.Code != http.StatusOK || !strings.Contains(saved.Body.String(), `id="rule-set-schedule-end-0"`) || !strings.Contains(saved.Body.String(), "Delay 30 Minutes") {
 		t.Fatalf("panel with a schedule on = %d %s", saved.Code, saved.Body.String())
