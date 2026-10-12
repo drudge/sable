@@ -4347,11 +4347,22 @@
 		watchAction.href = `/settings?${watch}`;
 		watchAction.setAttribute("aria-label", `Watch ${domain}`);
 	  }
-	  const blockAction = dialog.querySelector('[data-query-detail-policy="block"]');
-	  if (blockAction) blockAction.hidden = source === "blocked";
-	  // Allowing everywhere can't beat a rule set's own block.
-	  const allowAction = dialog.querySelector('[data-query-detail-policy="allow"]');
-	  if (allowAction) allowAction.hidden = row.dataset.queryDetailRuleSetBlock === "true";
+	  // A device in a rule set can have the domain blocked or allowed for just
+	  // that rule set, or for everyone. Allowing everywhere can't beat a rule
+	  // set's own block; the rule set's own allowed domains can.
+	  const ruleSet = row.dataset.queryDetailRuleSet || "";
+	  const policyLabel = (verb, forRuleSet) => !ruleSet ? verb : `${verb} for ${forRuleSet ? ruleSet : "Everyone"}`;
+	  [["block", false, source !== "blocked"], ["block-rule-set", true, source !== "blocked"],
+	   ["allow", false, row.dataset.queryDetailRuleSetBlock !== "true"], ["allow-rule-set", true, true]].forEach(([name, forRuleSet, shown]) => {
+		const form = dialog.querySelector(`[data-query-detail-policy="${name}"]`);
+		if (!form) return;
+		form.hidden = !shown || (forRuleSet && !ruleSet);
+		const ruleSetInput = form.querySelector("[data-query-detail-rule-set]");
+		if (ruleSetInput) ruleSetInput.value = ruleSet;
+		const button = form.querySelector("button");
+		button.querySelector("span").textContent = policyLabel(name.startsWith("block") ? "Block" : "Allow", forRuleSet);
+		if (name === "allow") button.classList.toggle("outline", Boolean(ruleSet));
+	  });
 	  const why = dialog.querySelector("[data-query-detail-why]");
 	  if (why) {
 		// A device in a rule set gets the answer for that device.

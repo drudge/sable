@@ -237,7 +237,7 @@ func (server *Server) addQueryPolicyDomain(writer http.ResponseWriter, request *
 		return
 	}
 	allowed := request.FormValue("action") == "allow"
-	result, err := server.policyService().Add(request.Context(), requestActor(request, ""), "", request.FormValue("domain"), allowed)
+	result, err := server.policyService().Add(request.Context(), requestActor(request, ""), request.FormValue("rule_set"), request.FormValue("domain"), allowed)
 	if err != nil {
 		server.render(writer, request, pages.Toast(err.Error(), "error"))
 		return

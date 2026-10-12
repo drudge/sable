@@ -361,3 +361,28 @@ func TestRuleSetPanelBlocksApps(t *testing.T) {
 		t.Fatalf("picker for an unknown rule set = %d", missing.Code)
 	}
 }
+
+// The query log's Block and Allow can change just the rule set the device
+// used, and Allow for the rule set gets past the rule set's own block.
+func TestQueryLogBlocksAndAllowsForTheRuleSet(t *testing.T) {
+	t.Parallel()
+	server, configuration := newRuleSetTestServer(t)
+	kids := func() config.RuleSet { return configuration.Current().Config.Blocking.RuleSets[0] }
+
+	blocked := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/query-domain", url.Values{"domain": {"videos.example."}, "action": {"block"}, "rule_set": {"Kids"}})
+	if blocked.Code != http.StatusOK || !slices.Contains(kids().Domains, "videos.example") || slices.Contains(configuration.Current().Config.Blocking.Domains, "videos.example") ||
+		!strings.Contains(blocked.Body.String(), "Kids") {
+		t.Fatalf("block for Kids = %d %s, Kids %+v", blocked.Code, blocked.Body.String(), kids())
+	}
+	allowed := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/query-domain", url.Values{"domain": {"games.example"}, "action": {"allow"}, "rule_set": {"Kids"}})
+	if allowed.Code != http.StatusOK || !slices.Contains(kids().AllowedDomains, "games.example") || slices.Contains(kids().Domains, "games.example") {
+		t.Fatalf("allow for Kids = %d %s, Kids %+v", allowed.Code, allowed.Body.String(), kids())
+	}
+	if everyone := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/query-domain", url.Values{"domain": {"ads.example"}, "action": {"block"}}); everyone.Code != http.StatusOK ||
+		!slices.Contains(configuration.Current().Config.Blocking.Domains, "ads.example") || slices.Contains(kids().Domains, "ads.example") {
+		t.Fatalf("block for everyone = %d, Kids %+v", everyone.Code, kids())
+	}
+	if missing := serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/query-domain", url.Values{"domain": {"ads.example"}, "action": {"block"}, "rule_set": {"Teens"}}); !strings.Contains(missing.Body.String(), "Teens") {
+		t.Fatalf("a deleted rule set = %s", missing.Body.String())
+	}
+}

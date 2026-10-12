@@ -614,6 +614,7 @@ func queryDecisionView(decision querylog.Decision) pages.QueryDecisionView {
 	view := pages.QueryDecisionView{
 		Available:    decision.Policy != "" || decision.Cache != "" || decision.Resolver != "" || decision.DNSSEC != "",
 		RuleSetBlock: decision.OwnRule && decision.Policy == querylog.PolicyBlocked,
+		RuleSet:      decision.RuleSet,
 	}
 	switch decision.Policy {
 	case querylog.PolicyNotEvaluated:

@@ -281,6 +281,7 @@ templ QueryLogTableRow(entry QueryLogEntryView, canBlocking bool) {
 		data-query-detail-dnssec-label={ entry.Decision.DNSSEC }
 		data-query-detail-check-device={ entry.Decision.CheckDevice }
 		data-query-detail-rule-set-block={ fmt.Sprint(entry.Decision.RuleSetBlock) }
+		data-query-detail-rule-set={ entry.Decision.RuleSet }
 		if entry.ID > 0 {
 			data-query-detail-id={ strconv.FormatInt(entry.ID, 10) }
 			data-query-detail-link={ QueryPath(entry.ID, entry.Name) }
@@ -476,10 +477,58 @@ templ queryDetailFooter(view QueryDetailView) {
 			@components.Button(components.ButtonProps{Label: "Watch", Icon: "eye", Variant: components.ButtonOutline, Href: templ.SafeURL(queryWatchURL(view.Entry)), Attrs: templ.Attributes{"data-query-detail-watch": true, "aria-label": "Watch " + view.Entry.Name}})
 		}
 		if view.CanBlocking {
-			<form data-query-detail-policy="block" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend" hidden?={ view.Entry.Source == "blocked" }><input type="hidden" name="domain" value={ view.Entry.Name } data-query-detail-domain/><input type="hidden" name="action" value="block"/>@components.Button(components.ButtonProps{Label: "Block", Icon: "shield-x", Variant: components.ButtonOutline, Destructive: true, Type: "submit"})</form>
-			<form data-query-detail-policy="allow" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend" hidden?={ view.Entry.Decision.RuleSetBlock }><input type="hidden" name="domain" value={ view.Entry.Name } data-query-detail-domain/><input type="hidden" name="action" value="allow"/>@components.Button(components.ButtonProps{Label: "Allow", Icon: "shield-check", Type: "submit"})</form>
+			@queryDetailPolicy(view, "block", false)
+			@queryDetailPolicy(view, "block", true)
+			@queryDetailPolicy(view, "allow", true)
+			@queryDetailPolicy(view, "allow", false)
 		}
 	</div>
+}
+
+// queryDetailPolicy blocks or allows the open query's domain for everyone,
+// or, with forRuleSet, for the rule set the device used. The page's script
+// points it at the open query, and shows only the ones that apply.
+templ queryDetailPolicy(view QueryDetailView, action string, forRuleSet bool) {
+	{{ ruleSet := view.Entry.Decision.RuleSet }}
+	<form data-query-detail-policy={ action + ifThen(forRuleSet, "-rule-set", "") } hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend" hidden?={ !queryPolicyShown(view.Entry, action, forRuleSet) }>
+		<input type="hidden" name="domain" value={ view.Entry.Name } data-query-detail-domain/>
+		<input type="hidden" name="action" value={ action }/>
+		if forRuleSet {
+			<input type="hidden" name="rule_set" value={ ruleSet } data-query-detail-rule-set/>
+		}
+		if action == "block" {
+			@components.Button(components.ButtonProps{Label: queryPolicyLabel("Block", ruleSet, forRuleSet), Icon: "shield-x", Variant: components.ButtonOutline, Destructive: true, Type: "submit"})
+		} else {
+			@components.Button(components.ButtonProps{Label: queryPolicyLabel("Allow", ruleSet, forRuleSet), Icon: "shield-check", Variant: ifThen(forRuleSet || ruleSet == "", components.ButtonPrimary, components.ButtonOutline), Type: "submit"})
+		}
+	</form>
+}
+
+// queryPolicyShown says whether a query's panel offers an action: Block
+// unless it was blocked, Allow for everyone unless the rule set's own domain
+// or app blocked it, which only the rule set's allowed domains get past, and
+// the rule set's versions only when the device used one.
+func queryPolicyShown(entry QueryLogEntryView, action string, forRuleSet bool) bool {
+	if forRuleSet && entry.Decision.RuleSet == "" {
+		return false
+	}
+	if action == "block" {
+		return entry.Source != "blocked"
+	}
+	return forRuleSet || !entry.Decision.RuleSetBlock
+}
+
+// queryPolicyLabel names a query panel's Block or Allow: plain when the
+// device used no rule set, and for whom when it did.
+func queryPolicyLabel(verb, ruleSet string, forRuleSet bool) string {
+	switch {
+	case ruleSet == "":
+		return verb
+	case forRuleSet:
+		return verb + " for " + ruleSet
+	default:
+		return verb + " for Everyone"
+	}
 }
 
 // queryCopyLinkButton is CopyLinkButton with the hook the page's script uses
