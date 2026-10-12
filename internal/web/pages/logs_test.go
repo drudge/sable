@@ -186,7 +186,7 @@ func TestQueryPolicySplitButtons(t *testing.T) {
 		`name="rule_set" value="Kids"`,
 		"Allow for Kids",
 		`<strong data-query-policy-rule-set-name>Kids</strong>`,
-		`class="split-button query-policy-split single scoped" data-split-button data-split-remember="query-policy-scope" data-query-policy-split="allow">`,
+		`class="split-button query-policy-split single" data-split-button data-split-remember="query-policy-scope" data-query-policy-split="allow">`,
 		`<div data-split-action="everyone" data-split-unavailable hidden>`,
 		`data-query-policy-split="block" hidden>`,
 	} {
@@ -196,7 +196,7 @@ func TestQueryPolicySplitButtons(t *testing.T) {
 	}
 	answered := renderComponent(t, queryDetailFooter(QueryDetailView{CanBlocking: true, Entry: QueryLogEntryView{Name: "games.example", Source: "upstream", Decision: QueryDecisionView{RuleSet: "Kids"}}}))
 	for _, expected := range []string{
-		`class="split-button query-policy-split scoped" data-split-button data-split-remember="query-policy-scope" data-query-policy-split="block">`,
+		`class="split-button query-policy-split" data-split-button data-split-remember="query-policy-scope" data-query-policy-split="block">`,
 		"Block for Kids", "Block for Everyone",
 	} {
 		if !strings.Contains(answered, expected) {

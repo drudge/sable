@@ -4482,6 +4482,7 @@
 		block: {"rule-set": source !== "blocked", everyone: source !== "blocked"},
 		allow: {"rule-set": source === "blocked", everyone: row.dataset.queryDetailRuleSetBlock !== "true"},
 	  };
+	  dialog.querySelector("[data-query-policy-row]")?.classList.toggle("scoped", Boolean(ruleSet));
 	  dialog.querySelectorAll("[data-query-policy-split]").forEach((split) => {
 		const verb = split.dataset.queryPolicySplit === "block" ? "Block" : "Allow";
 		split.querySelectorAll(":scope > [data-split-action]").forEach((action) => {
@@ -4495,7 +4496,6 @@
 		});
 		const name = split.querySelector("[data-query-policy-rule-set-name]");
 		if (name) name.textContent = ruleSet;
-		split.classList.toggle("scoped", Boolean(ruleSet));
 		setupSplitButton(split);
 		split.sableSelectSplit();
 	  });

@@ -477,8 +477,10 @@ templ queryDetailFooter(view QueryDetailView) {
 			@components.Button(components.ButtonProps{Label: "Watch", Icon: "eye", Variant: components.ButtonOutline, Href: templ.SafeURL(queryWatchURL(view.Entry)), Attrs: templ.Attributes{"data-query-detail-watch": true, "aria-label": "Watch " + view.Entry.Name}})
 		}
 		if view.CanBlocking {
-			@queryPolicySplit(view, "block")
-			@queryPolicySplit(view, "allow")
+			<div class={ "query-policy-row", templ.KV("scoped", view.Entry.Decision.RuleSet != "") } data-query-policy-row>
+				@queryPolicySplit(view, "block")
+				@queryPolicySplit(view, "allow")
+			</div>
 		}
 	</div>
 }
@@ -491,7 +493,7 @@ templ queryPolicySplit(view QueryDetailView, action string) {
 	{{ entry := view.Entry }}
 	{{ ruleSetOffered, everyoneOffered := queryPolicyApplies(entry, action, true), queryPolicyApplies(entry, action, false) }}
 	<div
-		class={ "split-button query-policy-split", templ.KV("single", !(ruleSetOffered && everyoneOffered)), templ.KV("scoped", entry.Decision.RuleSet != "") }
+		class={ "split-button query-policy-split", templ.KV("single", !(ruleSetOffered && everyoneOffered)) }
 		data-split-button
 		data-split-remember="query-policy-scope"
 		data-query-policy-split={ action }

@@ -1335,6 +1335,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
    one chosen last, and the chevron opens a menu of all of them. */
 .split-button { display: grid; grid-template-columns: minmax(0, 1fr) 2rem; min-width: 0; }
 .split-button > [data-split-action], .split-button > [data-split-action] form { display: flex; min-width: 0; margin: 0; }
+.split-button > [data-split-action] form { flex: 1; }
 .split-button > [data-split-action] .button { width: 100%; border-top-right-radius: 0; border-bottom-right-radius: 0; white-space: nowrap; }
 .toast-update .split-button > [data-split-action] .button { padding-inline: var(--space-2); }
 .split-button .split-button-trigger { justify-content: center; border-top-left-radius: 0; border-bottom-left-radius: 0; padding: 0; }
@@ -3097,6 +3098,12 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .query-detail-policy-actions .button { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; }
 .query-detail-policy-actions .button .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; }
 .query-detail-policy-actions .button { white-space: nowrap; }
+/* Block and Allow sit together. Named for a rule set or everyone they're
+   long, so they take a row of their own at equal widths. */
+.query-policy-row { display: flex; gap: var(--space-2); min-width: 0; }
+.query-detail-policy-actions:has(> .query-policy-row.scoped), .query-policy-row.scoped { width: 100%; }
+.query-policy-row.scoped > .query-policy-split { flex: 1 1 0; }
+.query-policy-row .button > span { overflow: hidden; text-overflow: ellipsis; }
 .query-log-table.full th, .query-log-table.full td { padding-inline: var(--space-5); }
 .query-log-table.full td { height: 3.25rem; }
 .query-log-table.full code { font-size: .75rem; }
@@ -3192,13 +3199,14 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.query-detail-footer { padding-bottom: max(.85rem, env(safe-area-inset-bottom)); }
 	.query-detail-policy-actions { width: 100%; }
 	.query-detail-policy-actions form, .query-detail-policy-actions .button { flex: 1; }
-	/* A query's actions pair up, two to a row. Block and Allow name whom
-	   they're for when the device has a rule set, so each takes a row. */
-	.query-detail-footer > .query-detail-policy-actions:has(> .query-policy-split) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-	.query-detail-policy-actions:has(> .query-policy-split) .button { min-width: 0; padding-inline: var(--space-3); }
-	.query-detail-policy-actions:has(> .query-policy-split) > .button, .query-policy-split [data-split-action] .button { width: 100%; }
-	.query-detail-policy-actions:has(> .query-policy-split) .button > span { overflow: hidden; text-overflow: ellipsis; }
-	.query-policy-split.scoped { grid-column: 1 / -1; }
+	/* A query's actions pair up, two to a row, and Block and Allow take a
+	   row each when they name a rule set or everyone. */
+	.query-detail-footer > .query-detail-policy-actions:has(> .query-policy-row) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.query-detail-policy-actions:has(> .query-policy-row) .button { min-width: 0; padding-inline: var(--space-3); }
+	.query-detail-policy-actions:has(> .query-policy-row) > .button, .query-policy-split [data-split-action] .button { width: 100%; }
+	.query-policy-row { grid-column: 1 / -1; }
+	.query-policy-row > .query-policy-split { flex: 1 1 0; }
+	.query-policy-row.scoped { flex-direction: column; }
 	.query-policy-split .split-button-trigger { padding: 0; }
 	/* A node's Remove and Promote don't fit side by side, so they stack. */
 	.query-detail-footer > .cluster-node-actions { flex-wrap: wrap; }
