@@ -68,7 +68,7 @@ templ RuleSetsPanel(view BlockingPageView) {
 			@components.Button(components.ButtonProps{Label: "Add Rule Set", Icon: "plus", Attrs: ruleSetAddAttrs()})
 		</div>
 		<div class="blocking-source-list rule-set-list">
-			<article class="blocking-source-row rule-set-row" data-rule-set="Default">
+			<article class="blocking-source-row rule-set-row" data-rule-set="Default" data-row-opener>
 				<span class="blocking-source-icon">@Icon("shield")</span>
 				<div>
 					<button class="blocking-source-name rule-set-name" type="button" { drawerOpener(RuleSetDrawerLink(DefaultRuleSet))... } aria-label="View details for Default">Default</button>
@@ -76,9 +76,10 @@ templ RuleSetsPanel(view BlockingPageView) {
 					<small>Every device without a rule set</small>
 				</div>
 				// Default can't go, but its row keeps the same shape as the others.
-				<span class="rule-set-delete-locked" title="Can't delete Default">
+				<span class="rule-set-delete-locked" title="Can't delete Default" data-row-opener-skip>
 					<button class="icon-button danger" type="button" disabled aria-label="Can't delete Default">@Icon("trash")</button>
 				</span>
+				@rowChevron()
 			</article>
 			for _, set := range view.RuleSets {
 				@RuleSetRow(set)
@@ -92,7 +93,7 @@ templ RuleSetsPanel(view BlockingPageView) {
 }
 
 templ RuleSetRow(set RuleSetView) {
-	<article class="blocking-source-row rule-set-row" data-rule-set={ set.Name }>
+	<article class="blocking-source-row rule-set-row" data-rule-set={ set.Name } data-row-opener>
 		<span class="blocking-source-icon">@Icon(ifThen(set.Off, "shield-off", "users"))</span>
 		<div>
 			<button class="blocking-source-name rule-set-name" type="button" { drawerOpener(RuleSetDrawerLink(set.Name))... } aria-label={ "View details for " + set.Name }>{ set.Name }</button>
@@ -100,6 +101,7 @@ templ RuleSetRow(set RuleSetView) {
 			<small class={ ifThen(len(set.Devices) == 0, "rule-set-devices empty", "rule-set-devices") }>{ ruleSetDevices(set.Devices) }</small>
 		</div>
 		<button class="icon-button danger" type="button" hx-post="/ui/blocking/rule-sets/delete" hx-vals={ fmt.Sprintf("{\"name\":%q}", set.Name) } hx-target="#blocking-content" hx-swap="outerHTML" hx-confirm={ ruleSetDeleteQuestion(set) } data-confirm-title="Delete rule set?" data-confirm-action="Delete Rule Set" aria-label={ "Delete " + set.Name } data-replica-primary-action>@Icon("trash")</button>
+		@rowChevron()
 	</article>
 }
 

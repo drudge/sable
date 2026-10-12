@@ -201,7 +201,14 @@ templ BlockListRow(list BlockListSourceView) {
 			<a class="icon-button" href={ templ.SafeURL(list.URL) } target="_blank" rel="noreferrer" aria-label={ "Open " + list.Name }>@Icon("external-link")</a>
 		}
 		<button class="icon-button danger" type="button" hx-post="/ui/blocking/lists/delete" hx-vals={ fmt.Sprintf("{\"name\":%q}", list.Name) } hx-target="#blocking-content" hx-swap="outerHTML" hx-confirm={ "Remove " + list.Name + " from the block lists?" } data-confirm-title="Remove block list?" data-confirm-action="Remove Block List" aria-label={ "Remove " + list.Name }>@Icon("trash")</button>
+		@rowChevron()
 	</article>
+}
+
+// rowChevron ends a row that opens its details panel when clicked anywhere,
+// so it reads as a drill-in like the other tappable lists.
+templ rowChevron() {
+	<span class="row-chevron" aria-hidden="true">@Icon("chevron-right")</span>
 }
 
 templ DomainPanel(value string, domains []string, active string, allowed bool, ruleSets []RuleSetView) {
