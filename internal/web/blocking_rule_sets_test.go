@@ -73,6 +73,13 @@ func TestRuleSetsTabListsRuleSetsAndTheirDevices(t *testing.T) {
 	if strings.Contains(body, ">Edit<") || !strings.Contains(body, `disabled aria-label="Can't delete Default"`) {
 		t.Error("the Rule Sets tab still has Edit, or Default has no locked delete button")
 	}
+	// A click anywhere on a row opens its panel, except on Default's locked
+	// delete button, and a chevron says so.
+	for _, want := range []string{`data-rule-set="Default" data-row-opener`, `data-rule-set="Kids" data-row-opener`, `title="Can't delete Default" data-row-opener-skip`, `class="row-chevron"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("Rule Sets tab is missing %q", want)
+		}
+	}
 
 	panel := serveRuleSetRequest(server, http.MethodGet, "/ui/blocking/rule-set?name=Kids", nil).Body.String()
 	for _, want := range []string{`aria-label="Rename Kids"`, `name="blocking" value="on" checked`, `value="Strict" checked`, `hx-post="/ui/blocking/rule-sets/lists"`} {

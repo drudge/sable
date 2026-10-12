@@ -620,13 +620,15 @@ button.ranking-row { width: 100%; border-width: 1px 0 0; background: none; color
 .blocking-panel > header .button { flex: 0 0 auto; }
 .blocking-panel .button .nav-icon { width: 1rem; height: 1rem; }
 .blocking-source-list, .blocked-domain-list { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); }
-.blocking-source-row { display: grid; min-height: 4.75rem; grid-template-columns: 2.25rem minmax(0, 1fr) auto 2rem; align-items: center; gap: var(--space-3); border-top: 1px solid var(--border); padding: var(--space-3) var(--space-4); }
+.blocking-source-row { display: grid; min-height: 4.75rem; grid-template-columns: 2.25rem minmax(0, 1fr); grid-auto-columns: auto; grid-auto-flow: column; align-items: center; gap: var(--space-3); border-top: 1px solid var(--border); padding: var(--space-3) var(--space-4); }
 .blocking-source-row:first-child { border-top: 0; }
 .blocking-source-row:hover, .blocked-domain-row:hover { background: color-mix(in oklch, var(--muted) 45%, transparent); }
 .blocking-source-icon { display: grid; width: 2.25rem; height: 2.25rem; place-items: center; border-radius: .5rem; background: var(--muted); color: var(--muted-foreground); }
 .blocking-source-icon .nav-icon { width: 1.1rem; height: 1.1rem; }
 .blocking-source-row > div { display: grid; min-width: 0; gap: .15rem; }
 .blocking-source-row strong { font-size: .875rem; }
+.row-chevron { display: grid; place-items: center; margin-left: calc(var(--space-2) * -1); color: var(--muted-foreground); }
+.row-chevron .nav-icon { width: 1rem; height: 1rem; }
 /* A row's name opens its details panel, and so does the rest of the row. */
 .blocking-source-row[data-row-opener], .cluster-node-row[data-row-opener] { cursor: pointer; }
 .blocking-source-name, .cluster-node-name { justify-self: start; max-width: 100%; overflow: hidden; border: 0; background: none; padding: 0; color: var(--foreground); cursor: pointer; font: inherit; font-weight: 600; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
@@ -2056,7 +2058,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.domain-list-clear { grid-area: 1 / 2; }
 	.domain-list-import { grid-area: 2 / 1; }
 	.domain-list-export { grid-area: 2 / 2; }
-	.blocking-source-row { grid-template-columns: 2rem minmax(0, 1fr) 2rem; padding-inline: var(--space-3); }
+	.blocking-source-row { grid-template-columns: 2rem minmax(0, 1fr); padding-inline: var(--space-3); }
 	.blocking-source-row .source-status { display: none; }
 	.blocking-status-card { padding: var(--space-4); }
 	.blocking-quick-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: var(--space-6) -1rem -1rem; padding-inline: var(--space-3); }
@@ -4442,14 +4444,12 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 	:is(.alert-sends-groups, .rule-set-list-choices) { grid-template-columns: 1fr; }
 }
 
-/* Rule sets: the Default row and one row per rule set, with Edit beside
-   Delete, and a dialog whose block list choices scroll when there are many. */
+/* Rule sets: the Default row and one row per rule set, and a dialog whose
+   block list choices scroll when there are many. */
 .rule-set-toolbar .field-help { margin: 0; max-width: 36rem; }
 .rule-set-toolbar > .button { flex: none; white-space: nowrap; }
 .rule-set-row small { text-transform: none; }
 .rule-set-row .rule-set-name { overflow-wrap: anywhere; }
-.rule-set-row > .button { justify-self: end; }
-.rule-set-row:not(:has(> .icon-button)) > .button { grid-column: 3 / -1; }
 .rule-set-empty { min-height: 0; margin-top: var(--space-4); padding: var(--space-6); }
 .rule-set-note { margin: var(--space-4) 0 0; }
 .rule-set-form { display: grid; gap: var(--space-4); }
@@ -4467,9 +4467,6 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .rule-set-delete-locked .icon-button:disabled { opacity: .4; pointer-events: none; }
 /* All Your Block Lists needs no list to pick from. */
 .rule-set-scope:has(input[name="scope"][value="all"]:checked) .rule-set-list-choices { display: none; }
-@media (max-width: 640px) {
-	.rule-set-row { grid-template-columns: 2rem minmax(0, 1fr) auto 2rem; }
-}
 /* A rule set's panel: its own blocked and allowed domains, each with a field
    to add one above a compact list. */
 .query-detail-answer > .rule-set-domains-heading { display: flex; align-items: center; gap: var(--space-2); }

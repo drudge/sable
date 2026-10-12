@@ -97,7 +97,7 @@ func TestBlockListPanel(t *testing.T) {
 	}
 	expectContains(t, "list address", page.Body.String(),
 		`id="block-list-dialog"`, `data-drawer-content="/ui/blocking/list" data-drawer-param="name" data-drawer-route="/blocked/lists/"`,
-		`data-dialog-base-url="/blocked"`, `data-dialog-url="/blocked/lists/Test%20Feed"`, `data-row-opener`,
+		`data-dialog-base-url="/blocked"`, `data-dialog-url="/blocked/lists/Test%20Feed"`, `data-row-opener`, `class="row-chevron"`,
 	)
 
 	panel := serveRequest(server, http.MethodGet, "/ui/blocking/list?name=Test+Feed")
