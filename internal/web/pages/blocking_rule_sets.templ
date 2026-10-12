@@ -59,46 +59,29 @@ type RuleSetDevice struct {
 	Type string
 }
 
-// RuleSetDeviceOption is a device Sable has seen, offered when adding one to
-// a rule set: Value is what the form sends, Label how it reads.
-type RuleSetDeviceOption struct {
-	Value string
-	Label string
-}
-
-// RuleSetFormView fills the rule set dialog. Default edits the block lists
-// for devices without a rule set instead of a rule set.
-type RuleSetFormView struct {
-	Default bool
-	// Original is the name of the rule set being edited, empty for a new one.
-	Original string
-	Set      RuleSetView
-	// Lists names every configured block list, in order.
-	Lists []string
-	// DefaultLists is the default policy's choice; empty means every list.
-	DefaultLists []string
-}
-
 // RuleSetsPanel is the Blocking tab for rule sets: the default policy, then
 // each rule set.
 templ RuleSetsPanel(view BlockingPageView) {
 	<div class="blocking-panel rule-set-panel" id="blocking-panel-rule-sets" role="tabpanel" aria-labelledby="blocking-tab-rule-sets" data-blocking-panel="rule-sets" hidden?={ view.ActiveTab != "rule-sets" }>
 		<div class="blocking-list-toolbar rule-set-toolbar">
 			<p class="field-help">Give some devices their own block lists and domains, or turn blocking off for them. Open a rule set to add its devices.</p>
-			@components.Button(components.ButtonProps{Label: "Add Rule Set", Icon: "plus", Attrs: ruleSetFormAttrs("/ui/blocking/rule-sets/form", "rule-set-add")})
+			@components.Button(components.ButtonProps{Label: "Add Rule Set", Icon: "plus", Attrs: ruleSetAddAttrs()})
 		</div>
 		<div class="blocking-source-list rule-set-list">
 			<article class="blocking-source-row rule-set-row" data-rule-set="Default">
 				<span class="blocking-source-icon">@Icon("shield")</span>
 				<div>
-					<strong class="rule-set-name">Default</strong>
+					<button class="blocking-source-name rule-set-name" type="button" { drawerOpener(RuleSetDrawerLink(DefaultRuleSet))... } aria-label="View details for Default">Default</button>
 					<small>{ defaultListsSummary(view.DefaultLists) }</small>
 					<small>Every device without a rule set</small>
 				</div>
-				@components.Button(components.ButtonProps{Label: "Edit", Icon: "pencil", Variant: components.ButtonOutline, Compact: true, Attrs: ruleSetFormAttrs("/ui/blocking/rule-sets/form?default=1", "rule-set-edit-default", "aria-label", "Edit Default")})
+				// Default can't go, but its row keeps the same shape as the others.
+				<span class="rule-set-delete-locked" title="Can't delete Default">
+					<button class="icon-button danger" type="button" disabled aria-label="Can't delete Default">@Icon("trash")</button>
+				</span>
 			</article>
-			for index, set := range view.RuleSets {
-				@RuleSetRow(set, index)
+			for _, set := range view.RuleSets {
+				@RuleSetRow(set)
 			}
 		</div>
 		if len(view.RuleSets) == 0 {
@@ -108,7 +91,7 @@ templ RuleSetsPanel(view BlockingPageView) {
 	</div>
 }
 
-templ RuleSetRow(set RuleSetView, index int) {
+templ RuleSetRow(set RuleSetView) {
 	<article class="blocking-source-row rule-set-row" data-rule-set={ set.Name }>
 		<span class="blocking-source-icon">@Icon(ifThen(set.Off, "shield-off", "users"))</span>
 		<div>
@@ -116,7 +99,6 @@ templ RuleSetRow(set RuleSetView, index int) {
 			<small>{ ruleSetSummary(set) }</small>
 			<small class={ ifThen(len(set.Devices) == 0, "rule-set-devices empty", "rule-set-devices") }>{ ruleSetDevices(set.Devices) }</small>
 		</div>
-		@components.Button(components.ButtonProps{Label: "Edit", Icon: "pencil", Variant: components.ButtonOutline, Compact: true, Attrs: ruleSetFormAttrs("/ui/blocking/rule-sets/form?"+url.Values{"name": []string{set.Name}}.Encode(), fmt.Sprintf("rule-set-edit-%d", index), "aria-label", "Edit "+set.Name)})
 		<button class="icon-button danger" type="button" hx-post="/ui/blocking/rule-sets/delete" hx-vals={ fmt.Sprintf("{\"name\":%q}", set.Name) } hx-target="#blocking-content" hx-swap="outerHTML" hx-confirm={ ruleSetDeleteQuestion(set) } data-confirm-title="Delete rule set?" data-confirm-action="Delete Rule Set" aria-label={ "Delete " + set.Name } data-replica-primary-action>@Icon("trash")</button>
 	</article>
 }
@@ -128,75 +110,34 @@ templ RuleSetDialog() {
 	}
 }
 
-// RuleSetForm edits a rule set, or the default policy's block lists. Saving
-// swaps the page and closes the dialog; a problem shows inside it instead,
-// leaving what was typed alone.
-templ RuleSetForm(form RuleSetFormView) {
-	if form.Default {
-		<form class="rule-set-form" hx-post="/ui/blocking/rule-sets/default" hx-target="#blocking-content" hx-swap="outerHTML" hx-disable="find button[type='submit']">
-			@components.DialogHeader(components.DialogProps{TitleID: "rule-set-title", Title: "Edit Default", Description: "The block lists for every device without a rule set."})
-			<div class="isotope-dialog-body rule-set-body">
-				<div class="rule-set-notice" id="rule-set-notice"></div>
-				<fieldset class="field-control rule-set-lists rule-set-scope">
-					<legend>Block Lists</legend>
-					<div class="rule-set-choice">
-						<label><input type="radio" name="scope" value="all" checked?={ len(form.DefaultLists) == 0 }/><span>All Your Block Lists</span></label>
-						<label><input type="radio" name="scope" value="chosen" checked?={ len(form.DefaultLists) > 0 }/><span>Only These Lists</span></label>
-					</div>
-					@ruleSetListChoices(form.Lists, form.DefaultLists)
-				</fieldset>
-			</div>
-			@components.DialogFooter("Cancel") {
-				@components.Button(components.ButtonProps{Label: "Save", Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
-			}
-		</form>
-	} else {
-		<form class="rule-set-form" hx-post="/ui/blocking/rule-sets/save" hx-target="#blocking-content" hx-swap="outerHTML" hx-disable="find button[type='submit']">
-			@components.DialogHeader(components.DialogProps{TitleID: "rule-set-title", Title: ifThen(form.Original == "", "Add Rule Set", "Edit "+form.Original), Description: "Devices in a rule set use only its block lists, plus its own blocked and allowed domains, or skip blocking altogether."})
-			if form.Original != "" {
-				<input type="hidden" name="original" value={ form.Original }/>
-			}
-			<div class="isotope-dialog-body rule-set-body">
-				<div class="rule-set-notice" id="rule-set-notice"></div>
-				@components.Field(components.FieldProps{ID: "rule-set-name", Label: "Name", Input: templ.Attributes{"name": "name", "value": form.Set.Name, "placeholder": "Kids", "maxlength": "64", "autocomplete": "off", "required": true}})
-				<input type="hidden" name="blocking" value="off"/>
-				@components.SwitchField(components.SwitchFieldProps{ID: "rule-set-blocking", Title: "Blocking", Description: "Its devices use the block lists below and its own blocked domains. Turn it off to let everything through for them; blocking everything for one of them still works.", Name: "blocking", Value: "on", Checked: !form.Set.Off, Class: "rule-set-blocking"})
-				<fieldset class="field-control rule-set-lists">
-					<legend>Block Lists</legend>
-					if len(form.Lists) == 0 {
-						<p class="field-help">No block lists yet. Add one in the Block Lists tab.</p>
-					} else {
-						@ruleSetListChoices(form.Lists, form.Set.Lists)
-					}
-					<small class="field-help">Leave them all off to use only its own domains and the Blocked tab.</small>
-				</fieldset>
-				if form.Original == "" {
-					<p class="field-help">Add its devices, and its own blocked and allowed domains, from its panel once it's saved.</p>
-				}
-			</div>
-			@components.DialogFooter("Cancel") {
-				@components.Button(components.ButtonProps{Label: ifThen(form.Original == "", "Add Rule Set", "Save"), Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
-			}
-		</form>
-	}
+// RuleSetForm adds a rule set by name. Saving swaps the page, closes the
+// dialog, and opens the new rule set's panel, where the rest is set; a
+// problem shows inside the dialog instead, leaving what was typed alone.
+templ RuleSetForm() {
+	<form class="rule-set-form" hx-post="/ui/blocking/rule-sets/add" hx-target="#blocking-content" hx-swap="outerHTML" hx-disable="find button[type='submit']">
+		@components.DialogHeader(components.DialogProps{TitleID: "rule-set-title", Title: "Add Rule Set", Description: "Devices in a rule set use its own block lists and domains, or skip blocking altogether. Set those, and add its devices, in its panel next."})
+		<div class="isotope-dialog-body rule-set-body">
+			<div class="rule-set-notice" id="rule-set-notice"></div>
+			@components.Field(components.FieldProps{ID: "rule-set-name", Label: "Name", Input: templ.Attributes{"name": "name", "placeholder": "Kids", "maxlength": "64", "autocomplete": "off", "required": true, "autofocus": true}})
+		</div>
+		@components.DialogFooter("Cancel") {
+			@components.Button(components.ButtonProps{Label: "Add Rule Set", Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
+		}
+	</form>
 }
 
-templ ruleSetListChoices(lists, chosen []string) {
+templ ruleSetListChoices(lists, chosen []string, disabled bool) {
 	<div class="rule-set-list-choices" role="group" aria-label="Block lists">
 		for _, list := range lists {
-			<label><input type="checkbox" name="lists" value={ list } checked?={ slices.Contains(chosen, list) }/><span>{ list }</span></label>
+			<label><input type="checkbox" name="lists" value={ list } checked?={ slices.Contains(chosen, list) } disabled?={ disabled }/><span>{ list }</span></label>
 		}
 	</div>
 }
 
-// ruleSetFormAttrs makes a button load the rule set form into the dialog
-// and open it.
-func ruleSetFormAttrs(endpoint, id string, more ...string) templ.Attributes {
-	attributes := templ.Attributes{"id": id, "hx-get": endpoint, "hx-target": "#rule-set-content", "hx-swap": "innerHTML", "data-dialog-load": "rule-set-dialog", "data-replica-primary-action": true}
-	for index := 0; index+1 < len(more); index += 2 {
-		attributes[more[index]] = more[index+1]
-	}
-	return attributes
+// ruleSetAddAttrs make the Add Rule Set button load its form into the
+// dialog and open it.
+func ruleSetAddAttrs() templ.Attributes {
+	return templ.Attributes{"id": "rule-set-add", "hx-get": "/ui/blocking/rule-sets/form", "hx-target": "#rule-set-content", "hx-swap": "innerHTML", "data-dialog-load": "rule-set-dialog", "data-replica-primary-action": true}
 }
 
 func defaultListsSummary(lists []string) string {
@@ -246,6 +187,10 @@ func ruleSetDeleteQuestion(set RuleSetView) string {
 
 const RuleSetRoute = "/blocked/rule-sets/"
 
+// DefaultRuleSet names the Default rules' panel, as config.DefaultRuleSetName
+// keeps any rule set from taking the name.
+const DefaultRuleSet = "Default"
+
 // RuleSetPath is the address of one rule set's panel.
 func RuleSetPath(name string) string { return RuleSetRoute + url.PathEscape(name) }
 
@@ -253,7 +198,7 @@ func RuleSetPath(name string) string { return RuleSetRoute + url.PathEscape(name
 func RuleSetDrawerLink(name string) *DrawerLink {
 	return &DrawerLink{
 		Dialog: "rule-set-drawer", Loading: "rule-set-drawer-loading", Target: "rule-set-drawer-content",
-		URL: "/ui/blocking/rule-set?" + url.Values{"name": []string{name}}.Encode(), Link: RuleSetPath(name),
+		URL: ruleSetPanelURL(name), Link: RuleSetPath(name),
 	}
 }
 
@@ -267,7 +212,16 @@ type RuleSetDrawerView struct {
 	Set RuleSetView
 	// DeviceOptions are the devices Sable has seen that are not in the rule
 	// set yet, offered as the Add Device field is filled in.
-	DeviceOptions []RuleSetDeviceOption
+	DeviceOptions []DeviceOption
+	// Lists names every configured block list, in order, for its Block
+	// Lists choices.
+	Lists []string
+	// Default is the Default rules' panel, which has only block lists:
+	// DefaultLists, where empty means every list.
+	Default      bool
+	DefaultLists []string
+	// EditingName shows the name field in place of the panel's title.
+	EditingName bool
 	// Missing is set when no rule set has the requested name.
 	Missing  bool
 	CanWrite bool
@@ -299,23 +253,22 @@ templ ruleSetLoading() {
 	}
 }
 
-// RuleSetDrawer is one rule set's details, loaded into the open panel.
+// RuleSetDrawer is one rule set's details, loaded into the open panel, where
+// everything about it is changed: its name from the title's pencil, then
+// whether it blocks and with which lists, its devices, apps, schedules, and
+// domains. Default's panel has only its block lists.
 templ RuleSetDrawer(view RuleSetDrawerView) {
-	@DetailDrawerContent(DetailDrawerView{ID: "rule-set-drawer", TitleID: "rule-set-drawer-title", Eyebrow: "Rule Set", Title: ifThen(view.Missing, "Rule set not found", view.Set.Name), CloseLabel: "Close rule set details"}, ruleSetFooter(view)) {
+	@DetailDrawerContent(ruleSetDrawerHeader(view), ruleSetFooter(view)) {
 		@Toast(view.Message, "success")
 		if view.Error != "" {
 			<div class="query-error" role="alert"><strong>Something went wrong</strong><span>{ view.Error }</span></div>
 		}
 		if view.Missing {
 			<div class="query-detail-section-heading"><p>No rule set has this name. It may have been deleted or renamed.</p></div>
+		} else if view.Default {
+			@ruleSetDefaultLists(view)
 		} else {
-			@components.FactList(components.FactListProps{Class: "query-detail-grid"}) {
-				if view.Set.Off {
-					@components.Fact(components.FactProps{Label: "Blocking", Value: "Off for its devices. Blocking everything for one of them still works.", Full: true})
-				} else {
-					@components.Fact(components.FactProps{Label: "Block lists", Value: ifThen(len(view.Set.Lists) == 0, "None, only its own domains and the Blocked tab", strings.Join(view.Set.Lists, ", ")), Full: true})
-				}
-			}
+			@ruleSetBlocking(view)
 			@ruleSetDeviceSection(view)
 			if !view.Set.Off {
 				@ruleSetApps(view)
@@ -327,6 +280,93 @@ templ RuleSetDrawer(view RuleSetDrawerView) {
 			}
 		}
 	}
+}
+
+func ruleSetDrawerHeader(view RuleSetDrawerView) DetailDrawerView {
+	header := DetailDrawerView{ID: "rule-set-drawer", TitleID: "rule-set-drawer-title", Eyebrow: "Rule Set", Title: ifThen(view.Missing, "Rule set not found", view.Set.Name), CloseLabel: "Close rule set details"}
+	switch {
+	case view.Missing || view.Default || !view.CanWrite:
+	case view.EditingName:
+		header.TitleEditor = ruleSetNameEditor(view)
+	default:
+		header.TitleAction = ruleSetRenameButton(view)
+	}
+	return header
+}
+
+templ ruleSetRenameButton(view RuleSetDrawerView) {
+	<button class="query-detail-title-action" type="button" hx-get={ ruleSetPanelURL(view.Set.Name) + "&edit=name" } hx-target="#rule-set-drawer-content" hx-swap="innerHTML" hx-indicator="#rule-set-drawer-content" aria-label={ "Rename " + view.Set.Name } title="Rename rule set" data-replica-primary-action>@Icon("pencil")</button>
+}
+
+// ruleSetNameEditor renames a rule set in place of the panel's title. Its
+// devices move with it.
+templ ruleSetNameEditor(view RuleSetDrawerView) {
+	<form class="insight-name-editor" hx-post="/ui/blocking/rule-sets/rename?edit=name" hx-target="#rule-set-drawer-content" hx-swap="innerHTML" hx-disable="#rule-set-drawer-content .insight-name-editor button">
+		<input type="hidden" name="original" value={ view.Set.Name }/>
+		<label class="insight-name-field">
+			<span class="sr-only">Rule set name</span>
+			<input name="name" maxlength="64" autocomplete="off" placeholder="Kids" value={ view.Set.Name } required autofocus data-escape-click="#rule-set-drawer-content [data-name-cancel]"/>
+		</label>
+		<small class="insight-name-help">Its devices, apps, schedules, and domains stay with it.</small>
+		<div class="insight-name-actions">
+			@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"hx-get": ruleSetPanelURL(view.Set.Name), "hx-target": "#rule-set-drawer-content", "hx-swap": "innerHTML", "hx-indicator": "#rule-set-drawer-content", "data-name-cancel": true}})
+			<button class="button compact insight-action" type="submit" data-replica-primary-action>@insightActionLabel("Save", "Saving…")</button>
+		</div>
+	</form>
+}
+
+func ruleSetPanelURL(name string) string {
+	return "/ui/blocking/rule-set?" + url.Values{"name": []string{name}}.Encode()
+}
+
+// ruleSetChangeAttrs save a panel form as soon as one of its choices
+// changes, keeping the panel where it was scrolled.
+func ruleSetChangeAttrs(endpoint string) templ.Attributes {
+	return templ.Attributes{"hx-post": endpoint, "hx-trigger": "change", "hx-target": "#rule-set-drawer-content", "hx-swap": "innerHTML", "data-keep-scroll": true}
+}
+
+// ruleSetBlocking turns blocking on or off for a rule set's devices and,
+// while it is on, picks the block lists they use.
+templ ruleSetBlocking(view RuleSetDrawerView) {
+	<section class="query-detail-answer rule-set-domains rule-set-blocking-section" aria-labelledby="rule-set-blocking-label">
+		<form class="rule-set-blocking-form" { ruleSetChangeAttrs("/ui/blocking/rule-sets/blocking")... }>
+			<input type="hidden" name="name" value={ view.Set.Name }/>
+			@components.SwitchField(components.SwitchFieldProps{ID: "rule-set-blocking", Title: "Blocking", Description: ifThen(view.Set.Off, "Off: everything gets through for "+view.Set.Name+" devices. Blocking everything for one of them still works.", "Its devices use the block lists below and its own blocked domains."), Name: "blocking", Value: "on", Checked: !view.Set.Off, Disabled: !view.CanWrite, InputAttrs: templ.Attributes{"data-replica-primary-action": true}})
+		</form>
+		if !view.Set.Off {
+			<form class="rule-set-lists-form" { ruleSetChangeAttrs("/ui/blocking/rule-sets/lists")... }>
+				<input type="hidden" name="name" value={ view.Set.Name }/>
+				<fieldset class="rule-set-lists">
+					<legend>Block Lists</legend>
+					if len(view.Lists) == 0 {
+						<p class="rule-set-domains-help">No block lists yet. Add one in the Block Lists tab.</p>
+					} else {
+						@ruleSetListChoices(view.Lists, view.Set.Lists, !view.CanWrite)
+						<small class="rule-set-domains-help">Leave them all off to use only its own domains and the Blocked tab.</small>
+					}
+				</fieldset>
+			</form>
+		}
+	</section>
+}
+
+// ruleSetDefaultLists picks the block lists for every device without a rule
+// set: all of them, including ones added later, or only some.
+templ ruleSetDefaultLists(view RuleSetDrawerView) {
+	<section class="query-detail-answer rule-set-domains rule-set-blocking-section" aria-labelledby="rule-set-default-lists-title">
+		<div class="rule-set-domains-heading"><h3 id="rule-set-default-lists-title">Block Lists</h3></div>
+		<p class="rule-set-domains-help">Every device without a rule set uses these, with the Blocked and Allowed tabs.</p>
+		<form class="rule-set-lists-form" { ruleSetChangeAttrs("/ui/blocking/rule-sets/default")... }>
+			<fieldset class="rule-set-lists rule-set-scope">
+				<legend class="sr-only">Block lists for Default</legend>
+				<div class="rule-set-choice">
+					<label><input type="radio" name="scope" value="all" checked?={ len(view.DefaultLists) == 0 } disabled?={ !view.CanWrite }/><span>All Your Block Lists</span></label>
+					<label><input type="radio" name="scope" value="chosen" checked?={ len(view.DefaultLists) > 0 } disabled?={ !view.CanWrite }/><span>Only These Lists</span></label>
+				</div>
+				@ruleSetListChoices(view.Lists, view.DefaultLists, !view.CanWrite)
+			</fieldset>
+		</form>
+	</section>
 }
 
 // ruleSetApps lists the apps a rule set blocks, with a button that swaps the
@@ -421,7 +461,7 @@ templ ruleSetAppChoices(groups []RuleSetAppGroup) {
 templ ruleSetAppPickerFooter(view RuleSetAppPickerView) {
 	<div class="query-detail-policy-actions insight-drawer-actions">
 		@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Attrs: templ.Attributes{
-			"hx-get": "/ui/blocking/rule-set?" + url.Values{"name": []string{view.Name}}.Encode(), "hx-target": "#rule-set-drawer-content", "hx-swap": "innerHTML",
+			"hx-get": ruleSetPanelURL(view.Name), "hx-target": "#rule-set-drawer-content", "hx-swap": "innerHTML",
 		}})
 		@components.Button(components.ButtonProps{Label: "Save Apps", Icon: "check", Type: "submit", Attrs: templ.Attributes{"form": "rule-set-app-form", "data-replica-primary-action": true}})
 	</div>
@@ -477,16 +517,7 @@ templ ruleSetDeviceSection(view RuleSetDrawerView) {
 		if view.CanWrite {
 			<form class="rule-set-domain-form rule-set-device-form" hx-post="/ui/blocking/rule-sets/devices/add" hx-target="#rule-set-drawer-content" hx-swap="innerHTML" hx-disable="find button">
 				<input type="hidden" name="name" value={ view.Set.Name }/>
-				<label class="sr-only" for="rule-set-add-device">Device to add</label>
-				<span class="suggest-input">
-					<input id="rule-set-add-device" name="device" list="rule-set-device-options" placeholder="Device, IP address, or network" autocomplete="off" spellcheck="false" required/>
-					<span class="styled-select-chevron" aria-hidden="true"></span>
-				</span>
-				<datalist id="rule-set-device-options">
-					for _, option := range view.DeviceOptions {
-						<option value={ option.Value } label={ option.Label }></option>
-					}
-				</datalist>
+				@DevicePicker(DevicePickerProps{ID: "rule-set-add-device", Name: "device", Label: "Device to add", Placeholder: "Device, IP address, or network", Required: true, Options: view.DeviceOptions})
 				@components.Button(components.ButtonProps{Label: "Add", Icon: "plus", Variant: components.ButtonOutline, Compact: true, Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 			</form>
 		}
@@ -517,9 +548,6 @@ templ ruleSetFooter(view RuleSetDrawerView) {
 	if !view.Missing {
 		<div class="query-detail-policy-actions insight-drawer-actions">
 			@CopyLinkButton(RuleSetPath(view.Set.Name))
-			if view.CanWrite {
-				@components.Button(components.ButtonProps{Label: "Edit Rule Set", Icon: "pencil", Variant: components.ButtonOutline, Attrs: ruleSetFormAttrs("/ui/blocking/rule-sets/form?"+url.Values{"name": []string{view.Set.Name}}.Encode(), "rule-set-drawer-edit")})
-			}
 		</div>
 	}
 }

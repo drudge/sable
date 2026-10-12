@@ -191,7 +191,7 @@ templ RuleSetScheduleForm(view RuleSetScheduleFormView) {
 				@components.Field(components.FieldProps{ID: "rule-set-schedule-start", Label: "Starts", Input: templ.Attributes{"name": "start", "value": view.Start, "type": "time", "step": "60", "class": "time-field", "data-styled-time": true, "required": true}})
 				@components.Field(components.FieldProps{ID: "rule-set-schedule-end", Label: "Ends", Input: templ.Attributes{"name": "end", "value": view.End, "type": "time", "step": "60", "class": "time-field", "data-styled-time": true, "required": true}})
 			</div>
-			@components.Field(components.FieldProps{ID: "rule-set-schedule-zone", Label: "Time Zone", Help: "An end before the start runs into the next morning. Times follow daylight saving time in this zone.", Input: templ.Attributes{"name": "time_zone", "value": view.TimeZone, "placeholder": "America/New_York", "autocomplete": "off", "spellcheck": "false", "required": true}})
+			<p class="field-help rule-set-schedule-zone">{ "Times are in " + view.TimeZone + ", the time zone the console shows, and follow its daylight saving time. An end before the start runs into the next morning." }</p>
 			if view.Off {
 				<input type="hidden" name="block" value="everything"/>
 				<p class="rule-set-domains-help">{ "Blocking is off for " + view.Set + ", so its schedules block everything but its allowed domains." }</p>

@@ -626,6 +626,111 @@
 	let styledTimeSequence = 0;
 	const uses24HourTime = () => document.cookie.split(";")
 	  .some((entry) => entry.trim() === "sable_time_format=24");
+	// A device picker narrows the devices it offers as a name or address is
+	// typed. Choosing one shows its name and sends its value; anything typed
+	// and not chosen is sent as typed. Focus stays in the field while the
+	// arrow keys move through the list.
+	const setupDevicePicker = (root) => {
+	  if (root.dataset.devicePickerReady === "true") return;
+	  root.dataset.devicePickerReady = "true";
+	  const input = root.querySelector("[data-device-picker-input]");
+	  const value = root.querySelector("[data-device-picker-value]");
+	  const toggle = root.querySelector("[data-device-picker-toggle]");
+	  const popover = root.querySelector(".device-picker-popover");
+	  const empty = root.querySelector("[data-device-picker-empty]");
+	  const options = [...popover.querySelectorAll('[role="option"]')];
+	  let active = null;
+	  const shown = () => options.filter((option) => !option.hidden);
+	  const activate = (option) => {
+		active?.setAttribute("aria-selected", "false");
+		active = option || null;
+		if (active) {
+		  active.setAttribute("aria-selected", "true");
+		  input.setAttribute("aria-activedescendant", active.id);
+		  active.scrollIntoView({block: "nearest"});
+		} else {
+		  input.removeAttribute("aria-activedescendant");
+		}
+	  };
+	  const filter = () => {
+		const query = input.value.trim().toLowerCase();
+		options.forEach((option) => { option.hidden = query !== "" && !option.dataset.search.includes(query); });
+		empty.hidden = shown().length > 0;
+		activate(null);
+	  };
+	  const reposition = () => {
+		if (!popover.hidden) positionFloatingPopover(root, input, popover);
+	  };
+	  const {open, close} = createPopover(root, popover, [input, toggle], {
+		focusTarget: input,
+		onOpen: () => {
+		  if (typeof popover.showPopover === "function" && !popover.matches(":popover-open")) popover.showPopover();
+		  positionFloatingPopover(root, input, popover);
+		  document.addEventListener("scroll", reposition, true);
+		  window.addEventListener("resize", reposition);
+		},
+		onClose: () => {
+		  if (typeof popover.hidePopover === "function" && popover.matches(":popover-open")) popover.hidePopover();
+		  document.removeEventListener("scroll", reposition, true);
+		  window.removeEventListener("resize", reposition);
+		  activate(null);
+		},
+	  });
+	  const choose = (option) => {
+		input.value = option.dataset.label;
+		value.value = option.dataset.value;
+		close({restoreFocus: true});
+	  };
+	  input.addEventListener("input", () => {
+		value.value = input.value.trim();
+		filter();
+		if (popover.hidden) open(); else reposition();
+	  });
+	  input.addEventListener("click", () => {
+		if (popover.hidden) {
+		  filter();
+		  open();
+		}
+	  });
+	  toggle.addEventListener("click", () => {
+		if (!popover.hidden) {
+		  close({restoreFocus: true});
+		  return;
+		}
+		input.focus();
+		filter();
+		open();
+	  });
+	  input.addEventListener("keydown", (event) => {
+		const list = shown();
+		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+		  event.preventDefault();
+		  if (popover.hidden) {
+			filter();
+			open();
+		  }
+		  const step = event.key === "ArrowDown" ? 1 : -1;
+		  const current = list.indexOf(active);
+		  activate(list[current < 0 ? (step > 0 ? 0 : list.length - 1) : (current + step + list.length) % list.length]);
+		} else if (event.key === "Enter" && !popover.hidden && active) {
+		  event.preventDefault();
+		  choose(active);
+		} else if (event.key === "Escape" && !popover.hidden) {
+		  event.preventDefault();
+		  event.stopPropagation();
+		  close();
+		} else if (event.key === "Tab") {
+		  close();
+		}
+	  });
+	  // A press on an option keeps focus in the field, so the list stays put
+	  // until the choice lands.
+	  popover.addEventListener("pointerdown", (event) => event.preventDefault());
+	  options.forEach((option) => option.addEventListener("click", () => choose(option)));
+	  input.closest("form")?.addEventListener("reset", () => { value.value = ""; });
+	  root.sableDispose = () => close();
+	};
+
 	const setupStyledTime = (input) => {
 	  if (!input || input.dataset.styledTimeReady === "true") return;
 	  input.dataset.styledTimeReady = "true";
@@ -3240,7 +3345,7 @@
 	  if (window.ResizeObserver) new ResizeObserver(sync).observe(region);
 	};
 
-	const interactiveComponentSelector = ".styled-select, .styled-time, [data-resolver-combobox]";
+	const interactiveComponentSelector = ".styled-select, .styled-time, [data-resolver-combobox], [data-device-picker]";
 	const disposeInteractiveComponent = (component) => {
 	  component?.sableDispose?.();
 	};
@@ -3298,6 +3403,7 @@
 	  ["[data-top-stats-dialog]", updateTopStatsDialog],
 	  ["[data-list-filter-root]", applyListFilter],
 	  ['input[type="time"][data-styled-time]', setupStyledTime],
+	  ["[data-device-picker]", setupDevicePicker],
 	  ["[data-chart-plot]", setupQueryChartHover],
 	  ["[data-donut]", setupDonutChart],
 	  ["[data-insight-chart]", setupInsightChart],
@@ -4353,7 +4459,7 @@
 	  const ruleSet = row.dataset.queryDetailRuleSet || "";
 	  const policyLabel = (verb, forRuleSet) => !ruleSet ? verb : `${verb} for ${forRuleSet ? ruleSet : "Everyone"}`;
 	  [["block", false, source !== "blocked"], ["block-rule-set", true, source !== "blocked"],
-	   ["allow", false, row.dataset.queryDetailRuleSetBlock !== "true"], ["allow-rule-set", true, true]].forEach(([name, forRuleSet, shown]) => {
+	   ["allow", false, row.dataset.queryDetailRuleSetBlock !== "true"], ["allow-rule-set", true, source === "blocked"]].forEach(([name, forRuleSet, shown]) => {
 		const form = dialog.querySelector(`[data-query-detail-policy="${name}"]`);
 		if (!form) return;
 		form.hidden = !shown || (forRuleSet && !ruleSet);
@@ -5053,6 +5159,18 @@
 	  const loading = document.getElementById(ctx?.sourceElement?.dataset?.drawerLoading || "");
 	  if (event.defaultPrevented || !loading?.content || !ctx.target) return;
 	  ctx.target.replaceChildren(loading.content.cloneNode(true));
+	});
+	// A drawer form that saves as its choices change, such as a rule set's
+	// Blocking switch, brings the drawer back where it was scrolled.
+	document.body.addEventListener("htmx:before:swap", (event) => {
+	  const ctx = event.detail?.ctx;
+	  if (!ctx?.sourceElement?.closest?.("[data-keep-scroll]")) return;
+	  ctx.sableScrollTop = ctx.target?.querySelector(".query-detail-body")?.scrollTop;
+	});
+	document.body.addEventListener("htmx:after:swap", (event) => {
+	  const ctx = event.detail?.ctx;
+	  const body = ctx?.sableScrollTop !== undefined && ctx.target?.querySelector(".query-detail-body");
+	  if (body) body.scrollTop = ctx.sableScrollTop;
 	});
 	document.body.addEventListener("htmx:after:swap", () => {
 	  syncRoutedDialogs();

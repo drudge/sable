@@ -512,10 +512,14 @@ func queryPolicyShown(entry QueryLogEntryView, action string, forRuleSet bool) b
 	if forRuleSet && entry.Decision.RuleSet == "" {
 		return false
 	}
-	if action == "block" {
+	switch {
+	case action == "block":
 		return entry.Source != "blocked"
+	case forRuleSet:
+		return entry.Source == "blocked"
+	default:
+		return !entry.Decision.RuleSetBlock
 	}
-	return forRuleSet || !entry.Decision.RuleSetBlock
 }
 
 // queryPolicyLabel names a query panel's Block or Allow: plain when the

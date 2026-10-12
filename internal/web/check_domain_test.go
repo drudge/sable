@@ -119,7 +119,7 @@ func TestCheckDomainPanelChecksADevice(t *testing.T) {
 
 	blocked := getDetailsPanel(server, "/ui/blocking/check?domain=tiktokcdn.com&device=Kid%27s+iPad", true).Body.String()
 	expectContains(t, "device check", blocked,
-		`id="check-domain-device"`, `value="Kid&#39;s iPad"`, `<option value="192.0.2.4" label="Kid&#39;s iPad">`,
+		`id="check-domain-device"`, `value="Kid&#39;s iPad"`, `data-value="192.0.2.4" data-label="Kid&#39;s iPad"`,
 		`class="source-pill source-blocked">Blocked</span>`,
 		"Blocked because the Kids rule set blocks TikTok, and tiktokcdn.com is one of its domains.",
 		`data-dialog-url="/blocked/rule-sets/Kids"`, "This is the answer for Kid&#39;s iPad, which uses the Kids rule set.",

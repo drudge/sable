@@ -162,7 +162,7 @@ func TestQueryPolicyActionsForARuleSet(t *testing.T) {
 	}{
 		{"no rule set", QueryLogEntryView{Source: "upstream"}, map[string]bool{"block": true, "allow": true}},
 		{"answered", QueryLogEntryView{Source: "upstream", Decision: QueryDecisionView{RuleSet: "Kids"}},
-			map[string]bool{"block": true, "block-rule-set": true, "allow": true, "allow-rule-set": true}},
+			map[string]bool{"block": true, "block-rule-set": true, "allow": true}},
 		{"blocked by a list", QueryLogEntryView{Source: "blocked", Decision: QueryDecisionView{RuleSet: "Kids"}},
 			map[string]bool{"allow": true, "allow-rule-set": true}},
 		{"blocked by the rule set", QueryLogEntryView{Source: "blocked", Decision: QueryDecisionView{RuleSet: "Kids", RuleSetBlock: true}},

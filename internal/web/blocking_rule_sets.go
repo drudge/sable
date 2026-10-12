@@ -22,43 +22,64 @@ import (
 // ruleSetsTab is the Blocking tab that lists rule sets.
 const ruleSetsTab = "rule-sets"
 
-// ruleSetFormPanel fills the rule set dialog: a new rule set, the one named,
-// or with default=1 the default policy's block lists.
-func (server *Server) ruleSetFormPanel(writer http.ResponseWriter, request *http.Request) {
-	configuration := server.config.Current().Config
-	form := pages.RuleSetFormView{Default: request.URL.Query().Get("default") == "1", DefaultLists: configuration.Blocking.DefaultLists}
-	for _, list := range configuration.Blocking.Lists {
-		form.Lists = append(form.Lists, list.Name)
-	}
-	if name := request.URL.Query().Get("name"); name != "" && !form.Default {
-		index := slices.IndexFunc(configuration.Blocking.RuleSets, func(set config.RuleSet) bool { return set.Name == name })
-		if index < 0 {
-			server.renderRuleSetProblem(writer, request, refuse(http.StatusNotFound, "No rule set is called %s. It may have been deleted.", name))
-			return
-		}
-		form.Original = name
-		form.Set = ruleSetView(configuration.Blocking.RuleSets[index])
-	}
+// ruleSetForm fills the Add Rule Set dialog.
+func (server *Server) ruleSetForm(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
-	server.render(writer, request, pages.RuleSetForm(form))
+	server.render(writer, request, pages.RuleSetForm())
 }
 
-func (server *Server) saveRuleSet(writer http.ResponseWriter, request *http.Request) {
-	if err := request.ParseForm(); err != nil {
-		server.renderRuleSetProblem(writer, request, refuse(http.StatusBadRequest, "Sable could not read the form."))
-		return
-	}
-	// The Blocking switch sends "on" beside a hidden "off", so a switch left
-	// off sends only "off".
-	blocking := request.Form["blocking"]
-	off := slices.Contains(blocking, "off") && !slices.Contains(blocking, "on")
-	set := config.RuleSet{Name: strings.TrimSpace(request.FormValue("name")), Off: off, Lists: request.Form["lists"]}
-	message, err := server.ruleSetService().Save(request.Context(), requestActor(request, ""), request.FormValue("original"), set)
+// addRuleSet adds a rule set by name, then opens its panel over the page so
+// its devices, block lists, and domains can be set there.
+func (server *Server) addRuleSet(writer http.ResponseWriter, request *http.Request) {
+	name := strings.TrimSpace(request.FormValue("name"))
+	message, err := server.ruleSetService().Add(request.Context(), requestActor(request, ""), name)
 	if err != nil {
 		server.renderRuleSetProblem(writer, request, err)
 		return
 	}
+	writer.Header().Set("HX-Push-Url", pages.RuleSetPath(name))
 	server.renderPolicyChange(writer, request, ruleSetsTab, message, nil)
+}
+
+// renameRuleSet renames a rule set from its panel's title, moving its
+// devices with it, and gives the open panel the new name's address.
+func (server *Server) renameRuleSet(writer http.ResponseWriter, request *http.Request) {
+	original, name := request.FormValue("original"), strings.TrimSpace(request.FormValue("name"))
+	message := "Rule set " + original + " renamed to " + name
+	err := server.ruleSetService().Change(request.Context(), requestActor(request, ""), original, func(set *config.RuleSet) { set.Name = name }, message)
+	if err != nil {
+		server.renderRuleSetChange(writer, request, original, "", err)
+		return
+	}
+	// The editor posts with edit=name so a problem leaves it open; once saved,
+	// the panel shows the new name.
+	request.URL.RawQuery = ""
+	writer.Header().Set("HX-Replace-Url", pages.RuleSetPath(name))
+	server.renderRuleSetChange(writer, request, name, message, nil)
+}
+
+// setRuleSetBlocking turns blocking on or off for a rule set's devices.
+func (server *Server) setRuleSetBlocking(writer http.ResponseWriter, request *http.Request) {
+	name, off := request.FormValue("name"), request.FormValue("blocking") != "on"
+	message := "Blocking is on for " + name + " devices"
+	if off {
+		message = "Blocking is off for " + name + " devices"
+	}
+	err := server.ruleSetService().Change(request.Context(), requestActor(request, ""), name, func(set *config.RuleSet) { set.Off = off }, message)
+	server.renderRuleSetChange(writer, request, name, message, err)
+}
+
+// setRuleSetLists replaces the block lists a rule set uses with the ones
+// checked in its panel.
+func (server *Server) setRuleSetLists(writer http.ResponseWriter, request *http.Request) {
+	if err := request.ParseForm(); err != nil {
+		server.renderRuleSetChange(writer, request, "", "", refuse(http.StatusBadRequest, "Sable could not read the form."))
+		return
+	}
+	name, lists := request.FormValue("name"), request.Form["lists"]
+	message := ruleSetListsMessage(name, lists)
+	err := server.ruleSetService().Change(request.Context(), requestActor(request, ""), name, func(set *config.RuleSet) { set.Lists = lists }, message)
+	server.renderRuleSetChange(writer, request, name, message, err)
 }
 
 func (server *Server) deleteRuleSet(writer http.ResponseWriter, request *http.Request) {
@@ -70,26 +91,29 @@ func (server *Server) deleteRuleSet(writer http.ResponseWriter, request *http.Re
 	server.renderPolicyChange(writer, request, ruleSetsTab, message, err)
 }
 
+// saveDefaultLists sets the block lists for devices without a rule set from
+// the Default panel. Choosing Only These Lists with none checked yet starts
+// from every list, to uncheck from there.
 func (server *Server) saveDefaultLists(writer http.ResponseWriter, request *http.Request) {
 	if err := request.ParseForm(); err != nil {
-		server.renderRuleSetProblem(writer, request, refuse(http.StatusBadRequest, "Sable could not read the form."))
+		server.renderRuleSetChange(writer, request, config.DefaultRuleSetName, "", refuse(http.StatusBadRequest, "Sable could not read the form."))
 		return
 	}
 	var lists []string
 	// "Every list" sends no lists, which is what an empty choice means too.
 	if request.FormValue("scope") == "chosen" {
-		lists = request.Form["lists"]
+		if lists = request.Form["lists"]; len(lists) == 0 && len(server.config.Current().Config.Blocking.DefaultLists) == 0 {
+			for _, list := range server.config.Current().Config.Blocking.Lists {
+				lists = append(lists, list.Name)
+			}
+		}
 		if len(lists) == 0 {
-			server.renderRuleSetProblem(writer, request, refuse(http.StatusUnprocessableEntity, "Choose at least one block list, or All Your Block Lists."))
+			server.renderRuleSetChange(writer, request, config.DefaultRuleSetName, "", refuse(http.StatusUnprocessableEntity, "Choose at least one block list, or All Your Block Lists."))
 			return
 		}
 	}
 	message, err := server.ruleSetService().SetDefaultLists(request.Context(), requestActor(request, ""), lists)
-	if err != nil {
-		server.renderRuleSetProblem(writer, request, err)
-		return
-	}
-	server.renderPolicyChange(writer, request, ruleSetsTab, message, nil)
+	server.renderRuleSetChange(writer, request, config.DefaultRuleSetName, message, err)
 }
 
 // renderRuleSetProblem shows why the rule set dialog could not save, inside
@@ -271,6 +295,17 @@ func (server *Server) deleteRuleSetApp(writer http.ResponseWriter, request *http
 	server.renderRuleSetChange(writer, request, name, message, err)
 }
 
+func ruleSetListsMessage(name string, lists []string) string {
+	switch len(lists) {
+	case 0:
+		return name + " uses no block lists, only its own domains and the Blocked tab"
+	case 1:
+		return name + " uses " + lists[0]
+	default:
+		return fmt.Sprintf("%s uses %d block lists", name, len(lists))
+	}
+}
+
 func ruleSetAppsMessage(name string, apps []string) string {
 	switch len(apps) {
 	case 0:
@@ -291,7 +326,15 @@ func (server *Server) ruleSetPanel(writer http.ResponseWriter, request *http.Req
 
 func (server *Server) ruleSetDrawerView(request *http.Request, name string) pages.RuleSetDrawerView {
 	configuration := server.config.Current().Config
-	view := pages.RuleSetDrawerView{CanWrite: server.consoleView(request).CanWriteBlocking}
+	view := pages.RuleSetDrawerView{CanWrite: server.consoleView(request).CanWriteBlocking, EditingName: request.URL.Query().Get("edit") == "name"}
+	for _, list := range configuration.Blocking.Lists {
+		view.Lists = append(view.Lists, list.Name)
+	}
+	if name == config.DefaultRuleSetName {
+		view.Default, view.DefaultLists = true, configuration.Blocking.DefaultLists
+		view.Set.Name = name
+		return view
+	}
 	index := slices.IndexFunc(configuration.Blocking.RuleSets, func(set config.RuleSet) bool { return set.Name == name })
 	if index < 0 {
 		view.Missing = true
@@ -313,7 +356,7 @@ const ruleSetDeviceLimit = 500
 // ruleSetDeviceOptions offers the devices Sable has seen, by hardware
 // address when it knows one, and the ones the operator named, leaving out
 // those already in the rule set called name. An empty name leaves none out.
-func (server *Server) ruleSetDeviceOptions(ctx context.Context, configuration config.Config, name string) []pages.RuleSetDeviceOption {
+func (server *Server) ruleSetDeviceOptions(ctx context.Context, configuration config.Config, name string) []pages.DeviceOption {
 	taken := map[string]bool{}
 	for _, client := range configuration.Clients {
 		if name != "" && client.RuleSet == name {
@@ -328,26 +371,30 @@ func (server *Server) ruleSetDeviceOptions(ctx context.Context, configuration co
 		}
 	}
 	given := devices.NewGivenNames(identities, configuration.Clients)
-	options := map[string]pages.RuleSetDeviceOption{}
-	add := func(entry, label string) {
+	options := map[string]pages.DeviceOption{}
+	add := func(entry, label, kind string) {
 		if entry == "" || taken[entry] {
 			return
 		}
-		if _, found := options[entry]; !found || label != entry {
-			options[entry] = pages.RuleSetDeviceOption{Value: entry, Label: cmp.Or(label, entry)}
+		option, found := options[entry]
+		if !found || label != "" {
+			option.Value, option.Label = entry, cmp.Or(label, option.Label, entry)
 		}
+		option.Type = cmp.Or(kind, option.Type)
+		options[entry] = option
 	}
 	for _, identity := range identities {
 		if identity.MAC != "" {
-			add(identity.MAC, cmp.Or(given.Hardware(identity.MAC), identity.Hostname))
+			add(identity.MAC, cmp.Or(given.Hardware(identity.MAC), identity.Hostname), identity.Kind)
 		} else {
-			add(identity.Address, cmp.Or(given.Address(identity.Address), identity.Hostname))
+			add(identity.Address, cmp.Or(given.Address(identity.Address), identity.Hostname), identity.Kind)
 		}
 	}
+	// The operator's name and type win over what the network says.
 	for _, client := range configuration.Clients {
-		add(cmp.Or(client.MAC, client.Address), client.Name)
+		add(cmp.Or(client.MAC, client.Address), client.Name, client.Type)
 	}
-	list := slices.SortedFunc(maps.Values(options), func(left, right pages.RuleSetDeviceOption) int {
+	list := slices.SortedFunc(maps.Values(options), func(left, right pages.DeviceOption) int {
 		return cmp.Or(strings.Compare(strings.ToLower(left.Label), strings.ToLower(right.Label)), strings.Compare(left.Value, right.Value))
 	})
 	return list[:min(len(list), ruleSetDeviceLimit)]

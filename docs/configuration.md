@@ -820,7 +820,9 @@ A schedule follows the `[[blocking.rule_sets]]` entry it belongs to. It starts
 at `start` on each of its `days` and ends at `end`, using a 24-hour clock; an
 `end` before `start` ends the next morning, so the Bedtime above runs from
 Sunday night to Friday morning. Times are read in `time_zone`, an IANA name,
-so a schedule keeps its hours across daylight saving time. `block =
+so a schedule keeps its hours across daylight saving time. A schedule saved
+from the console takes the time zone the console shows, which Settings names.
+`block =
 "everything"` blocks everything but the rule set's and the global allowed
 domains, the way a hold does, even while blocking is paused or the rule set's
 blocking is off. `block = "apps"` blocks its `apps` like the rule set's own
