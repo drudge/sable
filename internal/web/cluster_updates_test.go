@@ -189,7 +189,7 @@ func TestNotificationClusterChoiceRequiresCapabilityAndPermission(t *testing.T) 
 				t.Fatal(err)
 			}
 			want := scenario == "supported"
-			if view.CanUpdateCluster != want || strings.Contains(response.Body.String(), `data-update-scope-trigger`) != want {
+			if view.CanUpdateCluster != want || strings.Contains(response.Body.String(), `data-split-trigger`) != want {
 				t.Fatalf("cluster choice = %t, want %t: %s", view.CanUpdateCluster, want, response.Body.String())
 			}
 			// About offers the same choice as the notification.

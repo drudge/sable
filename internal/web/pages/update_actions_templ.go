@@ -323,7 +323,7 @@ func updateScopeButton(view UpdateView, fromNotification bool) templ.Component {
 		}
 		ctx = templ.ClearChildren(ctx)
 		prefix := ifThen(fromNotification, "notification", "about")
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<div class=\"update-split-button\" data-update-scope><div data-update-scope-action=\"node\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<div class=\"split-button\" data-split-button data-split-remember=\"update-scope\"><div data-split-action=\"node\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -349,7 +349,7 @@ func updateScopeButton(view UpdateView, fromNotification bool) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</div><div data-update-scope-action=\"cluster\" hidden>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</div><div data-split-action=\"cluster\" hidden>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -388,7 +388,7 @@ func updateScopeButton(view UpdateView, fromNotification bool) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "\" class=\"button compact update-scope-trigger\" type=\"button\" aria-label=\"Choose update scope\" aria-haspopup=\"menu\" aria-expanded=\"false\" aria-controls=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "\" class=\"button compact split-button-trigger\" type=\"button\" aria-label=\"Choose update scope\" aria-haspopup=\"menu\" aria-expanded=\"false\" aria-controls=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -401,7 +401,7 @@ func updateScopeButton(view UpdateView, fromNotification bool) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\" data-update-scope-trigger>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\" data-split-trigger>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -422,7 +422,7 @@ func updateScopeButton(view UpdateView, fromNotification bool) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "\" class=\"update-scope-menu\" role=\"menu\" aria-label=\"Update scope\" popover=\"manual\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "\" class=\"split-menu\" role=\"menu\" aria-label=\"Update scope\" popover=\"manual\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -438,7 +438,7 @@ func updateScopeButton(view UpdateView, fromNotification bool) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<button class=\"update-scope-option\" type=\"submit\" role=\"menuitemradio\" aria-checked=\"true\" data-update-scope-option=\"node\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "<button class=\"split-menu-option\" type=\"submit\" role=\"menuitemradio\" aria-checked=\"true\" data-split-option=\"node\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -476,7 +476,7 @@ func updateScopeButton(view UpdateView, fromNotification bool) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<button class=\"update-scope-option\" type=\"submit\" role=\"menuitemradio\" aria-checked=\"false\" data-update-scope-option=\"cluster\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<button class=\"split-menu-option\" type=\"submit\" role=\"menuitemradio\" aria-checked=\"false\" data-split-option=\"cluster\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

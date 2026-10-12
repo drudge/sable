@@ -177,29 +177,34 @@ func TestQueryPolicyActionsForARuleSet(t *testing.T) {
 	}
 }
 
-// The scope control starts on the device's rule set and shows only that
-// side's actions; a side with nothing to offer is disabled.
-func TestQueryPolicyScope(t *testing.T) {
+// Block and Allow are split buttons offering the rule set or everyone, and
+// a side with nothing to offer is left out, which makes a plain button.
+func TestQueryPolicySplitButtons(t *testing.T) {
 	t.Parallel()
 	page := renderComponent(t, queryDetailFooter(QueryDetailView{CanBlocking: true, Entry: QueryLogEntryView{Name: "games.example", Source: "blocked", Decision: QueryDecisionView{RuleSet: "Kids", RuleSetBlock: true}}}))
 	for _, expected := range []string{
 		`name="rule_set" value="Kids"`,
-		`data-query-policy-scope-choice="rule-set">Kids</button>`,
-		`data-query-policy-scope-choice="everyone" disabled>Everyone</button>`,
-		`data-query-detail-policy="allow" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend" data-query-policy-applies="false" hidden`,
+		"Allow for Kids",
+		`<strong data-query-policy-rule-set-name>Kids</strong>`,
+		`class="split-button query-policy-split single scoped" data-split-button data-split-remember="query-policy-scope" data-query-policy-split="allow">`,
+		`<div data-split-action="everyone" data-split-unavailable hidden>`,
+		`data-query-policy-split="block" hidden>`,
 	} {
 		if !strings.Contains(page, expected) {
 			t.Errorf("query footer does not contain %q:\n%s", expected, page)
 		}
 	}
-	if strings.Contains(page, `data-query-detail-policy="allow-rule-set" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend" data-query-policy-applies="true" hidden`) {
-		t.Errorf("the rule set's Allow starts hidden:\n%s", page)
+	answered := renderComponent(t, queryDetailFooter(QueryDetailView{CanBlocking: true, Entry: QueryLogEntryView{Name: "games.example", Source: "upstream", Decision: QueryDecisionView{RuleSet: "Kids"}}}))
+	for _, expected := range []string{
+		`class="split-button query-policy-split scoped" data-split-button data-split-remember="query-policy-scope" data-query-policy-split="block">`,
+		"Block for Kids", "Block for Everyone",
+	} {
+		if !strings.Contains(answered, expected) {
+			t.Errorf("answered query footer does not contain %q:\n%s", expected, answered)
+		}
 	}
 	plain := renderComponent(t, queryDetailFooter(QueryDetailView{CanBlocking: true, Entry: QueryLogEntryView{Name: "ads.example", Source: "upstream"}}))
-	if !strings.Contains(plain, `data-query-policy-scope hidden`) {
-		t.Errorf("a device with no rule set shows the scope control:\n%s", plain)
-	}
-	if strings.Contains(plain, `data-query-detail-policy="block" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend" data-query-policy-applies="true" hidden`) {
-		t.Errorf("Block for everyone starts hidden without a rule set:\n%s", plain)
+	if !strings.Contains(plain, `class="split-button query-policy-split single" data-split-button data-split-remember="query-policy-scope" data-query-policy-split="block">`) || strings.Contains(plain, "for Everyone") {
+		t.Errorf("a device with no rule set gets more than a plain Block:\n%s", plain)
 	}
 }

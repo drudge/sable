@@ -1331,21 +1331,29 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .toast-update > .notification-actions:empty { display: none; }
 .toast-update > .notification-actions > :only-child { grid-column: 1 / -1; }
 .toast-update .notification-actions .button { width: 100%; min-height: 2.25rem; justify-content: center; }
-.update-split-button { display: grid; grid-template-columns: minmax(0, 1fr) 2rem; min-width: 0; }
-.update-split-button > [data-update-scope-action], .update-split-button > [data-update-scope-action] form { min-width: 0; margin: 0; }
-.update-split-button > [data-update-scope-action] .button { width: 100%; border-top-right-radius: 0; border-bottom-right-radius: 0; white-space: nowrap; }
-.toast-update .update-split-button > [data-update-scope-action] .button { padding-inline: var(--space-2); }
-.update-split-button .update-scope-trigger { justify-content: center; border-top-left-radius: 0; border-bottom-left-radius: 0; border-left-color: color-mix(in srgb, var(--primary-foreground) 22%, var(--primary)); padding: 0; }
-.update-scope-menu { position: fixed; inset: auto; margin: 0; width: 18rem; max-width: calc(100vw - 1rem); overflow: auto; border: 1px solid var(--border); border-radius: .625rem; background: var(--popover); color: var(--popover-foreground); padding: .375rem; box-shadow: 0 12px 32px rgb(0 0 0 / .22); }
-.update-scope-menu form { margin: 0; }
-.update-scope-option { display: flex; align-items: center; gap: var(--space-3); width: 100%; border: 0; border-radius: .375rem; background: transparent; padding: .65rem var(--space-2); color: inherit; text-align: left; }
-.update-scope-option:hover, .update-scope-option:focus-visible { background: var(--accent); color: var(--accent-foreground); }
-.update-scope-option > .nav-icon { width: 1rem; height: 1rem; flex: 0 0 auto; color: var(--muted-foreground); }
-.update-scope-option > span { display: grid; gap: .2rem; }
-.update-scope-option > .icon-check { margin-left: auto; color: inherit; }
-.update-scope-option[aria-checked="false"] > .icon-check { visibility: hidden; }
-.update-scope-option strong { font-size: .8125rem; font-weight: 500; }
-.update-scope-option small { color: var(--muted-foreground); font-size: .6875rem; line-height: 1.4; }
+/* A split button runs one of a few actions: the part on the left runs the
+   one chosen last, and the chevron opens a menu of all of them. */
+.split-button { display: grid; grid-template-columns: minmax(0, 1fr) 2rem; min-width: 0; }
+.split-button > [data-split-action], .split-button > [data-split-action] form { display: flex; min-width: 0; margin: 0; }
+.split-button > [data-split-action] .button { width: 100%; border-top-right-radius: 0; border-bottom-right-radius: 0; white-space: nowrap; }
+.toast-update .split-button > [data-split-action] .button { padding-inline: var(--space-2); }
+.split-button .split-button-trigger { justify-content: center; border-top-left-radius: 0; border-bottom-left-radius: 0; padding: 0; }
+.split-button .split-button-trigger:not(.outline) { border-left-color: color-mix(in srgb, var(--primary-foreground) 22%, var(--primary)); }
+.split-button .split-button-trigger.outline { margin-left: -1px; }
+/* With one action left there is nothing to pick, so it fills the button. */
+.split-button.single { grid-template-columns: minmax(0, 1fr); }
+.split-button.single > .split-button-trigger { display: none; }
+.split-button.single > [data-split-action] .button { border-radius: 999px; }
+.split-menu { position: fixed; inset: auto; margin: 0; width: 18rem; max-width: calc(100vw - 1rem); overflow: auto; border: 1px solid var(--border); border-radius: .625rem; background: var(--popover); color: var(--popover-foreground); padding: .375rem; box-shadow: 0 12px 32px rgb(0 0 0 / .22); }
+.split-menu form { margin: 0; }
+.split-menu-option { display: flex; align-items: center; gap: var(--space-3); width: 100%; border: 0; border-radius: .375rem; background: transparent; padding: .65rem var(--space-2); color: inherit; text-align: left; }
+.split-menu-option:hover, .split-menu-option:focus-visible { background: var(--accent); color: var(--accent-foreground); }
+.split-menu-option > .nav-icon { width: 1rem; height: 1rem; flex: 0 0 auto; color: var(--muted-foreground); }
+.split-menu-option > span { display: grid; gap: .2rem; }
+.split-menu-option > .icon-check { margin-left: auto; color: inherit; }
+.split-menu-option[aria-checked="false"] > .icon-check { visibility: hidden; }
+.split-menu-option strong { font-size: .8125rem; font-weight: 500; }
+.split-menu-option small { color: var(--muted-foreground); font-size: .6875rem; line-height: 1.4; }
 
 @media (hover: hover) and (min-width: 640px) {
   .notification-stack {
@@ -3089,12 +3097,6 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .query-detail-policy-actions .button { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; }
 .query-detail-policy-actions .button .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; }
 .query-detail-policy-actions .button { white-space: nowrap; }
-/* Whom Block and Allow are for stays beside them, and the three move to a
-   row of their own together when the footer runs out of room. */
-.query-policy-group { display: flex; align-items: center; gap: var(--space-2); }
-.query-policy-group form { display: inline-flex; }
-.query-policy-scope button { height: 1.75rem; max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8rem; }
-.query-policy-scope button:disabled { opacity: .5; cursor: not-allowed; }
 .query-log-table.full th, .query-log-table.full td { padding-inline: var(--space-5); }
 .query-log-table.full td { height: 3.25rem; }
 .query-log-table.full code { font-size: .75rem; }
@@ -3190,16 +3192,14 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.query-detail-footer { padding-bottom: max(.85rem, env(safe-area-inset-bottom)); }
 	.query-detail-policy-actions { width: 100%; }
 	.query-detail-policy-actions form, .query-detail-policy-actions .button { flex: 1; }
-	/* A query's actions pair up, two to a row. */
-	.query-detail-footer > .query-detail-policy-actions:has([data-query-detail-policy]) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-	.query-detail-policy-actions:has([data-query-detail-policy]) .button { width: 100%; min-width: 0; padding-inline: var(--space-3); }
-	.query-detail-policy-actions:has([data-query-detail-policy]) .button > span { overflow: hidden; text-overflow: ellipsis; }
-	/* Block and Allow pair up under the rule set or everyone control, and a
-	   lone one takes the row. */
-	.query-policy-group { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-	.query-policy-group > .query-policy-scope { grid-column: 1 / -1; }
-	.query-policy-scope button { flex: 1; max-width: none; }
-	.query-policy-group:not(:has(> form:not([hidden]) ~ form:not([hidden]))) > form { grid-column: 1 / -1; }
+	/* A query's actions pair up, two to a row. Block and Allow name whom
+	   they're for when the device has a rule set, so each takes a row. */
+	.query-detail-footer > .query-detail-policy-actions:has(> .query-policy-split) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.query-detail-policy-actions:has(> .query-policy-split) .button { min-width: 0; padding-inline: var(--space-3); }
+	.query-detail-policy-actions:has(> .query-policy-split) > .button, .query-policy-split [data-split-action] .button { width: 100%; }
+	.query-detail-policy-actions:has(> .query-policy-split) .button > span { overflow: hidden; text-overflow: ellipsis; }
+	.query-policy-split.scoped { grid-column: 1 / -1; }
+	.query-policy-split .split-button-trigger { padding: 0; }
 	/* A node's Remove and Promote don't fit side by side, so they stack. */
 	.query-detail-footer > .cluster-node-actions { flex-wrap: wrap; }
 	.query-detail-footer > .cluster-node-actions > * { flex: 1 1 auto; }

@@ -630,28 +630,6 @@
 	// typed. Choosing one shows its name and sends its value; anything typed
 	// and not chosen is sent as typed. Focus stays in the field while the
 	// arrow keys move through the list.
-	// showQueryPolicyScope shows a query panel's Block and Allow for the
-	// device's rule set or for everyone, and disables a side of the scope
-	// control with nothing to offer.
-	const showQueryPolicyScope = (root, forRuleSet) => {
-	  const forms = [...root.querySelectorAll("[data-query-detail-policy]")];
-	  const ruleSetSide = (form) => form.dataset.queryDetailPolicy.endsWith("-rule-set");
-	  const applies = (form) => form.dataset.queryPolicyApplies === "true";
-	  forms.forEach((form) => { form.hidden = !applies(form) || ruleSetSide(form) !== forRuleSet; });
-	  root.querySelectorAll("[data-query-policy-scope-choice]").forEach((choice) => {
-		const side = choice.dataset.queryPolicyScopeChoice === "rule-set";
-		choice.classList.toggle("active", side === forRuleSet);
-		choice.setAttribute("aria-pressed", String(side === forRuleSet));
-		choice.disabled = !forms.some((form) => applies(form) && ruleSetSide(form) === side);
-	  });
-	};
-
-	document.addEventListener("click", (event) => {
-	  const choice = event.target.closest?.("[data-query-policy-scope-choice]");
-	  const actions = choice?.closest("[data-query-detail-policy-actions]");
-	  if (actions) showQueryPolicyScope(actions, choice.dataset.queryPolicyScopeChoice === "rule-set");
-	});
-
 	const setupDevicePicker = (root) => {
 	  if (root.dataset.devicePickerReady === "true") return;
 	  root.dataset.devicePickerReady = "true";
@@ -2118,36 +2096,55 @@
   };
   queueMicrotask(checkForUpdateNotification);
 
-	const UPDATE_SCOPE_MENU_WIDTH = 288;
-	const updateScopePreferenceKey = `sable-update-scope:${document.body.dataset.preferenceUser || ""}`;
-	const setupUpdateScope = (root) => {
-	  if (root.dataset.updateScopeReady === "true") return;
-	  root.dataset.updateScopeReady = "true";
-	  const trigger = root.querySelector("[data-update-scope-trigger]");
+	// A split button runs the action picked last, and its chevron opens a menu
+	// of every action. Picking one runs it: a menu item that is a form's own
+	// submit button runs that form, and any other runs the matching action's
+	// form. data-split-remember keeps the pick per user across pages.
+	const SPLIT_MENU_WIDTH = 288;
+	const setupSplitButton = (root) => {
+	  if (root.dataset.splitReady === "true") return;
+	  root.dataset.splitReady = "true";
+	  const trigger = root.querySelector("[data-split-trigger]");
 	  const menu = root.querySelector('[role="menu"]');
-	  const items = [...menu.querySelectorAll('[data-update-scope-option]')];
-	  const actions = [...root.querySelectorAll(':scope > [data-update-scope-action]')];
-	  const select = (scope) => {
-		const selected = scope === "cluster" ? "cluster" : "node";
-		actions.forEach((action) => { action.hidden = action.dataset.updateScopeAction !== selected; });
-		items.forEach((item) => { item.setAttribute("aria-checked", String(item.dataset.updateScopeOption === selected)); });
+	  const items = () => [...menu.querySelectorAll("[data-split-option]")].filter((item) => !item.hidden);
+	  const actions = [...root.querySelectorAll(":scope > [data-split-action]")];
+	  const preferenceKey = root.dataset.splitRemember && `sable-${root.dataset.splitRemember}:${document.body.dataset.preferenceUser || ""}`;
+	  const select = (choice) => {
+		const offered = actions.filter((action) => !action.hasAttribute("data-split-unavailable"));
+		const selected = offered.find((action) => action.dataset.splitAction === choice) || offered[0];
+		actions.forEach((action) => { action.hidden = action !== selected; });
+		menu.querySelectorAll("[data-split-option]").forEach((item) => {
+		  item.setAttribute("aria-checked", String(item.dataset.splitOption === selected?.dataset.splitAction));
+		});
+		root.classList.toggle("single", offered.length < 2);
+		root.hidden = !selected;
 	  };
-	  try {
-		select(localStorage.getItem(updateScopePreferenceKey));
-	  } catch {
-		// Storage may be disabled; the node action remains the initial default.
-	  }
-	  menu.addEventListener("click", (event) => {
-		const option = event.target.closest("[data-update-scope-option]");
-		if (!option) return;
-		select(option.dataset.updateScopeOption);
+	  const remembered = () => {
 		try {
-		  localStorage.setItem(updateScopePreferenceKey, option.dataset.updateScopeOption);
+		  return preferenceKey ? localStorage.getItem(preferenceKey) : null;
 		} catch {
-		  // The selected action still works for this notification without storage.
+		  // Storage may be disabled; the first action remains the default.
+		  return null;
+		}
+	  };
+	  // A page that changes which actions are offered calls this again.
+	  root.sableSelectSplit = (choice = remembered()) => select(choice);
+	  select(remembered());
+	  menu.addEventListener("click", (event) => {
+		const option = event.target.closest("[data-split-option]");
+		if (!option) return;
+		select(option.dataset.splitOption);
+		try {
+		  if (preferenceKey) localStorage.setItem(preferenceKey, option.dataset.splitOption);
+		} catch {
+		  // The picked action still runs without storage.
+		}
+		if (option.type !== "submit") {
+		  close();
+		  actions.find((action) => action.dataset.splitAction === option.dataset.splitOption)?.querySelector("form")?.requestSubmit();
 		}
 	  });
-	  const position = () => positionFloatingPopover(root, root, menu, UPDATE_SCOPE_MENU_WIDTH);
+	  const position = () => positionFloatingPopover(root, root, menu, SPLIT_MENU_WIDTH);
 	  const close = () => {
 		if (menu.matches(":popover-open")) menu.hidePopover();
 	  };
@@ -2157,7 +2154,7 @@
 	  const open = (last = false) => {
 		menu.showPopover();
 		position();
-		(last ? items.at(-1) : items[0])?.focus();
+		(last ? items().at(-1) : items()[0])?.focus();
 	  };
 	  trigger.addEventListener("click", () => {
 		if (menu.matches(":popover-open")) close(); else open();
@@ -2181,9 +2178,10 @@
 		}
 		if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
 		event.preventDefault();
-		const current = items.indexOf(document.activeElement);
-		const index = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : current + (event.key === "ArrowDown" ? 1 : -1);
-		items[(index + items.length) % items.length]?.focus();
+		const list = items();
+		const current = list.indexOf(document.activeElement);
+		const index = event.key === "Home" ? 0 : event.key === "End" ? list.length - 1 : current + (event.key === "ArrowDown" ? 1 : -1);
+		list[(index + list.length) % list.length]?.focus();
 	  });
 	  // Close before the shared confirmation captures its return-focus control.
 	  menu.addEventListener("htmx:confirm", () => {
@@ -2192,8 +2190,8 @@
 	  });
 	};
 	window.addEventListener("resize", () => {
-	  document.querySelectorAll('[data-update-scope][data-open="true"]').forEach((root) => {
-		positionFloatingPopover(root, root, root.querySelector('[role="menu"]'), UPDATE_SCOPE_MENU_WIDTH);
+	  document.querySelectorAll('[data-split-button][data-open="true"]').forEach((root) => {
+		positionFloatingPopover(root, root, root.querySelector('[role="menu"]'), SPLIT_MENU_WIDTH);
 	  });
 	});
 
@@ -3430,7 +3428,7 @@
 	  ["[data-donut]", setupDonutChart],
 	  ["[data-insight-chart]", setupInsightChart],
 	  ["[data-toast]", setupToast],
-	  ["[data-update-scope]", setupUpdateScope],
+	  ["[data-split-button]", setupSplitButton],
 	  ["[data-dnssec-denial]", syncDNSSECDenial],
 	  ["[data-isotope-tabs]", setupIsotopeTabs],
 	  ["[data-blocking-root]", setupBlockingTabs],
@@ -4476,25 +4474,31 @@
 		watchAction.setAttribute("aria-label", `Watch ${domain}`);
 	  }
 	  // A device in a rule set can have the domain blocked or allowed for just
-	  // that rule set, or for everyone, which the scope control picks; it
-	  // starts on the rule set. Allowing everywhere can't beat a rule set's own
-	  // block; the rule set's own allowed domains can.
+	  // that rule set or for everyone, from a split button that offers what
+	  // applies. Allowing everywhere can't beat a rule set's own block; the
+	  // rule set's own allowed domains can.
 	  const ruleSet = row.dataset.queryDetailRuleSet || "";
-	  [["block", false, source !== "blocked"], ["block-rule-set", true, source !== "blocked"],
-	   ["allow", false, row.dataset.queryDetailRuleSetBlock !== "true"], ["allow-rule-set", true, source === "blocked"]].forEach(([name, forRuleSet, applies]) => {
-		const form = dialog.querySelector(`[data-query-detail-policy="${name}"]`);
-		if (!form) return;
-		form.dataset.queryPolicyApplies = String(applies && (!forRuleSet || Boolean(ruleSet)));
-		const ruleSetInput = form.querySelector("[data-query-detail-rule-set]");
-		if (ruleSetInput) ruleSetInput.value = ruleSet;
+	  const applies = {
+		block: {"rule-set": source !== "blocked", everyone: source !== "blocked"},
+		allow: {"rule-set": source === "blocked", everyone: row.dataset.queryDetailRuleSetBlock !== "true"},
+	  };
+	  dialog.querySelectorAll("[data-query-policy-split]").forEach((split) => {
+		const verb = split.dataset.queryPolicySplit === "block" ? "Block" : "Allow";
+		split.querySelectorAll(":scope > [data-split-action]").forEach((action) => {
+		  const side = action.dataset.splitAction;
+		  const offered = applies[split.dataset.queryPolicySplit][side] && (side === "everyone" || Boolean(ruleSet));
+		  action.toggleAttribute("data-split-unavailable", !offered);
+		  const ruleSetInput = action.querySelector("[data-query-detail-rule-set]");
+		  if (ruleSetInput) ruleSetInput.value = ruleSet;
+		  const label = action.querySelector("button span");
+		  if (label) label.textContent = !ruleSet ? verb : `${verb} for ${side === "rule-set" ? ruleSet : "Everyone"}`;
+		});
+		const name = split.querySelector("[data-query-policy-rule-set-name]");
+		if (name) name.textContent = ruleSet;
+		split.classList.toggle("scoped", Boolean(ruleSet));
+		setupSplitButton(split);
+		split.sableSelectSplit();
 	  });
-	  const scope = dialog.querySelector("[data-query-policy-scope]");
-	  if (scope) {
-		scope.hidden = !ruleSet;
-		const ruleSetChoice = scope.querySelector('[data-query-policy-scope-choice="rule-set"]');
-		if (ruleSetChoice) ruleSetChoice.textContent = ruleSet;
-	  }
-	  showQueryPolicyScope(dialog, Boolean(ruleSet));
 	  const why = dialog.querySelector("[data-query-detail-why]");
 	  if (why) {
 		// A device in a rule set gets the answer for that device.
