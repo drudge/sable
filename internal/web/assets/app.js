@@ -5161,16 +5161,24 @@
 	  ctx.target.replaceChildren(loading.content.cloneNode(true));
 	});
 	// A drawer form that saves as its choices change, such as a rule set's
-	// Blocking switch, brings the drawer back where it was scrolled.
-	document.body.addEventListener("htmx:before:swap", (event) => {
+	// Blocking switch, brings the drawer back where it was scrolled once the
+	// new content has settled.
+	document.body.addEventListener("htmx:before:request", (event) => {
 	  const ctx = event.detail?.ctx;
-	  if (!ctx?.sourceElement?.closest?.("[data-keep-scroll]")) return;
-	  ctx.sableScrollTop = ctx.target?.querySelector(".query-detail-body")?.scrollTop;
+	  if (!ctx?.sourceElement?.closest?.("[data-keep-scroll]") || !ctx.target) return;
+	  ctx.target.sableKeepScroll = ctx.target.querySelector(".query-detail-body")?.scrollTop;
 	});
 	document.body.addEventListener("htmx:after:swap", (event) => {
-	  const ctx = event.detail?.ctx;
-	  const body = ctx?.sableScrollTop !== undefined && ctx.target?.querySelector(".query-detail-body");
-	  if (body) body.scrollTop = ctx.sableScrollTop;
+	  const target = event.detail?.ctx?.target;
+	  const top = target?.sableKeepScroll;
+	  if (top === undefined) return;
+	  delete target.sableKeepScroll;
+	  const restore = () => {
+		const body = target.querySelector(".query-detail-body");
+		if (body) body.scrollTop = top;
+	  };
+	  restore();
+	  window.requestAnimationFrame(restore);
 	});
 	document.body.addEventListener("htmx:after:swap", () => {
 	  syncRoutedDialogs();

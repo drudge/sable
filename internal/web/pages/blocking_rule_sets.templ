@@ -333,21 +333,29 @@ templ ruleSetBlocking(view RuleSetDrawerView) {
 			<input type="hidden" name="name" value={ view.Set.Name }/>
 			@components.SwitchField(components.SwitchFieldProps{ID: "rule-set-blocking", Title: "Blocking", Description: ifThen(view.Set.Off, "Off: everything gets through for "+view.Set.Name+" devices. Blocking everything for one of them still works.", "Its devices use the block lists below and its own blocked domains."), Name: "blocking", Value: "on", Checked: !view.Set.Off, Disabled: !view.CanWrite, InputAttrs: templ.Attributes{"data-replica-primary-action": true}})
 		</form>
-		if !view.Set.Off {
-			<form class="rule-set-lists-form" { ruleSetChangeAttrs("/ui/blocking/rule-sets/lists")... }>
-				<input type="hidden" name="name" value={ view.Set.Name }/>
-				<fieldset class="rule-set-lists">
-					<legend>Block Lists</legend>
-					if len(view.Lists) == 0 {
-						<p class="rule-set-domains-help">No block lists yet. Add one in the Block Lists tab.</p>
-					} else {
-						@ruleSetListChoices(view.Lists, view.Set.Lists, !view.CanWrite)
-						<small class="rule-set-domains-help">Leave them all off to use only its own domains and the Blocked tab.</small>
-					}
-				</fieldset>
-			</form>
-		}
 	</section>
+	if !view.Set.Off {
+		<section class="query-detail-answer rule-set-domains rule-set-lists-section" aria-labelledby="rule-set-lists-title">
+			<div class="rule-set-domains-heading">
+				<h3 id="rule-set-lists-title">Block Lists</h3>
+				if len(view.Set.Lists) > 0 {
+					@components.Badge(components.BadgeProps{Label: formatNumber(uint64(len(view.Set.Lists)))})
+				}
+			</div>
+			if len(view.Lists) == 0 {
+				<p class="rule-set-domains-help">No block lists yet. Add one in the Block Lists tab.</p>
+			} else {
+				<p class="rule-set-domains-help">{ "Used for " + view.Set.Name + " devices instead of the Default lists. Leave them all off to use only its own domains and the Blocked tab." }</p>
+				<form class="rule-set-lists-form" { ruleSetChangeAttrs("/ui/blocking/rule-sets/lists")... }>
+					<input type="hidden" name="name" value={ view.Set.Name }/>
+					<fieldset class="rule-set-lists">
+						<legend class="sr-only">Block lists for { view.Set.Name }</legend>
+						@ruleSetListChoices(view.Lists, view.Set.Lists, !view.CanWrite)
+					</fieldset>
+				</form>
+			}
+		</section>
+	}
 }
 
 // ruleSetDefaultLists picks the block lists for every device without a rule

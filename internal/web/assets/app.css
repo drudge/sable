@@ -3185,6 +3185,9 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.query-detail-footer > .query-detail-policy-actions:has(> [data-query-detail-policy]) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 	.query-detail-policy-actions:has(> [data-query-detail-policy]) .button { width: 100%; min-width: 0; padding-inline: var(--space-3); }
 	.query-detail-policy-actions:has(> [data-query-detail-policy]) .button > span { overflow: hidden; text-overflow: ellipsis; }
+	/* Block and Allow name whom they're for when the device has a rule set,
+	   so each takes a row of its own. */
+	.query-detail-policy-actions:has(> [data-query-detail-policy$="-rule-set"]:not([hidden])) > form { grid-column: 1 / -1; }
 	/* A node's Remove and Promote don't fit side by side, so they stack. */
 	.query-detail-footer > .cluster-node-actions { flex-wrap: wrap; }
 	.query-detail-footer > .cluster-node-actions > * { flex: 1 1 auto; }

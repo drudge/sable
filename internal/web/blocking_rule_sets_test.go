@@ -320,7 +320,7 @@ func TestRuleSetWithBlockingOffSkipsItsListsAndDomains(t *testing.T) {
 		t.Fatalf("the Rule Sets tab doesn't say blocking is off:\n%s", panel)
 	}
 	if !strings.Contains(panel, `name="blocking" value="on"`) || strings.Contains(panel, `name="blocking" value="on" checked`) ||
-		!strings.Contains(panel, "Off: everything gets through") || strings.Contains(panel, `id="rule-set-blocked-title"`) || strings.Contains(panel, "<legend>Block Lists</legend>") ||
+		!strings.Contains(panel, "Off: everything gets through") || strings.Contains(panel, `id="rule-set-blocked-title"`) || strings.Contains(panel, `id="rule-set-lists-title"`) ||
 		!strings.Contains(panel, "Leo&#39;s Switch") {
 		t.Fatalf("panel for a rule set with blocking off:\n%s", panel)
 	}
