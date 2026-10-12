@@ -477,12 +477,33 @@ templ queryDetailFooter(view QueryDetailView) {
 			@components.Button(components.ButtonProps{Label: "Watch", Icon: "eye", Variant: components.ButtonOutline, Href: templ.SafeURL(queryWatchURL(view.Entry)), Attrs: templ.Attributes{"data-query-detail-watch": true, "aria-label": "Watch " + view.Entry.Name}})
 		}
 		if view.CanBlocking {
-			@queryDetailPolicy(view, "block", false)
-			@queryDetailPolicy(view, "block", true)
-			@queryDetailPolicy(view, "allow", true)
-			@queryDetailPolicy(view, "allow", false)
+			<div class="query-policy-group">
+				@queryPolicyScope(view.Entry)
+				@queryDetailPolicy(view, "block", false)
+				@queryDetailPolicy(view, "block", true)
+				@queryDetailPolicy(view, "allow", true)
+				@queryDetailPolicy(view, "allow", false)
+			</div>
 		}
 	</div>
+}
+
+// queryPolicyScope picks whom Block and Allow are for when the device used
+// a rule set: just that rule set, which it starts on, or everyone. A side
+// with nothing to offer is disabled. The page's script points it at the open
+// query.
+templ queryPolicyScope(entry QueryLogEntryView) {
+	{{ ruleSet := entry.Decision.RuleSet }}
+	<div class="stats-scope-toggle query-policy-scope" role="group" aria-label="Block or allow for" data-query-policy-scope hidden?={ ruleSet == "" }>
+		<button type="button" class="active" aria-pressed="true" data-query-policy-scope-choice="rule-set" disabled?={ !queryScopeOffered(entry, true) }>{ ruleSet }</button>
+		<button type="button" aria-pressed="false" data-query-policy-scope-choice="everyone" disabled?={ !queryScopeOffered(entry, false) }>Everyone</button>
+	</div>
+}
+
+// queryScopeOffered says whether either Block or Allow applies on one side
+// of the scope control.
+func queryScopeOffered(entry QueryLogEntryView, forRuleSet bool) bool {
+	return queryPolicyApplies(entry, "block", forRuleSet) || queryPolicyApplies(entry, "allow", forRuleSet)
 }
 
 // queryDetailPolicy blocks or allows the open query's domain for everyone,
@@ -490,25 +511,32 @@ templ queryDetailFooter(view QueryDetailView) {
 // points it at the open query, and shows only the ones that apply.
 templ queryDetailPolicy(view QueryDetailView, action string, forRuleSet bool) {
 	{{ ruleSet := view.Entry.Decision.RuleSet }}
-	<form data-query-detail-policy={ action + ifThen(forRuleSet, "-rule-set", "") } hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend" hidden?={ !queryPolicyShown(view.Entry, action, forRuleSet) }>
+	<form data-query-detail-policy={ action + ifThen(forRuleSet, "-rule-set", "") } hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend" data-query-policy-applies={ fmt.Sprint(queryPolicyApplies(view.Entry, action, forRuleSet)) } hidden?={ !queryPolicyShown(view.Entry, action, forRuleSet) }>
 		<input type="hidden" name="domain" value={ view.Entry.Name } data-query-detail-domain/>
 		<input type="hidden" name="action" value={ action }/>
 		if forRuleSet {
 			<input type="hidden" name="rule_set" value={ ruleSet } data-query-detail-rule-set/>
 		}
 		if action == "block" {
-			@components.Button(components.ButtonProps{Label: queryPolicyLabel("Block", ruleSet, forRuleSet), Icon: "shield-x", Variant: components.ButtonOutline, Destructive: true, Type: "submit"})
+			@components.Button(components.ButtonProps{Label: "Block", Icon: "shield-x", Variant: components.ButtonOutline, Destructive: true, Type: "submit"})
 		} else {
-			@components.Button(components.ButtonProps{Label: queryPolicyLabel("Allow", ruleSet, forRuleSet), Icon: "shield-check", Variant: ifThen(forRuleSet || ruleSet == "", components.ButtonPrimary, components.ButtonOutline), Type: "submit"})
+			@components.Button(components.ButtonProps{Label: "Allow", Icon: "shield-check", Variant: components.ButtonPrimary, Type: "submit"})
 		}
 	</form>
 }
 
-// queryPolicyShown says whether a query's panel offers an action: Block
-// unless it was blocked, Allow for everyone unless the rule set's own domain
-// or app blocked it, which only the rule set's allowed domains get past, and
-// the rule set's versions only when the device used one.
+// queryPolicyShown says whether a query's panel shows an action when it
+// opens: one that applies, on the side the scope control starts on, which is
+// the rule set when the device used one.
 func queryPolicyShown(entry QueryLogEntryView, action string, forRuleSet bool) bool {
+	return queryPolicyApplies(entry, action, forRuleSet) && forRuleSet == (entry.Decision.RuleSet != "")
+}
+
+// queryPolicyApplies says whether an action applies to a query: Block unless
+// it was blocked, Allow for everyone unless the rule set's own domain or app
+// blocked it, which only the rule set's allowed domains get past, and the
+// rule set's versions only when the device used one.
+func queryPolicyApplies(entry QueryLogEntryView, action string, forRuleSet bool) bool {
 	if forRuleSet && entry.Decision.RuleSet == "" {
 		return false
 	}
@@ -519,19 +547,6 @@ func queryPolicyShown(entry QueryLogEntryView, action string, forRuleSet bool) b
 		return entry.Source == "blocked"
 	default:
 		return !entry.Decision.RuleSetBlock
-	}
-}
-
-// queryPolicyLabel names a query panel's Block or Allow: plain when the
-// device used no rule set, and for whom when it did.
-func queryPolicyLabel(verb, ruleSet string, forRuleSet bool) string {
-	switch {
-	case ruleSet == "":
-		return verb
-	case forRuleSet:
-		return verb + " for " + ruleSet
-	default:
-		return verb + " for Everyone"
 	}
 }
 

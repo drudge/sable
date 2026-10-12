@@ -3089,6 +3089,12 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .query-detail-policy-actions .button { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; }
 .query-detail-policy-actions .button .nav-icon { width: 1rem; height: 1rem; flex: 0 0 1rem; }
 .query-detail-policy-actions .button { white-space: nowrap; }
+/* Whom Block and Allow are for stays beside them, and the three move to a
+   row of their own together when the footer runs out of room. */
+.query-policy-group { display: flex; align-items: center; gap: var(--space-2); }
+.query-policy-group form { display: inline-flex; }
+.query-policy-scope button { height: 1.75rem; max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8rem; }
+.query-policy-scope button:disabled { opacity: .5; cursor: not-allowed; }
 .query-log-table.full th, .query-log-table.full td { padding-inline: var(--space-5); }
 .query-log-table.full td { height: 3.25rem; }
 .query-log-table.full code { font-size: .75rem; }
@@ -3185,12 +3191,15 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	.query-detail-policy-actions { width: 100%; }
 	.query-detail-policy-actions form, .query-detail-policy-actions .button { flex: 1; }
 	/* A query's actions pair up, two to a row. */
-	.query-detail-footer > .query-detail-policy-actions:has(> [data-query-detail-policy]) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-	.query-detail-policy-actions:has(> [data-query-detail-policy]) .button { width: 100%; min-width: 0; padding-inline: var(--space-3); }
-	.query-detail-policy-actions:has(> [data-query-detail-policy]) .button > span { overflow: hidden; text-overflow: ellipsis; }
-	/* Block and Allow name whom they're for when the device has a rule set,
-	   so each takes a row of its own. */
-	.query-detail-policy-actions:has(> [data-query-detail-policy$="-rule-set"]:not([hidden])) > form { grid-column: 1 / -1; }
+	.query-detail-footer > .query-detail-policy-actions:has([data-query-detail-policy]) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.query-detail-policy-actions:has([data-query-detail-policy]) .button { width: 100%; min-width: 0; padding-inline: var(--space-3); }
+	.query-detail-policy-actions:has([data-query-detail-policy]) .button > span { overflow: hidden; text-overflow: ellipsis; }
+	/* Block and Allow pair up under the rule set or everyone control, and a
+	   lone one takes the row. */
+	.query-policy-group { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.query-policy-group > .query-policy-scope { grid-column: 1 / -1; }
+	.query-policy-scope button { flex: 1; max-width: none; }
+	.query-policy-group:not(:has(> form:not([hidden]) ~ form:not([hidden]))) > form { grid-column: 1 / -1; }
 	/* A node's Remove and Promote don't fit side by side, so they stack. */
 	.query-detail-footer > .cluster-node-actions { flex-wrap: wrap; }
 	.query-detail-footer > .cluster-node-actions > * { flex: 1 1 auto; }

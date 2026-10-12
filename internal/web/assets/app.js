@@ -630,6 +630,28 @@
 	// typed. Choosing one shows its name and sends its value; anything typed
 	// and not chosen is sent as typed. Focus stays in the field while the
 	// arrow keys move through the list.
+	// showQueryPolicyScope shows a query panel's Block and Allow for the
+	// device's rule set or for everyone, and disables a side of the scope
+	// control with nothing to offer.
+	const showQueryPolicyScope = (root, forRuleSet) => {
+	  const forms = [...root.querySelectorAll("[data-query-detail-policy]")];
+	  const ruleSetSide = (form) => form.dataset.queryDetailPolicy.endsWith("-rule-set");
+	  const applies = (form) => form.dataset.queryPolicyApplies === "true";
+	  forms.forEach((form) => { form.hidden = !applies(form) || ruleSetSide(form) !== forRuleSet; });
+	  root.querySelectorAll("[data-query-policy-scope-choice]").forEach((choice) => {
+		const side = choice.dataset.queryPolicyScopeChoice === "rule-set";
+		choice.classList.toggle("active", side === forRuleSet);
+		choice.setAttribute("aria-pressed", String(side === forRuleSet));
+		choice.disabled = !forms.some((form) => applies(form) && ruleSetSide(form) === side);
+	  });
+	};
+
+	document.addEventListener("click", (event) => {
+	  const choice = event.target.closest?.("[data-query-policy-scope-choice]");
+	  const actions = choice?.closest("[data-query-detail-policy-actions]");
+	  if (actions) showQueryPolicyScope(actions, choice.dataset.queryPolicyScopeChoice === "rule-set");
+	});
+
 	const setupDevicePicker = (root) => {
 	  if (root.dataset.devicePickerReady === "true") return;
 	  root.dataset.devicePickerReady = "true";
@@ -4454,21 +4476,25 @@
 		watchAction.setAttribute("aria-label", `Watch ${domain}`);
 	  }
 	  // A device in a rule set can have the domain blocked or allowed for just
-	  // that rule set, or for everyone. Allowing everywhere can't beat a rule
-	  // set's own block; the rule set's own allowed domains can.
+	  // that rule set, or for everyone, which the scope control picks; it
+	  // starts on the rule set. Allowing everywhere can't beat a rule set's own
+	  // block; the rule set's own allowed domains can.
 	  const ruleSet = row.dataset.queryDetailRuleSet || "";
-	  const policyLabel = (verb, forRuleSet) => !ruleSet ? verb : `${verb} for ${forRuleSet ? ruleSet : "Everyone"}`;
 	  [["block", false, source !== "blocked"], ["block-rule-set", true, source !== "blocked"],
-	   ["allow", false, row.dataset.queryDetailRuleSetBlock !== "true"], ["allow-rule-set", true, source === "blocked"]].forEach(([name, forRuleSet, shown]) => {
+	   ["allow", false, row.dataset.queryDetailRuleSetBlock !== "true"], ["allow-rule-set", true, source === "blocked"]].forEach(([name, forRuleSet, applies]) => {
 		const form = dialog.querySelector(`[data-query-detail-policy="${name}"]`);
 		if (!form) return;
-		form.hidden = !shown || (forRuleSet && !ruleSet);
+		form.dataset.queryPolicyApplies = String(applies && (!forRuleSet || Boolean(ruleSet)));
 		const ruleSetInput = form.querySelector("[data-query-detail-rule-set]");
 		if (ruleSetInput) ruleSetInput.value = ruleSet;
-		const button = form.querySelector("button");
-		button.querySelector("span").textContent = policyLabel(name.startsWith("block") ? "Block" : "Allow", forRuleSet);
-		if (name === "allow") button.classList.toggle("outline", Boolean(ruleSet));
 	  });
+	  const scope = dialog.querySelector("[data-query-policy-scope]");
+	  if (scope) {
+		scope.hidden = !ruleSet;
+		const ruleSetChoice = scope.querySelector('[data-query-policy-scope-choice="rule-set"]');
+		if (ruleSetChoice) ruleSetChoice.textContent = ruleSet;
+	  }
+	  showQueryPolicyScope(dialog, Boolean(ruleSet));
 	  const why = dialog.querySelector("[data-query-detail-why]");
 	  if (why) {
 		// A device in a rule set gets the answer for that device.

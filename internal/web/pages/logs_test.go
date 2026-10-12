@@ -170,23 +170,36 @@ func TestQueryPolicyActionsForARuleSet(t *testing.T) {
 	} {
 		for _, action := range []string{"block", "block-rule-set", "allow", "allow-rule-set"} {
 			verb, forRuleSet := strings.TrimSuffix(action, "-rule-set"), strings.HasSuffix(action, "-rule-set")
-			if got := queryPolicyShown(test.entry, verb, forRuleSet); got != test.want[action] {
-				t.Errorf("%s: %s shown = %t", test.name, action, got)
+			if got := queryPolicyApplies(test.entry, verb, forRuleSet); got != test.want[action] {
+				t.Errorf("%s: %s applies = %t", test.name, action, got)
 			}
 		}
 	}
-	for _, test := range []struct{ ruleSet, want string }{{"", "Block"}, {"Kids", "Block for Everyone"}} {
-		if got := queryPolicyLabel("Block", test.ruleSet, false); got != test.want {
-			t.Errorf("label with rule set %q = %q", test.ruleSet, got)
-		}
-	}
-	if got := queryPolicyLabel("Allow", "Kids", true); got != "Allow for Kids" {
-		t.Errorf("rule set label = %q", got)
-	}
+}
+
+// The scope control starts on the device's rule set and shows only that
+// side's actions; a side with nothing to offer is disabled.
+func TestQueryPolicyScope(t *testing.T) {
+	t.Parallel()
 	page := renderComponent(t, queryDetailFooter(QueryDetailView{CanBlocking: true, Entry: QueryLogEntryView{Name: "games.example", Source: "blocked", Decision: QueryDecisionView{RuleSet: "Kids", RuleSetBlock: true}}}))
-	for _, expected := range []string{`name="rule_set" value="Kids"`, "Allow for Kids", `data-query-detail-policy="allow" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend" hidden`} {
+	for _, expected := range []string{
+		`name="rule_set" value="Kids"`,
+		`data-query-policy-scope-choice="rule-set">Kids</button>`,
+		`data-query-policy-scope-choice="everyone" disabled>Everyone</button>`,
+		`data-query-detail-policy="allow" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend" data-query-policy-applies="false" hidden`,
+	} {
 		if !strings.Contains(page, expected) {
 			t.Errorf("query footer does not contain %q:\n%s", expected, page)
 		}
+	}
+	if strings.Contains(page, `data-query-detail-policy="allow-rule-set" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend" data-query-policy-applies="true" hidden`) {
+		t.Errorf("the rule set's Allow starts hidden:\n%s", page)
+	}
+	plain := renderComponent(t, queryDetailFooter(QueryDetailView{CanBlocking: true, Entry: QueryLogEntryView{Name: "ads.example", Source: "upstream"}}))
+	if !strings.Contains(plain, `data-query-policy-scope hidden`) {
+		t.Errorf("a device with no rule set shows the scope control:\n%s", plain)
+	}
+	if strings.Contains(plain, `data-query-detail-policy="block" hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend" data-query-policy-applies="true" hidden`) {
+		t.Errorf("Block for everyone starts hidden without a rule set:\n%s", plain)
 	}
 }
