@@ -8,6 +8,45 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.0-beta.14] - 2026-10-12
+
+Sable 1.7.0-beta.14 lets you block or allow a domain for one rule set straight
+from the query log, and moves all rule set editing into the rule set's panel.
+
+### Upgrading
+
+Nothing in the config changes going from 1.7.0-beta.13. Coming from 1.6.x, also
+read the 1.7.0-beta.1 upgrade notes below.
+
+- A schedule saved from the console now uses the time zone the console shows,
+  which Settings names, so editing a schedule there moves it to that zone.
+  Schedules written in the config keep their own `time_zone`.
+
+### Blocking
+
+- Block or allow a query's domain for its device's rule set from the query
+  log. When the query came from a device in a rule set, **Block** and
+  **Allow** are split buttons that read, for example,
+  **Block for Warehouse**, with **Everyone** on the arrow. Sable remembers
+  which you picked last.
+- Edit a rule set in its panel. The Edit dialog is gone: a pencil beside the
+  name renames it, and the **Blocking** switch and **Block Lists** checkboxes
+  save as soon as they change.
+- **Default** opens a panel with its block lists, like any other rule set,
+  and shows a locked delete button.
+- **Add Rule Set** asks only for a name, then opens the new rule set's panel.
+- The device fields on **Add Device** and **Check a Domain** are a searchable
+  list showing each device's icon and address.
+- The schedule form no longer asks for a time zone.
+
+### Console
+
+- The sidebar brand's hover is a pill, the sidebar account action is a
+  circle, and the collapse toggle sits centred on the brand row.
+- When the Administration or MCP client tab bars wrap to two rows on a phone,
+  they become rounded rectangles instead of a stretched pill, as Settings
+  already does.
+
 ## [1.7.0-beta.13] - 2026-10-11
 
 Sable 1.7.0-beta.13 lets you hide an Insights finding straight from its row,
