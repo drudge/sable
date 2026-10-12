@@ -170,7 +170,7 @@ button { cursor: pointer; }
   color: var(--sidebar-foreground);
   transition: width 180ms ease, flex-basis 180ms ease;
 }
-.sidebar-header { padding: var(--space-2) 0.375rem var(--space-1); }
+.sidebar-header { position: relative; padding: var(--space-2) 0.375rem var(--space-1); }
 .sidebar-header > div, .sidebar-header { min-width: 0; }
 .brand { display: flex; min-width: 0; flex: 1; align-items: center; gap: var(--space-2); border-radius: 999px; padding: var(--space-2) 2.75rem var(--space-2) var(--space-2); }
 .brand:hover { background: var(--sidebar-accent); }
@@ -186,7 +186,9 @@ button { cursor: pointer; }
 .brand-copy, .user-copy { display: grid; min-width: 0; flex: 1; line-height: 1.25; }
 .brand-copy strong, .user-copy strong { overflow: hidden; font-size: 0.875rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .brand-copy small, .user-copy small { overflow: hidden; color: var(--muted-foreground); font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar-collapse { position: absolute; top: 0.625rem; right: 0.5rem; display: grid; width: 2rem; height: 2rem; place-items: center; border: 0; border-radius: 50%; background: transparent; }
+/* The toggle's insets match the header's padding, so auto margins centre it
+   on the brand row whatever the brand's height. */
+.sidebar-collapse { position: absolute; top: var(--space-2); right: 0.5rem; bottom: var(--space-1); display: grid; width: 2rem; height: 2rem; margin-block: auto; place-items: center; border: 0; border-radius: 50%; background: transparent; }
 .sidebar-collapse:hover, .user-menu:hover { background: var(--sidebar-accent); }
 .sidebar-nav-wrap { position: relative; min-height: 0; flex: 1; }
 /* The list scrolls when the window is too short for it. Scrollbars stay out
@@ -1910,7 +1912,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 	/* Mobile navigation is used by touch, so keep the full menu on a deliberate
 	   48px rhythm instead of carrying over the compact desktop controls. */
 	.sidebar-header { flex: 0 0 auto; padding: var(--space-3); }
-	.sidebar-collapse { top: .75rem; right: .75rem; width: 2.75rem; height: 2.75rem; }
+	.sidebar-collapse { top: var(--space-3); right: .75rem; bottom: var(--space-3); width: 2.75rem; height: 2.75rem; }
 	.sidebar-nav-wrap { flex: 1 1 auto; }
 	.nav { padding: var(--space-1) var(--space-3) var(--space-3); }
 	/* Keep the section break visible without spending a full touch target on it. */
