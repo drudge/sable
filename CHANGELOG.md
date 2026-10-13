@@ -8,6 +8,22 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.0-beta.15] - 2026-10-12
+
+Sable 1.7.0-beta.15 makes block list and rule set rows open from anywhere you
+click, with a chevron showing they lead somewhere.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.0-beta.14. Coming from 1.6.x, also read
+the 1.7.0-beta.1 upgrade notes below.
+
+### Blocking
+
+- Click anywhere on a rule set row to open its panel, as block list rows
+  already did. Default's locked delete button still doesn't open it.
+- Block list and rule set rows end in a chevron.
+
 ## [1.7.0-beta.14] - 2026-10-12
 
 Sable 1.7.0-beta.14 lets you block or allow a domain for one rule set straight
