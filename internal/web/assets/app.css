@@ -150,6 +150,9 @@ button { cursor: pointer; }
    specific component rules may adjust the offset without removing the ring. */
 :where(a, button, summary, [tabindex]):focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 :where(.main, .nav, section[tabindex="-1"]):focus-visible { outline: 3px solid var(--ring); outline-offset: -3px; }
+/* A tap on the phone menu button parks focus on the drawer itself, which is
+   a container, not a control, so it never draws a ring. */
+.sidebar:focus { outline: none; }
 
 .app-shell { display: flex; min-height: 100vh; width: 100%; gap: var(--space-3); background: var(--shell-background); padding: var(--space-3); }
 .sidebar {

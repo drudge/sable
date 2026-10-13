@@ -4023,16 +4023,28 @@
 	};
 	syncSidebarToggleState();
 	// The one way the phone drawer opens or closes, whether by the menu
-	// button or a swipe; opening moves focus into the navigation.
-	const setMobileSidebarOpen = (open) => {
+	// button or a swipe. Opening moves focus into the drawer: a keyboard lands
+	// on the current page's link, while a tap or swipe parks focus on the
+	// drawer itself, so no link lights up under a finger and Tab still starts
+	// inside the navigation.
+	const setMobileSidebarOpen = (open, {keyboard = false} = {}) => {
 	  document.documentElement.classList.toggle("sidebar-mobile-open", open);
 	  syncSidebarToggleState();
-	  if (open) document.querySelector("#primary-navigation [aria-current=page], #primary-navigation a")?.focus();
+	  if (!open) return;
+	  if (keyboard) {
+		document.querySelector("#primary-navigation [aria-current=page], #primary-navigation a")?.focus();
+		return;
+	  }
+	  const sidebar = document.getElementById("app-sidebar");
+	  if (!sidebar) return;
+	  sidebar.tabIndex = -1;
+	  sidebar.focus({preventScroll: true});
 	};
 	  document.querySelectorAll("[data-sidebar-toggle]").forEach((button) => {
-      button.addEventListener("click", () => {
+      button.addEventListener("click", (event) => {
         if (window.matchMedia("(max-width: 767px)").matches) {
-		  setMobileSidebarOpen(!document.documentElement.classList.contains("sidebar-mobile-open"));
+		  // A click from Enter or Space carries no pointer press count.
+		  setMobileSidebarOpen(!document.documentElement.classList.contains("sidebar-mobile-open"), {keyboard: event.detail === 0});
           return;
         }
         const collapsed = document.documentElement.classList.toggle("sidebar-collapsed");
@@ -4064,7 +4076,7 @@
 	  if (event.key !== "Tab" || controls.length === 0) return;
 	  const first = controls[0];
 	  const last = controls.at(-1);
-	  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+	  if (event.shiftKey && (document.activeElement === first || document.activeElement === sidebar)) { event.preventDefault(); last.focus(); }
 	  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 	});
 	window.addEventListener("resize", () => {
@@ -4072,6 +4084,27 @@
 	  document.documentElement.classList.remove("sidebar-mobile-open");
 	  syncSidebarToggleState();
 	});
+
+	// Closing a modal leaves the page where it was when the modal opened.
+	// Freezing the root for a modal costs iOS Safari its scroll position, so
+	// on a phone the page came back at the top. The position is taken as the
+	// first dialog opens and put back as the last one closes. Watching the
+	// open attribute does both before the browser lays out the change, and
+	// before anything a close sets off afterwards, such as the command palette
+	// scrolling to what was picked.
+	(() => {
+	  const anyOpen = () => document.querySelector("dialog[open]") !== null;
+	  const position = () => ({ x: window.scrollX, y: window.scrollY });
+	  let saved = anyOpen() ? position() : null;
+	  new MutationObserver(() => {
+		const open = anyOpen();
+		if (open && !saved) saved = position();
+		if (open || !saved) return;
+		const { x, y } = saved;
+		saved = null;
+		window.scrollTo({ left: x, top: y, behavior: "instant" });
+	  }).observe(document.body, { attributes: true, attributeFilter: ["open"], subtree: true });
+	})();
 
 	// The page behind a modal stays put under a finger. The stylesheet's
 	// overflow: hidden on the root covers wheels and trackpads, but iOS Safari
