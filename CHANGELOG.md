@@ -8,6 +8,22 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.0-beta.17] - 2026-10-13
+
+Sable 1.7.0-beta.17 lets you scroll a drawer in Safari while the pointer or
+your finger is over one of its lists.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.0-beta.16. Coming from 1.6.x, also read
+the 1.7.0-beta.1 upgrade notes below.
+
+### Console
+
+- In Safari and on iPhone, a wheel or swipe over a list inside a drawer, such
+  as a device's apps or addresses, now scrolls the drawer. It used to do
+  nothing until you moved off the list.
+
 ## [1.7.0-beta.16] - 2026-10-12
 
 Sable 1.7.0-beta.16 fixes two phone annoyances in the console: the menu no
