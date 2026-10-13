@@ -62,7 +62,41 @@ const refused = page => page.evaluate(() => window.lastTouchRefused);
     assert.equal(await refused(page), false, 'the modal scroller takes the touch');
     await page.waitForTimeout(200);
     assert.ok(await page.evaluate(() => document.querySelector('#cache-browser-dialog .cache-browser-body').scrollTop) > 0, 'the modal scroller moves');
-    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#cache-browser-dialog .cache-browser-body')).overscrollBehaviorY), 'contain');
+    // The modal contains its overscroll; nothing inside it does, so a clipped
+    // box such as a rounded list never swallows a scroll meant for the body
+    // around it, as Safari lets one that contains its overscroll do.
+    const overscroll = await page.evaluate(() => {
+      const dialog = document.getElementById('cache-browser-dialog');
+      const list = document.createElement('div');
+      list.style.overflow = 'hidden';
+      dialog.querySelector('.cache-browser-body').prepend(list);
+      const behavior = element => getComputedStyle(element).overscrollBehaviorY;
+      return [behavior(dialog), behavior(dialog.querySelector('.cache-browser-body')), behavior(list)];
+    });
+    assert.deepEqual(overscroll, ['contain', 'auto', 'auto'], 'only the modal contains its overscroll');
+
+    // A finger over a clipped box inside the scroller still moves the scroller.
+    const clipped = await page.evaluate(() => {
+      const body = document.querySelector('#cache-browser-dialog .cache-browser-body');
+      const list = body.firstElementChild;
+      list.style.height = '120px';
+      list.append(Object.assign(document.createElement('div'), {style: 'height: 121px'}));
+      const r = list.getBoundingClientRect();
+      return [r.x + r.width / 2, Math.max(r.y, body.getBoundingClientRect().y) + 40];
+    });
+    const before = await page.evaluate(() => document.querySelector('#cache-browser-dialog .cache-browser-body').scrollTop);
+    await drag(cdp, clipped, [clipped[0], clipped[1] - 150]);
+    assert.equal(await refused(page), false, 'a clipped box hands the touch to the scroller around it');
+    await page.waitForTimeout(200);
+    assert.ok(await page.evaluate(() => document.querySelector('#cache-browser-dialog .cache-browser-body').scrollTop) > before, 'the scroller moves under a clipped box');
+
+    // A scroller already at its top would pass a pull down on to the page,
+    // so the guard refuses it.
+    await page.evaluate(() => { document.querySelector('#cache-browser-dialog .cache-browser-body').scrollTop = 0; });
+    await page.waitForTimeout(100);
+    const top = await page.evaluate(() => { const r = document.querySelector('#cache-browser-dialog .cache-browser-body').getBoundingClientRect(); return [r.x + r.width / 2, r.y + 20]; });
+    await drag(cdp, top, [top[0], top[1] + 150]);
+    assert.equal(await refused(page), true, 'a scroller at its edge does not pass the touch to the page');
     await page.evaluate(() => document.getElementById('cache-browser-dialog').close());
 
     // Closing a modal leaves the page where it was, even when the browser
