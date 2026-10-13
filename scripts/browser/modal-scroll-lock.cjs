@@ -63,6 +63,16 @@ const refused = page => page.evaluate(() => window.lastTouchRefused);
     await page.waitForTimeout(200);
     assert.ok(await page.evaluate(() => document.querySelector('#cache-browser-dialog .cache-browser-body').scrollTop) > 0, 'the modal scroller moves');
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#cache-browser-dialog .cache-browser-body')).overscrollBehaviorY), 'contain');
+    await page.evaluate(() => document.getElementById('cache-browser-dialog').close());
+
+    // Closing a modal leaves the page where it was, even when the browser
+    // lost the position while the root was frozen, as iOS Safari does.
+    await page.evaluate(() => window.scrollTo(0, 1500));
+    await page.evaluate(() => document.getElementById('cache-flush-dialog').showModal());
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.evaluate(() => document.getElementById('cache-flush-dialog').close());
+    await page.waitForTimeout(100);
+    assert.equal(await page.evaluate(() => window.scrollY), 1500, 'closing a modal puts the page back');
     console.log('modal scroll lock: ok');
   } finally {
     await browser.close();

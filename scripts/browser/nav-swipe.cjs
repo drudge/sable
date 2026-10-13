@@ -61,7 +61,26 @@ const close = async page => {
     assert.equal(await drawerX(page), 0);
     assert.equal(await page.evaluate(() => document.getElementById('app-sidebar').style.transform), '');
     assert.equal(await page.evaluate(() => document.documentElement.classList.contains('sidebar-dragging')), false);
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'app-sidebar', 'a swipe parks focus on the drawer, not a link');
     console.log('PASS drag right opens the drawer, following the finger');
+    await close(page);
+
+    // A tap on the menu button lights up no link; Enter on it lands on one.
+    const menu = '[data-mobile-header] [data-sidebar-toggle]';
+    await page.tap(menu);
+    await settle(page);
+    assert.equal(await isOpen(page), true, 'a tap opens the drawer');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'app-sidebar', 'a tap parks focus on the drawer');
+    assert.equal(await page.evaluate(() => document.querySelector('#primary-navigation :focus-visible')), null);
+    await page.keyboard.press('Tab');
+    assert.ok(await page.evaluate(() => document.getElementById('primary-navigation').contains(document.activeElement) || document.getElementById('app-sidebar').contains(document.activeElement)), 'Tab starts inside the drawer');
+    await close(page);
+    await page.focus(menu);
+    await page.keyboard.press('Enter');
+    await settle(page);
+    assert.equal(await isOpen(page), true, 'Enter opens the drawer');
+    assert.ok(await page.evaluate(() => document.activeElement?.closest('#primary-navigation') !== null), 'Enter moves focus to a navigation link');
+    console.log('PASS the menu button moves focus to a link only from the keyboard');
     await close(page);
 
     // A short, slow drag snaps back.
