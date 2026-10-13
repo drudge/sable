@@ -8,6 +8,25 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.0-beta.16] - 2026-10-12
+
+Sable 1.7.0-beta.16 fixes two phone annoyances in the console: the menu no
+longer opens with a link highlighted, and closing a dialog no longer jumps the
+page back to the top.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.0-beta.15. Coming from 1.6.x, also read
+the 1.7.0-beta.1 upgrade notes below.
+
+### Console
+
+- Tapping or swiping open the phone menu no longer draws a focus ring around
+  the current page's link. Opening it from the keyboard still focuses that
+  link, and Tab still starts inside the navigation.
+- Closing a dialog keeps your place on the page. iOS Safari used to scroll
+  back to the top.
+
 ## [1.7.0-beta.15] - 2026-10-12
 
 Sable 1.7.0-beta.15 makes block list and rule set rows open from anywhere you
