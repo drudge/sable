@@ -8,6 +8,20 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.1-beta.3] - 2026-10-14
+
+Sable 1.7.1-beta.3 is beta.2 rebuilt on current dependencies. There are no
+behavior changes.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.0, 1.7.1-beta.1, or 1.7.1-beta.2.
+
+### Dependencies
+
+- Updated golang.org/x/crypto, x/net, x/sys, and related golang.org/x modules,
+  the templ console renderer, and the CBOR library used for passkeys.
+
 ## [1.7.1-beta.2] - 2026-10-14
 
 Sable 1.7.1-beta.2 finishes the Logs speed-up from beta.1. Filtering the query
