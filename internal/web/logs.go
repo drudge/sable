@@ -50,10 +50,24 @@ func (server *Server) logsPage(writer http.ResponseWriter, request *http.Request
 	if activeTab != "queries" {
 		activeTab = "server"
 	}
-	view := pages.LogsPageView{Console: server.consoleView(request), ActiveTab: activeTab}
-	view.Runtime = server.runtimeLogsView(request)
-	view.Queries = server.queryLogsView(request)
-	view.Queries.CanBlocking = view.Console.CanBlocking
+	console := server.consoleView(request)
+	view := pages.LogsPageView{Console: console, ActiveTab: activeTab}
+	// Only the tab that shows reads its log; the other loads when opened.
+	// The query details dialog sits outside both and needs only the filter.
+	pending := "/ui/logs/queries"
+	if activeTab == "queries" {
+		pending = "/ui/logs/runtime"
+		view.Queries = server.loadQueryLogsView(request, server.queryLogsFilterView(request, console))
+	} else {
+		view.Runtime = server.runtimeLogsView(request)
+		view.Queries = server.queryLogsFilterView(request, console)
+	}
+	pendingValues := request.URL.Query()
+	pendingValues.Del("tab")
+	view.PendingURL = pending
+	if encoded := pendingValues.Encode(); encoded != "" {
+		view.PendingURL += "?" + encoded
+	}
 	server.render(writer, request, pages.LogsPage(view))
 }
 
@@ -227,9 +241,15 @@ func (server *Server) queryLogsPanel(writer http.ResponseWriter, request *http.R
 }
 
 func (server *Server) queryLogsView(request *http.Request) pages.QueryLogsView {
+	return server.loadQueryLogsView(request, server.queryLogsFilterView(request, server.consoleView(request)))
+}
+
+// queryLogsFilterView is the query log's filter as the request asks for it,
+// without reading the log.
+func (server *Server) queryLogsFilterView(request *http.Request, console pages.DashboardView) pages.QueryLogsView {
 	filter, raw := queryLogFilter(request)
 	display := requestTimeDisplay(request)
-	view := pages.QueryLogsView{
+	return pages.QueryLogsView{
 		Page: filter.Page, PageSize: filter.PageSize, ClientIP: raw.Get("client_ip"),
 		Name: raw.Get("name"), Search: raw.Get("q"), RecordType: strings.ToUpper(raw.Get("record_type")),
 		ResponseCode: strings.ToUpper(raw.Get("response_code")), Source: raw.Get("source"), Protocol: strings.ToUpper(raw.Get("protocol")),
@@ -237,8 +257,14 @@ func (server *Server) queryLogsView(request *http.Request) pages.QueryLogsView {
 		Exact: filter.Exact,
 		Live:  liveRequested(raw, true), FiltersOpen: raw.Get("filters") == "1",
 		// Only operators who can change alert settings can add a watch.
-		CanWatch: server.alerts != nil && server.consoleView(request).CanWriteSettings,
+		CanWatch:    server.alerts != nil && console.CanWriteSettings,
+		CanBlocking: console.CanBlocking,
 	}
+}
+
+// loadQueryLogsView reads the page of the query log the filter view asks for.
+func (server *Server) loadQueryLogsView(request *http.Request, view pages.QueryLogsView) pages.QueryLogsView {
+	filter, raw := queryLogFilter(request)
 	pager, ok := server.queries.(queryEventPager)
 	if !ok {
 		view.Error = "The configured query log store does not support browsing."

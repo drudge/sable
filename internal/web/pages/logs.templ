@@ -15,6 +15,9 @@ type LogsPageView struct {
 	ActiveTab string
 	Runtime   RuntimeLogsView
 	Queries   QueryLogsView
+	// PendingURL loads the tab that isn't showing once it is opened, so a
+	// visit reads only the log it shows.
+	PendingURL string
 }
 
 type RuntimeLogsView struct {
@@ -105,9 +108,31 @@ templ LogsContent(view LogsPageView) {
 	<div class="logs-page page-stack isotope-control-page" data-isotope-tabs data-active-tab={ view.ActiveTab } data-tab-param="tab" data-title-base="Logs">
 		@components.PageHeader(components.PageHeaderProps{Title: "Logs", Description: "View server logs and DNS query history", Actions: logsSettingsLink()})
 		@components.Tabs(components.TabsProps{Label: "Log sources", Class: "logs-tab-list", Active: view.ActiveTab, Tabs: tabList(logsTabs)})
-		<div class="logs-tab-panel" role="tabpanel" data-isotope-panel="server" hidden?={ view.ActiveTab != "server" }>@RuntimeLogsPanel(view.Runtime)</div>
-		<div class="logs-tab-panel" role="tabpanel" data-isotope-panel="queries" hidden?={ view.ActiveTab != "queries" }>@QueryLogsPanel(view.Queries)</div>
+		<div class="logs-tab-panel" role="tabpanel" data-isotope-panel="server" hidden?={ view.ActiveTab != "server" }>
+			if view.ActiveTab == "server" {
+				@RuntimeLogsPanel(view.Runtime)
+			} else {
+				@pendingLogsPanel("runtime-logs-panel", view.PendingURL, "Loading server logs…")
+			}
+		</div>
+		<div class="logs-tab-panel" role="tabpanel" data-isotope-panel="queries" hidden?={ view.ActiveTab != "queries" }>
+			if view.ActiveTab == "queries" {
+				@QueryLogsPanel(view.Queries)
+			} else {
+				@pendingLogsPanel("query-logs-panel", view.PendingURL, "Loading DNS queries…")
+			}
+		</div>
 	</div>
+}
+
+// pendingLogsPanel stands in for the log in a hidden tab. It loads when the
+// tab first shows: a hidden panel takes no space, so it can't intersect the
+// viewport until then.
+templ pendingLogsPanel(id, loadURL, loading string) {
+	@components.Card(components.CardProps{ID: id, Class: "logs-card", Attrs: templ.Attributes{"role": "status", "aria-live": "polite", "aria-busy": "true", "hx-get": loadURL, "hx-trigger": "revealed", "hx-swap": "outerHTML"}}) {
+		<span class="sr-only">{ loading }</span>
+		<div class="logs-empty" aria-hidden="true"><span class="insights-skeleton-block"></span></div>
+	}
 }
 
 templ RuntimeLogsPanel(view RuntimeLogsView) {
