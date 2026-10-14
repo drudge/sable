@@ -35,7 +35,8 @@ func TestLogsExposeKeyboardReadableRegionsAndActions(t *testing.T) {
 		Runtime:   RuntimeLogsView{Entries: []RuntimeLogEntryView{{OccurredAt: "now", Level: "info", Message: "ready"}}},
 		Queries:   QueryLogsView{PageSize: 25, Entries: []QueryLogEntryView{{Name: "example.test", Source: "cache", Status: "NOERROR"}}},
 	}
-	page := renderComponent(t, LogsContent(view))
+	// The page renders only the open tab; the runtime log loads on its own.
+	page := renderComponent(t, LogsContent(view)) + renderComponent(t, RuntimeLogsPanel(view.Runtime))
 	for _, expected := range []string{
 		`role="tabpanel"`, `aria-labelledby="runtime-log-title"`,
 		`role="log"`, `aria-label="Runtime log entries"`,

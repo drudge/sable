@@ -102,3 +102,36 @@ func benchmarkQueryEvents(count int, occurredAt time.Time) []querylog.Event {
 	}
 	return events
 }
+
+// BenchmarkQueryEventsFirstPage is the Logs page's default read: the newest
+// page of the whole log, with its total counted or estimated.
+func BenchmarkQueryEventsFirstPage(b *testing.B) {
+	ctx := context.Background()
+	opened, err := Open(ctx, "sqlite", ":memory:")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer opened.Close()
+	now := time.Now().UTC().Truncate(time.Second)
+	for written := 0; written < benchmarkQueryLogRows; written += benchmarkQueryLogBatchSize {
+		batchSize := min(benchmarkQueryLogBatchSize, benchmarkQueryLogRows-written)
+		if err := opened.WriteQueryEvents(ctx, benchmarkQueryEvents(batchSize, now)); err != nil {
+			b.Fatal(err)
+		}
+	}
+	for _, estimate := range []bool{false, true} {
+		name := "counted"
+		if estimate {
+			name = "estimated"
+		}
+		b.Run(name, func(b *testing.B) {
+			b.ReportMetric(benchmarkQueryLogRows, "rows")
+			b.ReportAllocs()
+			for b.Loop() {
+				if _, err := opened.QueryEvents(ctx, querylog.Filter{Page: 1, PageSize: 50, EstimateTotal: estimate}); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}

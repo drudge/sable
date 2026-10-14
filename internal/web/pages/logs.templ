@@ -15,6 +15,9 @@ type LogsPageView struct {
 	ActiveTab string
 	Runtime   RuntimeLogsView
 	Queries   QueryLogsView
+	// PendingURL loads the tab that isn't showing once it is opened, so a
+	// visit reads only the log it shows.
+	PendingURL string
 }
 
 type RuntimeLogsView struct {
@@ -52,6 +55,8 @@ type QueryLogsView struct {
 	PageSize     int
 	TotalEntries int
 	TotalPages   int
+	// TotalEstimated marks TotalEntries as read from the log's ID span.
+	TotalEstimated bool
 	ClientIP     string
 	Name         string
 	// Search is the box above the table, which looks through the domain, the
@@ -105,9 +110,31 @@ templ LogsContent(view LogsPageView) {
 	<div class="logs-page page-stack isotope-control-page" data-isotope-tabs data-active-tab={ view.ActiveTab } data-tab-param="tab" data-title-base="Logs">
 		@components.PageHeader(components.PageHeaderProps{Title: "Logs", Description: "View server logs and DNS query history", Actions: logsSettingsLink()})
 		@components.Tabs(components.TabsProps{Label: "Log sources", Class: "logs-tab-list", Active: view.ActiveTab, Tabs: tabList(logsTabs)})
-		<div class="logs-tab-panel" role="tabpanel" data-isotope-panel="server" hidden?={ view.ActiveTab != "server" }>@RuntimeLogsPanel(view.Runtime)</div>
-		<div class="logs-tab-panel" role="tabpanel" data-isotope-panel="queries" hidden?={ view.ActiveTab != "queries" }>@QueryLogsPanel(view.Queries)</div>
+		<div class="logs-tab-panel" role="tabpanel" data-isotope-panel="server" hidden?={ view.ActiveTab != "server" }>
+			if view.ActiveTab == "server" {
+				@RuntimeLogsPanel(view.Runtime)
+			} else {
+				@pendingLogsPanel("runtime-logs-panel", view.PendingURL, "Loading server logs…")
+			}
+		</div>
+		<div class="logs-tab-panel" role="tabpanel" data-isotope-panel="queries" hidden?={ view.ActiveTab != "queries" }>
+			if view.ActiveTab == "queries" {
+				@QueryLogsPanel(view.Queries)
+			} else {
+				@pendingLogsPanel("query-logs-panel", view.PendingURL, "Loading DNS queries…")
+			}
+		</div>
 	</div>
+}
+
+// pendingLogsPanel stands in for the log in a hidden tab. It loads when the
+// tab first shows: a hidden panel takes no space, so it can't intersect the
+// viewport until then.
+templ pendingLogsPanel(id, loadURL, loading string) {
+	@components.Card(components.CardProps{ID: id, Class: "logs-card", Attrs: templ.Attributes{"role": "status", "aria-live": "polite", "aria-busy": "true", "hx-get": loadURL, "hx-trigger": "revealed", "hx-swap": "outerHTML"}}) {
+		<span class="sr-only">{ loading }</span>
+		<div class="logs-empty" aria-hidden="true"><span class="insights-skeleton-block"></span></div>
+	}
 }
 
 templ RuntimeLogsPanel(view RuntimeLogsView) {
@@ -155,7 +182,7 @@ templ QueryLogsPanel(view QueryLogsView) {
 	@components.Card(components.CardProps{ID: "query-logs-panel", Class: "logs-card", Attrs: templ.Attributes{"aria-labelledby": "query-log-title", "tabindex": "-1", "data-log-live-panel": true, "data-live-refresh": true, "data-live": fmt.Sprint(view.Live), "data-live-url": queryPanelLiveURL(view), "data-page-url": queryFilterURL(view)}}) {
 		<header class="logs-toolbar query-logs-toolbar">
 			<div>
-				<div class="log-title"><h2 id="query-log-title">@Icon("logs")<span>DNS Query Log</span></h2><span class="log-total">{ fmt.Sprintf("%s entries", formatNumber(view.TotalEntries)) }</span></div>
+				<div class="log-title"><h2 id="query-log-title">@Icon("logs")<span>DNS Query Log</span></h2><span class="log-total">{ fmt.Sprintf("%s entries", queryTotal(view)) }</span></div>
 				if len(tokens) > 0 {
 					<div class="query-filter-tokens">
 						for _, token := range tokens {
@@ -771,7 +798,9 @@ func queryRangeLabel(view QueryLogsView) string {
 	}
 	return "Any time"
 }
-func queryPageSummary(view QueryLogsView) string { if view.TotalEntries == 0 { return "0 results" }; first := (view.Page-1)*view.PageSize+1; last := min(view.TotalEntries, view.Page*view.PageSize); return fmt.Sprintf("%s–%s of %s", formatNumber(first), formatNumber(last), formatNumber(view.TotalEntries)) }
+func queryPageSummary(view QueryLogsView) string { if view.TotalEntries == 0 { return "0 results" }; first := (view.Page-1)*view.PageSize+1; last := min(view.TotalEntries, view.Page*view.PageSize); return fmt.Sprintf("%s–%s of %s", formatNumber(first), formatNumber(last), queryTotal(view)) }
+// queryTotal is the log's size, marked when it was estimated rather than counted.
+func queryTotal(view QueryLogsView) string { if view.TotalEstimated { return "~" + formatNumber(view.TotalEntries) }; return formatNumber(view.TotalEntries) }
 func logSourceLabel(source string) string { switch source { case "cache": return "Cached"; case "upstream": return "Recursive"; case "authoritative": return "Authoritative"; case "local": return "Local"; case "blocked": return "Blocked"; case "error": return "Error"; default: return source } }
 // runtimeLogURL names the same slice of the log for the panel and for the
 // export. The follow flag is spelled out rather than left off when paused,
@@ -811,6 +840,9 @@ func queryPanelLiveURL(view QueryLogsView) string {
 		values.Set("live", "1")
 		values.Set("known_total", fmt.Sprint(view.TotalEntries))
 		values.Set("after_id", fmt.Sprint(view.NewestID))
+		if view.TotalEstimated {
+			values.Set("estimated", "1")
+		}
 	}
 	if view.FiltersOpen {
 		values.Set("filters", "1")

@@ -145,8 +145,14 @@ type Filter struct {
 	UseKnownTotal bool
 	AfterID       int64
 	Incremental   bool
-	ClientIP      string
-	Name          string
+	// EstimateTotal lets an unfiltered count come from the span of row IDs,
+	// two index seeks, instead of counting every retained row. The total
+	// can then run a little high; Page.TotalEstimated says so.
+	EstimateTotal bool
+	// KnownTotalEstimated says KnownTotal came from such an estimate.
+	KnownTotalEstimated bool
+	ClientIP            string
+	Name                string
 	// Search matches a substring of the domain, the client address, or the
 	// answer, which is what an operator means when they type a name into the
 	// log's one search box without saying which column it belongs to.
@@ -298,6 +304,8 @@ type Page struct {
 	PageSize     int     `json:"page_size"`
 	TotalEntries int     `json:"total_entries"`
 	TotalPages   int     `json:"total_pages"`
+	// TotalEstimated marks a total read from the ID span rather than counted.
+	TotalEstimated bool `json:"total_estimated,omitempty"`
 }
 
 type Observer interface {

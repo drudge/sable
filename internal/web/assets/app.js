@@ -3191,6 +3191,8 @@
 	  const poll = () => {
 		if (!document.contains(panel)) { stop(); return; }
 		if (document.hidden || requestInFlight || isLiveRegionInUse(panel) || panel.dataset.live !== "true") return;
+		// A log in a tab that isn't showing waits; it catches up when shown.
+		if (panel.closest("[data-isotope-panel][hidden]")) return;
 		requestInFlight = true;
 		htmx.ajax("GET", panel.dataset.liveUrl, {source: panel, target: `#${panel.id}`, swap: "outerHTML"})
 		  .finally?.(() => { requestInFlight = false; pollRequest = null; });
@@ -4110,18 +4112,24 @@
 	// overflow: hidden on the root covers wheels and trackpads, but iOS Safari
 	// still scrolls the document by touch, and once it does the toolbar
 	// collapses and the drawer slides away with the page. A touch move is
-	// refused unless it lands in something inside the modal that can scroll
-	// along the gesture; those scrollers contain their own overscroll.
+	// refused unless it lands in something inside the modal that can still
+	// scroll the way the finger is going. A scroller already at that edge
+	// would hand the gesture on to the page, so it counts as one that can't.
 	(() => {
-	  const scrolls = (element, vertical) => {
+	  // forward is a finger moving up or left, which scrolls toward the end.
+	  const scrolls = (element, vertical, forward) => {
 		const style = getComputedStyle(element);
 		const overflow = vertical ? style.overflowY : style.overflowX;
 		if (overflow !== "auto" && overflow !== "scroll") return false;
-		return vertical ? element.scrollHeight > element.clientHeight + 1 : element.scrollWidth > element.clientWidth + 1;
+		const [position, size, view] = vertical
+		  ? [element.scrollTop, element.scrollHeight, element.clientHeight]
+		  : [Math.abs(element.scrollLeft), element.scrollWidth, element.clientWidth];
+		if (size <= view + 1) return false;
+		return forward ? position + view < size - 1 : position > 0;
 	  };
-	  const ownsScroll = (target, dialog, vertical) => {
+	  const ownsScroll = (target, dialog, vertical, forward) => {
 		for (let element = target; element && element !== dialog.parentElement; element = element.parentElement) {
-		  if (scrolls(element, vertical)) return true;
+		  if (scrolls(element, vertical, forward)) return true;
 		  if (element === dialog) break;
 		}
 		return false;
@@ -4140,8 +4148,10 @@
 		// Text fields and range inputs own their drags.
 		if (inside?.closest("input, textarea, select, [contenteditable]")) return;
 		const touch = event.touches[0];
-		const vertical = Math.abs(touch.clientY - start.y) >= Math.abs(touch.clientX - start.x);
-		if (!inside || !ownsScroll(inside, modal, vertical)) event.preventDefault();
+		const dx = touch.clientX - start.x;
+		const dy = touch.clientY - start.y;
+		const vertical = Math.abs(dy) >= Math.abs(dx);
+		if (!inside || !ownsScroll(inside, modal, vertical, (vertical ? dy : dx) < 0)) event.preventDefault();
 	  }, { passive: false });
 	})();
 
