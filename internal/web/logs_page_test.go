@@ -143,3 +143,43 @@ func TestQueryLogPanelMarksAnEstimatedTotal(t *testing.T) {
 		t.Errorf("export counted the log or asked for an estimate: %+v", exported)
 	}
 }
+
+// pagedLogStore answers every read with the same page of an estimated log.
+type pagedLogStore struct {
+	testServerLogStore
+	page querylog.Page
+}
+
+func (store *pagedLogStore) QueryEvents(context.Context, querylog.Filter) (querylog.Page, error) {
+	return store.page, nil
+}
+
+// From the page before the last, Last pages older from this page's oldest
+// row, as Next does, so an estimated total can't make the last page repeat
+// rows from this one.
+func TestQueryLogLastPageFollowsTheCursorFromThePageBefore(t *testing.T) {
+	t.Parallel()
+
+	entries := []querylog.Entry{{ID: 7, Name: "a.example."}, {ID: 6, Name: "b.example."}, {ID: 5, Name: "c.example."}}
+	for _, test := range []struct {
+		page int
+		want string
+	}{
+		{2, "cursor=5&amp;direction=older"},
+		{1, "direction=oldest"},
+	} {
+		store := &pagedLogStore{page: querylog.Page{
+			Entries: entries, Page: test.page, PageSize: 3, TotalEntries: 9, TotalPages: 3, TotalEstimated: true,
+		}}
+		server := newCountingLogTestServer(t, store)
+		body := serveRequest(server, "GET", "/ui/logs/queries").Body.String()
+		end := strings.Index(body, `aria-label="Last page"`)
+		if end < 0 {
+			t.Fatal("query log panel has no Last page button")
+		}
+		start := strings.LastIndex(body[:end], `hx-get="`)
+		if last := body[start:end]; !strings.Contains(last, test.want) {
+			t.Errorf("page %d: Last page = %s; want %s", test.page, last, test.want)
+		}
+	}
+}
