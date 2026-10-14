@@ -237,9 +237,7 @@ func (store *Store) PruneQueryEvents(ctx context.Context, before time.Time) erro
 		store.queryLogRows.forget()
 		return fmt.Errorf("prune query log: %w", err)
 	}
-	if err := store.queryLogRows.pruned(ctx, store, deleted); err != nil {
-		return err
-	}
+	counted := store.queryLogRows.pruned(deleted)
 	// Drop the cutoff minute as well because its aggregate can include rows
 	// from before the exact cutoff. Surviving rows in that partial minute remain
 	// available through the raw log boundary query.
@@ -250,7 +248,15 @@ func (store *Store) PruneQueryEvents(ctx context.Context, before time.Time) erro
 	if err := store.pruneRollupTiers(ctx, bucket); err != nil {
 		return err
 	}
-	return store.pruneClientSightings(ctx, before)
+	if err := store.pruneClientSightings(ctx, before); err != nil {
+		return err
+	}
+	// The count only sharpens the Logs tab's estimate, so it comes last, where
+	// a count that fails can't hold back the rest of retention.
+	if !counted {
+		return store.queryLogRows.count(ctx, store)
+	}
+	return nil
 }
 
 const (
@@ -520,8 +526,11 @@ func (store *Store) estimateQueryEvents(ctx context.Context) (int, error) {
 // background where a cold count's seconds cost nobody a page load; each later
 // prune subtracts the rows it deleted, and rows written since are the IDs
 // past the newest one counted. Writes the count doesn't see, such as another
-// node pruning a shared PostgreSQL log, can only leave it high, as the span
-// is, so the estimate takes the smaller of the two.
+// node pruning a shared PostgreSQL log, leave it high, as the span is, so the
+// estimate takes the smaller of the two. On PostgreSQL it can also run a few
+// rows low: a row whose sequence ID was taken before the count but committed
+// after it is in neither the count nor the IDs past it. Either way the total
+// is shown as an estimate.
 type queryLogCount struct {
 	mutex    sync.Mutex
 	known    bool
@@ -533,16 +542,19 @@ type queryLogCount struct {
 // so both come from the same snapshot.
 const queryLogCountQuery = "SELECT COUNT(*), COALESCE(MAX(id), 0) FROM sable_query_log"
 
-// pruned takes a prune's deletions off the count, or counts the log if it
-// hasn't been counted yet.
-func (count *queryLogCount) pruned(ctx context.Context, store *Store, deleted int64) error {
+// pruned takes a prune's deletions off the count and says whether there was
+// one to take them off; if not, the caller counts the log.
+func (count *queryLogCount) pruned(deleted int64) bool {
 	count.mutex.Lock()
+	defer count.mutex.Unlock()
 	if count.known {
 		count.rows = max(count.rows-int(deleted), 0)
-		count.mutex.Unlock()
-		return nil
 	}
-	count.mutex.Unlock()
+	return count.known
+}
+
+// count counts the log and reads its newest ID.
+func (count *queryLogCount) count(ctx context.Context, store *Store) error {
 	var rows int
 	var newestID int64
 	if err := store.database.QueryRowContext(ctx, queryLogCountQuery).Scan(&rows, &newestID); err != nil {
