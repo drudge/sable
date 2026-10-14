@@ -184,7 +184,7 @@ func (store *Store) upsertSpans(ctx context.Context, executor interface {
 // cutoff, so first-seen history never outlives the queries behind it.
 func (store *Store) pruneClientSightings(ctx context.Context, before time.Time) error {
 	for _, table := range []string{"sable_client_seen", "sable_client_domain_seen", "sable_client_identity"} {
-		if err := store.deleteInChunks(ctx, table, "last_seen < "+store.placeholder(1), before.UTC()); err != nil {
+		if _, err := store.deleteInChunks(ctx, table, "last_seen < "+store.placeholder(1), before.UTC()); err != nil {
 			return fmt.Errorf("prune %s: %w", table, err)
 		}
 	}

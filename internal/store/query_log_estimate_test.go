@@ -103,6 +103,70 @@ func TestQueryEventsEstimatesOnlyTheUnfilteredTotal(t *testing.T) {
 	}
 }
 
+// Pruning by time leaves holes wherever IDs and times disagree, which the ID
+// span keeps counting. Once a prune has counted the log, the estimate follows
+// the real row count: deletions come off it and new rows are added on.
+func TestQueryEventsEstimateDoesNotCountPrunedHoles(t *testing.T) {
+	t.Parallel()
+
+	base := time.Date(2026, time.October, 14, 12, 0, 0, 0, time.UTC)
+	event := func(minute int) querylog.Event {
+		return querylog.Event{
+			OccurredAt: base.Add(time.Duration(minute) * time.Minute), ClientIP: "192.0.2.1", Name: "holes.example.",
+			RecordType: dns.TypeA, Class: dns.ClassINET, Source: querylog.SourceCache, Protocol: "UDP",
+		}
+	}
+	// IDs 1 through 10; the even IDs were logged an hour late, as a replica
+	// catching up or a clock step can leave them.
+	events := make([]querylog.Event, 10)
+	for index := range events {
+		minute := index
+		if index%2 == 1 {
+			minute = index + 60
+		}
+		events[index] = event(minute)
+	}
+	opened := openQueryLogStore(t, events)
+	opened.exactCountRows = 1
+	ctx := context.Background()
+	estimate := func(want int) {
+		t.Helper()
+		page, err := opened.QueryEvents(ctx, querylog.Filter{Page: 1, PageSize: 3, EstimateTotal: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if page.TotalEntries != want || !page.TotalEstimated {
+			t.Fatalf("estimate = %d, estimated %t; want %d, true", page.TotalEntries, page.TotalEstimated, want)
+		}
+	}
+
+	// Before any prune the span is all there is.
+	estimate(10)
+	// Pruning before minute 9 deletes the odd IDs 1 through 9, leaving the
+	// even IDs 2 through 10: a span of 9 holding 5 rows.
+	if err := opened.PruneQueryEvents(ctx, base.Add(9*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	estimate(5)
+	// New rows add on from the newest ID counted.
+	if err := opened.WriteQueryEvents(ctx, []querylog.Event{event(120), event(121)}); err != nil {
+		t.Fatal(err)
+	}
+	estimate(7)
+	// A later prune takes off what it deleted without counting again.
+	if err := opened.PruneQueryEvents(ctx, base.Add(62*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	estimate(6)
+	counted, err := opened.QueryEvents(ctx, querylog.Filter{Page: 1, PageSize: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counted.TotalEntries != 6 {
+		t.Fatalf("exact count = %d, want 6", counted.TotalEntries)
+	}
+}
+
 // The estimate is only worth having while it reads the ends of the primary
 // key; a plan that scans the log is the COUNT(*) it replaced.
 func TestQueryLogSpanQuerySeeksRatherThanScans(t *testing.T) {

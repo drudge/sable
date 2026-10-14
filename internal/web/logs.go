@@ -502,6 +502,9 @@ func (server *Server) exportQueryLogs(writer http.ResponseWriter, request *http.
 	filter, _ := queryLogFilter(request)
 	filter.Page, filter.PageSize = 1, queryLogExportPageSize
 	filter.Cursor, filter.Direction, filter.Incremental = 0, "", false
+	// The CSV never says how many rows it holds, so skip the count: on a
+	// month of an unfiltered log it was seconds before the first row.
+	filter.KnownTotal, filter.UseKnownTotal = 0, true
 	result, err := pager.QueryEvents(request.Context(), filter)
 	if err != nil {
 		server.logger.Error("export query log", "error", err)

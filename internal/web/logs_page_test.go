@@ -114,8 +114,8 @@ func (store *estimatingLogStore) QueryEvents(ctx context.Context, filter querylo
 }
 
 // The console sizes the whole log from its ID span rather than counting it,
-// says so, and keeps saying so as it pages and refreshes. An export still
-// counts.
+// says so, and keeps saying so as it pages and refreshes. An export, which
+// never shows a total, doesn't count at all.
 func TestQueryLogPanelMarksAnEstimatedTotal(t *testing.T) {
 	t.Parallel()
 
@@ -139,7 +139,7 @@ func TestQueryLogPanelMarksAnEstimatedTotal(t *testing.T) {
 	if paged := store.filters[1]; !paged.KnownTotalEstimated || paged.KnownTotal != 1 {
 		t.Errorf("paging lost the estimate: %+v", paged)
 	}
-	if exported := store.filters[2]; exported.EstimateTotal || exported.KnownTotalEstimated {
-		t.Errorf("export asked for an estimate: %+v", exported)
+	if exported := store.filters[2]; !exported.UseKnownTotal || exported.EstimateTotal || exported.KnownTotalEstimated {
+		t.Errorf("export counted the log or asked for an estimate: %+v", exported)
 	}
 }
