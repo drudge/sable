@@ -8,6 +8,38 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.1-beta.2] - 2026-10-14
+
+Sable 1.7.1-beta.2 finishes the Logs speed-up from beta.1. Filtering the query
+log by source, response code, or record type no longer counts every row, and
+paging through an approximate total reaches the oldest queries without
+repeating or skipping any.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.0 or 1.7.1-beta.1.
+
+### Console
+
+- **Logs** filtered by source, response code, or a single record type shows
+  its total from the hourly summaries once the log is past 50,000 queries, so
+  a filter such as blocked-only opens in milliseconds instead of hundreds. The
+  total is marked `~`. Other filters still count exactly.
+- The approximate total on an unfiltered log stays close to the real count
+  after old queries are removed, instead of drifting high.
+- With an approximate total, **Last** no longer repeats rows from the page
+  before it, and **Next** and **Last** always reach the oldest queries.
+
+### API
+
+- The query log CSV export starts streaming right away instead of counting
+  the log first.
+
+### Fixes
+
+- Removing old queries no longer waits on counting the log, so a failed count
+  can't hold back retention of summaries and client sightings.
+
 ## [1.7.1-beta.1] - 2026-10-14
 
 Sable 1.7.1-beta.1 opens the Logs page instantly on a large query log. On a
