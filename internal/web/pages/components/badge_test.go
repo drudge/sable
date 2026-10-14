@@ -44,7 +44,7 @@ func TestBadgeRendersTones(t *testing.T) {
 			name:     "icon and children",
 			props:    BadgeProps{Icon: "clock", Class: "cluster-updated-badge"},
 			children: `<span>Updated now</span>`,
-			want:     `<span class="status-badge cluster-updated-badge">` + iconHTML(t, "clock") + `<span>Updated now</span></span>`,
+			want:     `<span class="status-badge cluster-updated-badge">` + iconHTML(t, "clock") + ` <span>Updated now</span></span>`,
 		},
 	}
 	for _, test := range tests {
