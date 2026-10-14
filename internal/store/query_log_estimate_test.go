@@ -51,7 +51,8 @@ func TestQueryEventsEstimatesOnlyTheUnfilteredTotal(t *testing.T) {
 		t.Fatalf("counted page = %d entries, estimated %t; want 7, false", counted.TotalEntries, counted.TotalEstimated)
 	}
 
-	// A filter still counts exactly: the ID span says nothing about it.
+	// A filter still counts exactly until the rollups are compacted; the ID
+	// span says nothing about it.
 	filtered, err := opened.QueryEvents(ctx, querylog.Filter{Page: 1, PageSize: 3, Source: querylog.SourceBlocked, EstimateTotal: true})
 	if err != nil {
 		t.Fatal(err)

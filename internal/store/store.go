@@ -485,7 +485,8 @@ func (store *Store) countQueryEvents(ctx context.Context, scope queryEventScope,
 	if filter.UseKnownTotal && !filter.Incremental {
 		return total, filter.KnownTotalEstimated, nil
 	}
-	if filter.EstimateTotal && !filter.Incremental && len(scope.conditions) == 0 {
+	rollup, rolled := rollupCountFilter(filter)
+	if filter.EstimateTotal && !filter.Incremental && (len(scope.conditions) == 0 || rolled) {
 		span, err := store.estimateQueryEvents(ctx)
 		if err != nil {
 			return 0, false, err
@@ -494,8 +495,14 @@ func (store *Store) countQueryEvents(ctx context.Context, scope queryEventScope,
 		if limit <= 0 {
 			limit = exactCountRowsLimit
 		}
-		if span > limit {
+		if span > limit && len(scope.conditions) == 0 {
 			return span, true, nil
+		}
+		if span > limit {
+			counted, found, err := store.countFromRollups(ctx, rollup)
+			if err != nil || found {
+				return counted, found, err
+			}
 		}
 	}
 	count := scope.clone()
