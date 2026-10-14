@@ -678,7 +678,7 @@ func (provider *ovhProvider) EnsureRecord(ctx context.Context, record Record) (b
 	}
 	body := map[string]any{"fieldType": record.Type, "subDomain": relative, "target": record.Value, "ttl": record.TTL}
 	if len(ids) == 0 {
-		var created int64
+		var created ovhCreatedRecord
 		if err := provider.request(ctx, http.MethodPost, basePath, body, &created); err != nil {
 			return false, err
 		}

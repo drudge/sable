@@ -303,12 +303,19 @@ type ovhProvider struct {
 	now         func() time.Time
 }
 
+// ovhCreatedRecord is the part of the domain.zone.Record that OVHcloud
+// returns from POST /domain/zone/{zone}/record.
+type ovhCreatedRecord struct {
+	ID int64 `json:"id"`
+}
+
 func (provider *ovhProvider) Present(ctx context.Context, zone, name, value string) (func(context.Context) error, error) {
-	var recordID int64
+	var created ovhCreatedRecord
 	body := map[string]any{"fieldType": "TXT", "subDomain": relativeName(name, zone), "target": value, "ttl": 60}
-	if err := provider.request(ctx, http.MethodPost, "/domain/zone/"+url.PathEscape(zone)+"/record", body, &recordID); err != nil {
+	if err := provider.request(ctx, http.MethodPost, "/domain/zone/"+url.PathEscape(zone)+"/record", body, &created); err != nil {
 		return nil, err
 	}
+	recordID := created.ID
 	if recordID == 0 {
 		return nil, errors.New("OVHcloud did not return the created record ID")
 	}
