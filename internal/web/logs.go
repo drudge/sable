@@ -300,8 +300,9 @@ func (server *Server) loadQueryLogsView(request *http.Request, view pages.QueryL
 	view.NextURL = queryLogPanelURL(raw, min(max(1, result.TotalPages), result.Page+1), lastID, "older", result.TotalEntries, result.TotalEstimated)
 	view.LastURL = queryLogPanelURL(raw, max(1, result.TotalPages), 0, "oldest", result.TotalEntries, result.TotalEstimated)
 	// From the page before the last, the last page is the rows older than
-	// this one, so it can't repeat any of them when an estimated total
-	// leaves the oldest page's length unknown.
+	// this one. That can't repeat any of them, whether the total is an
+	// estimate that leaves the oldest page's length unknown or an exact
+	// count that rows pruned since have made stale.
 	if result.Page+1 == result.TotalPages {
 		view.LastURL = view.NextURL
 	}
