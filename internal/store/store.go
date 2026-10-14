@@ -37,6 +37,9 @@ type Store struct {
 	// pruneChunk overrides how many rows one prune statement deletes; zero
 	// means pruneChunkRows. Tests set it to force several chunks.
 	pruneChunk int
+	// exactCountRows overrides how large the query log may be before an
+	// unfiltered count is estimated; zero means exactCountRowsLimit.
+	exactCountRows int
 }
 
 const maximumRecentQueryEvents = 1_000
@@ -311,7 +314,7 @@ func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (qu
 	filter.PageSize = min(filter.PageSize, 250)
 
 	scope := store.queryEventScope(filter)
-	total, err := store.countQueryEvents(ctx, scope, filter)
+	total, estimated, err := store.countQueryEvents(ctx, scope, filter)
 	if err != nil {
 		return querylog.Page{}, err
 	}
@@ -320,13 +323,13 @@ func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (qu
 		totalPages = (total + filter.PageSize - 1) / filter.PageSize
 		filter.Page = min(filter.Page, totalPages)
 	}
-	entries, err := store.selectQueryEvents(ctx, scope, filter, total)
+	entries, err := store.selectQueryEvents(ctx, scope, filter, total, estimated)
 	if err != nil {
 		return querylog.Page{}, err
 	}
 	return querylog.Page{
 		Entries: entries, Page: filter.Page, PageSize: filter.PageSize,
-		TotalEntries: total, TotalPages: totalPages,
+		TotalEntries: total, TotalPages: totalPages, TotalEstimated: estimated,
 	}, nil
 }
 
@@ -427,11 +430,26 @@ func (store *Store) addQueryEventTextSearch(scope *queryEventScope, filter query
 
 // countQueryEvents returns how many rows the filter matches. A caller that
 // already knows the total skips the count, and an incremental refresh counts
-// only the rows after the last one it saw.
-func (store *Store) countQueryEvents(ctx context.Context, scope queryEventScope, filter querylog.Filter) (int, error) {
+// only the rows after the last one it saw. An unfiltered count of a large log
+// the caller lets be estimated comes from the ID span; see
+// estimateQueryEvents.
+func (store *Store) countQueryEvents(ctx context.Context, scope queryEventScope, filter querylog.Filter) (int, bool, error) {
 	total := filter.KnownTotal
 	if filter.UseKnownTotal && !filter.Incremental {
-		return total, nil
+		return total, filter.KnownTotalEstimated, nil
+	}
+	if filter.EstimateTotal && !filter.Incremental && len(scope.conditions) == 0 {
+		span, err := store.estimateQueryEvents(ctx)
+		if err != nil {
+			return 0, false, err
+		}
+		limit := store.exactCountRows
+		if limit <= 0 {
+			limit = exactCountRowsLimit
+		}
+		if span > limit {
+			return span, true, nil
+		}
 	}
 	count := scope.clone()
 	if filter.Incremental {
@@ -439,17 +457,46 @@ func (store *Store) countQueryEvents(ctx context.Context, scope queryEventScope,
 	}
 	var counted int
 	if err := store.database.QueryRowContext(ctx, "SELECT COUNT(*)"+count.from+queryLogWhere(count.conditions), count.arguments...).Scan(&counted); err != nil {
-		return 0, fmt.Errorf("count query events: %w", err)
+		return 0, false, fmt.Errorf("count query events: %w", err)
 	}
 	if filter.Incremental {
-		return total + counted, nil
+		return total + counted, filter.KnownTotalEstimated, nil
 	}
-	return counted, nil
+	return counted, false, nil
+}
+
+// exactCountRowsLimit is the most rows an unfiltered count reads. Counting
+// this many takes about a millisecond warm and tens cold; past it the span of
+// IDs stands in, since a month of a busy network's queries takes seconds to
+// count from a cold disk.
+const exactCountRowsLimit = 50_000
+
+// queryLogSpanQuery reads the query log's lowest and highest IDs. Each end is
+// its own subquery: SQLite answers a lone MIN or MAX from the end of the
+// primary key, but scans every row when one SELECT asks for both.
+const queryLogSpanQuery = "SELECT (SELECT MIN(id) FROM sable_query_log), (SELECT MAX(id) FROM sable_query_log)"
+
+// estimateQueryEvents sizes the whole log from its lowest and highest IDs.
+// An exact COUNT(*) reads every row on both SQLite and PostgreSQL, which on a
+// month of a busy network's queries is most of the Logs page's time; the ends
+// of the primary key are two index seeks. IDs only ever grow, and pruning
+// deletes from the old end, so the span is the row count apart from the few
+// rows a prune leaves behind out of order and any IDs a PostgreSQL sequence
+// skipped: it can run high, never low.
+func (store *Store) estimateQueryEvents(ctx context.Context) (int, error) {
+	var oldest, newest sql.NullInt64
+	if err := store.database.QueryRowContext(ctx, queryLogSpanQuery).Scan(&oldest, &newest); err != nil {
+		return 0, fmt.Errorf("estimate query events: %w", err)
+	}
+	if !oldest.Valid || !newest.Valid {
+		return 0, nil
+	}
+	return int(newest.Int64 - oldest.Int64 + 1), nil
 }
 
 // selectQueryEvents reads one page, newest first, either by page number or
 // relative to a cursor row.
-func (store *Store) selectQueryEvents(ctx context.Context, scope queryEventScope, filter querylog.Filter, total int) ([]querylog.Entry, error) {
+func (store *Store) selectQueryEvents(ctx context.Context, scope queryEventScope, filter querylog.Filter, total int, estimated bool) ([]querylog.Entry, error) {
 	page := scope.clone()
 	order := "DESC"
 	useOffset := false
@@ -470,7 +517,9 @@ func (store *Store) selectQueryEvents(ctx context.Context, scope queryEventScope
 	}
 	selectWhere := queryLogWhere(page.conditions)
 	selectionLimit := filter.PageSize
-	if filter.Direction == "oldest" && total%filter.PageSize != 0 {
+	// An estimated total can't say how short the last page is, so it shows
+	// a full page of the oldest rows.
+	if filter.Direction == "oldest" && !estimated && total%filter.PageSize != 0 {
 		selectionLimit = total % filter.PageSize
 	}
 	arguments := append(page.arguments, selectionLimit)

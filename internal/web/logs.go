@@ -265,6 +265,9 @@ func (server *Server) queryLogsFilterView(request *http.Request, console pages.D
 // loadQueryLogsView reads the page of the query log the filter view asks for.
 func (server *Server) loadQueryLogsView(request *http.Request, view pages.QueryLogsView) pages.QueryLogsView {
 	filter, raw := queryLogFilter(request)
+	// The console can show the size of the whole log as an estimate; the API
+	// and exports still count.
+	filter.EstimateTotal = true
 	pager, ok := server.queries.(queryEventPager)
 	if !ok {
 		view.Error = "The configured query log store does not support browsing."
@@ -280,6 +283,7 @@ func (server *Server) loadQueryLogsView(request *http.Request, view pages.QueryL
 	view.PageSize = result.PageSize
 	view.TotalEntries = result.TotalEntries
 	view.TotalPages = result.TotalPages
+	view.TotalEstimated = result.TotalEstimated
 	view.Entries = queryLogEntryViews(result.Entries, requestTimeDisplay(request))
 	for index := range view.Entries {
 		view.Entries[index].OccurredAt = pages.FormatShortDateTime(result.Entries[index].OccurredAt, requestTimeDisplay(request), true)
@@ -291,10 +295,10 @@ func (server *Server) loadQueryLogsView(request *http.Request, view pages.QueryL
 		lastID = result.Entries[len(result.Entries)-1].ID
 		view.NewestID = firstID
 	}
-	view.FirstURL = queryLogPanelURL(raw, 1, 0, "", result.TotalEntries)
-	view.PreviousURL = queryLogPanelURL(raw, max(1, result.Page-1), firstID, "newer", result.TotalEntries)
-	view.NextURL = queryLogPanelURL(raw, min(max(1, result.TotalPages), result.Page+1), lastID, "older", result.TotalEntries)
-	view.LastURL = queryLogPanelURL(raw, max(1, result.TotalPages), 0, "oldest", result.TotalEntries)
+	view.FirstURL = queryLogPanelURL(raw, 1, 0, "", result.TotalEntries, result.TotalEstimated)
+	view.PreviousURL = queryLogPanelURL(raw, max(1, result.Page-1), firstID, "newer", result.TotalEntries, result.TotalEstimated)
+	view.NextURL = queryLogPanelURL(raw, min(max(1, result.TotalPages), result.Page+1), lastID, "older", result.TotalEntries, result.TotalEstimated)
+	view.LastURL = queryLogPanelURL(raw, max(1, result.TotalPages), 0, "oldest", result.TotalEntries, result.TotalEstimated)
 	view.ExportURL = "/api/v1/logs/queries/export?" + exportQueryValues(raw).Encode()
 	return view
 }
@@ -314,6 +318,7 @@ func queryLogFilter(request *http.Request) (querylog.Filter, url.Values) {
 	}
 	filter.KnownTotal = parseBoundedInt(values.Get("known_total"), 0, 0, 1_000_000_000)
 	_, filter.UseKnownTotal = values["known_total"]
+	filter.KnownTotalEstimated = filter.UseKnownTotal && values.Get("estimated") == "1"
 	filter.AfterID = parsePositiveInt64(values.Get("after_id"))
 	filter.Incremental = values.Get("live") == "1" && filter.UseKnownTotal
 	if value := strings.ToUpper(strings.TrimSpace(values.Get("record_type"))); value != "" && value != "ALL" {
@@ -391,11 +396,14 @@ func parsePositiveInt64(raw string) int64 {
 	return value
 }
 
-func queryLogPanelURL(values url.Values, page int, cursor int64, direction string, total int) string {
+func queryLogPanelURL(values url.Values, page int, cursor int64, direction string, total int, estimated bool) string {
 	copy := exportQueryValues(values)
 	copy.Set("page", strconv.Itoa(page))
 	copy.Set("live", "0")
 	copy.Set("known_total", strconv.Itoa(total))
+	if estimated {
+		copy.Set("estimated", "1")
+	}
 	if cursor > 0 {
 		copy.Set("cursor", strconv.FormatInt(cursor, 10))
 	}

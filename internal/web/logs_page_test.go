@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -30,7 +31,9 @@ func (store *countingLogStore) ServerLogEntries(ctx context.Context, query serve
 	return store.testServerLogStore.ServerLogEntries(ctx, query)
 }
 
-func newCountingLogTestServer(t *testing.T, store *countingLogStore) *Server {
+func newCountingLogTestServer(t *testing.T, store interface {
+	RecentQueryEvents(context.Context, int) ([]querylog.Entry, error)
+}) *Server {
 	t.Helper()
 	configuration := config.Defaults()
 	configuration.Cluster.DataDirectory = t.TempDir()
@@ -90,5 +93,53 @@ func TestQueryLogPanelKeepsPolicyActions(t *testing.T) {
 	body := serveRequest(server, "GET", "/ui/logs/queries").Body.String()
 	if !strings.Contains(body, "Block example.com") {
 		t.Error("query log panel lost the block action")
+	}
+}
+
+// estimatingLogStore estimates whenever it is allowed to, like the real store
+// on an unfiltered log, and keeps the filters it was asked for.
+type estimatingLogStore struct {
+	countingLogStore
+	mutex   sync.Mutex
+	filters []querylog.Filter
+}
+
+func (store *estimatingLogStore) QueryEvents(ctx context.Context, filter querylog.Filter) (querylog.Page, error) {
+	store.mutex.Lock()
+	store.filters = append(store.filters, filter)
+	store.mutex.Unlock()
+	page, err := store.countingLogStore.QueryEvents(ctx, filter)
+	page.TotalEstimated = filter.EstimateTotal || filter.KnownTotalEstimated
+	return page, err
+}
+
+// The console sizes the whole log from its ID span rather than counting it,
+// says so, and keeps saying so as it pages and refreshes. An export still
+// counts.
+func TestQueryLogPanelMarksAnEstimatedTotal(t *testing.T) {
+	t.Parallel()
+
+	store := &estimatingLogStore{}
+	server := newCountingLogTestServer(t, store)
+	body := serveRequest(server, "GET", "/ui/logs/queries").Body.String()
+	if !strings.Contains(body, "~1 entries") || !strings.Contains(body, "1–1 of ~1") {
+		t.Error("query log panel does not mark its total as an estimate")
+	}
+	if strings.Count(body, "estimated=1") < 5 {
+		t.Errorf("page and live links drop the estimate mark: %d of 5", strings.Count(body, "estimated=1"))
+	}
+	serveRequest(server, "GET", "/ui/logs/queries?known_total=1&estimated=1&page=1&cursor=2&direction=older")
+	serveRequest(server, "GET", "/api/v1/logs/queries/export")
+
+	store.mutex.Lock()
+	defer store.mutex.Unlock()
+	if len(store.filters) < 3 {
+		t.Fatalf("store read %d times, want at least 3", len(store.filters))
+	}
+	if paged := store.filters[1]; !paged.KnownTotalEstimated || paged.KnownTotal != 1 {
+		t.Errorf("paging lost the estimate: %+v", paged)
+	}
+	if exported := store.filters[2]; exported.EstimateTotal || exported.KnownTotalEstimated {
+		t.Errorf("export asked for an estimate: %+v", exported)
 	}
 }
