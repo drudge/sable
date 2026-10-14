@@ -233,3 +233,44 @@ func TestQueryLogSpanQuerySeeksRatherThanScans(t *testing.T) {
 		}
 	}
 }
+
+// The one-time count only sharpens the estimate, so a prune runs it after the
+// rest of retention: rollups, tiers and client sightings. A prune that fails
+// before then leaves the log uncounted, and the next one counts it.
+func TestPruneQueryEventsCountsTheLogLast(t *testing.T) {
+	t.Parallel()
+
+	base := time.Date(2026, time.October, 14, 12, 0, 0, 0, time.UTC)
+	events := make([]querylog.Event, 6)
+	for index := range events {
+		events[index] = querylog.Event{
+			OccurredAt: base.Add(time.Duration(index) * time.Minute), ClientIP: "192.0.2.1", Name: "order.example.",
+			RecordType: dns.TypeA, Class: dns.ClassINET, Source: querylog.SourceCache, Protocol: "UDP",
+		}
+	}
+	opened := openQueryLogStore(t, events)
+	ctx := context.Background()
+	// Client sightings are pruned last before the count; make that fail.
+	if _, err := opened.database.ExecContext(ctx, "ALTER TABLE sable_client_identity RENAME TO sable_client_identity_moved"); err != nil {
+		t.Fatal(err)
+	}
+	if err := opened.PruneQueryEvents(ctx, base.Add(2*time.Minute)); err == nil {
+		t.Fatal("prune succeeded without the client identity table")
+	}
+	if _, ok := opened.queryLogRows.since(6); ok {
+		t.Fatal("the log was counted before client sightings were pruned")
+	}
+	if rows := countPruneRows(t, opened, minuteRollupTable, "bucket_start <= ?", base.Add(2*time.Minute)); rows != 0 {
+		t.Fatalf("%d minute rollups survived the failed prune, want 0", rows)
+	}
+
+	if _, err := opened.database.ExecContext(ctx, "ALTER TABLE sable_client_identity_moved RENAME TO sable_client_identity"); err != nil {
+		t.Fatal(err)
+	}
+	if err := opened.PruneQueryEvents(ctx, base.Add(3*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if counted, ok := opened.queryLogRows.since(6); !ok || counted != 3 {
+		t.Fatalf("count after prune = %d, %t; want 3, true", counted, ok)
+	}
+}
