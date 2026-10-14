@@ -99,6 +99,39 @@ func TestQueryEventsEstimatesOnlyTheUnfilteredTotal(t *testing.T) {
 	}
 	assertQueryEventIDs(t, high.Entries, []int64{6, 5, 4})
 
+	// An estimate that runs low still pages on to the rows past it, and a
+	// full page with nothing older is the last.
+	low, err := opened.QueryEvents(ctx, querylog.Filter{
+		Page: 2, PageSize: 3, Direction: "older", Cursor: 8, KnownTotal: 6, UseKnownTotal: true, KnownTotalEstimated: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if low.Page != 2 || low.TotalPages != 3 {
+		t.Fatalf("low estimate page = page %d of %d; want 2 of 3", low.Page, low.TotalPages)
+	}
+	assertQueryEventIDs(t, low.Entries, []int64{7, 6, 5})
+	beyond, err := opened.QueryEvents(ctx, querylog.Filter{
+		Page: 3, PageSize: 3, Direction: "older", Cursor: 5, KnownTotal: 6, UseKnownTotal: true, KnownTotalEstimated: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if beyond.Page != 3 || beyond.TotalPages != 3 {
+		t.Fatalf("past a low estimate = page %d of %d; want 3 of 3", beyond.Page, beyond.TotalPages)
+	}
+	assertQueryEventIDs(t, beyond.Entries, []int64{4})
+	full, err := opened.QueryEvents(ctx, querylog.Filter{
+		Page: 2, PageSize: 3, Direction: "older", Cursor: 7, KnownTotal: 9, UseKnownTotal: true, KnownTotalEstimated: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if full.Page != 2 || full.TotalPages != 2 {
+		t.Fatalf("full oldest page = page %d of %d; want 2 of 2", full.Page, full.TotalPages)
+	}
+	assertQueryEventIDs(t, full.Entries, []int64{6, 5, 4})
+
 	// An exact total already knows where the log ends.
 	exact, err := opened.QueryEvents(ctx, querylog.Filter{
 		Page: 3, PageSize: 3, Direction: "older", Cursor: 4, KnownTotal: 7, UseKnownTotal: true,

@@ -336,28 +336,43 @@ func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (qu
 	if err != nil {
 		return querylog.Page{}, err
 	}
+	// An estimated total can run high or low, so paging older by cursor
+	// reads one row past the page to learn whether an older page exists,
+	// rather than trusting the page count.
+	lookAhead := estimated && filter.Direction == "older" && filter.Cursor > 0
 	totalPages := 0
 	if total > 0 {
 		totalPages = (total + filter.PageSize - 1) / filter.PageSize
-		filter.Page = min(filter.Page, totalPages)
+		if !lookAhead {
+			filter.Page = min(filter.Page, totalPages)
+		}
 	}
-	entries, err := store.selectQueryEvents(ctx, scope, filter, total, estimated)
+	read := filter
+	if lookAhead {
+		read.PageSize++
+	}
+	entries, err := store.selectQueryEvents(ctx, scope, read, total, estimated)
 	if err != nil {
 		return querylog.Page{}, err
 	}
-	// An estimated total can run high, so paging older can reach the oldest
-	// row before the page count says it should. A short page is the last one;
-	// an empty one means the page before it was, so that page is shown again
-	// rather than an empty log.
-	if estimated && filter.Direction == "older" && filter.Cursor > 0 && len(entries) < filter.PageSize {
-		if len(entries) == 0 && filter.Page > 1 {
+	if lookAhead {
+		switch {
+		case len(entries) > filter.PageSize:
+			// A low estimate: older rows remain past what the count allows.
+			entries = entries[:filter.PageSize]
+			totalPages = max(totalPages, filter.Page+1)
+		case len(entries) == 0 && filter.Page > 1:
+			// A high estimate paged past the oldest row, so the page before
+			// was the last; show it again rather than an empty log.
 			filter.Page--
 			filter.Direction = "oldest"
 			if entries, err = store.selectQueryEvents(ctx, scope, filter, total, estimated); err != nil {
 				return querylog.Page{}, err
 			}
+			totalPages = filter.Page
+		default:
+			totalPages = filter.Page
 		}
-		totalPages = filter.Page
 	}
 	return querylog.Page{
 		Entries: entries, Page: filter.Page, PageSize: filter.PageSize,
