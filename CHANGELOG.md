@@ -8,6 +8,56 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.1] - 2026-10-14
+
+Sable 1.7.1 opens the Logs page instantly on a large query log. On a log of
+about 5 million queries, the page took 2.7 seconds to open and now takes about
+30 milliseconds. Filtered query logs count faster too, and public TLS
+certificates issue again with OVHcloud, Hetzner, and Porkbun DNS.
+
+### Upgrading from 1.7.0
+
+Nothing new is needed. In a cluster, upgrade replicas first and the lead last;
+**Cluster → Rolling Updates** does it in that order.
+
+### Console
+
+- **Logs** reads only the tab that's open. The other tab loads when you click
+  it, and a hidden tab no longer refreshes in the background.
+- A query log of more than 50,000 queries shows an approximate total, marked
+  with `~`, instead of counting every row: unfiltered, or filtered by source,
+  response code, or a single record type, which take their total from the
+  hourly summaries. A filter such as blocked-only opens in milliseconds
+  instead of hundreds. Other filters, exports, and the API still count
+  exactly.
+- With an approximate total, **Last** no longer repeats rows from the page
+  before it, and **Next** and **Last** always reach the oldest queries. The
+  total stays close to the real count after old queries are removed.
+
+### API
+
+- The query log CSV export starts streaming right away instead of counting
+  the log first.
+
+### Fixes
+
+- **OVHcloud** DNS-01 challenges no longer fail with `cannot unmarshal object
+  into Go value of type int64`, so public TLS certificates issue and renew.
+  Dynamic DNS can also create a record that doesn't exist yet.
+- **Hetzner** DNS-01 challenges send the TXT value quoted, as Hetzner's DNS
+  API requires, so public TLS certificates issue and the challenge record is
+  removed afterwards.
+- **Porkbun** removes the DNS-01 challenge record after issuing a certificate
+  when Porkbun returns record IDs as numbers, instead of leaving it behind.
+  Dynamic DNS updates and removes duplicate records the same way.
+- Removing old queries no longer waits on counting the log, so a failed count
+  can't hold back retention of summaries and client sightings.
+
+### Dependencies
+
+- Updated golang.org/x/crypto, x/net, x/sys, and related golang.org/x modules,
+  the templ console renderer, and the CBOR library used for passkeys.
+
 ## [1.7.1-beta.4] - 2026-10-14
 
 Sable 1.7.1-beta.4 fixes public TLS certificates with OVHcloud, Hetzner, and
