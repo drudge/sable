@@ -3191,6 +3191,8 @@
 	  const poll = () => {
 		if (!document.contains(panel)) { stop(); return; }
 		if (document.hidden || requestInFlight || isLiveRegionInUse(panel) || panel.dataset.live !== "true") return;
+		// A log in a tab that isn't showing waits; it catches up when shown.
+		if (panel.closest("[data-isotope-panel][hidden]")) return;
 		requestInFlight = true;
 		htmx.ajax("GET", panel.dataset.liveUrl, {source: panel, target: `#${panel.id}`, swap: "outerHTML"})
 		  .finally?.(() => { requestInFlight = false; pollRequest = null; });
