@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -37,6 +38,12 @@ type Store struct {
 	// pruneChunk overrides how many rows one prune statement deletes; zero
 	// means pruneChunkRows. Tests set it to force several chunks.
 	pruneChunk int
+	// exactCountRows overrides how large the query log may be before an
+	// unfiltered count is estimated; zero means exactCountRowsLimit.
+	exactCountRows int
+	// queryLogRows is the query log's row count as of its last prune; see
+	// queryLogCount.
+	queryLogRows queryLogCount
 }
 
 const maximumRecentQueryEvents = 1_000
@@ -225,20 +232,31 @@ func (store *Store) writeQueryEvents(ctx context.Context, events []querylog.Even
 // timeout. The query log writer lands its batches between chunks.
 func (store *Store) PruneQueryEvents(ctx context.Context, before time.Time) error {
 	before = before.UTC()
-	if err := store.deleteInChunks(ctx, "sable_query_log", "occurred_at < "+store.placeholder(1), before); err != nil {
+	deleted, err := store.deleteInChunks(ctx, "sable_query_log", "occurred_at < "+store.placeholder(1), before)
+	if err != nil {
+		store.queryLogRows.forget()
 		return fmt.Errorf("prune query log: %w", err)
 	}
+	counted := store.queryLogRows.pruned(deleted)
 	// Drop the cutoff minute as well because its aggregate can include rows
 	// from before the exact cutoff. Surviving rows in that partial minute remain
 	// available through the raw log boundary query.
 	bucket := before.Truncate(time.Minute)
-	if err := store.deleteInChunks(ctx, minuteRollupTable, "bucket_start <= "+store.placeholder(1), bucket); err != nil {
+	if _, err := store.deleteInChunks(ctx, minuteRollupTable, "bucket_start <= "+store.placeholder(1), bucket); err != nil {
 		return fmt.Errorf("prune query log rollups: %w", err)
 	}
 	if err := store.pruneRollupTiers(ctx, bucket); err != nil {
 		return err
 	}
-	return store.pruneClientSightings(ctx, before)
+	if err := store.pruneClientSightings(ctx, before); err != nil {
+		return err
+	}
+	// The count only sharpens the Logs tab's estimate, so it comes last, where
+	// a count that fails can't hold back the rest of retention.
+	if !counted {
+		return store.queryLogRows.count(ctx, store)
+	}
+	return nil
 }
 
 const (
@@ -250,11 +268,12 @@ const (
 )
 
 // deleteInChunks deletes the rows of table that match condition, at most
-// pruneChunkRows at a time, each chunk in its own statement and transaction.
+// pruneChunkRows at a time, each chunk in its own statement and transaction,
+// and says how many it deleted.
 // Rows are picked by their physical key: on SQLite the rowid, which is the
 // query log's id, and on PostgreSQL the ctid, which the ANY(ARRAY(...)) form
 // turns into a direct tuple lookup instead of a scan.
-func (store *Store) deleteInChunks(ctx context.Context, table, condition string, arguments ...any) error {
+func (store *Store) deleteInChunks(ctx context.Context, table, condition string, arguments ...any) (int64, error) {
 	chunk := store.pruneChunk
 	if chunk <= 0 {
 		chunk = pruneChunkRows
@@ -264,22 +283,24 @@ func (store *Store) deleteInChunks(ctx context.Context, table, condition string,
 	if store.driver == "postgres" {
 		statement = "DELETE FROM " + table + " WHERE ctid = ANY(ARRAY(SELECT ctid FROM " + table + limit + "))"
 	}
+	var total int64
 	for {
 		if err := ctx.Err(); err != nil {
-			return err
+			return total, err
 		}
 		chunkContext, cancel := context.WithTimeout(ctx, pruneChunkTimeout)
 		result, err := store.database.ExecContext(chunkContext, statement, arguments...)
 		cancel()
 		if err != nil {
-			return err
+			return total, err
 		}
 		deleted, err := result.RowsAffected()
 		if err != nil {
-			return err
+			return total, err
 		}
+		total += deleted
 		if deleted < int64(chunk) {
-			return nil
+			return total, nil
 		}
 	}
 }
@@ -311,22 +332,51 @@ func (store *Store) QueryEvents(ctx context.Context, filter querylog.Filter) (qu
 	filter.PageSize = min(filter.PageSize, 250)
 
 	scope := store.queryEventScope(filter)
-	total, err := store.countQueryEvents(ctx, scope, filter)
+	total, estimated, err := store.countQueryEvents(ctx, scope, filter)
 	if err != nil {
 		return querylog.Page{}, err
 	}
+	// An estimated total can run high or low, so paging older by cursor
+	// reads one row past the page to learn whether an older page exists,
+	// rather than trusting the page count.
+	lookAhead := estimated && filter.Direction == "older" && filter.Cursor > 0
 	totalPages := 0
 	if total > 0 {
 		totalPages = (total + filter.PageSize - 1) / filter.PageSize
-		filter.Page = min(filter.Page, totalPages)
+		if !lookAhead {
+			filter.Page = min(filter.Page, totalPages)
+		}
 	}
-	entries, err := store.selectQueryEvents(ctx, scope, filter, total)
+	read := filter
+	if lookAhead {
+		read.PageSize++
+	}
+	entries, err := store.selectQueryEvents(ctx, scope, read, total, estimated)
 	if err != nil {
 		return querylog.Page{}, err
 	}
+	if lookAhead {
+		switch {
+		case len(entries) > filter.PageSize:
+			// A low estimate: older rows remain past what the count allows.
+			entries = entries[:filter.PageSize]
+			totalPages = max(totalPages, filter.Page+1)
+		case len(entries) == 0 && filter.Page > 1:
+			// A high estimate paged past the oldest row, so the page before
+			// was the last; show it again rather than an empty log.
+			filter.Page--
+			filter.Direction = "oldest"
+			if entries, err = store.selectQueryEvents(ctx, scope, filter, total, estimated); err != nil {
+				return querylog.Page{}, err
+			}
+			totalPages = filter.Page
+		default:
+			totalPages = filter.Page
+		}
+	}
 	return querylog.Page{
 		Entries: entries, Page: filter.Page, PageSize: filter.PageSize,
-		TotalEntries: total, TotalPages: totalPages,
+		TotalEntries: total, TotalPages: totalPages, TotalEstimated: estimated,
 	}, nil
 }
 
@@ -427,11 +477,33 @@ func (store *Store) addQueryEventTextSearch(scope *queryEventScope, filter query
 
 // countQueryEvents returns how many rows the filter matches. A caller that
 // already knows the total skips the count, and an incremental refresh counts
-// only the rows after the last one it saw.
-func (store *Store) countQueryEvents(ctx context.Context, scope queryEventScope, filter querylog.Filter) (int, error) {
+// only the rows after the last one it saw. An unfiltered count of a large log
+// the caller lets be estimated comes from the ID span; see
+// estimateQueryEvents.
+func (store *Store) countQueryEvents(ctx context.Context, scope queryEventScope, filter querylog.Filter) (int, bool, error) {
 	total := filter.KnownTotal
 	if filter.UseKnownTotal && !filter.Incremental {
-		return total, nil
+		return total, filter.KnownTotalEstimated, nil
+	}
+	rollup, rolled := rollupCountFilter(filter)
+	if filter.EstimateTotal && !filter.Incremental && (len(scope.conditions) == 0 || rolled) {
+		span, err := store.estimateQueryEvents(ctx)
+		if err != nil {
+			return 0, false, err
+		}
+		limit := store.exactCountRows
+		if limit <= 0 {
+			limit = exactCountRowsLimit
+		}
+		if span > limit && len(scope.conditions) == 0 {
+			return span, true, nil
+		}
+		if span > limit {
+			counted, found, err := store.countFromRollups(ctx, rollup)
+			if err != nil || found {
+				return counted, found, err
+			}
+		}
 	}
 	count := scope.clone()
 	if filter.Incremental {
@@ -439,17 +511,120 @@ func (store *Store) countQueryEvents(ctx context.Context, scope queryEventScope,
 	}
 	var counted int
 	if err := store.database.QueryRowContext(ctx, "SELECT COUNT(*)"+count.from+queryLogWhere(count.conditions), count.arguments...).Scan(&counted); err != nil {
-		return 0, fmt.Errorf("count query events: %w", err)
+		return 0, false, fmt.Errorf("count query events: %w", err)
 	}
 	if filter.Incremental {
-		return total + counted, nil
+		return total + counted, filter.KnownTotalEstimated, nil
 	}
-	return counted, nil
+	return counted, false, nil
+}
+
+// exactCountRowsLimit is the most rows an unfiltered count reads. Counting
+// this many takes about a millisecond warm and tens cold; past it the span of
+// IDs stands in, since a month of a busy network's queries takes seconds to
+// count from a cold disk.
+const exactCountRowsLimit = 50_000
+
+// queryLogSpanQuery reads the query log's lowest and highest IDs. Each end is
+// its own subquery: SQLite answers a lone MIN or MAX from the end of the
+// primary key, but scans every row when one SELECT asks for both.
+const queryLogSpanQuery = "SELECT (SELECT MIN(id) FROM sable_query_log), (SELECT MAX(id) FROM sable_query_log)"
+
+// estimateQueryEvents sizes the whole log from its lowest and highest IDs.
+// An exact COUNT(*) reads every row on both SQLite and PostgreSQL, which on a
+// month of a busy network's queries is most of the Logs page's time; the ends
+// of the primary key are two index seeks. IDs only ever grow, and pruning
+// deletes from the old end, so the span is the row count apart from the few
+// rows a prune leaves behind out of order and any IDs a PostgreSQL sequence
+// skipped: it can run high, never low.
+//
+// The span also counts every row a prune leaves a hole for, so once the log
+// has been counted the estimate is the smaller of the span and that count
+// plus the IDs written since; see queryLogCount.
+func (store *Store) estimateQueryEvents(ctx context.Context) (int, error) {
+	var oldest, newest sql.NullInt64
+	if err := store.database.QueryRowContext(ctx, queryLogSpanQuery).Scan(&oldest, &newest); err != nil {
+		return 0, fmt.Errorf("estimate query events: %w", err)
+	}
+	if !oldest.Valid || !newest.Valid {
+		return 0, nil
+	}
+	span := int(newest.Int64 - oldest.Int64 + 1)
+	if counted, ok := store.queryLogRows.since(newest.Int64); ok {
+		return min(span, counted), nil
+	}
+	return span, nil
+}
+
+// queryLogCount carries an exact count of the query log between prunes, the
+// way Pi-hole's FTL keeps its totals in memory rather than counting its
+// database. The first prune after start counts the log once, in the
+// background where a cold count's seconds cost nobody a page load; each later
+// prune subtracts the rows it deleted, and rows written since are the IDs
+// past the newest one counted. Writes the count doesn't see, such as another
+// node pruning a shared PostgreSQL log, leave it high, as the span is, so the
+// estimate takes the smaller of the two. On PostgreSQL it can also run a few
+// rows low: a row whose sequence ID was taken before the count but committed
+// after it is in neither the count nor the IDs past it. Either way the total
+// is shown as an estimate.
+type queryLogCount struct {
+	mutex    sync.Mutex
+	known    bool
+	rows     int
+	newestID int64
+}
+
+// queryLogCountQuery counts the log and reads its newest ID in one statement,
+// so both come from the same snapshot.
+const queryLogCountQuery = "SELECT COUNT(*), COALESCE(MAX(id), 0) FROM sable_query_log"
+
+// pruned takes a prune's deletions off the count and says whether there was
+// one to take them off; if not, the caller counts the log.
+func (count *queryLogCount) pruned(deleted int64) bool {
+	count.mutex.Lock()
+	defer count.mutex.Unlock()
+	if count.known {
+		count.rows = max(count.rows-int(deleted), 0)
+	}
+	return count.known
+}
+
+// count counts the log and reads its newest ID.
+func (count *queryLogCount) count(ctx context.Context, store *Store) error {
+	var rows int
+	var newestID int64
+	if err := store.database.QueryRowContext(ctx, queryLogCountQuery).Scan(&rows, &newestID); err != nil {
+		return fmt.Errorf("count query log: %w", err)
+	}
+	count.mutex.Lock()
+	count.known, count.rows, count.newestID = true, rows, newestID
+	count.mutex.Unlock()
+	return nil
+}
+
+// forget drops the count after a prune that may have deleted rows it can't
+// say how many of, so the next prune counts again.
+func (count *queryLogCount) forget() {
+	count.mutex.Lock()
+	count.known = false
+	count.mutex.Unlock()
+}
+
+// since returns the count for a log whose newest ID is newestID. A newest ID
+// below the one counted means the log was replaced, so the count no longer
+// applies.
+func (count *queryLogCount) since(newestID int64) (int, bool) {
+	count.mutex.Lock()
+	defer count.mutex.Unlock()
+	if !count.known || newestID < count.newestID {
+		return 0, false
+	}
+	return count.rows + int(newestID-count.newestID), true
 }
 
 // selectQueryEvents reads one page, newest first, either by page number or
 // relative to a cursor row.
-func (store *Store) selectQueryEvents(ctx context.Context, scope queryEventScope, filter querylog.Filter, total int) ([]querylog.Entry, error) {
+func (store *Store) selectQueryEvents(ctx context.Context, scope queryEventScope, filter querylog.Filter, total int, estimated bool) ([]querylog.Entry, error) {
 	page := scope.clone()
 	order := "DESC"
 	useOffset := false
@@ -470,7 +645,9 @@ func (store *Store) selectQueryEvents(ctx context.Context, scope queryEventScope
 	}
 	selectWhere := queryLogWhere(page.conditions)
 	selectionLimit := filter.PageSize
-	if filter.Direction == "oldest" && total%filter.PageSize != 0 {
+	// An estimated total can't say how short the last page is, so it shows
+	// a full page of the oldest rows.
+	if filter.Direction == "oldest" && !estimated && total%filter.PageSize != 0 {
 		selectionLimit = total % filter.PageSize
 	}
 	arguments := append(page.arguments, selectionLimit)

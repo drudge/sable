@@ -127,10 +127,14 @@ html { min-width: 320px; background: var(--shell-background); scroll-behavior: s
    or trackpad flick slides the background out from under the dialog. The
    gutter reserved above means freezing the document costs no sideways nudge.
    iOS Safari ignores overflow on the root for touch, so app.js also refuses
-   touch scrolls that would reach the page, and scrollers inside a modal keep
-   their overscroll to themselves. */
+   touch scrolls that would reach the page, and the modal keeps its
+   overscroll to itself. Only the modal: a clipped box inside it, such as a
+   drawer's rounded list or a truncated label, is a scroll container too, and
+   Safari lets one that contains its overscroll swallow a wheel or finger that
+   should scroll the drawer around it. Nested scrollers hand their overscroll
+   on to the scroller around them, as they do outside a modal. */
 html:has(dialog[open]) { overflow: hidden; }
-dialog[open] * { overscroll-behavior: contain; }
+dialog[open] { overscroll-behavior: contain; }
 body { min-width: 320px; min-height: 100vh; margin: 0; background: var(--background); color: var(--foreground); font-size: 14px; }
 body:has(.app-shell) { background: var(--shell-background); }
 a { color: inherit; text-decoration: none; }

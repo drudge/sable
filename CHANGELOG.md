@@ -8,6 +8,319 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.1-beta.2] - 2026-10-14
+
+Sable 1.7.1-beta.2 finishes the Logs speed-up from beta.1. Filtering the query
+log by source, response code, or record type no longer counts every row, and
+paging through an approximate total reaches the oldest queries without
+repeating or skipping any.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.0 or 1.7.1-beta.1.
+
+### Console
+
+- **Logs** filtered by source, response code, or a single record type shows
+  its total from the hourly summaries once the log is past 50,000 queries, so
+  a filter such as blocked-only opens in milliseconds instead of hundreds. The
+  total is marked `~`. Other filters still count exactly.
+- The approximate total on an unfiltered log stays close to the real count
+  after old queries are removed, instead of drifting high.
+- With an approximate total, **Last** no longer repeats rows from the page
+  before it, and **Next** and **Last** always reach the oldest queries.
+
+### API
+
+- The query log CSV export starts streaming right away instead of counting
+  the log first.
+
+### Fixes
+
+- Removing old queries no longer waits on counting the log, so a failed count
+  can't hold back retention of summaries and client sightings.
+
+## [1.7.1-beta.1] - 2026-10-14
+
+Sable 1.7.1-beta.1 opens the Logs page instantly on a large query log. On a
+log of about 5 million queries, the page used to take over two seconds to
+open.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.0.
+
+### Console
+
+- **Logs** reads only the tab that's open. The other tab loads when you click
+  it, and a hidden tab no longer refreshes in the background.
+- An unfiltered query log of more than 50,000 queries shows an approximate
+  total, marked with `~`, instead of counting every row. Filtered views,
+  exports, and the API still give exact totals.
+
+## [1.7.0] - 2026-10-13
+
+Sable 1.7.0 adds per-device blocking. Rule sets give some devices their own
+block lists, domains, and blocked apps, a hold blocks everything for one
+device for a while, and schedules block everything or chosen apps at set
+times each week, such as a bedtime. Block lists now block what their authors
+meant, and DNSSEC stops failing correctly signed answers that broke reverse
+lookups and the OISD lists. Kubernetes ExternalDNS can manage the override
+records on Forwarder zones. Sable starts faster, uses less memory per query,
+and can no longer be tied up by a stuck client or a lookup that hits a bug.
+The console looks the same on every page, with pill buttons, faster dialogs,
+and better behavior on phones and in Safari.
+
+### Upgrading from 1.6.x
+
+- `blocking.bypass_clients` moves into a rule set called `No Blocking` with
+  blocking turned off, one `[[clients]]` entry per address or network, the
+  first time 1.7.0 loads the config. The key is dropped on the next save, and
+  the **Bypass Clients** card leaves **Settings**. An address that already
+  had a rule set moves to `No Blocking`, since a bypass used to win.
+- Devices (`[[clients]]`), rule sets, holds, and schedules replicate to every
+  node, and each node compiles its own block lists. Upgrade every node in a
+  cluster together, and don't add rule sets, holds, or schedules until they
+  all run 1.7.0. Until then, nodes on different versions can answer some
+  names differently.
+- Adblock-style lists such as EasyList, EasyPrivacy, and AdGuard DNS Filter
+  block fewer domains after the upgrade. Rules with a path, a wildcard, a
+  regular expression, or a modifier other than `$important` used to be cut
+  down to their host, so `||google.com/adsense/…` blocked all of google.com.
+  They're now skipped and counted as unsupported rules. Sites those rules
+  broke resolve again.
+- `@@||host^` exception rules now unblock that host and its subdomains on
+  every list. Your own blocked domains and `$important` rules still win, and
+  your allowed domains are still checked first.
+- Fanboy Social and Fanboy Annoyances are no longer offered in the block list
+  catalog, because almost none of their rules apply to DNS. An existing
+  subscription keeps working as a custom list; remove it if you no longer
+  want it.
+- Allowed and blocked domains are now exclusive. Adding a domain to one list
+  removes it from the other, whether you use the console, MCP, the query
+  log's allow and block actions, or a file import.
+- The MCP `lookup` tool now needs `zones.read`. A token that only has
+  blocking or settings access gets "this token needs zones.read to use
+  lookup". Groups made by the MCP setup in **Integrations** already have it.
+  For a group you built yourself, add `zones.read` to its API access.
+- New MCP tools: `list_schedules` is on by default, and `block_device`,
+  `unblock_device`, and `override_schedule` are off by default. An install
+  that already picked its MCP tools (`[mcp] tools`) gets none of them until
+  you turn them on under **Integrations**.
+- A TSIG-signed zone transfer, NOTIFY, or dynamic update sent over
+  DNS-over-HTTPS is now refused, because Sable never checked the signature on
+  that path. Send them over UDP, TCP, or DoT, where it does.
+- The first start upgrades the database once and records its schema version,
+  so later starts skip that work. On PostgreSQL, nodes that share a database
+  take turns, and the query log indexes are built without blocking writes, so
+  a large log can make that first start slow.
+
+### Per-device blocking
+
+- Add rule sets on a new **Blocked → Rule Sets** tab. Each rule set picks its
+  own block lists and keeps its own blocked and allowed domains, which win
+  over everyone's. Devices without a rule set use the **Default** rules,
+  whose lists `blocking.default_lists` can narrow.
+- Open a rule set to change everything about it in one panel: its name, its
+  devices, addresses, and networks, its block lists, its own blocked and
+  allowed domains, and a **Blocking** switch that turns it off for its
+  devices. Changes save as you make them. **Add Rule Set** asks only for a
+  name, then opens the panel.
+- Put a device in a rule set by its hardware address. It applies at every
+  address Sable ties to that device, from the neighbor table, UniFi, or the
+  cluster lead, without Sable being the DHCP server. **Add Device** and
+  **Check a Domain** pick devices from a searchable list with each device's
+  icon and address.
+- Block apps for a rule set. **Choose Apps** opens a grid of app logos by
+  category with a search, and each app blocks every domain Sable knows it
+  uses. The grid leaves out device platforms, smart home, cameras, and work
+  tools so nobody breaks a device by accident.
+- Block everything for one device for 30 minutes, an hour, until a time, or
+  until you turn it off, from its **Blocking** section on **Insights →
+  Devices**. A live countdown, **Add 30 Minutes**, and **End Now** sit
+  beside it. A hold outlasts a global pause, and the device's allowed
+  domains still work.
+- Add schedules to a rule set. Pick the days, start and end times, and
+  whether it blocks everything or chosen apps. An end before the start runs
+  into the next morning, and times follow daylight saving time. A schedule
+  that blocks everything works like a hold.
+- Change one night without editing the schedule. **Skip**, **Delay 30
+  Minutes**, and **End Now** adjust the current or next window, and
+  **Resume** undoes them. A device's Insights panel lists its schedules,
+  whether each is on, and when it next starts or ends.
+- Show which rule set a device uses, and why, on its Insights panel, with a
+  picker to give it another.
+- Block or allow a query's domain for its device's rule set from the query
+  log. **Block** and **Allow** become split buttons such as **Block for
+  Warehouse**, with **Everyone** on the arrow, and remember which you picked
+  last.
+- Name the rule set, app, hold, or schedule behind a block in the query
+  explanation, such as "Matched tiktokcdn.com, one of TikTok's domains,
+  blocked by the Warehouse rule set". **Check a Domain** and **Why is this
+  blocked?** check for a particular device.
+
+### Block lists
+
+- Apply only the host rules from adblock-style lists: `||host^`, optionally
+  followed by `|` or `$important`. Paths, wildcards, regular expressions,
+  cosmetic rules, address rules, and other modifiers are skipped, as AdGuard
+  Home, Technitium, and Pi-hole skip them.
+- Stop treating `$badfilter` rules as blocks. AdGuard DNS Filter's
+  `||pl.ua^$badfilter` blocked the whole `pl.ua` suffix.
+- Honor `@@||host^` exception rules across all lists. The query log and
+  **Check a Domain** name the list whose exception let a domain through.
+- Show a list's exceptions and unsupported rules in its details, and keep
+  **Invalid lines** for lines that are actually malformed.
+- Click anywhere on a block list or rule set row to open it. Rows end in a
+  chevron.
+
+### DNSSEC
+
+- Accept correctly signed answers that Sable failed as Bogus (EDE 6):
+  - Names under an empty non-terminal, a name with children but no records of
+    its own (RFC 4035 sections 3.1.3.2 and 5.4). Reverse lookups in ARIN,
+    APNIC, and LACNIC space, such as `254.55.207.192.in-addr.arpa`, failed
+    this way.
+  - Wildcard answers proved only by the record covering the next closer name
+    (RFC 5155 sections 7.2.6 and 8.8, RFC 4035 section 5.3.4). Names such as
+    `big.oisd.nl` failed this way, and with them the OISD block list refresh.
+- Stop accepting proofs that don't prove anything: a parent zone's NSEC at a
+  delegation or DNAME offered as proof about the child zone, and an NSEC3
+  that matches the name or uses an unknown hash algorithm offered as proof the
+  name doesn't exist.
+- Keep serve-stale, prefetch, and the TTL limits after a trust anchor
+  rollover. The cache came back with default settings.
+- Stop a prefetch from replacing a validated cached answer with an
+  unvalidated one when local validation is off.
+
+### DNS
+
+- Accept RFC 2136 dynamic updates on Forwarder zones, so Kubernetes
+  ExternalDNS and similar tools can manage a Forwarder zone's local override
+  records. Secondary Forwarder zones still refuse them, and no update can add
+  or remove forwarding routes.
+- Accept the "delete this RRset" and "RRset exists" records of an RFC 2136
+  update. Sable answered those updates with FORMERR.
+- Answer SERVFAIL when a lookup hits a bug, and count it in
+  `sable_dns_panics_total`. The query used to die, and the same question from
+  other devices could hang until they gave up.
+- Cap open connections at 1,024 across TCP, DoT, and DoH, and at 256 for
+  DNS-over-QUIC, so a client that opens connections and never closes them
+  can't use up memory.
+- Check DoH and DoQ requests the same way as UDP, TCP, and DoT, and answer a
+  malformed one with the same DNS reply.
+- Stop sending a deleted zone's records to a secondary that asks for an
+  incremental transfer after the zone is deleted or re-created.
+- Apply configuration reloads and zone changes one at a time, so a reload
+  can't bring back zones a zone change had just replaced.
+- Match records by lowercase name and value, ignoring TTL, in both the
+  console and MCP, so an edit or delete through MCP picks the same record the
+  console would.
+
+### Insights
+
+- Hide a finding straight from its row in **Worth a Look**. A round icon
+  beside **Details** opens the **For a Day**, **For a Week**, and **That's
+  Normal** menu without opening the drawer.
+- Read all-time and open-ended ranges from the rollups instead of the whole
+  query log, and share dashboard data between open dashboards instead of
+  re-reading it on every poll.
+
+### Logs
+
+- Prune old queries in small batches. A large retention cut or a long outage
+  made one huge delete that could time out and start over every hour, drop new
+  queries while it ran, and hold the SQLite write lock the whole time.
+- Stream the CSV export without skipping or repeating rows that arrive during
+  the download. A failure partway through fails the download instead of
+  saving a short file.
+- Match `_` and `%` literally in query log search.
+
+### Performance
+
+- Start every `sable` command about 70 ms faster with 16 MiB less allocated,
+  and use about 3 MiB less memory when idle.
+- Allocate less per query, on cache hits and DoH responses in particular.
+- Load a zone's history when you open it instead of for every zone in the
+  list, and redraw only the zone you changed after a record edit.
+
+### Console
+
+- Draw every page from one set of buttons, dialogs, tabs, tables, menus, and
+  badges. Status badges use one green and one red, file sizes use binary
+  units everywhere, and every table heading is announced to screen readers as
+  a column heading.
+- Round the console into one shape language. Buttons, segmented controls,
+  the selected sidebar item, and the account button are pills, and icon-only
+  buttons and avatars are circles. Tab bars that wrap to two rows on a phone
+  use rounded rectangles.
+- Open the command palette, dialogs, and detail sheets faster.
+- Open the navigation on a phone by dragging right from anywhere on the page.
+  Start a little in from the edge, since iOS Safari keeps the edge for its
+  back gesture.
+- Keep the page behind an open sheet or dialog still on iPhone and iPad, and
+  keep your place on the page when a dialog closes.
+- Scroll a drawer in Safari and on iPhone while the pointer or your finger
+  is over one of its lists.
+- Stop drawing a focus ring on the current page's link when you tap open the
+  phone menu.
+- Ask "Delete this record?" with the record's type and name before deleting
+  a record.
+- Show a linked identity's last sign-in in your time setting instead of UTC.
+- List the cards on **Integrations** alphabetically.
+
+### Dynamic DNS
+
+- Summarize a provider outage as one short line per failure, such as
+  "Cloudflare had a temporary problem (502 Bad Gateway). Sable will try
+  again." The raw response is still under **View provider details**.
+- Stop sending requests to a provider for the rest of a run after its first
+  rate limit or server error, and wait as long as its `Retry-After` asks, up
+  to 30 minutes. Other providers still update.
+
+### MCP
+
+- Give `check_domain` an optional `device`, and return the `rule_set` and
+  `app` that decided.
+- Add `block_device` and `unblock_device` to set and end holds,
+  `list_schedules` to list each rule set's schedules, and
+  `override_schedule` to skip, delay, end, or resume a window.
+
+### Monitoring
+
+- Add the standard Prometheus process and Go runtime metrics to `/metrics`,
+  such as `process_resident_memory_bytes`, `process_cpu_seconds_total`,
+  `process_open_fds`, `go_goroutines`, and `go_gc_duration_seconds`.
+- Add memory, CPU, and garbage collector figures to the MCP `get_stats`
+  result.
+
+### Updates
+
+- Check for updates through Sable's own resolver, falling back to the host's
+  only when Sable has no answer. On hosts whose resolver drops queries, such
+  as some Starlink routers, the check timed out.
+
+### Security
+
+- Build with Go 1.27.2 and golang.org/x/net 0.60.0, which fix advisories in
+  `net/http`, its HTTP/2 code, `net/textproto`, and `crypto/tls`.
+
+## [1.7.0-beta.17] - 2026-10-13
+
+Sable 1.7.0-beta.17 lets you scroll a drawer in Safari while the pointer or
+your finger is over one of its lists.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.0-beta.16. Coming from 1.6.x, also read
+the 1.7.0-beta.1 upgrade notes below.
+
+### Console
+
+- In Safari and on iPhone, a wheel or swipe over a list inside a drawer, such
+  as a device's apps or addresses, now scrolls the drawer. It used to do
+  nothing until you moved off the list.
+
 ## [1.7.0-beta.16] - 2026-10-12
 
 Sable 1.7.0-beta.16 fixes two phone annoyances in the console: the menu no
