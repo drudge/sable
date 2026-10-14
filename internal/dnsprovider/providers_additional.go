@@ -61,7 +61,11 @@ func (provider *hetznerProvider) Present(ctx context.Context, zone, name, value 
 	}
 	recordName := relativeName(name, zone)
 	endpoint := provider.baseURL + "/zones/" + url.PathEscape(zoneID) + "/rrsets/" + url.PathEscape(recordName) + "/TXT/actions/"
-	body := map[string]any{"records": []map[string]string{{"value": value}}}
+	// Hetzner takes record values in zone-file presentation form, so a TXT
+	// value must be a quoted character-string (RFC 1035 section 5.1). ACME
+	// key authorizations are base64url (RFC 8555 section 8.4), well under the
+	// 255-octet limit of one string.
+	body := map[string]any{"records": []map[string]string{{"value": strconv.Quote(value)}}}
 	if err := jsonRequest(ctx, provider.client, http.MethodPost, endpoint+"add_records", "Bearer "+provider.credentials.APIToken, body, nil); err != nil {
 		return nil, err
 	}

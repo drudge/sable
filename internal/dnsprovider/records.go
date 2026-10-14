@@ -184,9 +184,9 @@ func (provider *porkbunProvider) EnsureRecord(ctx context.Context, record Record
 		Status  string `json:"status"`
 		Message string `json:"message"`
 		Records []struct {
-			ID      any    `json:"id"`
-			Content string `json:"content"`
-			TTL     any    `json:"ttl"`
+			ID      porkbunID `json:"id"`
+			Content string    `json:"content"`
+			TTL     any       `json:"ttl"`
 		} `json:"records"`
 	}
 	if err := jsonRequest(ctx, provider.client, http.MethodPost, provider.baseURL+lookupPath, "", authentication, &listed); err != nil {
@@ -219,8 +219,8 @@ func (provider *porkbunProvider) EnsureRecord(ctx context.Context, record Record
 		}
 		return true, nil
 	}
-	firstID := fmt.Sprint(listed.Records[0].ID)
-	if firstID == "" || firstID == "<nil>" {
+	firstID := string(listed.Records[0].ID)
+	if firstID == "" {
 		return false, errors.New("Porkbun did not return the existing record ID")
 	}
 	endpoint := provider.baseURL + "/dns/edit/" + url.PathEscape(record.Zone) + "/" + url.PathEscape(firstID)
@@ -228,8 +228,8 @@ func (provider *porkbunProvider) EnsureRecord(ctx context.Context, record Record
 		return false, err
 	}
 	for _, duplicate := range listed.Records[1:] {
-		duplicateID := fmt.Sprint(duplicate.ID)
-		if duplicateID == "" || duplicateID == "<nil>" {
+		duplicateID := string(duplicate.ID)
+		if duplicateID == "" {
 			return false, errors.New("Porkbun did not return a duplicate record ID")
 		}
 		deleteEndpoint := provider.baseURL + "/dns/delete/" + url.PathEscape(record.Zone) + "/" + url.PathEscape(duplicateID)
