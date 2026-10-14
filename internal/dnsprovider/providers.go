@@ -213,20 +213,43 @@ func (provider *porkbunProvider) Present(ctx context.Context, zone, name, value 
 		"name": relative, "type": "TXT", "content": value, "ttl": "600",
 	}
 	var created struct {
-		Status string `json:"status"`
-		ID     any    `json:"id"`
+		Status string    `json:"status"`
+		ID     porkbunID `json:"id"`
 	}
 	if err := jsonRequest(ctx, provider.client, http.MethodPost, provider.baseURL+"/dns/create/"+url.PathEscape(zone), "", body, &created); err != nil {
 		return nil, err
 	}
-	id := fmt.Sprint(created.ID)
-	if created.Status != "SUCCESS" || id == "" || id == "<nil>" {
+	id := string(created.ID)
+	if created.Status != "SUCCESS" || id == "" {
 		return nil, errors.New("Porkbun did not return the created record ID")
 	}
 	return func(cleanupContext context.Context) error {
 		cleanupBody := map[string]string{"apikey": provider.credentials.APIKey, "secretapikey": provider.credentials.Secret}
 		return jsonRequest(cleanupContext, provider.client, http.MethodPost, provider.baseURL+"/dns/delete/"+url.PathEscape(zone)+"/"+url.PathEscape(id), "", cleanupBody, nil)
 	}, nil
+}
+
+// porkbunID is a Porkbun record ID. The API documents it as a string but has
+// sent it as a JSON number, which decoding into any would turn into a float
+// such as 1.06926659e+08.
+type porkbunID string
+
+func (id *porkbunID) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		*id = ""
+		return nil
+	}
+	var number json.Number
+	if err := json.Unmarshal(data, &number); err == nil {
+		*id = porkbunID(number.String())
+		return nil
+	}
+	var text string
+	if err := json.Unmarshal(data, &text); err != nil {
+		return fmt.Errorf("Porkbun record ID: %w", err)
+	}
+	*id = porkbunID(strings.TrimSpace(text))
+	return nil
 }
 
 type godaddyProvider struct {

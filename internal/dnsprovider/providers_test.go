@@ -138,10 +138,14 @@ func TestHetznerProviderAddsAndRemovesOnlyChallengeValue(t *testing.T) {
 		if request.Header.Get("Authorization") != "Bearer token" {
 			t.Errorf("authorization = %q", request.Header.Get("Authorization"))
 		}
-		return httpResponse(http.StatusCreated, `{}`), nil
+		body, _ := io.ReadAll(request.Body)
+		if got, want := string(body), `{"records":[{"value":"\"challenge-Xy_9\""}]}`; got != want {
+			t.Errorf("body = %s, want %s", got, want)
+		}
+		return httpResponse(http.StatusCreated, `{"action":{"id":1,"status":"running"}}`), nil
 	})}
 	provider := &hetznerProvider{credentials: Credentials{APIToken: "token", ZoneID: "zone-1"}, client: client, baseURL: "https://hetzner.test/v1"}
-	cleanup, err := provider.Present(context.Background(), "example.com", "_acme-challenge.example.com", "challenge")
+	cleanup, err := provider.Present(context.Background(), "example.com", "_acme-challenge.example.com", "challenge-Xy_9")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,6 +336,34 @@ func TestGoDaddyEnsureRecordReadsItemsResponse(t *testing.T) {
 	}
 }
 
+func TestPorkbunProviderCleansUpCreatedRecordByID(t *testing.T) {
+	for _, created := range []string{`"106926659"`, `106926659`} {
+		var paths []string
+		client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			paths = append(paths, request.URL.Path)
+			if strings.Contains(request.URL.Path, "/dns/create/") {
+				return httpResponse(http.StatusOK, `{"status":"SUCCESS","id":`+created+`}`), nil
+			}
+			return httpResponse(http.StatusOK, `{"status":"SUCCESS"}`), nil
+		})}
+		provider := &porkbunProvider{credentials: Credentials{APIKey: "key", Secret: "secret"}, client: client, baseURL: "https://porkbun.test/api/json/v3"}
+		cleanup, err := provider.Present(context.Background(), "example.com", "_acme-challenge.example.com", "challenge")
+		if err != nil {
+			t.Fatalf("id %s: %v", created, err)
+		}
+		if err := cleanup(context.Background()); err != nil {
+			t.Fatalf("id %s: %v", created, err)
+		}
+		expected := []string{
+			"/api/json/v3/dns/create/example.com",
+			"/api/json/v3/dns/delete/example.com/106926659",
+		}
+		if strings.Join(paths, "\n") != strings.Join(expected, "\n") {
+			t.Fatalf("id %s: paths = %#v", created, paths)
+		}
+	}
+}
+
 func TestPorkbunEnsureApexRecordOmitsAtLabel(t *testing.T) {
 	var paths []string
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
@@ -358,7 +390,7 @@ func TestPorkbunEnsureRecordCollapsesDuplicateRecordsByID(t *testing.T) {
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		paths = append(paths, request.URL.Path)
 		if strings.Contains(request.URL.Path, "retrieveByNameType") {
-			return httpResponse(http.StatusOK, `{"status":"SUCCESS","records":[{"id":"10","content":"198.51.100.2","ttl":"600"},{"id":"11","content":"198.51.100.3","ttl":"600"}]}`), nil
+			return httpResponse(http.StatusOK, `{"status":"SUCCESS","records":[{"id":"10","content":"198.51.100.2","ttl":"600"},{"id":11,"content":"198.51.100.3","ttl":"600"}]}`), nil
 		}
 		return httpResponse(http.StatusOK, `{"status":"SUCCESS"}`), nil
 	})}
