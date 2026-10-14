@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -40,6 +41,9 @@ type Store struct {
 	// exactCountRows overrides how large the query log may be before an
 	// unfiltered count is estimated; zero means exactCountRowsLimit.
 	exactCountRows int
+	// queryLogRows is the query log's row count as of its last prune; see
+	// queryLogCount.
+	queryLogRows queryLogCount
 }
 
 const maximumRecentQueryEvents = 1_000
@@ -228,14 +232,19 @@ func (store *Store) writeQueryEvents(ctx context.Context, events []querylog.Even
 // timeout. The query log writer lands its batches between chunks.
 func (store *Store) PruneQueryEvents(ctx context.Context, before time.Time) error {
 	before = before.UTC()
-	if err := store.deleteInChunks(ctx, "sable_query_log", "occurred_at < "+store.placeholder(1), before); err != nil {
+	deleted, err := store.deleteInChunks(ctx, "sable_query_log", "occurred_at < "+store.placeholder(1), before)
+	if err != nil {
+		store.queryLogRows.forget()
 		return fmt.Errorf("prune query log: %w", err)
+	}
+	if err := store.queryLogRows.pruned(ctx, store, deleted); err != nil {
+		return err
 	}
 	// Drop the cutoff minute as well because its aggregate can include rows
 	// from before the exact cutoff. Surviving rows in that partial minute remain
 	// available through the raw log boundary query.
 	bucket := before.Truncate(time.Minute)
-	if err := store.deleteInChunks(ctx, minuteRollupTable, "bucket_start <= "+store.placeholder(1), bucket); err != nil {
+	if _, err := store.deleteInChunks(ctx, minuteRollupTable, "bucket_start <= "+store.placeholder(1), bucket); err != nil {
 		return fmt.Errorf("prune query log rollups: %w", err)
 	}
 	if err := store.pruneRollupTiers(ctx, bucket); err != nil {
@@ -253,11 +262,12 @@ const (
 )
 
 // deleteInChunks deletes the rows of table that match condition, at most
-// pruneChunkRows at a time, each chunk in its own statement and transaction.
+// pruneChunkRows at a time, each chunk in its own statement and transaction,
+// and says how many it deleted.
 // Rows are picked by their physical key: on SQLite the rowid, which is the
 // query log's id, and on PostgreSQL the ctid, which the ANY(ARRAY(...)) form
 // turns into a direct tuple lookup instead of a scan.
-func (store *Store) deleteInChunks(ctx context.Context, table, condition string, arguments ...any) error {
+func (store *Store) deleteInChunks(ctx context.Context, table, condition string, arguments ...any) (int64, error) {
 	chunk := store.pruneChunk
 	if chunk <= 0 {
 		chunk = pruneChunkRows
@@ -267,22 +277,24 @@ func (store *Store) deleteInChunks(ctx context.Context, table, condition string,
 	if store.driver == "postgres" {
 		statement = "DELETE FROM " + table + " WHERE ctid = ANY(ARRAY(SELECT ctid FROM " + table + limit + "))"
 	}
+	var total int64
 	for {
 		if err := ctx.Err(); err != nil {
-			return err
+			return total, err
 		}
 		chunkContext, cancel := context.WithTimeout(ctx, pruneChunkTimeout)
 		result, err := store.database.ExecContext(chunkContext, statement, arguments...)
 		cancel()
 		if err != nil {
-			return err
+			return total, err
 		}
 		deleted, err := result.RowsAffected()
 		if err != nil {
-			return err
+			return total, err
 		}
+		total += deleted
 		if deleted < int64(chunk) {
-			return nil
+			return total, nil
 		}
 	}
 }
@@ -483,6 +495,10 @@ const queryLogSpanQuery = "SELECT (SELECT MIN(id) FROM sable_query_log), (SELECT
 // deletes from the old end, so the span is the row count apart from the few
 // rows a prune leaves behind out of order and any IDs a PostgreSQL sequence
 // skipped: it can run high, never low.
+//
+// The span also counts every row a prune leaves a hole for, so once the log
+// has been counted the estimate is the smaller of the span and that count
+// plus the IDs written since; see queryLogCount.
 func (store *Store) estimateQueryEvents(ctx context.Context) (int, error) {
 	var oldest, newest sql.NullInt64
 	if err := store.database.QueryRowContext(ctx, queryLogSpanQuery).Scan(&oldest, &newest); err != nil {
@@ -491,7 +507,71 @@ func (store *Store) estimateQueryEvents(ctx context.Context) (int, error) {
 	if !oldest.Valid || !newest.Valid {
 		return 0, nil
 	}
-	return int(newest.Int64 - oldest.Int64 + 1), nil
+	span := int(newest.Int64 - oldest.Int64 + 1)
+	if counted, ok := store.queryLogRows.since(newest.Int64); ok {
+		return min(span, counted), nil
+	}
+	return span, nil
+}
+
+// queryLogCount carries an exact count of the query log between prunes, the
+// way Pi-hole's FTL keeps its totals in memory rather than counting its
+// database. The first prune after start counts the log once, in the
+// background where a cold count's seconds cost nobody a page load; each later
+// prune subtracts the rows it deleted, and rows written since are the IDs
+// past the newest one counted. Writes the count doesn't see, such as another
+// node pruning a shared PostgreSQL log, can only leave it high, as the span
+// is, so the estimate takes the smaller of the two.
+type queryLogCount struct {
+	mutex    sync.Mutex
+	known    bool
+	rows     int
+	newestID int64
+}
+
+// queryLogCountQuery counts the log and reads its newest ID in one statement,
+// so both come from the same snapshot.
+const queryLogCountQuery = "SELECT COUNT(*), COALESCE(MAX(id), 0) FROM sable_query_log"
+
+// pruned takes a prune's deletions off the count, or counts the log if it
+// hasn't been counted yet.
+func (count *queryLogCount) pruned(ctx context.Context, store *Store, deleted int64) error {
+	count.mutex.Lock()
+	if count.known {
+		count.rows = max(count.rows-int(deleted), 0)
+		count.mutex.Unlock()
+		return nil
+	}
+	count.mutex.Unlock()
+	var rows int
+	var newestID int64
+	if err := store.database.QueryRowContext(ctx, queryLogCountQuery).Scan(&rows, &newestID); err != nil {
+		return fmt.Errorf("count query log: %w", err)
+	}
+	count.mutex.Lock()
+	count.known, count.rows, count.newestID = true, rows, newestID
+	count.mutex.Unlock()
+	return nil
+}
+
+// forget drops the count after a prune that may have deleted rows it can't
+// say how many of, so the next prune counts again.
+func (count *queryLogCount) forget() {
+	count.mutex.Lock()
+	count.known = false
+	count.mutex.Unlock()
+}
+
+// since returns the count for a log whose newest ID is newestID. A newest ID
+// below the one counted means the log was replaced, so the count no longer
+// applies.
+func (count *queryLogCount) since(newestID int64) (int, bool) {
+	count.mutex.Lock()
+	defer count.mutex.Unlock()
+	if !count.known || newestID < count.newestID {
+		return 0, false
+	}
+	return count.rows + int(newestID-count.newestID), true
 }
 
 // selectQueryEvents reads one page, newest first, either by page number or

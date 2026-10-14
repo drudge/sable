@@ -352,7 +352,7 @@ func (store *Store) pruneRollupTiers(ctx context.Context, through time.Time) err
 		}
 		builder := store.newSQLBuilder()
 		condition := store.dimensionCondition(queryLogRollupDimensions, builder.Bind) + " AND bucket_start <= " + builder.Bind(through)
-		if err := store.deleteInChunks(ctx, tier.table, condition, builder.Args()...); err != nil {
+		if _, err := store.deleteInChunks(ctx, tier.table, condition, builder.Args()...); err != nil {
 			return fmt.Errorf("prune %s: %w", tier.table, err)
 		}
 	}
