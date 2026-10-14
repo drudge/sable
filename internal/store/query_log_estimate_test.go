@@ -73,6 +73,43 @@ func TestQueryEventsEstimatesOnlyTheUnfilteredTotal(t *testing.T) {
 	}
 	assertQueryEventIDs(t, oldest.Entries, []int64{6, 5, 4})
 
+	// Paging older from the second page reaches the oldest row on a short
+	// page, which is then the last.
+	older, err := opened.QueryEvents(ctx, querylog.Filter{
+		Page: 3, PageSize: 3, Direction: "older", Cursor: 5, KnownTotal: 7, UseKnownTotal: true, KnownTotalEstimated: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if older.Page != 3 || older.TotalPages != 3 {
+		t.Fatalf("short older page = page %d of %d; want 3 of 3", older.Page, older.TotalPages)
+	}
+	assertQueryEventIDs(t, older.Entries, []int64{4})
+
+	// An estimate that runs a page high ends on the page that held the
+	// oldest row, not on an empty one.
+	high, err := opened.QueryEvents(ctx, querylog.Filter{
+		Page: 4, PageSize: 3, Direction: "older", Cursor: 4, KnownTotal: 10, UseKnownTotal: true, KnownTotalEstimated: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if high.Page != 3 || high.TotalPages != 3 {
+		t.Fatalf("past the oldest row = page %d of %d; want 3 of 3", high.Page, high.TotalPages)
+	}
+	assertQueryEventIDs(t, high.Entries, []int64{6, 5, 4})
+
+	// An exact total already knows where the log ends.
+	exact, err := opened.QueryEvents(ctx, querylog.Filter{
+		Page: 3, PageSize: 3, Direction: "older", Cursor: 4, KnownTotal: 7, UseKnownTotal: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exact.TotalPages != 3 || len(exact.Entries) != 0 {
+		t.Fatalf("exact older page = %d pages, %d rows; want 3, 0", exact.TotalPages, len(exact.Entries))
+	}
+
 	live, err := opened.QueryEvents(ctx, querylog.Filter{
 		Page: 1, PageSize: 3, KnownTotal: 6, UseKnownTotal: true, KnownTotalEstimated: true, AfterID: 9, Incremental: true,
 	})

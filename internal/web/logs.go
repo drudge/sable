@@ -299,6 +299,12 @@ func (server *Server) loadQueryLogsView(request *http.Request, view pages.QueryL
 	view.PreviousURL = queryLogPanelURL(raw, max(1, result.Page-1), firstID, "newer", result.TotalEntries, result.TotalEstimated)
 	view.NextURL = queryLogPanelURL(raw, min(max(1, result.TotalPages), result.Page+1), lastID, "older", result.TotalEntries, result.TotalEstimated)
 	view.LastURL = queryLogPanelURL(raw, max(1, result.TotalPages), 0, "oldest", result.TotalEntries, result.TotalEstimated)
+	// From the page before the last, the last page is the rows older than
+	// this one, so it can't repeat any of them when an estimated total
+	// leaves the oldest page's length unknown.
+	if result.Page+1 == result.TotalPages {
+		view.LastURL = view.NextURL
+	}
 	view.ExportURL = "/api/v1/logs/queries/export?" + exportQueryValues(raw).Encode()
 	return view
 }
