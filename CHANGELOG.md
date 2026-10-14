@@ -8,6 +8,24 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.1-beta.1] - 2026-10-14
+
+Sable 1.7.1-beta.1 opens the Logs page instantly on a large query log. On a
+log of about 5 million queries, the page used to take over two seconds to
+open.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.0.
+
+### Console
+
+- **Logs** reads only the tab that's open. The other tab loads when you click
+  it, and a hidden tab no longer refreshes in the background.
+- An unfiltered query log of more than 50,000 queries shows an approximate
+  total, marked with `~`, instead of counting every row. Filtered views,
+  exports, and the API still give exact totals.
+
 ## [1.7.0] - 2026-10-13
 
 Sable 1.7.0 adds per-device blocking. Rule sets give some devices their own
