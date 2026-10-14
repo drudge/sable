@@ -8,6 +8,27 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.1-beta.4] - 2026-10-14
+
+Sable 1.7.1-beta.4 fixes public TLS certificates with OVHcloud, Hetzner, and
+Porkbun DNS, and Dynamic DNS with OVHcloud.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.0 or any 1.7.1 beta.
+
+### Fixes
+
+- **OVHcloud** DNS-01 challenges no longer fail with `cannot unmarshal object
+  into Go value of type int64`, so public TLS certificates issue and renew.
+  Dynamic DNS can also create a record that doesn't exist yet.
+- **Hetzner** DNS-01 challenges send the TXT value quoted, as Hetzner's DNS
+  API requires, so public TLS certificates issue and the challenge record is
+  removed afterwards.
+- **Porkbun** removes the DNS-01 challenge record after issuing a certificate
+  when Porkbun returns record IDs as numbers, instead of leaving it behind.
+  Dynamic DNS updates and removes duplicate records the same way.
+
 ## [1.7.1-beta.3] - 2026-10-14
 
 Sable 1.7.1-beta.3 is beta.2 rebuilt on current dependencies. There are no
