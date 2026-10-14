@@ -235,7 +235,7 @@ func TestOVHProviderRefreshesAfterCreateAndCleanup(t *testing.T) {
 			t.Errorf("signature = %q", request.Header.Get("X-Ovh-Signature"))
 		}
 		if strings.HasSuffix(request.URL.Path, "/record") {
-			return httpResponse(http.StatusOK, `42`), nil
+			return httpResponse(http.StatusOK, `{"id":42,"zone":"example.com","fieldType":"TXT","subDomain":"_acme-challenge","target":"challenge","ttl":60}`), nil
 		}
 		return httpResponse(http.StatusOK, `{}`), nil
 	})}
@@ -448,6 +448,38 @@ func TestHetznerEnsureRecordCreatesMissingRRSet(t *testing.T) {
 	expected := []string{
 		"GET /v1/zones/zone-1/rrsets/home/A",
 		"POST /v1/zones/zone-1/rrsets",
+	}
+	if strings.Join(requests, "\n") != strings.Join(expected, "\n") {
+		t.Fatalf("requests = %#v", requests)
+	}
+}
+
+func TestOVHEnsureRecordCreatesMissingRecord(t *testing.T) {
+	var requests []string
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		requests = append(requests, request.Method+" "+request.URL.Path)
+		switch {
+		case request.Method == http.MethodGet:
+			return httpResponse(http.StatusOK, `[]`), nil
+		case strings.HasSuffix(request.URL.Path, "/record"):
+			return httpResponse(http.StatusOK, `{"id":42,"zone":"example.com","fieldType":"A","subDomain":"home","target":"198.51.100.1","ttl":600}`), nil
+		}
+		return httpResponse(http.StatusOK, `null`), nil
+	})}
+	provider := &ovhProvider{
+		credentials: Credentials{ApplicationKey: "application", ApplicationSecret: "secret", ConsumerKey: "consumer"},
+		client:      client, baseURL: "https://ovh.test/1.0", now: func() time.Time { return time.Unix(1_786_620_000, 0) },
+	}
+	changed, err := provider.EnsureRecord(context.Background(), Record{
+		Zone: "example.com", Name: "home.example.com", Type: TypeA, Value: "198.51.100.1", TTL: 600,
+	})
+	if err != nil || !changed {
+		t.Fatalf("EnsureRecord() = %v, %v", changed, err)
+	}
+	expected := []string{
+		"GET /1.0/domain/zone/example.com/record",
+		"POST /1.0/domain/zone/example.com/record",
+		"POST /1.0/domain/zone/example.com/refresh",
 	}
 	if strings.Join(requests, "\n") != strings.Join(expected, "\n") {
 		t.Fatalf("requests = %#v", requests)
