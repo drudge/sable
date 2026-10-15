@@ -134,6 +134,12 @@ html { min-width: 320px; background: var(--shell-background); scroll-behavior: s
    should scroll the drawer around it. Nested scrollers hand their overscroll
    on to the scroller around them, as they do outside a modal. */
 html:has(dialog[open]) { overflow: hidden; }
+/* iOS Safari still scrolls a frozen root under a finger, a focus or a fling,
+   and when it does the modal and its backdrop, fixed to a viewport the
+   browser no longer moves, slide off the screen with the page. app.js pins
+   the body where the page was while a dialog is open, so the document has
+   nothing left to scroll. */
+html.modal-scroll-lock body { position: fixed; inset-inline: 0; top: var(--modal-scroll-top, 0); }
 dialog[open] { overscroll-behavior: contain; }
 body { min-width: 320px; min-height: 100vh; margin: 0; background: var(--background); color: var(--foreground); font-size: 14px; }
 body:has(.app-shell) { background: var(--shell-background); }

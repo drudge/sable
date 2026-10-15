@@ -99,6 +99,21 @@ const refused = page => page.evaluate(() => window.lastTouchRefused);
     assert.equal(await refused(page), true, 'a scroller at its edge does not pass the touch to the page');
     await page.evaluate(() => document.getElementById('cache-browser-dialog').close());
 
+    // While a modal is open the page sits where it was with nothing left to
+    // scroll, so iOS Safari can't carry the modal off the screen with it.
+    await page.evaluate(() => window.scrollTo(0, 1200));
+    const marker = () => page.evaluate(() => document.getElementById('main-content').getBoundingClientRect().top);
+    const resting = await marker();
+    await page.evaluate(() => document.getElementById('cache-flush-dialog').showModal());
+    await page.waitForTimeout(100);
+    assert.equal(await marker(), resting, 'opening a modal leaves the page where it was');
+    assert.equal(await page.evaluate(() => getComputedStyle(document.body).position), 'fixed', 'the body is pinned while a modal is open');
+    assert.ok(await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1), 'the document has nothing to scroll');
+    await page.evaluate(() => document.getElementById('cache-flush-dialog').close());
+    await page.waitForTimeout(100);
+    assert.equal(await page.evaluate(() => getComputedStyle(document.body).position), 'static', 'closing the modal unpins the body');
+    assert.equal(await page.evaluate(() => window.scrollY), 1200, 'and puts the page back');
+
     // Closing a modal leaves the page where it was, even when the browser
     // lost the position while the root was frozen, as iOS Safari does.
     await page.evaluate(() => window.scrollTo(0, 1500));
