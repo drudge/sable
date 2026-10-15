@@ -284,6 +284,9 @@ type UniFiWizardView struct {
 	Username              string
 	CAFile                string
 	Insecure              bool
+	// Timeout is the per-request limit as the operator typed it; blank means
+	// the default.
+	Timeout               string
 	Interval              string
 	SyncReservations      bool
 	SyncActive            bool
@@ -1229,6 +1232,9 @@ templ UniFiWizardConnectStep(wizard UniFiWizardView) {
 			<label class="field-control"><span>CA File (optional)</span><input name="tls_ca_file" value={ wizard.CAFile } placeholder="/etc/sable/unifi-ca.pem"/></label>
 			<label class="field-control checkbox"><input type="checkbox" name="tls_insecure" value="true" checked?={ wizard.Insecure }/><span>Skip certificate verification</span><small>Pin the issuer above, or accept it unverified on a trusted network.</small></label>
 		</div>
+		<div class="field-grid two">
+			@components.Field(components.FieldProps{ID: "unifi-timeout", Label: "Request Timeout (optional)", Help: "How long Sable waits for each controller reply, from 5s to 10m.", Input: templ.Attributes{"name": "timeout", "value": wizard.Timeout, "placeholder": "90s"}})
+		</div>
 	</section>
 }
 
@@ -1388,6 +1394,7 @@ templ UniFiWizardCarriedConnection(wizard UniFiWizardView) {
 	<input type="hidden" name="auth_mode" value={ wizard.AuthMode }/>
 	<input type="hidden" name="username" value={ wizard.Username }/>
 	<input type="hidden" name="tls_ca_file" value={ wizard.CAFile }/>
+	<input type="hidden" name="timeout" value={ wizard.Timeout }/>
 	if wizard.Insecure {
 		<input type="hidden" name="tls_insecure" value="true"/>
 	}

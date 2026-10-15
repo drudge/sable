@@ -612,6 +612,15 @@ lists every such skip.
 UniFi consoles ship a self-signed certificate. Point `tls_ca_file` at its issuer
 to pin it, or set `tls_insecure` to accept it unverified on a trusted network.
 
+**Slow controllers.** `timeout` limits each request to the controller, from
+connecting to reading the whole reply. It defaults to `90s` and accepts `5s` to
+`10m`; the wizard's connection step calls it **Request Timeout**. Reading
+reservations lists every client the controller has ever seen, which can take
+tens of seconds on a busy console, so raise it if syncs fail with `context
+deadline exceeded`. The key is written only when it's set. A node from before
+this setting can't read it, so upgrade every node in a cluster before you set
+it.
+
 **Finding devices.** Every sync also reads each connected client's traffic,
 named or not, and the DNS servers each network's DHCP hands out, so
 [Insights](guides/insights.md#devices-that-dont-use-sable) can point out devices

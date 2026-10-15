@@ -23,9 +23,12 @@ import (
 )
 
 const (
-	requestTimeout      = 30 * time.Second
-	maximumResponseSize = 32 << 20
-	userAgent           = "Sable DNS UniFi synchronizer"
+	// DefaultRequestTimeout is how long one controller request may take when
+	// the operator has not chosen a limit. Listing every known client on a
+	// busy console can take tens of seconds, so it is generous.
+	DefaultRequestTimeout = 90 * time.Second
+	maximumResponseSize   = 32 << 20
+	userAgent             = "Sable DNS UniFi synchronizer"
 )
 
 // ErrUnauthorized reports credentials the controller rejected. The console
@@ -58,6 +61,9 @@ type Options struct {
 	// risk with InsecureSkipVerify.
 	CAFile             string
 	InsecureSkipVerify bool
+	// Timeout limits each controller request, from connecting to reading the
+	// whole reply. Zero means DefaultRequestTimeout.
+	Timeout time.Duration
 }
 
 // Client reads inventory from a UniFi controller.
@@ -117,12 +123,16 @@ func New(options Options) (*Client, error) {
 	if site == "" {
 		site = "default"
 	}
+	timeout := options.Timeout
+	if timeout <= 0 {
+		timeout = DefaultRequestTimeout
+	}
 	return &Client{
 		baseURL:     parsed,
 		site:        site,
 		credentials: options.Credentials,
 		http: &http.Client{
-			Timeout: requestTimeout,
+			Timeout: timeout,
 			Jar:     jar,
 			Transport: &http.Transport{
 				TLSClientConfig:     tlsConfig,
