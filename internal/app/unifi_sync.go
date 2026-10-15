@@ -197,6 +197,7 @@ func (syncer *unifiSyncer) Inventory(ctx context.Context, settings config.UniFi)
 		Credentials:        credentials,
 		CAFile:             settings.CAFile,
 		InsecureSkipVerify: settings.Insecure,
+		Timeout:            settings.RequestTimeout(),
 	})
 	if err != nil {
 		return unifi.Inventory{}, err
@@ -280,6 +281,7 @@ func (syncer *unifiSyncer) synchronize(ctx context.Context, settings config.UniF
 		Credentials:        credentials,
 		CAFile:             settings.CAFile,
 		InsecureSkipVerify: settings.Insecure,
+		Timeout:            settings.RequestTimeout(),
 	})
 	if err != nil {
 		return unifi.Plan{}, 0, err
