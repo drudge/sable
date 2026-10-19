@@ -310,6 +310,9 @@ func unifiSettingsFromWizard(wizard pages.UniFiWizardView, networks []pages.UniF
 	if parsed, err := durationfmt.Parse(wizard.Interval); err == nil && parsed > 0 {
 		settings.Interval = config.Duration{Duration: parsed}
 	}
+	if timeout, err := unifiWizardTimeout(wizard.Timeout); err == nil {
+		settings.Timeout = config.Duration{Duration: timeout}
+	}
 	if wizard.SyncReservations {
 		settings.Sources = append(settings.Sources, "reservations")
 	}
@@ -346,6 +349,9 @@ func (server *Server) newUniFiWizard(request *http.Request) pages.UniFiWizardVie
 		Interval: settings.Interval.String(), CAFile: settings.CAFile, Insecure: settings.Insecure,
 		SyncReservations: settings.SyncsReservations(), SyncActive: settings.SyncsActiveClients(),
 		FindDevices: settings.FindDevices, AuthMode: "api-key",
+	}
+	if settings.Timeout.Duration > 0 {
+		wizard.Timeout = settings.Timeout.String()
 	}
 	if settings.Site == "" {
 		wizard.Site = "default"
@@ -472,6 +478,7 @@ func unifiWizardFromForm(request *http.Request) pages.UniFiWizardView {
 		Username:         strings.TrimSpace(request.FormValue("username")),
 		CAFile:           strings.TrimSpace(request.FormValue("tls_ca_file")),
 		Insecure:         request.FormValue("tls_insecure") == "true",
+		Timeout:          strings.TrimSpace(request.FormValue("timeout")),
 		Interval:         strings.TrimSpace(request.FormValue("interval")),
 		SyncReservations: request.FormValue("source_reservations") == "true",
 		SyncActive:       request.FormValue("source_active") == "true",
@@ -492,6 +499,11 @@ func unifiWizardFromForm(request *http.Request) pages.UniFiWizardView {
 
 func (server *Server) unifiWizardConnect(writer http.ResponseWriter, request *http.Request, wizard pages.UniFiWizardView) {
 	wizard.Step = unifiStepConnect
+	if _, err := unifiWizardTimeout(wizard.Timeout); err != nil {
+		wizard.Error = err.Error()
+		server.renderWizard(writer, request, http.StatusUnprocessableEntity, wizard)
+		return
+	}
 	credentials, err := server.unifiWizardCredentials(request, wizard)
 	if err != nil {
 		wizard.Error = err.Error()
@@ -520,6 +532,20 @@ func (server *Server) unifiWizardConnect(writer http.ResponseWriter, request *ht
 		return
 	}
 	server.renderWizard(writer, request, http.StatusOK, wizard)
+}
+
+// unifiWizardTimeout reads the request timeout field. Blank is zero, which
+// leaves the default in place; anything else must be a duration the
+// configuration accepts.
+func unifiWizardTimeout(text string) (time.Duration, error) {
+	if text == "" {
+		return 0, nil
+	}
+	timeout, err := durationfmt.Parse(text)
+	if err != nil || timeout < config.MinimumUniFiTimeout || timeout > config.MaximumUniFiTimeout {
+		return 0, errors.New("Enter a request timeout from 5s to 10m, or leave it blank for 90s.")
+	}
+	return timeout, nil
 }
 
 // unifiWizardCredentials builds credentials from the connection form, keeping

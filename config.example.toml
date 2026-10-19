@@ -270,6 +270,10 @@ sources = ["reservations", "active"]
 # the risk with tls_insecure.
 tls_ca_file = ""
 tls_insecure = false
+# How long Sable waits for each controller reply, from 5s to 10m. Leave it out
+# for the 90s default. Older nodes in a cluster can't read this key, so upgrade
+# every node before setting it.
+# timeout = "90s"
 # Read the controller's clients for Insights even with no network mapped
 # below, so Sable can point out devices that never use it for DNS.
 find_devices = false

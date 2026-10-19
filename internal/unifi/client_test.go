@@ -307,6 +307,19 @@ func TestNewDefaultsSchemeAndSite(t *testing.T) {
 	if client.baseURL.Scheme != "https" || client.site != "default" {
 		t.Fatalf("client defaulted to %s and site %q", client.baseURL, client.site)
 	}
+	if client.http.Timeout != DefaultRequestTimeout {
+		t.Fatalf("timeout = %s, want %s", client.http.Timeout, DefaultRequestTimeout)
+	}
+}
+
+func TestNewUsesChosenTimeout(t *testing.T) {
+	client, err := New(Options{ControllerURL: "unifi.example", Credentials: Credentials{APIKey: "k"}, Timeout: 2 * time.Minute})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if client.http.Timeout != 2*time.Minute {
+		t.Fatalf("timeout = %s, want 2m", client.http.Timeout)
+	}
 }
 
 // unplacedFixture mirrors what a controller really returns: reservations

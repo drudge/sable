@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 func decodeUniFi(t *testing.T, body string) (Config, error) {
@@ -37,6 +39,42 @@ func TestUniFiDefaults(t *testing.T) {
 	}
 	if settings.Runnable() {
 		t.Fatal("an unconfigured integration reported itself runnable")
+	}
+	if settings.Timeout.Duration != 0 || settings.RequestTimeout() != 90*time.Second {
+		t.Fatalf("timeout = %s, request timeout = %s, want unset and 90s", settings.Timeout.Duration, settings.RequestTimeout())
+	}
+}
+
+// An unset timeout stays out of the encoded file, so a node that predates the
+// key can still decode a configuration replicated from a newer primary.
+func TestUniFiTimeoutEncodesOnlyWhenSet(t *testing.T) {
+	cases := []struct {
+		name, body, want string
+		timeout          time.Duration
+	}{
+		{name: "unset", timeout: 90 * time.Second},
+		{name: "set", body: "\n[unifi]\ntimeout = \"2m\"\n", want: "timeout = '2m0s'", timeout: 2 * time.Minute},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			loaded, err := decodeUniFi(t, testCase.body)
+			if err != nil {
+				t.Fatalf("Decode: %v", err)
+			}
+			if got := loaded.UniFi.RequestTimeout(); got != testCase.timeout {
+				t.Fatalf("request timeout = %s, want %s", got, testCase.timeout)
+			}
+			encoded, err := toml.Marshal(loaded.UniFi)
+			if err != nil {
+				t.Fatalf("Marshal: %v", err)
+			}
+			if testCase.want == "" && strings.Contains(string(encoded), "timeout") {
+				t.Fatalf("unset timeout was encoded:\n%s", encoded)
+			}
+			if testCase.want != "" && !strings.Contains(string(encoded), testCase.want) {
+				t.Fatalf("encoded section lacks %q:\n%s", testCase.want, encoded)
+			}
+		})
 	}
 }
 
@@ -93,6 +131,16 @@ func TestUniFiValidationRejectsBadConfiguration(t *testing.T) {
 			name: "interval below the floor",
 			body: "\n[unifi]\ninterval = \"5s\"\n",
 			want: "unifi.interval must be at least",
+		},
+		{
+			name: "timeout below the floor",
+			body: "\n[unifi]\ntimeout = \"1s\"\n",
+			want: "unifi.timeout must be between",
+		},
+		{
+			name: "timeout above the ceiling",
+			body: "\n[unifi]\ntimeout = \"1h\"\n",
+			want: "unifi.timeout must be between",
 		},
 		{
 			name: "mapping without a zone",
