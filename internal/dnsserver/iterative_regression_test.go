@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -199,24 +201,47 @@ func TestIterativeResolverChasesACNAMEOutOfTheZone(t *testing.T) {
 // pick the servers for every name under com.
 func TestIterativeResolverRefusesAReferralUpward(t *testing.T) {
 	t.Parallel()
-	runtime := recursiveTestRuntime(t)
-	runtime.delegations.set("fye.com", []string{"192.0.2.3:53"}, 300, time.Now())
-	handler := NewHandler(runtime)
-	defer handler.Close()
-	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, endpoint string, _ time.Duration) (*dns.Msg, error) {
-		question := request.Question[0]
-		if endpoint == "udp://192.0.2.3:53" && question.Name == "www.fye.com." {
-			return referralResponse(request, "com.", "ns.fye.com.", "192.0.2.3"), nil
-		}
-		return nil, fmt.Errorf("unexpected iterative query %s/%s to %s", question.Name, dns.TypeToString[question.Qtype], endpoint)
-	}
-	request := new(dns.Msg)
-	request.SetQuestion("www.fye.com.", dns.TypeA)
-	if _, err := handler.resolveNetworkWithinTimeout(request, runtime, nil); err == nil {
-		t.Fatal("an upward referral was followed")
-	}
-	if zone, servers, found := runtime.delegations.get("www.example.com", time.Now()); found && zone == "com" {
-		t.Fatalf("com delegation was taken from fye.com's servers: %v", servers)
+	for _, test := range []struct {
+		name, referTo, wantErr string
+	}{
+		// The com. NS is out of fye.com's bailiwick, so it is scrubbed
+		// before the referral is read and the walk finds nothing to follow.
+		{"above the zone", "com.", "neither an answer nor a referral"},
+		// A lame server that answers with its own apex NS refers sideways
+		// to the zone it already is; the walk must stop rather than loop.
+		{"to the zone itself", "fye.com.", "referred www.fye.com. upward to fye.com."},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			runtime := recursiveTestRuntime(t)
+			runtime.delegations.set("fye.com", []string{"192.0.2.3:53"}, 300, time.Now())
+			handler := NewHandler(runtime)
+			defer handler.Close()
+			var queries atomic.Int32
+			handler.upstreamExchange = func(_ context.Context, request *dns.Msg, endpoint string, _ time.Duration) (*dns.Msg, error) {
+				queries.Add(1)
+				question := request.Question[0]
+				if endpoint == "udp://192.0.2.3:53" && question.Name == "www.fye.com." {
+					return referralResponse(request, test.referTo, "ns.fye.com.", "192.0.2.3"), nil
+				}
+				return nil, fmt.Errorf("unexpected iterative query %s/%s to %s", question.Name, dns.TypeToString[question.Qtype], endpoint)
+			}
+			request := new(dns.Msg)
+			request.SetQuestion("www.fye.com.", dns.TypeA)
+			_, err := handler.resolveNetworkWithinTimeout(request, runtime, nil)
+			if err == nil {
+				t.Fatal("an upward referral was followed")
+			}
+			if !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("error = %v, want it to mention %q", err, test.wantErr)
+			}
+			if got := queries.Load(); got != 1 {
+				t.Fatalf("sent %d queries, want 1: the walk should stop at the first upward referral", got)
+			}
+			if zone, servers, found := runtime.delegations.get("www.example.com", time.Now()); found && zone == "com" {
+				t.Fatalf("com delegation was taken from fye.com's servers: %v", servers)
+			}
+		})
 	}
 }
 
