@@ -92,6 +92,14 @@ const (
 	defaultKeyRetireAfter         = 7 * 24 * time.Hour
 )
 
+// MinimumUniFiTimeout and MaximumUniFiTimeout bound unifi.timeout. Below the
+// floor a busy controller can never answer; above the ceiling a stuck one
+// holds up every sync.
+const (
+	MinimumUniFiTimeout = 5 * time.Second
+	MaximumUniFiTimeout = 10 * time.Minute
+)
+
 type Duration struct {
 	time.Duration
 }
@@ -474,6 +482,11 @@ type UniFi struct {
 	// network is mapped to a zone, so Sable can tell which devices never ask
 	// it anything without publishing their names.
 	FindDevices bool `toml:"find_devices"`
+
+	// Timeout limits each request to the controller. Zero means
+	// unifi.DefaultRequestTimeout, and the key is left out of the file then,
+	// so a node that predates it can still read a replicated configuration.
+	Timeout Duration `toml:"timeout,omitempty"`
 }
 
 // UniFiNetwork maps one UniFi network onto a Sable zone. The identifier is the
@@ -525,6 +538,14 @@ func (unifi UniFi) Runnable() bool {
 // Publishes reports whether the synchronizer writes records, which it does
 // once at least one network is mapped to a zone.
 func (unifi UniFi) Publishes() bool { return len(unifi.ActiveNetworks()) > 0 }
+
+// RequestTimeout is how long each controller request may take.
+func (settings UniFi) RequestTimeout() time.Duration {
+	if settings.Timeout.Duration > 0 {
+		return settings.Timeout.Duration
+	}
+	return unifi.DefaultRequestTimeout
+}
 
 type Security struct {
 	PasskeysDisabled bool     `toml:"passkeys_disabled"`
@@ -1241,6 +1262,9 @@ func (settings UniFi) validate() []error {
 	var validationErrors []error
 	if settings.Interval.Duration < minimumUniFiInterval {
 		validationErrors = append(validationErrors, fmt.Errorf("unifi.interval must be at least %s", minimumUniFiInterval))
+	}
+	if timeout := settings.Timeout.Duration; timeout != 0 && (timeout < MinimumUniFiTimeout || timeout > MaximumUniFiTimeout) {
+		validationErrors = append(validationErrors, fmt.Errorf("unifi.timeout must be between %s and %s", Duration{MinimumUniFiTimeout}, Duration{MaximumUniFiTimeout}))
 	}
 	for _, source := range settings.Sources {
 		if source != "reservations" && source != "active" {

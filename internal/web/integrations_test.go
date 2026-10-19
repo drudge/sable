@@ -493,7 +493,7 @@ func TestUniFiWizardWalksFromConnectionToEnabled(t *testing.T) {
 
 	connect := postIntegrations(server, "/ui/integrations/unifi/wizard", url.Values{
 		"wizard_step": {"connect"}, "controller_url": {"https://192.168.1.1/"}, "site": {"default"},
-		"auth_mode": {"api-key"}, "api_key": {"unifi-secret"},
+		"auth_mode": {"api-key"}, "api_key": {"unifi-secret"}, "timeout": {"2m"},
 	})
 	if connect.Code != http.StatusOK {
 		t.Fatalf("connect step = %d %s", connect.Code, connect.Body.String())
@@ -504,7 +504,7 @@ func TestUniFiWizardWalksFromConnectionToEnabled(t *testing.T) {
 	if strings.Contains(connect.Body.String(), "unifi-secret") {
 		t.Fatal("the wizard echoed the API key back into the page")
 	}
-	for _, expected := range []string{"Default", "IoT", "192.168.1.0/24", "Map Zones", "Fixed-IP reservations", "Sync Interval"} {
+	for _, expected := range []string{"Default", "IoT", "192.168.1.0/24", "Map Zones", "Fixed-IP reservations", "Sync Interval", `name="timeout" value="2m"`} {
 		if !strings.Contains(connect.Body.String(), expected) {
 			t.Errorf("networks step does not contain %q", expected)
 		}
@@ -530,7 +530,7 @@ func TestUniFiWizardWalksFromConnectionToEnabled(t *testing.T) {
 
 	mapped := url.Values{
 		"wizard_step": {"zones"}, "controller_url": {"https://192.168.1.1"}, "site": {"default"},
-		"auth_mode": {"api-key"}, "interval": {"2m"},
+		"auth_mode": {"api-key"}, "interval": {"2m"}, "timeout": {"2m"},
 		"source_reservations": {"true"}, "source_active": {"true"}, "network": {"net-lan"},
 		"network_id_0": {"net-lan"}, "network_name_0": {"Default"}, "network_subnet_0": {"192.168.1.0/24"},
 		"zone_0": {"clients.example.test"}, "template_0": {"{{host}}.{{network}}.{{zone}}"},
@@ -556,7 +556,7 @@ func TestUniFiWizardWalksFromConnectionToEnabled(t *testing.T) {
 		t.Fatalf("finish step = %d %s", enabled.Code, enabled.Body.String())
 	}
 	settings := configuration.snapshot.Config.UniFi
-	if !settings.Enabled || len(settings.Networks) != 1 {
+	if !settings.Enabled || len(settings.Networks) != 1 || settings.Timeout.Duration != 2*time.Minute {
 		t.Fatalf("saved settings = %+v", settings)
 	}
 	mapping := settings.Networks[0]
@@ -589,6 +589,24 @@ func TestUniFiWizardReportsRejectedCredentials(t *testing.T) {
 	}
 	if !strings.Contains(response.Body.String(), `name="api_key"`) {
 		t.Fatal("the wizard did not stay on the connection step")
+	}
+}
+
+func TestUniFiWizardRejectsAnUnusableTimeout(t *testing.T) {
+	t.Parallel()
+	controller := &testUniFiController{inventory: testUniFiInventory()}
+	server, _ := newIntegrationsTestServer(t, controller)
+
+	response := postIntegrations(server, "/ui/integrations/unifi/wizard", url.Values{
+		"wizard_step": {"connect"}, "controller_url": {"https://192.168.1.1"}, "site": {"default"},
+		"auth_mode": {"api-key"}, "api_key": {"unifi-secret"}, "timeout": {"1s"},
+	})
+
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "request timeout from 5s to 10m") {
+		t.Fatalf("connect step = %d %s", response.Code, response.Body.String())
+	}
+	if controller.credentials.APIKey != "" {
+		t.Fatal("the wizard stored credentials despite the bad timeout")
 	}
 }
 
