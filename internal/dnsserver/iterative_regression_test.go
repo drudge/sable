@@ -3,6 +3,9 @@ package dnsserver
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -125,5 +128,142 @@ func TestIterativeDNSSECValidatesWithCachedChildDelegations(t *testing.T) {
 	}
 	if len(response.Answer) == 0 {
 		t.Fatal("missing answer")
+	}
+}
+
+// fye.com's servers answer www.fye.com with a CNAME to shops.myshopify.com
+// and an A record for shops.myshopify.com that points at a parking page.
+// They have no say over myshopify.com, so that A record is dropped and the
+// target is asked of its own servers, as other resolvers do.
+func TestIterativeResolverChasesACNAMEOutOfTheZone(t *testing.T) {
+	t.Parallel()
+	for _, minimize := range []bool{true, false} {
+		t.Run(fmt.Sprintf("minimize=%t", minimize), func(t *testing.T) {
+			runtime := recursiveTestRuntime(t)
+			runtime.qnameMinimization = minimize
+			handler := NewHandler(runtime)
+			defer handler.Close()
+			parked := func(name string) dns.RR {
+				return &dns.A{Hdr: dns.RR_Header{Name: name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 300}, A: netIP("203.0.113.129")}
+			}
+			handler.upstreamExchange = func(_ context.Context, request *dns.Msg, endpoint string, _ time.Duration) (*dns.Msg, error) {
+				question := request.Question[0]
+				switch {
+				case endpoint == "udp://192.0.2.1:53" && dns.IsSubDomain("com.", question.Name):
+					return referralResponse(request, "com.", "a.gtld-servers.net.", "192.0.2.2"), nil
+				case endpoint == "udp://192.0.2.2:53" && dns.IsSubDomain("fye.com.", question.Name):
+					return referralResponse(request, "fye.com.", "ns25.worldnic.com.", "192.0.2.3"), nil
+				case endpoint == "udp://192.0.2.2:53" && dns.IsSubDomain("myshopify.com.", question.Name):
+					return referralResponse(request, "myshopify.com.", "ns1.myshopify.com.", "192.0.2.4"), nil
+				case endpoint == "udp://192.0.2.3:53" && question.Name == "www.fye.com." && question.Qtype == dns.TypeA:
+					response := new(dns.Msg)
+					response.SetReply(request)
+					response.Authoritative = true
+					response.Answer = []dns.RR{
+						&dns.CNAME{Hdr: dns.RR_Header{Name: "www.fye.com.", Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 300}, Target: "shops.myshopify.com."},
+						parked("shops.myshopify.com."),
+					}
+					response.Ns = []dns.RR{&dns.NS{Hdr: dns.RR_Header{Name: "myshopify.com.", Rrtype: dns.TypeNS, Class: dns.ClassINET, Ttl: 300}, Ns: "ns25.worldnic.com."}}
+					response.Extra = []dns.RR{parked("ns25.worldnic.com.")}
+					return response, nil
+				case endpoint == "udp://192.0.2.4:53" && question.Name == "shops.myshopify.com." && question.Qtype == dns.TypeA:
+					return addressResponse(request, "192.0.2.74"), nil
+				default:
+					return nil, fmt.Errorf("unexpected iterative query %s/%s to %s", question.Name, dns.TypeToString[question.Qtype], endpoint)
+				}
+			}
+			request := new(dns.Msg)
+			request.SetQuestion("www.fye.com.", dns.TypeA)
+			response, err := handler.resolveNetworkWithinTimeout(request, runtime, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			answer := make([]string, 0, len(response.Answer))
+			for _, record := range response.Answer {
+				answer = append(answer, record.String())
+			}
+			want := []string{
+				"www.fye.com.\t300\tIN\tCNAME\tshops.myshopify.com.",
+				"shops.myshopify.com.\t300\tIN\tA\t192.0.2.74",
+			}
+			if !slices.Equal(answer, want) {
+				t.Fatalf("answer = %v, want %v", answer, want)
+			}
+			if len(response.Ns) != 0 || len(response.Extra) != 0 {
+				t.Fatalf("authority %v, additional %v; want neither from fye.com's servers", response.Ns, response.Extra)
+			}
+		})
+	}
+}
+
+// A zone's servers can only refer down, to zones below their own. One that
+// claims to know com's name servers is wrong, and believing it would let it
+// pick the servers for every name under com.
+func TestIterativeResolverRefusesAReferralUpward(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name, referTo, wantErr string
+	}{
+		// The com. NS is out of fye.com's bailiwick, so it is scrubbed
+		// before the referral is read and the walk finds nothing to follow.
+		{"above the zone", "com.", "neither an answer nor a referral"},
+		// A lame server that answers with its own apex NS refers sideways
+		// to the zone it already is; the walk must stop rather than loop.
+		{"to the zone itself", "fye.com.", "referred www.fye.com. upward to fye.com."},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			runtime := recursiveTestRuntime(t)
+			runtime.delegations.set("fye.com", []string{"192.0.2.3:53"}, 300, time.Now())
+			handler := NewHandler(runtime)
+			defer handler.Close()
+			var queries atomic.Int32
+			handler.upstreamExchange = func(_ context.Context, request *dns.Msg, endpoint string, _ time.Duration) (*dns.Msg, error) {
+				queries.Add(1)
+				question := request.Question[0]
+				if endpoint == "udp://192.0.2.3:53" && question.Name == "www.fye.com." {
+					return referralResponse(request, test.referTo, "ns.fye.com.", "192.0.2.3"), nil
+				}
+				return nil, fmt.Errorf("unexpected iterative query %s/%s to %s", question.Name, dns.TypeToString[question.Qtype], endpoint)
+			}
+			request := new(dns.Msg)
+			request.SetQuestion("www.fye.com.", dns.TypeA)
+			_, err := handler.resolveNetworkWithinTimeout(request, runtime, nil)
+			if err == nil {
+				t.Fatal("an upward referral was followed")
+			}
+			if !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("error = %v, want it to mention %q", err, test.wantErr)
+			}
+			if got := queries.Load(); got != 1 {
+				t.Fatalf("sent %d queries, want 1: the walk should stop at the first upward referral", got)
+			}
+			if zone, servers, found := runtime.delegations.get("www.example.com", time.Now()); found && zone == "com" {
+				t.Fatalf("com delegation was taken from fye.com's servers: %v", servers)
+			}
+		})
+	}
+}
+
+func TestInZone(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name, zone string
+		want       bool
+	}{
+		{"www.fye.com.", "fye.com", true},
+		{"fye.com.", "fye.com.", true},
+		{"WWW.FYE.COM.", "fye.com", true},
+		{"shops.myshopify.com.", "fye.com", false},
+		{"notfye.com.", "fye.com", false},
+		{"com.", "fye.com", false},
+		{`a\.fye.com.`, "fye.com", false},
+		{`a\\.fye.com.`, "fye.com", true},
+		{"anything.example.", "", true},
+		{"anything.example.", ".", true},
+	} {
+		if got := inZone(test.name, test.zone); got != test.want {
+			t.Errorf("inZone(%q, %q) = %t, want %t", test.name, test.zone, got, test.want)
+		}
 	}
 }
