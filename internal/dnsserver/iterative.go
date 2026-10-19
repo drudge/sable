@@ -459,6 +459,12 @@ func (walk *iterativeWalk) answer(ctx context.Context, question dns.Question) (*
 		if !referral {
 			return nil, fmt.Errorf("authority returned neither an answer nor a referral for %s", dns.Fqdn(current.Name))
 		}
+		// A zone's servers can only refer down. A referral to the zone itself
+		// or one above it would let them choose the servers for names they
+		// have no say over.
+		if !belowZone(zone, walk.closestZone) {
+			return nil, fmt.Errorf("servers for %s referred %s upward to %s", dns.Fqdn(walk.closestZone), dns.Fqdn(current.Name), dns.Fqdn(zone))
+		}
 		if err := walk.follow(ctx, response, zone, names); err != nil {
 			return nil, err
 		}

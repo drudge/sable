@@ -194,6 +194,32 @@ func TestIterativeResolverChasesACNAMEOutOfTheZone(t *testing.T) {
 	}
 }
 
+// A zone's servers can only refer down, to zones below their own. One that
+// claims to know com's name servers is wrong, and believing it would let it
+// pick the servers for every name under com.
+func TestIterativeResolverRefusesAReferralUpward(t *testing.T) {
+	t.Parallel()
+	runtime := recursiveTestRuntime(t)
+	runtime.delegations.set("fye.com", []string{"192.0.2.3:53"}, 300, time.Now())
+	handler := NewHandler(runtime)
+	defer handler.Close()
+	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, endpoint string, _ time.Duration) (*dns.Msg, error) {
+		question := request.Question[0]
+		if endpoint == "udp://192.0.2.3:53" && question.Name == "www.fye.com." {
+			return referralResponse(request, "com.", "ns.fye.com.", "192.0.2.3"), nil
+		}
+		return nil, fmt.Errorf("unexpected iterative query %s/%s to %s", question.Name, dns.TypeToString[question.Qtype], endpoint)
+	}
+	request := new(dns.Msg)
+	request.SetQuestion("www.fye.com.", dns.TypeA)
+	if _, err := handler.resolveNetworkWithinTimeout(request, runtime, nil); err == nil {
+		t.Fatal("an upward referral was followed")
+	}
+	if zone, servers, found := runtime.delegations.get("www.example.com", time.Now()); found && zone == "com" {
+		t.Fatalf("com delegation was taken from fye.com's servers: %v", servers)
+	}
+}
+
 func TestInZone(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
