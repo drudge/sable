@@ -4094,16 +4094,26 @@
 	// open attribute does both before the browser lays out the change, and
 	// before anything a close sets off afterwards, such as the command palette
 	// scrolling to what was picked.
+	// While it is open the body is pinned where the page was, so iOS has no
+	// document left to scroll the modal away with.
 	(() => {
+	  const root = document.documentElement;
 	  const anyOpen = () => document.querySelector("dialog[open]") !== null;
-	  const position = () => ({ x: window.scrollX, y: window.scrollY });
-	  let saved = anyOpen() ? position() : null;
+	  let saved = null;
+	  const lock = () => {
+		saved = { x: window.scrollX, y: window.scrollY };
+		root.style.setProperty("--modal-scroll-top", `${-saved.y}px`);
+		root.classList.add("modal-scroll-lock");
+	  };
+	  if (anyOpen()) lock();
 	  new MutationObserver(() => {
 		const open = anyOpen();
-		if (open && !saved) saved = position();
+		if (open && !saved) lock();
 		if (open || !saved) return;
 		const { x, y } = saved;
 		saved = null;
+		root.classList.remove("modal-scroll-lock");
+		root.style.removeProperty("--modal-scroll-top");
 		window.scrollTo({ left: x, top: y, behavior: "instant" });
 	  }).observe(document.body, { attributes: true, attributeFilter: ["open"], subtree: true });
 	})();
@@ -4260,6 +4270,9 @@
       const reveal = () => document.documentElement.classList.remove(hiddenClass);
       const update = () => {
         queued = false;
+        // A modal pins the page at the top of the document; the page hasn't
+        // moved, so the header stays as it was.
+        if (document.documentElement.classList.contains("modal-scroll-lock")) return;
         const current = Math.max(0, window.scrollY);
         // Anything still behind the header stays visible, so a page shorter
         // than the viewport can never leave the header stuck off screen.
