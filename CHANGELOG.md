@@ -28,7 +28,9 @@ before you set `unifi.timeout`; older nodes can't read it.
   get that address cached and served; the resolver now looks the target up
   from its own servers.
 - A referral to the zone already being asked, or to a zone above it, is
-  refused instead of followed and cached as that zone's delegation.
+  refused instead of followed and cached as that zone's delegation. A lame
+  server that answers with its own zone's NS records now fails the lookup at
+  once instead of being asked again until the hop limit.
 
 ### Integrations
 
