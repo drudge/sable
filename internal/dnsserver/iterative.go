@@ -389,7 +389,7 @@ func (walk *iterativeWalk) minimize(ctx context.Context, name string) error {
 		if walk.walked != "" && dns.IsSubDomain(candidate, walk.walked) {
 			continue
 		}
-		response, err := walk.handler.exchangeIterative(ctx, iterativeQuery(candidate, dns.TypeNS), walk.servers, runtime, walk.budget)
+		response, err := walk.ask(ctx, candidate, dns.TypeNS)
 		if err != nil {
 			return err
 		}
@@ -432,7 +432,7 @@ func (walk *iterativeWalk) answer(ctx context.Context, question dns.Question) (*
 	var cnameChain []dns.RR
 	current := question
 	for hops := 0; hops <= maximumIterativeDepth; hops++ {
-		response, err := walk.handler.exchangeIterative(ctx, iterativeQuery(current.Name, current.Qtype), walk.servers, walk.runtime, walk.budget)
+		response, err := walk.ask(ctx, current.Name, current.Qtype)
 		if err != nil {
 			return nil, err
 		}
@@ -450,7 +450,6 @@ func (walk *iterativeWalk) answer(ctx context.Context, question dns.Question) (*
 			return targetResponse, nil
 		}
 		if iterativeTerminal(response) {
-			scrubOutOfBailiwick(response, walk.closestZone)
 			if len(cnameChain) > 0 {
 				response.Answer = append(cnameChain, response.Answer...)
 			}
@@ -465,6 +464,17 @@ func (walk *iterativeWalk) answer(ctx context.Context, question dns.Question) (*
 		}
 	}
 	return nil, errors.New("iterative resolution exceeded the maximum alias depth")
+}
+
+// ask sends a question to the closest servers and keeps only the records
+// they speak for.
+func (walk *iterativeWalk) ask(ctx context.Context, name string, recordType uint16) (*dns.Msg, error) {
+	response, err := walk.handler.exchangeIterative(ctx, iterativeQuery(name, recordType), walk.servers, walk.runtime, walk.budget)
+	if err != nil {
+		return nil, err
+	}
+	scrubOutOfBailiwick(response, walk.closestZone)
+	return response, nil
 }
 
 // follow moves the walk down a referral to zone, refusing a zone it has
@@ -501,20 +511,55 @@ func attemptGotFairTurn(ctx context.Context) bool {
 	return !bounded || time.Until(deadline) >= minimumFairTurn
 }
 
-// scrubOutOfBailiwick drops the authority and additional records a zone's
-// servers have no say over, as BIND and Unbound do before trusting or
-// validating anything. Some servers add them anyway: Comcast's for
+// scrubOutOfBailiwick drops the records a zone's servers have no say over, as
+// BIND and Unbound do before trusting or validating anything. Some servers
+// add them anyway. Network Solutions' answer www.fye.com with a CNAME to
+// shops.myshopify.com and an A record of their own for the target, a parking
+// page; dropping it leaves the CNAME to be followed to Shopify's servers.
+// Comcast's for
 // 94.19.96.in-addr.arpa list name servers for 19.96.in-addr.arpa above it,
 // and Vultr's for a single address's reverse zone give an SOA for all of
 // in-addr.arpa. Neither is signed, while the zones they name are, so the
 // answer failed DNSSEC validation over records that weren't part of it.
 func scrubOutOfBailiwick(response *dns.Msg, zone string) {
-	zone = dns.Fqdn(zone)
-	outside := func(record dns.RR) bool {
-		return record.Header().Rrtype != dns.TypeOPT && !dns.IsSubDomain(zone, dns.Fqdn(record.Header().Name))
+	zone = strings.TrimSuffix(zone, ".")
+	if zone == "" {
+		// The root speaks for every name.
+		return
 	}
+	outside := func(record dns.RR) bool {
+		return record.Header().Rrtype != dns.TypeOPT && !inZone(record.Header().Name, zone)
+	}
+	response.Answer = slices.DeleteFunc(response.Answer, outside)
 	response.Ns = slices.DeleteFunc(response.Ns, outside)
 	response.Extra = slices.DeleteFunc(response.Extra, outside)
+}
+
+// inZone reports whether name is zone or a name below it, ignoring case and
+// any trailing dot. It allocates nothing, unlike dns.IsSubDomain, because it
+// runs on every record of every answer from an authority.
+func inZone(name, zone string) bool {
+	name, zone = strings.TrimSuffix(name, "."), strings.TrimSuffix(zone, ".")
+	if zone == "" {
+		return true
+	}
+	cut := len(name) - len(zone)
+	if cut < 0 || !strings.EqualFold(name[cut:], zone) {
+		return false
+	}
+	if cut == 0 {
+		return true
+	}
+	if name[cut-1] != '.' {
+		return false
+	}
+	// The dot must end a label rather than sit escaped inside one, as in
+	// "a\.fye.com", a single label under com.
+	escapes := 0
+	for index := cut - 2; index >= 0 && name[index] == '\\'; index-- {
+		escapes++
+	}
+	return escapes%2 == 0
 }
 
 // aliasRecords returns the CNAME an answer gives name, with the RRSIGs that
