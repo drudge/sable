@@ -8,7 +8,7 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
-## [1.7.2-beta.1] - 2026-10-20
+## [1.7.2-beta.1] - 2026-10-19
 
 Sable 1.7.2-beta.1 makes the recursive resolver ignore records a zone's
 servers aren't authoritative for, which could cache a wrong address for a name
