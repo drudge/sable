@@ -8,6 +8,47 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.2] - 2026-10-19
+
+Sable 1.7.2 makes the recursive resolver ignore records a zone's
+servers aren't authoritative for, which could cache a wrong address for a name
+behind a CNAME. It also gives UniFi host sync more time on busy controllers and
+keeps drawers in place on iPhone.
+
+### Upgrading from 1.7.1
+
+Nothing new is needed. In a cluster, upgrade every node
+before you set `unifi.timeout`; older nodes can't read it.
+
+### Resolver
+
+- Answers from a zone's servers now drop records outside that zone, in the
+  answer section as well as authority and additional. A server that answered a
+  CNAME together with an address for the target in someone else's zone could
+  get that address cached and served; the resolver now looks the target up
+  from its own servers.
+- A referral to the zone being queried, or to a zone above it, is
+  refused instead of followed and cached as that zone's delegation. A lame
+  server that answers with its own zone's NS records now fails the lookup at
+  once instead of being asked again until the hop limit.
+
+### Integrations
+
+- **UniFi** requests wait up to 90 seconds by default instead of 30, so syncs
+  no longer fail with `context deadline exceeded` on consoles that take a
+  while to list every known client. Set `unifi.timeout` from `5s` to `10m`, or
+  **Request Timeout** on the setup wizard's connection step.
+
+### Console
+
+- On iPhone, the page behind an open dialog or drawer stays pinned, so a
+  drawer no longer floats partway up the screen with the page showing below
+  it.
+
+### Dependencies
+
+- Updated quic-go, used for DNS over QUIC, to 0.64.0.
+
 ## [1.7.2-beta.1] - 2026-10-19
 
 Sable 1.7.2-beta.1 makes the recursive resolver ignore records a zone's
