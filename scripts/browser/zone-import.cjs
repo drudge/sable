@@ -44,6 +44,19 @@ module.exports = async (browser, baseURL) => {
     await file.setInputFiles({name: 'records.zone', mimeType: 'text/plain', buffer: Buffer.from('@ IN A 192.0.2.1')});
     await page.waitForFunction(() => document.querySelector('[data-zone-name-help]').textContent.includes('No zone name detected'));
     assert.equal(await zoneName.inputValue(), '');
+    const windowsExport = dialog.locator('[data-zone-import-windows]');
+    assert.equal(await windowsExport.isChecked(), false);
+    await file.setInputFiles({name: 'windows.example.dns', mimeType: 'text/plain', buffer: Buffer.from(';\n;  Database file windows.example.dns for windows.example zone.\n;\n@ IN SOA ns.windows.example. hostmaster.windows.example. (1 900 600 86400 3600)\nhost [AGE:3794565] 1200 A 192.0.2.5\n')});
+    await waitForName('windows.example');
+    await page.waitForFunction(() => document.querySelector('[data-zone-import-windows]').checked);
+    await file.setInputFiles({name: 'plain.zone', mimeType: 'text/plain', buffer: Buffer.from('$ORIGIN plain.example.')});
+    await waitForName('plain.example');
+    await page.waitForFunction(() => !document.querySelector('[data-zone-import-windows]').checked);
+    await windowsExport.check();
+    await file.setInputFiles({name: 'plain2.zone', mimeType: 'text/plain', buffer: Buffer.from('$ORIGIN plain2.example.')});
+    await waitForName('plain2.example');
+    assert.equal(await windowsExport.isChecked(), true, 'a choice the operator made is kept');
+    await windowsExport.uncheck();
     for (const [size, label] of [[1, '1 byte'], [12776, '12.5 KiB'], [1500000, '1.4 MiB']]) {
       await file.setInputFiles({name: 'example.zone', mimeType: 'text/plain', buffer: Buffer.alloc(size, 'a')});
       assert.equal(await dialog.locator('[data-zone-file-size]').innerText(), `${label} · Ready to import`);
@@ -113,7 +126,7 @@ module.exports = async (browser, baseURL) => {
       assert.ok(Math.abs(cancel.width - discover.width) < 1, `catalog actions have equal width at ${width}px`);
       assert.ok(Math.abs(cancel.x - discover.x) < 1, 'catalog actions align');
     }
-    console.log('PASS zone import upload, drop, source isolation, clipboard fallback, and mobile layout');
+    console.log('PASS zone import upload, drop, Windows export detection, source isolation, clipboard fallback, and mobile layout');
   } finally {
     await page.close();
   }

@@ -1286,11 +1286,11 @@ templ ZoneImportSource(id string, placeholder string) {
 		</div>
 		<div data-file-dropzone-root data-file-dropzone-state="empty" data-zone-import-panel="file">
 			<label class="file-dropzone" data-file-dropzone>
-				<input type="file" name="file" accept=".zone,.txt,.db,text/plain,text/dns" data-file-dropzone-input data-zone-file aria-label="Choose zone file"/>
+				<input type="file" name="file" accept=".zone,.txt,.db,.dns,text/plain,text/dns" data-file-dropzone-input data-zone-file aria-label="Choose zone file"/>
 				<span class="file-dropzone-upload-icon">@Icon("upload")</span>
 				<strong>Drop your zone file here</strong>
 				<span>or <span class="file-dropzone-browse">browse files</span></span>
-				<small>BIND or Technitium · .zone, .txt, .db</small>
+				<small>BIND, Technitium, or Windows DNS · .zone, .txt, .db, .dns</small>
 			</label>
 			<div class="file-dropzone-selection" data-zone-file-selection hidden>
 				@Icon("file-text")
@@ -1308,11 +1308,12 @@ templ ZoneImportSource(id string, placeholder string) {
 }
 
 templ ImportNewZoneDialog() {
-	@components.Dialog(components.DialogProps{ID: "import-new-zone-dialog", TitleID: "import-new-zone-title", Title: "Import Zone", Description: "Create a primary zone from a BIND or Technitium zone file.", Class: "isotope-zone-import-dialog"}) {
+	@components.Dialog(components.DialogProps{ID: "import-new-zone-dialog", TitleID: "import-new-zone-title", Title: "Import Zone", Description: "Create a primary zone from a BIND, Technitium, or Windows DNS zone file.", Class: "isotope-zone-import-dialog"}) {
 		<form class="blocking-dialog-form zone-import-form" hx-post="/ui/zones/import-new" hx-encoding="multipart/form-data" hx-target="#zones-content" hx-swap="outerHTML">
 			@ZoneImportSource("import-new-zone", "$ORIGIN example.com.\n@  3600  IN  SOA  ns1.example.com. hostmaster.example.com. 1 3600 600 1209600 300")
 			<label><span>Zone name <small>Optional</small></span><input class="mono-input" name="zone" placeholder="example.com" autocomplete="off" data-zone-import-name aria-describedby="import-new-zone-help"/></label>
 			<p class="zone-import-help" id="import-new-zone-help" data-zone-name-help aria-live="polite">Detected automatically from <code>$ORIGIN</code> or the SOA record. Enter a name only if your file doesn’t include one.</p>
+			@components.SwitchField(components.SwitchFieldProps{ID: "import-new-zone-windows", Title: "Windows DNS Export", Description: "Removes aging timestamps and skips WINS records that only Windows DNS Server reads.", Name: "windows_export", InputAttrs: templ.Attributes{"data-zone-import-windows": true}})
 			@components.DialogFooter("Cancel") {
 				@components.Button(components.ButtonProps{Label: "Import Zone", Type: "submit", Disabled: true, Attrs: templ.Attributes{"data-zone-import-submit": true}})
 			}

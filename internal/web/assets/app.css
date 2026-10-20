@@ -700,6 +700,7 @@ button.ranking-row { width: 100%; border-width: 1px 0 0; background: none; color
 .blocking-guidance span { color: var(--muted-foreground); font-size: .75rem; line-height: 1.45; }
 .blocking-dialog-form { display: grid; gap: .85rem; }
 .blocking-dialog-form label { display: grid; gap: .35rem; font-size: .8rem; font-weight: 500; }
+.blocking-dialog-form label.switch-row { display: flex; }
 .blocking-dialog-form .dialog-footer { margin-top: var(--space-1); }
 .isotope-blocking-layout { grid-template-columns: minmax(0, 2.1fr) minmax(16rem, .85fr); gap: var(--space-6); }
 .blocking-main-column { display: grid; min-width: 0; align-content: start; gap: var(--space-6); }
