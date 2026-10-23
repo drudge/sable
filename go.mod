@@ -2,7 +2,7 @@ module github.com/drudge/sable
 
 go 1.27
 
-toolchain go1.27.2
+toolchain go1.27.3
 
 require (
 	github.com/a-h/templ v0.3.1070
