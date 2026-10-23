@@ -1584,6 +1584,29 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .record-open-button .nav-icon { width: 1rem; height: 1rem; }
 .record-open-placeholder { width: 1.5rem; min-width: 1.5rem; justify-self: end; }
 .isotope-zone-dialog { width: min(32rem, calc(100vw - 2rem)); }
+.zone-type-fieldset { display: grid; min-width: 0; gap: var(--space-2); margin: 0; border: 0; padding: 0; }
+.zone-type-fieldset legend { margin-bottom: .35rem; padding: 0; font-size: .8rem; font-weight: 500; }
+.zone-type-fieldset > .field-help { margin: 0; }
+.zone-type-segments { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-radius: 999px; background: var(--muted); padding: var(--space-1); }
+.blocking-dialog-form .zone-type-segment { display: flex; border: 0; background: transparent; min-width: 0; height: 2rem; align-items: center; justify-content: center; gap: .35rem; border-radius: 999px; padding: 0 var(--space-2); color: var(--muted-foreground); font-size: .75rem; font-weight: 600; white-space: nowrap; cursor: pointer; transition: color 150ms ease, background-color 150ms ease, box-shadow 150ms ease; }
+.zone-type-segment:hover { color: var(--foreground); }
+.zone-type-segment:has(> input:checked), .zone-type-fieldset:has(.zone-type-more-panel input:checked) [data-zone-type-more-toggle] { background: var(--background); color: var(--foreground); box-shadow: 0 1px 3px rgb(0 0 0 / .16); }
+.zone-type-segment:has(> input:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; }
+.zone-type-segment > span:first-of-type { overflow: hidden; text-overflow: ellipsis; }
+.zone-type-more-chevron { width: .4rem; height: .4rem; flex: none; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-.1rem) rotate(45deg); transition: transform 150ms ease; }
+[data-zone-type-more-toggle][aria-expanded="true"] .zone-type-more-chevron { transform: translateY(.1rem) rotate(225deg); }
+.zone-type-more-panel { display: grid; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); padding: .3rem; }
+.zone-type-more-panel[hidden] { display: none; }
+.zone-type-more-panel:not([hidden]) + .field-help { display: none; }
+.blocking-dialog-form .zone-type-more-option { display: grid; gap: .15rem; border-radius: .4rem; padding: .5rem .6rem; font-weight: 400; cursor: pointer; }
+.zone-type-more-option:hover, .zone-type-more-option:has(input:focus-visible) { background: var(--accent); }
+.zone-type-more-option:has(input:checked) { background: color-mix(in oklch, var(--accent) 72%, transparent); }
+.zone-type-more-option:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+.zone-type-more-option strong { font-size: .8rem; font-weight: 600; }
+.zone-type-more-option small { color: var(--muted-foreground); font-size: .7rem; line-height: 1.4; }
+@media (prefers-reduced-motion: reduce) { .blocking-dialog-form .zone-type-segment, .zone-type-more-chevron { transition: none; } }
+@media (max-width: 639px) { .blocking-dialog-form .zone-type-segment { padding: 0 var(--space-1); font-size: .7rem; } }
+.zone-create-options .field-help, .blocking-dialog-form label > .field-help { margin: 0; }
 .zone-settings-dialog { max-height: min(90vh, 48rem); overflow: hidden; }
 .zone-settings-dialog[open] { grid-template-rows: auto auto minmax(0, 1fr); }
 .zone-settings-tabs { margin: 0; }
