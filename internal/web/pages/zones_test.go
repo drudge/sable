@@ -99,25 +99,29 @@ func TestZoneFormsUseStyledSelects(t *testing.T) {
 	}
 }
 
-func TestCreateZoneDialogPicksTypeFromCards(t *testing.T) {
+func TestCreateZoneDialogPicksTypeFromSegments(t *testing.T) {
 	t.Parallel()
 
 	dialog := renderComponent(t, CreateZoneDialog([]string{"source.test"}, []string{"transfer-key."}))
 	for _, kind := range zoneKinds {
-		if !strings.Contains(dialog, `id="create-zone-type-`+kind.Value+`-label">`+kind.Title+`<`) || !strings.Contains(dialog, html.EscapeString(kind.Description)) {
-			t.Errorf("create-zone dialog has no %s card", kind.Value)
+		if !strings.Contains(dialog, `value="`+kind.Value+`"`) || !strings.Contains(dialog, `data-description="`+html.EscapeString(kind.Description)+`"`) {
+			t.Errorf("create-zone dialog has no %s choice", kind.Value)
 		}
 	}
 	if strings.Count(dialog, `type="radio" name="type"`) != len(zoneKinds) || strings.Count(dialog, " checked") != 2 {
 		t.Errorf("create-zone dialog should check only Primary and the DNSSEC switch: %s", dialog)
 	}
-	if strings.Index(dialog, "create-zone-type-stub") < strings.Index(dialog, "data-zone-type-more") {
-		t.Error("stub zones should wait behind More Types")
+	more := strings.Index(dialog, "data-zone-type-more")
+	if strings.Index(dialog, `value="forwarder"`) > more || strings.Index(dialog, `value="stub"`) < more {
+		t.Error("Primary, Secondary and Forwarder should be segments, with Stub under More")
+	}
+	if !strings.Contains(dialog, `data-zone-type-description>`+zoneKinds[0].Description+`<`) {
+		t.Error("the type help line should start with Primary's description")
 	}
 
 	noSources := renderComponent(t, CreateZoneDialog(nil, nil))
-	if !strings.Contains(noSources, "Needs a primary or secondary zone to mirror first.") || !strings.Contains(noSources, `value="alias" data-zone-create-type disabled`) {
-		t.Error("alias card should be disabled and explain why while no zone can be mirrored")
+	if !strings.Contains(noSources, "Needs a primary or secondary zone to mirror first.") || !strings.Contains(noSources, `value="alias" disabled`) {
+		t.Error("alias choice should be disabled and explain why while no zone can be mirrored")
 	}
 	if strings.Contains(noSources, `name="tsig_key"`) || !strings.Contains(noSources, "add one under") {
 		t.Error("create-zone dialog should point to Settings instead of offering an empty TSIG list")

@@ -898,19 +898,44 @@ func commonZoneKinds(common bool) []zoneKind {
 	return kinds
 }
 
-// zoneKindChoice describes a kind's card. An alias zone needs a primary or
-// secondary zone to mirror, so its card says so while there is none.
-func zoneKindChoice(kind zoneKind, allowAlias bool) components.ChoiceCardProps {
-	unavailable := kind.Value == "alias" && !allowAlias
-	description := kind.Description
-	if unavailable {
-		description = "Needs a primary or secondary zone to mirror first."
+// zoneKindUnavailable reports a kind the dialog cannot create yet. An alias
+// zone needs a primary or secondary zone to mirror.
+func zoneKindUnavailable(kind zoneKind, allowAlias bool) bool {
+	return kind.Value == "alias" && !allowAlias
+}
+
+func zoneKindDescription(kind zoneKind, allowAlias bool) string {
+	if zoneKindUnavailable(kind, allowAlias) {
+		return "Needs a primary or secondary zone to mirror first."
 	}
-	return components.ChoiceCardProps{
-		ID: "create-zone-type-" + kind.Value, Title: kind.Title, Description: description,
-		Radio: true, Name: "type", Value: kind.Value, Checked: kind.Value == "primary", Disabled: unavailable,
-		Class: "zone-type-choice", InputAttrs: templ.Attributes{"data-zone-create-type": true},
-	}
+	return kind.Description
+}
+
+// zoneKindRadio is the radio behind one zone type in the Create Zone picker.
+// The segment or menu row around it draws the choice.
+templ zoneKindRadio(kind zoneKind, allowAlias bool) {
+	<input class="sr-only" type="radio" name="type" value={ kind.Value } checked?={ kind.Value == "primary" } disabled?={ zoneKindUnavailable(kind, allowAlias) } aria-describedby="create-zone-type-help" data-zone-create-type data-title={ kind.Title } data-description={ zoneKindDescription(kind, allowAlias) }/>
+}
+
+// ZoneTypePicker is the Create Zone dialog's segmented control: the common
+// zone types as segments, and the rest in a list that More opens under the
+// bar. More takes the name of whichever of those is picked.
+templ ZoneTypePicker(allowAlias bool) {
+	<fieldset class="zone-type-fieldset">
+		<legend>Zone Type</legend>
+		<div class="zone-type-segments">
+			for _, kind := range commonZoneKinds(true) {
+				<label class="zone-type-segment">@zoneKindRadio(kind, allowAlias)<span>{ kind.Title }</span></label>
+			}
+			<button class="zone-type-segment" type="button" aria-expanded="false" aria-controls="create-zone-more-types" data-zone-type-more-toggle><span data-zone-type-more-label>More</span><span class="zone-type-more-chevron" aria-hidden="true"></span></button>
+		</div>
+		<div class="zone-type-more-panel" id="create-zone-more-types" hidden data-zone-type-more>
+			for _, kind := range commonZoneKinds(false) {
+				<label class="zone-type-more-option">@zoneKindRadio(kind, allowAlias)<strong>{ kind.Title }</strong><small>{ zoneKindDescription(kind, allowAlias) }</small></label>
+			}
+		</div>
+		<p class="field-help" id="create-zone-type-help" data-zone-type-description>{ zoneKinds[0].Description }</p>
+	</fieldset>
 }
 
 // ZoneTypeOptions lists the zone types the console knows about. Zone Settings
@@ -940,22 +965,7 @@ templ TSIGKeySelect(keys []string, selected string) {
 templ CreateZoneDialog(aliasSources []string, tsigKeys []string) {
 	@components.Dialog(components.DialogProps{ID: "create-zone-dialog", TitleID: "create-zone-title", Title: "Create Zone", Description: "Add a new DNS zone to your server.", Class: "isotope-zone-dialog"}) {
 		<form class="blocking-dialog-form" hx-post="/ui/zones/add" hx-target="#zones-content" hx-swap="outerHTML" data-zone-create-form>
-			<fieldset class="zone-type-fieldset">
-				<legend>Zone Type</legend>
-				<div class="zone-type-grid">
-					for _, kind := range commonZoneKinds(true) {
-						@components.ChoiceCard(zoneKindChoice(kind, len(aliasSources) > 0))
-					}
-				</div>
-				<details class="record-advanced zone-type-more" data-zone-type-more>
-					<summary><span>More Types</span><span class="record-advanced-chevron" aria-hidden="true"></span></summary>
-					<div class="zone-type-grid">
-						for _, kind := range commonZoneKinds(false) {
-							@components.ChoiceCard(zoneKindChoice(kind, len(aliasSources) > 0))
-						}
-					</div>
-				</details>
-			</fieldset>
+			@ZoneTypePicker(len(aliasSources) > 0)
 			<label><span>Zone Name</span><input class="mono-input" name="name" placeholder="example.com" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="create-zone-name-help create-zone-name-error" autofocus required data-zone-create-name/><small class="field-help" id="create-zone-name-help">The domain this zone answers for, such as home.arpa or example.com.</small><small class="field-error" id="create-zone-name-error" data-zone-create-name-error hidden></small></label>
 			<section class="zone-create-options" data-zone-create-options="transfer" hidden>
 				<label><span>Primary Name Servers</span><textarea class="mono-input" name="primary_servers" placeholder={ "192.0.2.53\nprimary.example.net:53" } disabled required></textarea><small>One address per line. Sable tries each server in order.</small></label>

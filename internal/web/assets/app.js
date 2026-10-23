@@ -2999,10 +2999,22 @@
 	  if (stubProtocol) stubProtocol.disabled = type !== "stub";
 	  if (primaryProtocol && type === "stub" && primaryProtocol.value === "tcp") primaryProtocol.value = "udp";
 	  if (primaryProtocol && (type === "secondary" || type === "secondary_catalog") && primaryProtocol.value === "udp") primaryProtocol.value = "tcp";
-	  // A less common type stays in view once picked, so the dialog never hides
-	  // the choice it is about to submit.
+	  // The help line describes the picked type, and More takes the name of a
+	  // less common type once it is picked, so the bar always shows the choice.
+	  const description = form.querySelector("[data-zone-type-description]");
+	  if (description) description.textContent = picked.dataset.description || "";
 	  const more = form.querySelector("[data-zone-type-more]");
-	  if (more?.contains(picked)) more.open = true;
+	  const moreLabel = form.querySelector("[data-zone-type-more-label]");
+	  if (moreLabel) moreLabel.textContent = more?.contains(picked) ? picked.dataset.title : "More";
+	  toggleZoneTypeMore(form, false);
+	};
+
+	const toggleZoneTypeMore = (form, open) => {
+	  const panel = form?.querySelector("[data-zone-type-more]");
+	  const toggle = form?.querySelector("[data-zone-type-more-toggle]");
+	  if (!panel || !toggle) return;
+	  panel.hidden = !open;
+	  toggle.setAttribute("aria-expanded", String(open));
 	};
 
 	// zoneNameProblem says what is wrong with a zone name before the server has
@@ -3034,11 +3046,13 @@
 	  name.addEventListener("input", () => validate(!error.hidden));
 	  name.addEventListener("blur", () => { if (name.value.trim()) validate(true); });
 	  name.addEventListener("invalid", () => validate(true));
+	  form.querySelector("[data-zone-type-more-toggle]")?.addEventListener("click", (event) => {
+		toggleZoneTypeMore(form, event.currentTarget.getAttribute("aria-expanded") !== "true");
+	  });
 	  // Closing the dialog resets the form, which puts Primary back without a
 	  // change event.
 	  form.addEventListener("reset", () => queueMicrotask(() => {
 		validate(false);
-		form.querySelector("[data-zone-type-more]")?.removeAttribute("open");
 		syncZoneCreateType(form);
 	  }));
 	  syncZoneCreateType(form);
