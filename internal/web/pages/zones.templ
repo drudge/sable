@@ -867,17 +867,59 @@ templ ZoneCopyableText(id, text, className string) {
 	<span class={ "zone-copyable " + className }><code id={ id }>{ text }</code><button type="button" data-copy-target={ id } aria-label="Copy to clipboard" title="Copy to clipboard">@components.CopyIcons()</button></span>
 }
 
+// zoneKind is one of the zone types the Create Zone dialog offers.
+type zoneKind struct {
+	Value       string
+	Title       string
+	Description string
+	// Common kinds lead the dialog; the rest wait behind More Types.
+	Common bool
+}
+
+// zoneKinds lists the zone types the console knows about, in the order the
+// Create Zone dialog and Zone Settings show them.
+var zoneKinds = []zoneKind{
+	{Value: "primary", Title: "Primary", Description: "Sable holds the records, and you edit them here.", Common: true},
+	{Value: "secondary", Title: "Secondary", Description: "A read-only copy transferred from another server.", Common: true},
+	{Value: "forwarder", Title: "Forwarder", Description: "Sends queries for this domain to another resolver.", Common: true},
+	{Value: "stub", Title: "Stub", Description: "Keeps only the NS records and asks those servers directly."},
+	{Value: "alias", Title: "Alias", Description: "Republishes another zone's records under this name."},
+	{Value: "catalog", Title: "Catalog", Description: "Lists zones here for secondary servers to pick up."},
+	{Value: "secondary_catalog", Title: "Secondary Catalog", Description: "Transfers a catalog and adds every zone it lists."},
+}
+
+func commonZoneKinds(common bool) []zoneKind {
+	kinds := make([]zoneKind, 0, len(zoneKinds))
+	for _, kind := range zoneKinds {
+		if kind.Common == common {
+			kinds = append(kinds, kind)
+		}
+	}
+	return kinds
+}
+
+// zoneKindChoice describes a kind's card. An alias zone needs a primary or
+// secondary zone to mirror, so its card says so while there is none.
+func zoneKindChoice(kind zoneKind, allowAlias bool) components.ChoiceCardProps {
+	unavailable := kind.Value == "alias" && !allowAlias
+	description := kind.Description
+	if unavailable {
+		description = "Needs a primary or secondary zone to mirror first."
+	}
+	return components.ChoiceCardProps{
+		ID: "create-zone-type-" + kind.Value, Title: kind.Title, Description: description,
+		Radio: true, Name: "type", Value: kind.Value, Checked: kind.Value == "primary", Disabled: unavailable,
+		Class: "zone-type-choice", InputAttrs: templ.Attributes{"data-zone-create-type": true},
+	}
+}
+
 // ZoneTypeOptions lists the zone types the console knows about. Zone Settings
 // renders the same options behind a disabled select so a zone's type reads the
 // way it was picked, rather than as a text box that looks editable.
-templ ZoneTypeOptions(selected string, allowAlias bool) {
-	<option value="primary" selected?={ selected == "primary" }>Primary Zone</option>
-	<option value="secondary" selected?={ selected == "secondary" }>Secondary Zone</option>
-	<option value="stub" selected?={ selected == "stub" }>Stub Zone</option>
-	<option value="forwarder" selected?={ selected == "forwarder" }>Forwarder Zone</option>
-	<option value="alias" selected?={ selected == "alias" } disabled?={ !allowAlias }>Alias Zone</option>
-	<option value="catalog" selected?={ selected == "catalog" }>Catalog Zone</option>
-	<option value="secondary_catalog" selected?={ selected == "secondary_catalog" }>Secondary Catalog Zone</option>
+templ ZoneTypeOptions(selected string) {
+	for _, kind := range zoneKinds {
+		<option value={ kind.Value } selected?={ selected == kind.Value }>{ kind.Title } Zone</option>
+	}
 }
 
 // TSIGKeySelect offers the keys configured under Settings. A zone that still
@@ -898,9 +940,23 @@ templ TSIGKeySelect(keys []string, selected string) {
 templ CreateZoneDialog(aliasSources []string, tsigKeys []string) {
 	@components.Dialog(components.DialogProps{ID: "create-zone-dialog", TitleID: "create-zone-title", Title: "Create Zone", Description: "Add a new DNS zone to your server.", Class: "isotope-zone-dialog"}) {
 		<form class="blocking-dialog-form" hx-post="/ui/zones/add" hx-target="#zones-content" hx-swap="outerHTML" data-zone-create-form>
-			<label><span>Zone Name</span><input name="name" placeholder="example.com" autocomplete="off" required/></label>
-			<label><span>Zone Type</span><select name="type" data-zone-create-type data-styled-select>@ZoneTypeOptions("primary", len(aliasSources) > 0)</select></label>
-			<label><span>TSIG Key (optional)</span>@TSIGKeySelect(tsigKeys, "")<small>Authenticates transfers and updates. Add keys under <a class="inline-link" href="/settings?tab=tsig">Settings &rsaquo; TSIG</a>.</small></label>
+			<fieldset class="zone-type-fieldset">
+				<legend>Zone Type</legend>
+				<div class="zone-type-grid">
+					for _, kind := range commonZoneKinds(true) {
+						@components.ChoiceCard(zoneKindChoice(kind, len(aliasSources) > 0))
+					}
+				</div>
+				<details class="record-advanced zone-type-more" data-zone-type-more>
+					<summary><span>More Types</span><span class="record-advanced-chevron" aria-hidden="true"></span></summary>
+					<div class="zone-type-grid">
+						for _, kind := range commonZoneKinds(false) {
+							@components.ChoiceCard(zoneKindChoice(kind, len(aliasSources) > 0))
+						}
+					</div>
+				</details>
+			</fieldset>
+			<label><span>Zone Name</span><input class="mono-input" name="name" placeholder="example.com" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="create-zone-name-help create-zone-name-error" autofocus required data-zone-create-name/><small class="field-help" id="create-zone-name-help">The domain this zone answers for, such as home.arpa or example.com.</small><small class="field-error" id="create-zone-name-error" data-zone-create-name-error hidden></small></label>
 			<section class="zone-create-options" data-zone-create-options="transfer" hidden>
 				<label><span>Primary Name Servers</span><textarea class="mono-input" name="primary_servers" placeholder={ "192.0.2.53\nprimary.example.net:53" } disabled required></textarea><small>One address per line. Sable tries each server in order.</small></label>
 				<label><span>Protocol</span><select name="primary_protocol" data-zone-primary-protocol data-styled-select disabled><option value="tcp">TCP</option><option value="tls">DNS-over-TLS</option><option value="udp" data-stub-protocol>UDP</option></select></label>
@@ -919,6 +975,13 @@ templ CreateZoneDialog(aliasSources []string, tsigKeys []string) {
 			<section class="zone-create-options" data-zone-create-options="resolution" hidden>
 				<input type="hidden" name="dnssec_validation_present" value="1" disabled/>
 				<label class="zone-dynamic-toggle"><span><strong>DNSSEC Validation</strong><small>Turn this off when the upstream servers answer for a signed delegation without serving its signatures, such as a private split-horizon copy of a public zone.</small></span><span class="switch"><input type="checkbox" name="dnssec_validation" value="true" checked disabled/><span></span></span></label>
+			</section>
+			<section class="zone-create-options" data-zone-create-options="tsig">
+				if len(tsigKeys) > 0 {
+					<label><span>TSIG Key (optional)</span>@TSIGKeySelect(tsigKeys, "")<small data-zone-create-tsig-help>Signs zone transfers and dynamic updates. Manage keys under <a class="inline-link" href="/settings?tab=tsig">Settings &rsaquo; TSIG</a>.</small></label>
+				} else {
+					<p class="field-help">To sign transfers and updates with a TSIG key, add one under <a class="inline-link" href="/settings?tab=tsig">Settings &rsaquo; TSIG</a> first.</p>
+				}
 			</section>
 			@components.DialogFooter("Cancel") {
 				@components.Button(components.ButtonProps{Label: "Create Zone", Type: "submit"})
@@ -1176,7 +1239,7 @@ templ ZoneSettingsDialog(zone ZoneView, id string) {
 			<input type="hidden" name="zone" value={ zone.Name }/>
 			<section class="dialog-tab-panel zone-settings-panel" role="tabpanel" data-dialog-panel="general">
 				<label><span>Zone Name</span><input class="mono-input" value={ zone.Name } readonly/></label>
-				<label><span>Zone Type</span><select data-styled-select disabled>@ZoneTypeOptions(zoneTypeSelectValue(zone), true)</select></label>
+				<label><span>Zone Type</span><select data-styled-select disabled>@ZoneTypeOptions(zoneTypeSelectValue(zone))</select></label>
 				<label><span>Default TTL (seconds)</span><input type="number" name="default_ttl" min="1" max="4294967295" value={ fmt.Sprint(zone.DefaultTTL) } required/></label>
 				if zone.CatalogManager != "" {
 					<section class="zone-settings-section">

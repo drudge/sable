@@ -2,6 +2,7 @@ package pages
 
 import (
 	"context"
+	"html"
 	"io"
 	"strings"
 	"testing"
@@ -87,7 +88,6 @@ func TestZoneFormsUseStyledSelects(t *testing.T) {
 
 	dialog := renderComponent(t, CreateZoneDialog([]string{"source.test"}, []string{"transfer-key."}))
 	for _, expected := range []string{
-		`name="type" data-zone-create-type data-styled-select`,
 		`name="tsig_key" data-styled-select`,
 		`name="primary_protocol" data-zone-primary-protocol data-styled-select`,
 		`name="alias_zone" data-styled-select`,
@@ -96,6 +96,31 @@ func TestZoneFormsUseStyledSelects(t *testing.T) {
 		if !strings.Contains(dialog, expected) {
 			t.Errorf("create-zone dialog does not contain styled select %q", expected)
 		}
+	}
+}
+
+func TestCreateZoneDialogPicksTypeFromCards(t *testing.T) {
+	t.Parallel()
+
+	dialog := renderComponent(t, CreateZoneDialog([]string{"source.test"}, []string{"transfer-key."}))
+	for _, kind := range zoneKinds {
+		if !strings.Contains(dialog, `id="create-zone-type-`+kind.Value+`-label">`+kind.Title+`<`) || !strings.Contains(dialog, html.EscapeString(kind.Description)) {
+			t.Errorf("create-zone dialog has no %s card", kind.Value)
+		}
+	}
+	if strings.Count(dialog, `type="radio" name="type"`) != len(zoneKinds) || strings.Count(dialog, " checked") != 2 {
+		t.Errorf("create-zone dialog should check only Primary and the DNSSEC switch: %s", dialog)
+	}
+	if strings.Index(dialog, "create-zone-type-stub") < strings.Index(dialog, "data-zone-type-more") {
+		t.Error("stub zones should wait behind More Types")
+	}
+
+	noSources := renderComponent(t, CreateZoneDialog(nil, nil))
+	if !strings.Contains(noSources, "Needs a primary or secondary zone to mirror first.") || !strings.Contains(noSources, `value="alias" data-zone-create-type disabled`) {
+		t.Error("alias card should be disabled and explain why while no zone can be mirrored")
+	}
+	if strings.Contains(noSources, `name="tsig_key"`) || !strings.Contains(noSources, "add one under") {
+		t.Error("create-zone dialog should point to Settings instead of offering an empty TSIG list")
 	}
 }
 

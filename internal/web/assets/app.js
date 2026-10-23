@@ -2973,6 +2973,77 @@
 	  sync();
 	};
 
+	// syncZoneCreateType shows the Create Zone fields the picked type uses and
+	// disables the rest, so a hidden field is never submitted.
+	const syncZoneCreateType = (form) => {
+	  const picked = form?.querySelector("[data-zone-create-type]:checked");
+	  if (!picked) return;
+	  const type = picked.value;
+	  const sectionsByType = {
+		primary: ["tsig"],
+		secondary: ["transfer", "tsig"],
+		stub: ["transfer", "resolution", "tsig"],
+		forwarder: ["forwarder", "resolution"],
+		alias: ["alias"],
+		catalog: ["tsig"],
+		secondary_catalog: ["transfer", "tsig"],
+	  };
+	  const active = sectionsByType[type] || [];
+	  form.querySelectorAll("[data-zone-create-options]").forEach((section) => {
+		const shown = active.includes(section.dataset.zoneCreateOptions);
+		section.hidden = !shown;
+		section.querySelectorAll("input, textarea, select").forEach((field) => { field.disabled = !shown; });
+	  });
+	  const primaryProtocol = form.querySelector("[data-zone-primary-protocol]");
+	  const stubProtocol = primaryProtocol?.querySelector("[data-stub-protocol]");
+	  if (stubProtocol) stubProtocol.disabled = type !== "stub";
+	  if (primaryProtocol && type === "stub" && primaryProtocol.value === "tcp") primaryProtocol.value = "udp";
+	  if (primaryProtocol && (type === "secondary" || type === "secondary_catalog") && primaryProtocol.value === "udp") primaryProtocol.value = "tcp";
+	  // A less common type stays in view once picked, so the dialog never hides
+	  // the choice it is about to submit.
+	  const more = form.querySelector("[data-zone-type-more]");
+	  if (more?.contains(picked)) more.open = true;
+	};
+
+	// zoneNameProblem says what is wrong with a zone name before the server has
+	// to, including a zone that already exists on this page's list.
+	const zoneNameProblem = (form, raw) => {
+	  const value = raw.trim().toLowerCase().replace(/^\.+|\.+$/g, "");
+	  if (!value) return "Enter the domain this zone answers for.";
+	  if (/^[a-z][a-z0-9+.-]*:\/\//.test(value) || value.includes("/")) return "Enter just the domain, without a scheme or path.";
+	  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value) || value.includes(":")) return "Enter a domain, not an IP address. Reverse zones end in in-addr.arpa or ip6.arpa.";
+	  if (!/^[\p{L}\p{N}-]+(\.[\p{L}\p{N}-]+)*$/u.test(value)) return "Use letters, numbers, and hyphens, with dots between labels.";
+	  if (value.split(".").some((label) => label.length > 63)) return "Each label between dots can be at most 63 characters.";
+	  const existing = form.closest("#zones-content")?.querySelector(`[data-zone-row][data-zone-name="${CSS.escape(value)}"]`);
+	  if (existing) return `A zone named ${value} already exists.`;
+	  return "";
+	};
+
+	const setupCreateZoneForm = (form) => {
+	  if (form.dataset.zoneCreateReady === "true") return;
+	  form.dataset.zoneCreateReady = "true";
+	  const name = form.querySelector("[data-zone-create-name]");
+	  const error = form.querySelector("[data-zone-create-name-error]");
+	  const validate = (show) => {
+		const message = zoneNameProblem(form, name.value);
+		name.setCustomValidity(message);
+		name.toggleAttribute("aria-invalid", Boolean(message) && show);
+		error.textContent = message;
+		error.hidden = !message || !show;
+	  };
+	  name.addEventListener("input", () => validate(!error.hidden));
+	  name.addEventListener("blur", () => { if (name.value.trim()) validate(true); });
+	  name.addEventListener("invalid", () => validate(true));
+	  // Closing the dialog resets the form, which puts Primary back without a
+	  // change event.
+	  form.addEventListener("reset", () => queueMicrotask(() => {
+		validate(false);
+		form.querySelector("[data-zone-type-more]")?.removeAttribute("open");
+		syncZoneCreateType(form);
+	  }));
+	  syncZoneCreateType(form);
+	};
+
 	const setupCreateUserForm = (form) => {
 	  if (!form || form.dataset.userValidationReady === "true") return;
 	  form.dataset.userValidationReady = "true";
@@ -3443,6 +3514,7 @@
 	  ["[data-dialog-tabs]", setupDialogTabs],
 	  ["[data-cluster-tls-accordion]", setupClusterTLSAccordion],
 	  ["[data-create-user-form]", setupCreateUserForm],
+	  ["[data-zone-create-form]", setupCreateZoneForm],
 	  ["[data-unifi-auth-root]", setupUniFiAuthModes],
 	  ["[data-unifi-zone-rows]", setupUniFiZoneRows],
 	  ["[data-log-live-panel]", setupLogLivePanel],
@@ -4449,7 +4521,8 @@
 		  window.history.pushState({sableDialog: dialog.id}, "", dialog.dataset.dialogUrl);
 		}
 	  }
-	  const initial = dialog.querySelector('[autofocus], input:not([type="hidden"]):not(.sr-only):not([disabled]), textarea:not([disabled]), select:not([disabled])') ||
+	  const initial = dialog.querySelector("[autofocus]:not([disabled])") ||
+		dialog.querySelector('input:not([type="hidden"]):not(.sr-only):not([disabled]), textarea:not([disabled]), select:not([disabled])') ||
 		dialog.querySelector('button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])');
 	  initial?.focus();
 	  dialog.querySelector("[data-token-owner]")?.dispatchEvent(new Event("change", {bubbles: true}));
@@ -6050,28 +6123,7 @@
 		return;
 	  }
 	  if (event.target.matches("[data-zone-create-type]")) {
-		const form = event.target.closest("[data-zone-create-form]");
-		const type = event.target.value;
-		const sectionsByType = {
-		  primary: [],
-		  secondary: ["transfer"],
-		  stub: ["transfer", "resolution"],
-		  forwarder: ["forwarder", "resolution"],
-		  alias: ["alias"],
-		  catalog: [],
-		  secondary_catalog: ["transfer"],
-		};
-		const active = sectionsByType[type] || [];
-		form?.querySelectorAll("[data-zone-create-options]").forEach((section) => {
-		  const shown = active.includes(section.dataset.zoneCreateOptions);
-		  section.hidden = !shown;
-		  section.querySelectorAll("input, textarea, select").forEach((field) => { field.disabled = !shown; });
-		});
-		const primaryProtocol = form?.querySelector("[data-zone-primary-protocol]");
-		const stubProtocol = primaryProtocol?.querySelector("[data-stub-protocol]");
-		if (stubProtocol) stubProtocol.disabled = type !== "stub";
-		if (primaryProtocol && type === "stub" && primaryProtocol.value === "tcp") primaryProtocol.value = "udp";
-		if (primaryProtocol && (type === "secondary" || type === "secondary_catalog") && primaryProtocol.value === "udp") primaryProtocol.value = "tcp";
+		syncZoneCreateType(event.target.closest("[data-zone-create-form]"));
 		return;
 	  }
 	  if (event.target.matches("[data-record-more-types]")) {
