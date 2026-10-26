@@ -975,6 +975,10 @@ templ AuthPage(setup bool, errorMessage string, csrfToken string, returnTo strin
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+			// As a Home Screen app, iOS otherwise keeps the page out from under
+			// the status bar, which in landscape is a column down one side, and
+			// the card centres beside it rather than on the screen.
+			<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 			<meta name="color-scheme" content="light dark"/>
 			<title>{ ifThen(setup, "Set up Sable", "Sign in to Sable") }</title>
 			<link rel="icon" href={ assetURL("sable-mark.svg") } type="image/svg+xml"/>
