@@ -1747,22 +1747,21 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
   .mobile-header, .replica-read-only-banner { transition: none; }
 }
 
-/* The sign-in page centres against the visible viewport. The console's
-   one-sided scrollbar gutter would pull the card left of centre, so this page
-   reserves both edges or neither and paints them like the page. dvh tracks
-   browser chrome that slides in and out, and the safe-area insets keep the
-   card clear of a notch, a hinge or a system bar the browser reports. */
+/* The sign-in page centres on the whole screen. The console's one-sided
+   scrollbar gutter would pull the card left of centre, so this page reserves
+   both edges or neither and paints them like the page. dvh tracks browser
+   chrome that slides in and out. With viewport-fit=cover the page runs under
+   an iPhone's landscape status rail, and each axis pads by the larger of its
+   two insets, so a rail on one side keeps the card clear of it without
+   pushing it off the screen's centre. */
 html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable both-edges; }
 .auth-body {
   display: grid;
   min-height: 100vh;
   min-height: 100dvh;
   place-items: center;
-  padding:
-    max(var(--space-6), env(safe-area-inset-top))
-    max(var(--space-6), env(safe-area-inset-right))
-    max(var(--space-6), env(safe-area-inset-bottom))
-    max(var(--space-6), env(safe-area-inset-left));
+  padding-block: max(var(--space-6), env(safe-area-inset-top), env(safe-area-inset-bottom));
+  padding-inline: max(var(--space-6), env(safe-area-inset-left), env(safe-area-inset-right));
 }
 .auth-shell { display: grid; width: min(28rem, 100%); gap: var(--space-4); }
 /* The footer's bottom padding would sit the visible block above centre. */
