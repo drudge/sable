@@ -1770,8 +1770,25 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
   .mobile-header, .replica-read-only-banner { transition: none; }
 }
 
-.auth-body { display: grid; min-height: 100vh; place-items: center; padding: var(--space-6); }
+/* The sign-in page centres on the whole screen. The console's one-sided
+   scrollbar gutter would pull the card left of centre, so this page reserves
+   both edges or neither and paints them like the page. dvh tracks browser
+   chrome that slides in and out. With viewport-fit=cover the page runs under
+   an iPhone's landscape status rail, and each axis pads by the larger of its
+   two insets, so a rail on one side keeps the card clear of it without
+   pushing it off the screen's centre. */
+html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable both-edges; }
+.auth-body {
+  display: grid;
+  min-height: 100vh;
+  min-height: 100dvh;
+  place-items: center;
+  padding-block: max(var(--space-6), env(safe-area-inset-top), env(safe-area-inset-bottom));
+  padding-inline: max(var(--space-6), env(safe-area-inset-left), env(safe-area-inset-right));
+}
 .auth-shell { display: grid; width: min(28rem, 100%); gap: var(--space-4); }
+/* The footer's bottom padding would sit the visible block above centre. */
+.auth-shell > .about-footer { padding-bottom: 0; }
 .auth-brand { display: flex; align-items: center; justify-content: center; gap: 0.65rem; color: var(--foreground); }
 .auth-brand strong { font-size: 1.5rem; font-weight: 700; }
 .auth-card { width: 100%; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: var(--space-6); color: var(--card-foreground); }
