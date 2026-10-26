@@ -8,6 +8,39 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.3-beta.1] - 2026-10-26
+
+Sable 1.7.3-beta.1 rebuilds the Create Zone dialog around picking the zone
+type first, centres the sign-in card on the whole screen, and builds with
+Go 1.27.3 for a certificate trust fix.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.2.
+
+### Console
+
+- **Create Zone** now starts with the zone type, picked from a
+  Primary / Secondary / Forwarder / More bar. More holds Stub, Alias, Catalog
+  and Secondary Catalog, each with a short description, and a help line under
+  the bar explains the type you picked. The dialog then shows only the fields
+  that type uses.
+- The zone name field gets focus when the dialog opens and checks itself as
+  you type: it flags a pasted URL, an IP address, bad characters, a label over
+  63 characters, and a zone that already exists.
+- The TSIG key choice only appears for types that use it. With no keys
+  configured it points to **Settings › TSIG** instead of an empty list.
+- Alias says why it's unavailable when there's no primary or secondary zone to
+  mirror yet.
+- The sign-in and setup card is centred on the whole screen. Before, it sat
+  left of centre on an iPhone in landscape, beside the status rail, and
+  slightly left on desktops with classic scrollbars.
+
+### Dependencies
+
+- Built with Go 1.27.3, which stops trusting the compromised certificate
+  intermediates named in GO-2026-6809.
+
 ## [1.7.2] - 2026-10-19
 
 Sable 1.7.2 makes the recursive resolver ignore records a zone's
