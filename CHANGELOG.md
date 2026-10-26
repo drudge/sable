@@ -8,6 +8,24 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.3-beta.2] - 2026-10-26
+
+Sable 1.7.3-beta.2 finishes centring the sign-in card when Sable runs as a
+Home Screen app on an iPhone in landscape.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.3-beta.1. If you use Sable as a Home
+Screen app on an iPhone, remove it from the Home Screen and add it again so
+iOS picks up the change.
+
+### Console
+
+- The sign-in and setup page now draws under the iOS status bar when Sable
+  runs as a Home Screen app. In landscape, iOS used to end the app's window at
+  the status column, so the card still sat left of centre in 1.7.3-beta.1. The
+  clock and status icons on that page now show in white over the page.
+
 ## [1.7.3-beta.1] - 2026-10-26
 
 Sable 1.7.3-beta.1 rebuilds the Create Zone dialog around picking the zone
