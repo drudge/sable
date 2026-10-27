@@ -526,3 +526,59 @@ func TestPrimaryHandoffMarksTheOldRolloutFailed(t *testing.T) {
 		t.Fatal("handoff did not release the old primary safely")
 	}
 }
+
+// A replica that comes back on another release says which one, so the
+// operator can tell a failed install from a restart that skipped it.
+func TestReplicaRestartedOnOtherReleaseNamesIt(t *testing.T) {
+	fixture := newRolloutFixture(t, 1)
+	if err := fixture.nodes[0].StartRollout(context.Background(), "1.1.0"); err != nil {
+		t.Fatal(err)
+	}
+	for range 15 {
+		fixture.tick(t)
+	}
+	if !fixture.pending[1] {
+		t.Fatal("replica was never told to restart")
+	}
+	fixture.restart(t, 1, "1.0.0")
+	for range 4 {
+		fixture.tick(t)
+	}
+	status := fixture.nodes[0].RolloutStatus()
+	want := "dns-2: Node restarted on v1.0.0 before its update to v1.1.0 completed. Review it before trying again."
+	if status.Phase != RolloutFailed || status.Error != want {
+		t.Fatalf("rollout = %s %q, want failed %q", status.Phase, status.Error, want)
+	}
+}
+
+func TestRolloutSupersededOnceEveryNodeMovesPast(t *testing.T) {
+	nodes := func(versions ...string) []Node {
+		var found []Node
+		for _, version := range versions {
+			found = append(found, Node{Version: version})
+		}
+		return found
+	}
+	for _, test := range []struct {
+		name  string
+		phase string
+		nodes []Node
+		want  bool
+	}{
+		{"failed, a node still behind", RolloutFailed, nodes("1.1.0", "1.0.0"), false},
+		{"failed, every node reached it", RolloutFailed, nodes("1.1.0", "v1.1.0"), true},
+		{"failed, cluster moved past it", RolloutFailed, nodes("1.2.0", "1.2.0"), true},
+		{"stopped, cluster moved past it", RolloutStopped, nodes("1.2.0", "1.1.0"), true},
+		{"complete, still current", RolloutComplete, nodes("1.1.0", "1.1.0"), false},
+		{"complete, cluster moved past it", RolloutComplete, nodes("1.2.0", "1.2.0"), true},
+		{"running", rolloutUpdating, nodes("1.2.0", "1.2.0"), false},
+		{"development node", RolloutFailed, nodes("1.2.0", "dev"), false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			rollout := RolloutStatus{ID: "rollout", Version: "v1.1.0", Phase: test.phase}
+			if got := rollout.Superseded(test.nodes); got != test.want {
+				t.Fatalf("Superseded = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
