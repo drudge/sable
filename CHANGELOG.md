@@ -8,6 +8,21 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.3-beta.5] - 2026-10-26
+
+Sable 1.7.3-beta.5 centres the sign-in card on an unfolded iPhone Duo.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.3-beta.4.
+
+### Console
+
+- The sign-in card is now centred on the screen of an unfolded iPhone Duo
+  running Sable from the Home Screen in landscape. iOS keeps the page out of
+  the status rail's column without telling the page, so the card used to sit
+  left of the screen's centre.
+
 ## [1.7.3-beta.4] - 2026-10-26
 
 Sable 1.7.3-beta.4 makes the sign-in layout report open on an iPhone.
