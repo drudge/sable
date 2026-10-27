@@ -4141,13 +4141,11 @@
 		  setMobileSidebarOpen(!document.documentElement.classList.contains("sidebar-mobile-open"), {keyboard: event.detail === 0});
           return;
         }
-		// In book mode this closes or opens the book, so the pages turn.
-		window.sableTurnPages(() => {
-		  const collapsed = document.documentElement.classList.toggle("sidebar-collapsed");
-		  localStorage.setItem(sidebarKey, String(collapsed));
-		  sidebarTooltip.hide();
-		  syncSidebarToggleState();
-		});
+		// In book mode this closes or opens the book.
+		const collapsed = document.documentElement.classList.toggle("sidebar-collapsed");
+		localStorage.setItem(sidebarKey, String(collapsed));
+		sidebarTooltip.hide();
+		syncSidebarToggleState();
       });
     });
 

@@ -35,30 +35,15 @@
   };
   const foldedQuery = window.matchMedia("(device-posture: folded)");
   const halfFolded = () => navigator.devicePosture?.type === "folded" || foldedQuery.matches;
-  // Opening or closing the book, by folding or unfolding the phone or with
-  // the sidebar button, morphs the sidebar and the page into their new places.
-  // A turn that starts before the last one ends skips it, so only the
-  // latest one takes the class away.
-  let turning = null;
-  const turnPages = (change) => {
-    if (!document.startViewTransition || !document.body || window.matchMedia("(prefers-reduced-motion: reduce)").matches) { change(); return; }
-    root.classList.add("book-turning");
-    const transition = document.startViewTransition(change);
-    turning = transition;
-    transition.ready.catch(() => {});
-    transition.finished.catch(() => {}).then(() => {
-      if (turning === transition) root.classList.remove("book-turning");
-    });
+  // Folding or flattening the phone opens or closes the book; app.css
+  // slides the sidebar and the page into their new places. On a foldable's
+  // shape (.book-shape) the sidebar keeps the same slide for its own button.
+  const syncBook = () => {
+    const shape = bookShape();
+    root.classList.toggle("book-shape", shape);
+    root.classList.toggle("book-pages", shape && halfFolded());
   };
-  window.sableTurnPages = (change) => root.classList.contains("book-pages") ? turnPages(change) : change();
-  const syncBook = (animate = true) => {
-    const book = bookShape() && halfFolded();
-    if (book === root.classList.contains("book-pages")) return;
-    const change = () => root.classList.toggle("book-pages", book);
-    if (animate) turnPages(change);
-    else change();
-  };
-  syncBook(false);
+  syncBook();
   // Opened cold, or brought back from the background, iOS can hand a Home
   // Screen app its window at the folded screen's size and settle it later
   // without a resize, so look again whenever the page's box changes, when it

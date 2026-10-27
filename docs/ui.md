@@ -147,20 +147,22 @@ always show, a page takes its narrower layout about 15px sooner than the
 window alone would say, since that is the room it really has.
 
 Book mode is for an unfolded foldable, such as the iPhone Duo, held wide and
-half-folded like a book: the sidebar fills the left page and the current page
-fills the right one, at phone size and in its phone layout, so nothing sits on
-the fold. Opened flat, the console keeps its usual layout. Dialogs and drawers
-open over the right page. `bootstrap.js` turns it on before the first paint
-when the Device Posture API reports the `folded` posture and the window has a
-foldable's shape, a touch screen 768 to 1100 points wide and 1.2 to 1.9 times
-as wide as it is tall, and keeps it in step as the phone folds, unfolds, and
-turns. On iOS the Device Posture API is a Safari feature flag (Settings ›
-Apps › Safari › Advanced › Feature Flags); without it the console never turns
-into a book. There `.main` becomes the `page` container, so the same queries
-give the phone layout. Opening or closing the book, by folding or flattening
-the phone or with the sidebar button, slides the two sides into place with a view
-transition, and skips it when reduced motion is on. Collapsing the sidebar
-closes the book into one page across the screen.
+half-folded like a book: the sidebar runs to the fold and the current page
+takes the right page, in its phone layout, past a 52px gap where the crease
+is, so nothing sits on it. Opened flat, the console keeps its usual layout.
+Dialogs and drawers open over the right page. `bootstrap.js` turns it on
+before the first paint when the Device Posture API reports the `folded`
+posture and the window has a foldable's shape, a touch screen 768 to 1100
+points wide and 1.2 to 1.9 times as wide as it is tall, and keeps it in step
+as the phone folds, unfolds, and turns. On iOS the Device Posture API is a
+Safari feature flag (Settings › Apps › Safari › Advanced › Feature Flags);
+without it the console never turns into a book. There `.main` becomes the
+`page` container, so the same queries give the phone layout. Opening or
+closing the book, by folding or flattening the phone or with the sidebar
+button, slides the sidebar to the fold or back and opens or closes the crease
+with CSS transitions over .4s, as Fortysix does, and skips them when reduced
+motion is on. Collapsing the sidebar closes the book into one page across the
+screen.
 
 ### Accessibility and responsive verification
 
