@@ -11,6 +11,10 @@
   const systemDark = () => window.matchMedia("(prefers-color-scheme: dark)").matches;
   const currentTheme = () => ["light", "dark"].includes(localStorage.getItem(themeKey)) ? localStorage.getItem(themeKey) : "system";
 
+	// Book mode (bootstrap.js) with the sidebar open: the page has the right
+	// page of an unfolded foldable, at phone size.
+	const bookPageOpen = () => document.documentElement.classList.contains("book-pages") && !document.documentElement.classList.contains("sidebar-collapsed");
+
 	document.addEventListener("DOMContentLoaded", () => {
 	const liveStatSnapshots = new Map();
 	const announce = (message) => {
@@ -2752,7 +2756,9 @@
 		  accepted = true;
 		  dialog.close();
 		});
-		document.body.append(dialog);
+		// Inside the page's frame, so it lays out by the page's width like
+		// every other dialog, on the right page in book mode.
+		(document.querySelector(".app-frame") || document.body).append(dialog);
 		dialog.showModal();
 		dialog.querySelector("[data-confirm-cancel]").focus();
 	  });
@@ -3929,7 +3935,7 @@
 	  const syncCacheExplainer = () => {
 	    const explainer = document.querySelector("[data-cache-explainer]");
 	    if (!explainer) return;
-	    explainer.open = !cacheExplainerMedia.matches;
+	    explainer.open = !cacheExplainerMedia.matches && !bookPageOpen();
 	  };
 	  syncCacheExplainer();
 	  cacheExplainerMedia.addEventListener("change", syncCacheExplainer);
@@ -4135,10 +4141,13 @@
 		  setMobileSidebarOpen(!document.documentElement.classList.contains("sidebar-mobile-open"), {keyboard: event.detail === 0});
           return;
         }
-        const collapsed = document.documentElement.classList.toggle("sidebar-collapsed");
-        localStorage.setItem(sidebarKey, String(collapsed));
-		sidebarTooltip.hide();
-		syncSidebarToggleState();
+		// In book mode this closes or opens the book, so the pages turn.
+		window.sableTurnPages(() => {
+		  const collapsed = document.documentElement.classList.toggle("sidebar-collapsed");
+		  localStorage.setItem(sidebarKey, String(collapsed));
+		  sidebarTooltip.hide();
+		  syncSidebarToggleState();
+		});
       });
     });
 

@@ -135,6 +135,29 @@ once because htmx can process a newly swapped subtree at any time.
   may use the member's pinned certificate authority for DoH but must never
   disable TLS verification globally.
 
+### Page widths and book mode
+
+A page lays itself out by the width it is given, not the window's. Rules for
+the page's own content use `@container page (...)` queries in `app.css`;
+`@media` queries are for the window itself, such as the sidebar and its phone
+drawer, the command palette, and notifications. The `page` container is the
+`.app-frame` around the whole console: the window's width less the
+scrollbar's gutter, which is nothing on phones and Macs. Where scrollbars
+always show, a page takes its narrower layout about 15px sooner than the
+window alone would say, since that is the room it really has.
+
+Book mode is for an unfolded foldable, such as the iPhone Duo, held wide:
+the sidebar fills the left page and the current page fills the right one, at
+phone size and in its phone layout, so nothing sits on the fold. Dialogs and
+drawers open over the right page. `bootstrap.js` turns it on before the first
+paint from the window's shape, a touch screen 768 to 1100 points wide and 1.2
+to 1.9 times as wide as it is tall, and keeps it in step as the phone folds,
+unfolds, and turns. There `.main` becomes the `page` container, so the same
+queries give the phone layout. Opening or closing the book, by unfolding the
+phone or with the sidebar button, slides the two sides into place with a view
+transition, and skips it when reduced motion is on. Collapsing the sidebar
+closes the book into one page across the screen.
+
 ### Accessibility and responsive verification
 
 The complete product goals, keyboard interaction model, and definition of done

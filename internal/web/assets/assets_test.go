@@ -472,7 +472,7 @@ func TestStyledTimePickerMatchesTextFieldGeometryAndSurface(t *testing.T) {
 	if strings.Contains(stylesheet, ".styled-time-trigger:hover") {
 		t.Error("styled time trigger has a hover border state that text fields do not")
 	}
-	_, mobileStyles, found := strings.Cut(stylesheet, "@media (max-width: 767px)")
+	_, mobileStyles, found := strings.Cut(stylesheet, "@container page (max-width: 767px)")
 	if !found || !strings.Contains(mobileStyles, ".styled-time-popover { width: 100%; }") {
 		t.Error("styled time picker does not span its field on mobile")
 	}
@@ -506,7 +506,7 @@ func TestIntegrationActionsStackAcrossNarrowCards(t *testing.T) {
 
 	stylesheet := manifest["app.css"].content
 	for _, expected := range []string{
-		"@media (max-width: 960px)",
+		"@container page (max-width: 960px)",
 		".integration-card-actions { align-items: stretch; flex-direction: column-reverse; }",
 		".integration-card-actions-primary { width: 100%; align-items: stretch; flex-direction: column; }",
 		".integration-card-actions .button, .integration-card-actions form { width: 100%; justify-content: center; }",
@@ -540,8 +540,8 @@ func TestSettingsTabsFormTwoRowsOfFiveOnPhones(t *testing.T) {
 
 	stylesheet := manifest["app.css"].content
 	for _, expected := range []string{
-		"@media (max-width: 960px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 4 * .25rem) / 5); } }",
-		"@media (max-width: 374px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 3 * .25rem) / 4); } }",
+		"@container page (max-width: 960px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 4 * .25rem) / 5); } }",
+		"@container page (max-width: 374px) { .settings-tab-list > .settings-tab { flex-basis: calc((100% - 3 * .25rem) / 4); } }",
 	} {
 		if !strings.Contains(stylesheet, expected) {
 			t.Errorf("settings tabs do not keep two rows of five down to 375px phones: missing %q", expected)
@@ -553,7 +553,7 @@ func TestPhoneDialogFootersKeepTheCloseButtonAtTheBottom(t *testing.T) {
 	t.Parallel()
 
 	stylesheet := manifest["app.css"].content
-	_, phone, found := strings.Cut(stylesheet, "@media (max-width: 639px)")
+	_, phone, found := strings.Cut(stylesheet, "@container page (max-width: 639px)")
 	for _, expected := range []string{
 		".dialog-footer { flex-direction: column-reverse; }",
 		".dialog-footer > [data-dialog-close] { order: -1; }",
@@ -582,7 +582,7 @@ func TestQueryLogToolbarUsesAvailableCompactWidth(t *testing.T) {
 
 	stylesheet := manifest["app.css"].content
 	for _, expected := range []string{
-		"@media (min-width: 561px) and (max-width: 960px)",
+		"@container page (min-width: 561px) and (max-width: 960px)",
 		".query-logs-toolbar { align-items: center; flex-direction: row; }",
 		".query-logs-toolbar .logs-toolbar-actions { display: flex; flex: none; }",
 	} {
@@ -629,7 +629,7 @@ func TestMobileLogTabsSpanAvailableWidth(t *testing.T) {
 	t.Parallel()
 
 	stylesheet := manifest["app.css"].content
-	_, mobileStyles, found := strings.Cut(stylesheet, "@media (max-width: 700px)")
+	_, mobileStyles, found := strings.Cut(stylesheet, "@container page (max-width: 700px)")
 	if !found || !strings.Contains(mobileStyles, ".logs-tab-list { width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }") {
 		t.Error("mobile log tabs do not span the available content width")
 	}
@@ -667,7 +667,7 @@ func TestAdministrationMobileTabsUseBalancedRows(t *testing.T) {
 	t.Parallel()
 
 	stylesheet := manifest["app.css"].content
-	_, mobileStyles, found := strings.Cut(stylesheet, "@media (max-width: 700px)")
+	_, mobileStyles, found := strings.Cut(stylesheet, "@container page (max-width: 700px)")
 	for _, expected := range []string{
 		".admin-tab-list { display: grid; width: 100%; grid-template-columns: repeat(6, minmax(0, 1fr));",
 		".admin-tab-list .isotope-tab { width: 100%; grid-column: span 2; }",
