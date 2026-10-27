@@ -142,6 +142,7 @@ Every screen should look finished: polished, responsive, and consistent with the
 - **Keep motion subtle.** Hover effects and state changes are quick transitions of about 150ms ease, matching the existing rules. Motion should explain a change, not decorate. Under `prefers-reduced-motion`, remove motion that isn't essential.
 - **Balance the layout.** Align to the 4px grid, keep rows from feeling cramped, and keep one clear primary action per area.
 - **Make it responsive.** Check every screen at 1218×787 (laptop) and 390×844 (phone), in light and dark, with no sideways scrolling. Safari lays some things out differently from Chrome, so check it for layout changes.
+- **Lay a page out by its own width.** Write breakpoints for page content as `@container page (...)` queries, not `@media`, so the page also works on the right page of book mode on a foldable such as the iPhone Duo. Keep `@media` for the window itself: the sidebar, the command palette, and notifications. See [docs/ui.md](docs/ui.md#page-widths-and-book-mode).
 
 ### Console conventions
 

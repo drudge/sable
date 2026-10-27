@@ -407,140 +407,142 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 				<a href="#primary-navigation">Skip to navigation</a>
 			</nav>
 			<div class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-a11y-announcer></div>
-			<div class="notification-stack" data-notification-stack></div>
-			@UpdateCompletedToast(view.Version)
-			@CommandPalette(view)
-			<div class="app-shell">
-				<aside class="sidebar" id="app-sidebar" aria-label="Application sidebar">
-					<div class="sidebar-header">
-						<a class="brand" href="/" aria-label="Sable dashboard" data-tooltip={ brandTooltip(view) }>
-							@SableMark("")
-							<span class="brand-copy"><strong>Sable</strong><small>{ view.Version }</small></span>
-						</a>
-						<button class="sidebar-collapse" type="button" data-sidebar-toggle aria-controls="app-sidebar" aria-expanded="true" aria-label="Collapse sidebar" title="Collapse sidebar">
-							@Icon("panel")
-						</button>
-					</div>
-					<nav class="nav" id="primary-navigation" aria-label="Primary navigation" tabindex="-1">
-						<div class="nav-group">
-							@NavItem("Dashboard", "/", "dashboard", activePage == "dashboard", false)
-							if (view.CanBlocking || view.CanLogs) && !view.InsightsOff {
-								@NavItem("Insights", "/insights", "lightbulb", activePage == "insights", false)
-							}
-							if view.CanZones {
-								@NavItem("Zones", "/zones", "globe", activePage == "zones", false)
-							}
-							if view.CanSettings {
-								@NavItem("Cache", "/cache", "database", activePage == "cache", false)
-							}
-							if view.CanBlocking {
-								@NavItem("Allowed", "/blocked?tab=allowed", "shield-check", activePage == "allowed", false)
-								@NavItem("Blocked", "/blocked?tab=domains", "shield-x", activePage == "blocked", false)
-							}
-							@NavItem("DNS Client", "/dns-client", "terminal", activePage == "dns-client", false)
-							if view.CanLogs {
-								@NavItem("Logs", "/logs", "logs", activePage == "logs", false)
-							}
-						</div>
-						<div class="nav-group">
-							<div class="nav-label">System</div>
-							if view.CanAdministration {
-								@NavItem("Administration", "/administration", "users", activePage == "administration", false)
-							}
-							if view.CanCluster {
-								@NavItem("Cluster", "/cluster", "cluster", activePage == "cluster", false)
-							}
-							if view.CanSettings {
-								@NavItem("Integrations", "/integrations", "plug", activePage == "integrations", false)
-								@NavItem("Settings", "/settings", "settings", activePage == "settings", false)
-							}
-							@NavItem("About", "/about", "info", activePage == "about", false)
-						</div>
-					</nav>
-					<div class="sidebar-bottom">
-						<button class="command-palette-trigger" type="button" data-command-open aria-haspopup="dialog" aria-controls="command-palette" aria-expanded="false" aria-keyshortcuts="Meta+K Control+K" data-tooltip="Command palette">
-							@Icon("search")
-							<span class="command-palette-trigger-label">Commands</span>
-							<kbd data-command-shortcut>⌘K</kbd>
-						</button>
-						<div class="sidebar-account" data-account-menu>
-							<button class="user-menu" type="button" data-account-trigger aria-haspopup="dialog" aria-expanded="false" data-tooltip={ accountDisplayName(view) }>
-								@AccountAvatar(view)
-								<span class="user-copy"><strong>{ accountDisplayName(view) }</strong><small>{ ifThen(view.SecurityEnabled, view.Username, "local console") }</small></span>
-								<span class="user-action">
-									@Icon("chevron-up")
-								</span>
+			<div class="app-frame">
+				<div class="notification-stack" data-notification-stack></div>
+				@UpdateCompletedToast(view.Version)
+				@CommandPalette(view)
+				<div class="app-shell">
+					<aside class="sidebar" id="app-sidebar" aria-label="Application sidebar">
+						<div class="sidebar-header">
+							<a class="brand" href="/" aria-label="Sable dashboard" data-tooltip={ brandTooltip(view) }>
+								@SableMark("")
+								<span class="brand-copy"><strong>Sable</strong><small>{ view.Version }</small></span>
+							</a>
+							<button class="sidebar-collapse" type="button" data-sidebar-toggle aria-controls="app-sidebar" aria-expanded="true" aria-label="Collapse sidebar" title="Collapse sidebar">
+								@Icon("panel")
 							</button>
-							<div class="account-popover" data-account-popover role="dialog" aria-label="Account and appearance" hidden>
-								if view.SecurityEnabled {
-									<div class="account-popover-header">
-										@AccountAvatar(view)
-										<span><strong>{ accountDisplayName(view) }</strong><small>{ view.Username }</small></span>
-									</div>
-									<a class="account-menu-item" href="/profile">
-										@Icon("user")
-										<span>Profile</span>
-									</a>
-									<a class="account-menu-item" href="/profile?tab=tokens">
-										@Icon("key")
-										<span>API Tokens</span>
-									</a>
-									<div class="account-menu-separator"></div>
+						</div>
+						<nav class="nav" id="primary-navigation" aria-label="Primary navigation" tabindex="-1">
+							<div class="nav-group">
+								@NavItem("Dashboard", "/", "dashboard", activePage == "dashboard", false)
+								if (view.CanBlocking || view.CanLogs) && !view.InsightsOff {
+									@NavItem("Insights", "/insights", "lightbulb", activePage == "insights", false)
 								}
-								<div class="account-theme">
-									<div class="account-theme-label">
-										@Icon("sun")
-										<span>Theme</span>
+								if view.CanZones {
+									@NavItem("Zones", "/zones", "globe", activePage == "zones", false)
+								}
+								if view.CanSettings {
+									@NavItem("Cache", "/cache", "database", activePage == "cache", false)
+								}
+								if view.CanBlocking {
+									@NavItem("Allowed", "/blocked?tab=allowed", "shield-check", activePage == "allowed", false)
+									@NavItem("Blocked", "/blocked?tab=domains", "shield-x", activePage == "blocked", false)
+								}
+								@NavItem("DNS Client", "/dns-client", "terminal", activePage == "dns-client", false)
+								if view.CanLogs {
+									@NavItem("Logs", "/logs", "logs", activePage == "logs", false)
+								}
+							</div>
+							<div class="nav-group">
+								<div class="nav-label">System</div>
+								if view.CanAdministration {
+									@NavItem("Administration", "/administration", "users", activePage == "administration", false)
+								}
+								if view.CanCluster {
+									@NavItem("Cluster", "/cluster", "cluster", activePage == "cluster", false)
+								}
+								if view.CanSettings {
+									@NavItem("Integrations", "/integrations", "plug", activePage == "integrations", false)
+									@NavItem("Settings", "/settings", "settings", activePage == "settings", false)
+								}
+								@NavItem("About", "/about", "info", activePage == "about", false)
+							</div>
+						</nav>
+						<div class="sidebar-bottom">
+							<button class="command-palette-trigger" type="button" data-command-open aria-haspopup="dialog" aria-controls="command-palette" aria-expanded="false" aria-keyshortcuts="Meta+K Control+K" data-tooltip="Command palette">
+								@Icon("search")
+								<span class="command-palette-trigger-label">Commands</span>
+								<kbd data-command-shortcut>⌘K</kbd>
+							</button>
+							<div class="sidebar-account" data-account-menu>
+								<button class="user-menu" type="button" data-account-trigger aria-haspopup="dialog" aria-expanded="false" data-tooltip={ accountDisplayName(view) }>
+									@AccountAvatar(view)
+									<span class="user-copy"><strong>{ accountDisplayName(view) }</strong><small>{ ifThen(view.SecurityEnabled, view.Username, "local console") }</small></span>
+									<span class="user-action">
+										@Icon("chevron-up")
+									</span>
+								</button>
+								<div class="account-popover" data-account-popover role="dialog" aria-label="Account and appearance" hidden>
+									if view.SecurityEnabled {
+										<div class="account-popover-header">
+											@AccountAvatar(view)
+											<span><strong>{ accountDisplayName(view) }</strong><small>{ view.Username }</small></span>
+										</div>
+										<a class="account-menu-item" href="/profile">
+											@Icon("user")
+											<span>Profile</span>
+										</a>
+										<a class="account-menu-item" href="/profile?tab=tokens">
+											@Icon("key")
+											<span>API Tokens</span>
+										</a>
+										<div class="account-menu-separator"></div>
+									}
+									<div class="account-theme">
+										<div class="account-theme-label">
+											@Icon("sun")
+											<span>Theme</span>
+										</div>
+										<div class="account-theme-options" role="radiogroup" aria-label="Theme"><button type="button" data-theme-value="system" role="radio">System</button><button type="button" data-theme-value="light" role="radio">Light</button><button type="button" data-theme-value="dark" role="radio">Dark</button></div>
 									</div>
-									<div class="account-theme-options" role="radiogroup" aria-label="Theme"><button type="button" data-theme-value="system" role="radio">System</button><button type="button" data-theme-value="light" role="radio">Light</button><button type="button" data-theme-value="dark" role="radio">Dark</button></div>
+									if view.SecurityEnabled {
+										<div class="account-menu-separator"></div>
+										<button class="account-menu-item account-sign-out" hx-post="/logout" hx-swap="none">
+											@Icon("log-out")
+											<span>Sign out</span>
+										</button>
+									}
 								</div>
-								if view.SecurityEnabled {
-									<div class="account-menu-separator"></div>
-									<button class="account-menu-item account-sign-out" hx-post="/logout" hx-swap="none">
-										@Icon("log-out")
-										<span>Sign out</span>
-									</button>
-								}
 							</div>
 						</div>
+						<button class="sidebar-rail" type="button" data-sidebar-toggle aria-controls="app-sidebar" aria-expanded="true" aria-label="Expand sidebar"></button>
+					</aside>
+					<div class="sidebar-scrim" data-sidebar-toggle aria-hidden="true"></div>
+					<div class="pull-refresh" data-pull-refresh aria-hidden="true">
+						@Icon("loader-circle")
 					</div>
-					<button class="sidebar-rail" type="button" data-sidebar-toggle aria-controls="app-sidebar" aria-expanded="true" aria-label="Expand sidebar"></button>
-				</aside>
-				<div class="sidebar-scrim" data-sidebar-toggle aria-hidden="true"></div>
-				<div class="pull-refresh" data-pull-refresh aria-hidden="true">
-					@Icon("loader-circle")
-				</div>
-				<main class="main" id="main-content" tabindex="-1">
-					<header class="mobile-header" data-mobile-header>
-						<button type="button" data-sidebar-toggle aria-controls="app-sidebar" aria-expanded="false" aria-label="Open navigation">
-							@Icon("menu")
-						</button>
-						<a class="mobile-header-brand" href="/">Sable</a>
-						<button class="mobile-command-palette-trigger" type="button" data-command-open aria-haspopup="dialog" aria-controls="command-palette" aria-expanded="false" aria-keyshortcuts="Meta+K Control+K" aria-label="Open command palette">
-							@Icon("search")
-						</button>
-					</header>
-					if view.ControlPlaneReadOnly {
-						<div class="replica-read-only-banner" role="status">
-							<div class="replica-read-only-copy">
-								@Icon("lock")
-								<span><strong>Replica · Read-only</strong><span>View and troubleshoot here. Make configuration changes on the primary.</span></span>
+					<main class="main" id="main-content" tabindex="-1">
+						<header class="mobile-header" data-mobile-header>
+							<button type="button" data-sidebar-toggle aria-controls="app-sidebar" aria-expanded="false" aria-label="Open navigation">
+								@Icon("menu")
+							</button>
+							<a class="mobile-header-brand" href="/">Sable</a>
+							<button class="mobile-command-palette-trigger" type="button" data-command-open aria-haspopup="dialog" aria-controls="command-palette" aria-expanded="false" aria-keyshortcuts="Meta+K Control+K" aria-label="Open command palette">
+								@Icon("search")
+							</button>
+						</header>
+						if view.ControlPlaneReadOnly {
+							<div class="replica-read-only-banner" role="status">
+								<div class="replica-read-only-copy">
+									@Icon("lock")
+									<span><strong>Replica · Read-only</strong><span>View and troubleshoot here. Make configuration changes on the primary.</span></span>
+								</div>
+								if view.PrimaryURL != "" {
+									<a class="replica-primary-link" href={ templ.SafeURL(view.PrimaryURL) } target="_blank" rel="noopener noreferrer">
+										<span>Open Primary</span>@Icon("external-link")
+									</a>
+								}
 							</div>
-							if view.PrimaryURL != "" {
-								<a class="replica-primary-link" href={ templ.SafeURL(view.PrimaryURL) } target="_blank" rel="noopener noreferrer">
-									<span>Open Primary</span>@Icon("external-link")
-								</a>
+						}
+						<div class="content">
+							if activePage == "dashboard" {
+								@DashboardHome(view)
+							} else {
+								@page
 							}
 						</div>
-					}
-					<div class="content">
-						if activePage == "dashboard" {
-							@DashboardHome(view)
-						} else {
-							@page
-						}
-					</div>
-				</main>
+					</main>
+				</div>
 			</div>
 		</body>
 	</html>
