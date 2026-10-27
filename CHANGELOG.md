@@ -8,6 +8,27 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.3-beta.8] - 2026-10-27
+
+Sable 1.7.3-beta.8 opens book mode on the iPhone Duo only when it's
+half-folded.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.3-beta.7.
+
+### Console
+
+- On an unfolded iPhone Duo, the console now becomes a book only when the
+  phone is half-folded like a book. Lying flat, it keeps the usual sidebar
+  layout. Folding or flattening the phone slides the two sides into place.
+  In 1.7.3-beta.7 it was a book whenever the Duo was held wide. Telling
+  folded from flat needs Safari's Device Posture API feature flag (Settings ›
+  Apps › Safari › Advanced › Feature Flags). Without it, the console keeps
+  the usual layout.
+- Opening Sable from the Home Screen after closing it from the app switcher
+  now settles into the right layout once iOS finishes sizing the window.
+
 ## [1.7.3-beta.7] - 2026-10-27
 
 Sable 1.7.3-beta.7 opens the console as a book on an unfolded iPhone Duo held

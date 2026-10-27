@@ -376,7 +376,8 @@ button { cursor: pointer; }
 .app-frame { container: page / inline-size; }
 
 /* Book mode (bootstrap.js sets .book-pages): an unfolded foldable such as the
-   iPhone Duo, held wide, reads like a book. The sidebar fills the left page
+   iPhone Duo, held wide and half-folded, reads like a book. Opened flat it
+   keeps the usual layout. The sidebar fills the left page
    and the page you are on fills the right one, at phone size and in its phone
    layout, so nothing sits on the fold. The fold is the middle of the glass. A
    Home Screen app on the Duo gives up the glass's right 84pt to the status

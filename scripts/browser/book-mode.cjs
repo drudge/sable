@@ -25,19 +25,37 @@ const settle = page => page.waitForTimeout(500);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(process.argv[2]);
+    // Opened flat, it keeps the usual layout.
+    const flat = await layout(page);
+    assert.equal(flat.book, false, 'the Duo opened flat is not a book');
+    assert.ok(flat.sidebarRight < 300, `opened flat the sidebar keeps its width: ${flat.sidebarRight}`);
+    // Half-folded, it turns into a book.
+    const posture = await duo.newCDPSession(page);
+    const fold = async folded => {
+      await posture.send('Emulation.setDevicePostureOverride', {posture: {type: folded ? 'folded' : 'continuous'}});
+      await settle(page);
+    };
+    await fold(true);
     let open = await layout(page);
-    assert.equal(open.book, true, 'the unfolded Duo opens as a book');
+    assert.equal(open.book, true, 'the half-folded Duo is a book');
     assert.ok(Math.abs(open.sidebarRight - 475.5) < 1, `the sidebar fills the left page: ${open.sidebarRight}`);
     assert.ok(Math.abs(open.mainLeft - 475.5) < 1 && Math.abs(open.mainWidth - 475.5) < 1, `the page fills the right page: ${open.mainLeft} + ${open.mainWidth}`);
     assert.equal(open.cardPadding, '16px', 'the right page uses the phone layout');
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'the book does not scroll sideways');
+
+    // Flattened again, it goes back to the usual layout, and back to a book
+    // when half-folded.
+    await fold(false);
+    assert.equal((await layout(page)).book, false, 'flattening closes the book');
+    await fold(true);
+    assert.equal((await layout(page)).book, true, 'half-folding opens the book again');
 
     // The keyboard shortens the window without the phone changing shape.
     await page.setViewportSize({width: 951, height: 300});
     await settle(page);
     assert.equal((await layout(page)).book, true, 'the keyboard does not close the book');
 
-    // Folded, it's a phone; unfolded again, a book.
+    // Folded shut, it's a phone; unfolded again, a book.
     await page.setViewportSize({width: 466, height: 678});
     await settle(page);
     assert.equal((await layout(page)).book, false, 'the folded phone is not a book');
@@ -76,9 +94,11 @@ const settle = page => page.waitForTimeout(500);
     assert.deepEqual(errors, []);
     await duo.close();
 
-    // A laptop window the same size, with a mouse, keeps the usual layout.
+    // A laptop window the same size, with a mouse, keeps the usual layout,
+    // even on a foldable laptop that says it's folded.
     const laptop = await browser.newContext({viewport: {width: 951, height: 543}});
     const desk = await laptop.newPage();
+    await (await laptop.newCDPSession(desk)).send('Emulation.setDevicePostureOverride', {posture: {type: 'folded'}});
     await desk.goto(process.argv[2]);
     const usual = await layout(desk);
     assert.equal(usual.book, false, 'a mouse-driven window is never a book');

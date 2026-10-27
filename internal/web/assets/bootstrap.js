@@ -12,14 +12,17 @@
   document.documentElement.classList.toggle("dark", theme === "dark" || (theme === "system" && systemDark()));
   document.documentElement.classList.toggle("sidebar-collapsed", sidebarCollapsed);
 
-  // Book mode: an unfolded foldable such as the iPhone Duo, held wide, reads
-  // like a book, with the sidebar on the left page and the page itself, at
-  // phone size, on the right. Safari can't see the fold, so the window's
-  // shape says so: a touch screen 768 to 1100 points wide and 1.2 to 1.9
-  // times as wide as it is tall. The keyboard shortens a Home Screen app's
-  // window without the phone changing shape, so at one width the tallest
-  // height seen counts. This runs before the first paint so the console
-  // never opens in one layout and jumps to the other.
+  // Book mode: an unfolded foldable such as the iPhone Duo, held wide and
+  // half-folded, reads like a book, with the sidebar on the left page and the
+  // page itself, at phone size, on the right. Opened flat it keeps the usual
+  // layout. The Device Posture API says when it's half-folded (on iOS it's a
+  // Safari feature flag, so without it the console never turns into a book),
+  // and the window's shape says it's an unfolded foldable: a touch screen 768
+  // to 1100 points wide and 1.2 to 1.9 times as wide as it is tall. The
+  // keyboard shortens a Home Screen app's window without the phone changing
+  // shape, so at one width the tallest height seen counts. This runs before
+  // the first paint so the console never opens in one layout and jumps to the
+  // other.
   const root = document.documentElement;
   let bookWidth = 0;
   let bookHeight = 0;
@@ -30,8 +33,10 @@
     const ratio = width / bookHeight;
     return window.matchMedia("(pointer: coarse)").matches && width >= 768 && width <= 1100 && bookHeight >= 500 && ratio >= 1.2 && ratio <= 1.9;
   };
-  // Opening or closing the book, by unfolding the phone or with the sidebar
-  // button, morphs the sidebar and the page into their new places.
+  const foldedQuery = window.matchMedia("(device-posture: folded)");
+  const halfFolded = () => navigator.devicePosture?.type === "folded" || foldedQuery.matches;
+  // Opening or closing the book, by folding or unfolding the phone or with
+  // the sidebar button, morphs the sidebar and the page into their new places.
   // A turn that starts before the last one ends skips it, so only the
   // latest one takes the class away.
   let turning = null;
@@ -47,23 +52,29 @@
   };
   window.sableTurnPages = (change) => root.classList.contains("book-pages") ? turnPages(change) : change();
   const syncBook = (animate = true) => {
-    const book = bookShape();
+    const book = bookShape() && halfFolded();
     if (book === root.classList.contains("book-pages")) return;
     const change = () => root.classList.toggle("book-pages", book);
     if (animate) turnPages(change);
     else change();
   };
   syncBook(false);
-  // iOS can hand a Home Screen app its window at the folded screen's size
-  // and settle it later without a resize, so look again whenever the page's
-  // box changes, when it comes back into view, and a few times after.
+  // Opened cold, or brought back from the background, iOS can hand a Home
+  // Screen app its window at the folded screen's size and settle it later
+  // without a resize, so look again whenever the page's box changes, when it
+  // comes back into view, and a few times as it starts up.
   let bookTimers = [];
   const syncBookSoon = () => {
     syncBook();
     bookTimers.forEach(clearTimeout);
-    bookTimers = [150, 500, 1200, 2500].map((delay) => setTimeout(syncBook, delay));
+    bookTimers = [150, 500, 1200, 2500, 5000].map((delay) => setTimeout(syncBook, delay));
   };
+  syncBookSoon();
   window.addEventListener("resize", () => syncBook());
+  window.visualViewport?.addEventListener("resize", () => syncBook());
+  window.addEventListener("focus", syncBookSoon);
+  navigator.devicePosture?.addEventListener?.("change", () => syncBook());
+  foldedQuery.addEventListener?.("change", () => syncBook());
   window.addEventListener("orientationchange", syncBookSoon);
   window.addEventListener("pageshow", syncBookSoon);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) syncBookSoon(); });
