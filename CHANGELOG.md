@@ -8,6 +8,22 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.3-beta.11] - 2026-10-27
+
+Sable 1.7.3-beta.11 puts the iPhone Duo's top band to use.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.3-beta.10.
+
+### Console
+
+- Run as a Home Screen app on an unfolded iPhone Duo held tall, the menu,
+  title and search now sit in the band beside the status bar at the top of the
+  screen instead of below it, as Fortysix does.
+- The console now draws under the status bar and keeps itself clear of it and
+  any notch, so its header fills the band behind the status bar.
+
 ## [1.7.3-beta.10] - 2026-10-27
 
 Sable 1.7.3-beta.10 tidies book mode and the drawers on touch screens.
