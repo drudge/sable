@@ -2094,10 +2094,12 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 /* An unfolded iPhone Duo held tall as a Home Screen app has an 82pt band at
    the top with the status bar only at its right end, so the header moves up
    into the band, as Fortysix's does, with search kept clear of the status
-   icons. */
+   icons. On the device, taps high in the band never reach the page, so the
+   row sits at the band's bottom, on the clock's line, where Fortysix puts its
+   tabs. */
 @media (display-mode: standalone) and (min-width: 660px) and (max-width: 680px) and (min-height: 850px) and (max-height: 890px) {
-  .mobile-header { height: max(3.5rem, env(safe-area-inset-top)); padding-top: 0; }
-  .mobile-header button { top: calc((max(3.5rem, env(safe-area-inset-top)) - 2.75rem) / 2); }
+  .mobile-header { height: max(3.5rem, env(safe-area-inset-top)); align-items: flex-end; padding: 0 0 3px; }
+  .mobile-header button { top: auto; bottom: 3px; }
   .mobile-header .mobile-command-palette-trigger { right: 8rem; }
   .replica-read-only-banner { top: max(3.5rem, env(safe-area-inset-top)); }
 }
