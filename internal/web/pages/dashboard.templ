@@ -386,7 +386,11 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 	<html lang="en">
 		<head>
 			<meta charset="utf-8"/>
-			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+			// As a Home Screen app the page runs under the status bar, so the
+			// phone header can fill the band beside it (app.css pads the
+			// console clear of every inset).
+			<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 			<meta name="color-scheme" content="light dark"/>
 			<meta name="htmx-config" content={ htmxConfig }/>
 			<title>{ pageTitle } · Sable</title>

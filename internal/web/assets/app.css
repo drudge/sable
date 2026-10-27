@@ -165,9 +165,12 @@ button { cursor: pointer; }
 .sidebar:focus { outline: none; }
 
 .app-shell { display: flex; min-height: 100vh; width: 100%; gap: var(--space-3); background: var(--shell-background); padding: var(--space-3); }
+/* The console runs under the status bar and any notch (viewport-fit=cover),
+   so the shell keeps clear of each inset. */
+.app-shell { padding: max(var(--space-3), env(safe-area-inset-top)) max(var(--space-3), env(safe-area-inset-right)) max(var(--space-3), env(safe-area-inset-bottom)) max(var(--space-3), env(safe-area-inset-left)); }
 .sidebar {
   position: sticky;
-  top: .75rem;
+  top: max(.75rem, env(safe-area-inset-top));
   z-index: 30;
   display: flex;
   width: 15rem;
@@ -415,7 +418,7 @@ button { cursor: pointer; }
   .book-shape :is(.app-shell, .sidebar, .main) { transition: none; }
 }
 .dashboard-page { display: grid; gap: var(--space-4); }
-.dashboard-update-indicator { position: fixed; top: 1rem; left: 50%; z-index: 90; display: flex; height: 2.25rem; align-items: center; gap: var(--space-2); border: 1px solid var(--border); border-radius: 999px; background: var(--popover); padding: 0 .85rem; color: var(--popover-foreground); font-size: .75rem; font-weight: 600; white-space: nowrap; box-shadow: 0 .75rem 2rem rgb(0 0 0 / .2); pointer-events: none; transform: translate(-50%, -.5rem); transition: opacity 160ms ease, transform 160ms ease, visibility 160ms; }
+.dashboard-update-indicator { position: fixed; top: calc(1rem + env(safe-area-inset-top)); left: 50%; z-index: 90; display: flex; height: 2.25rem; align-items: center; gap: var(--space-2); border: 1px solid var(--border); border-radius: 999px; background: var(--popover); padding: 0 .85rem; color: var(--popover-foreground); font-size: .75rem; font-weight: 600; white-space: nowrap; box-shadow: 0 .75rem 2rem rgb(0 0 0 / .2); pointer-events: none; transform: translate(-50%, -.5rem); transition: opacity 160ms ease, transform 160ms ease, visibility 160ms; }
 .dashboard-update-indicator.htmx-request { transform: translate(-50%, 0); }
 .dashboard-update-indicator .nav-icon { width: .9rem; height: .9rem; flex: 0 0 .9rem; animation: dashboard-update-spin .8s linear infinite; }
 @keyframes dashboard-update-spin { to { transform: rotate(360deg); } }
@@ -2076,10 +2079,27 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 	.mobile-header .mobile-command-palette-trigger { right: 1rem; left: auto; }
   .mobile-header-brand { display: inline-flex; height: 2.75rem; align-items: center; border-radius: 0.375rem; padding-inline: var(--space-3); font-size: 1.125rem; font-weight: 700; }
   .mobile-header-hidden .mobile-header { transform: translateY(-100%); }
+  /* Under the status bar the header grows by the top inset and keeps its row
+     below it. A band the page's colour stays behind the status bar when the
+     header slides away, so the page never scrolls under the clock. */
+  .mobile-header { height: calc(3.5rem + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
+  .mobile-header button { top: calc(env(safe-area-inset-top) + .375rem); }
+  .app-frame::before { content: ""; position: fixed; inset: 0 0 auto; z-index: 14; height: env(safe-area-inset-top); background: var(--background); pointer-events: none; }
+  .sidebar { padding-top: env(safe-area-inset-top); }
   /* The banner parks below the header and slides up with it, so the two never
      stack on top of each other at the same sticky offset. */
-  .replica-read-only-banner { top: 3.5rem; transition: top 180ms ease; }
-  .mobile-header-hidden .replica-read-only-banner { top: 0; }
+  .replica-read-only-banner { top: calc(3.5rem + env(safe-area-inset-top)); transition: top 180ms ease; }
+  .mobile-header-hidden .replica-read-only-banner { top: env(safe-area-inset-top); }
+}
+/* An unfolded iPhone Duo held tall as a Home Screen app has an 82pt band at
+   the top with the status bar only at its right end, so the header moves up
+   into the band, as Fortysix's does, with search kept clear of the status
+   icons. */
+@media (display-mode: standalone) and (min-width: 660px) and (max-width: 680px) and (min-height: 850px) and (max-height: 890px) {
+  .mobile-header { height: max(3.5rem, env(safe-area-inset-top)); padding-top: 0; }
+  .mobile-header button { top: calc((max(3.5rem, env(safe-area-inset-top)) - 2.75rem) / 2); }
+  .mobile-header .mobile-command-palette-trigger { right: 8rem; }
+  .replica-read-only-banner { top: max(3.5rem, env(safe-area-inset-top)); }
 }
 
 @container page (max-width: 767px) {
@@ -2094,7 +2114,7 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 }
 
 @media (max-width: 639px) {
-	.command-palette { width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem); margin: var(--space-2) auto; border-radius: .7rem; }
+	.command-palette { width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem - env(safe-area-inset-top)); margin: calc(var(--space-2) + env(safe-area-inset-top)) auto var(--space-2); border-radius: .7rem; }
 	.command-palette-search { grid-template-columns: 1.25rem minmax(0, 1fr) 2rem; padding-left: .8rem; }
 	.command-palette-search > kbd { display: none; }
 	.command-palette-search-scope { grid-template-columns: 2rem minmax(0, 1fr); }
