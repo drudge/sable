@@ -214,9 +214,7 @@ button { cursor: pointer; }
 [data-scroll-fade-bottom="true"] { -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 2.75rem), transparent 100%); mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 2.75rem), transparent 100%); }
 [data-scroll-fade-top="true"] { -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 100%); mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 100%); }
 [data-scroll-fade-top="true"][data-scroll-fade-bottom="true"] { -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 calc(100% - 2.75rem), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0%, #000 2.75rem, #000 calc(100% - 2.75rem), transparent 100%); }
-/* The chevron sits at the row's trailing edge, clear of the faded item's
-   label, which a centred chevron would land on. */
-.sidebar-nav-hint { position: absolute; right: .75rem; bottom: .15rem; left: .75rem; display: grid; height: 2.25rem; place-items: end end; padding: 0 var(--space-3) var(--space-1) 0; color: var(--muted-foreground); opacity: 0; pointer-events: none; transition: opacity 140ms ease; }
+.sidebar-nav-hint { position: absolute; right: .75rem; bottom: .15rem; left: .75rem; display: grid; height: 2.25rem; place-items: end center; padding-bottom: var(--space-1); color: var(--muted-foreground); opacity: 0; pointer-events: none; transition: opacity 140ms ease; }
 .sidebar-nav-hint[data-visible="true"] { opacity: 1; }
 /* A box marked data-scroll-fade gets the same chevron from a frame around it,
    so the chevron stays put while the box scrolls. It sits in the gap just

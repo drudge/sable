@@ -10,8 +10,8 @@ compatibility are not yet a published contract.
 
 ## [1.7.3-beta.6] - 2026-10-26
 
-Sable 1.7.3-beta.6 fixes the Logs page and sidebar on short screens, such as
-an unfolded iPhone Duo in landscape.
+Sable 1.7.3-beta.6 fixes the Logs page on short screens, such as an unfolded
+iPhone Duo in landscape.
 
 ### Upgrading
 
@@ -23,8 +23,6 @@ Nothing new is needed going from 1.7.3-beta.5.
   spill over the search bar, and the rows-per-page and paging controls at the
   bottom of either log are no longer cut off. The log list gives up the
   height instead.
-- The sidebar's "more below" chevron now sits at the right end of the row
-  instead of on top of the faded item's name.
 
 ## [1.7.3-beta.5] - 2026-10-26
 
