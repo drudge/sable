@@ -8,6 +8,22 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.3-beta.3] - 2026-10-26
+
+Sable 1.7.3-beta.3 adds a layout report to the sign-in page for tracking down
+a screen where the sign-in card isn't centred.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.3-beta.2.
+
+### Console
+
+- Tapping the Sable logo on the sign-in page three times quickly shows what
+  the browser reports about the screen: window and screen sizes, safe-area
+  insets, whether Sable runs as a Home Screen app, and where the card sits.
+  Tap three times again to hide it.
+
 ## [1.7.3-beta.2] - 2026-10-26
 
 Sable 1.7.3-beta.2 finishes centring the sign-in card when Sable runs as a
