@@ -6306,7 +6306,9 @@ document.addEventListener("click", (event) => {
    navigator.userAgent,
   ].join("\n");
  };
- document.addEventListener("click", (event) => {
+ // pointerup, not click: iOS doesn't send a tap on plain text up to a
+ // listener on the document.
+ document.addEventListener("pointerup", (event) => {
   if (!event.target.closest(".auth-brand")) return;
   const now = Date.now();
   taps = taps.filter((time) => now - time < 1000).concat(now);

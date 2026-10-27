@@ -1788,6 +1788,7 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 }
 .auth-shell { display: grid; width: min(28rem, 100%); gap: var(--space-4); }
 /* The sign-in logo's three-tap layout report (app.js). */
+.auth-brand { touch-action: manipulation; user-select: none; -webkit-user-select: none; }
 .layout-report { position: fixed; bottom: 1rem; left: 50%; z-index: 9999; max-width: min(40rem, 90vw); margin: 0; transform: translateX(-50%); border: 1px solid var(--border); border-radius: .5rem; background: var(--card); padding: .75rem; color: var(--foreground); font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; user-select: text; }
 .layout-report-probe { position: fixed; visibility: hidden; }
 .layout-report-probe[data-side="top"] { padding-left: env(safe-area-inset-top); }

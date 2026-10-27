@@ -8,6 +8,20 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.3-beta.4] - 2026-10-26
+
+Sable 1.7.3-beta.4 makes the sign-in layout report open on an iPhone.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.3-beta.3.
+
+### Console
+
+- The three-tap layout report on the sign-in logo now opens on an iPhone.
+  In 1.7.3-beta.3, iOS didn't pass the taps to it. A fast triple tap on the
+  logo also no longer zooms the page or selects the text.
+
 ## [1.7.3-beta.3] - 2026-10-26
 
 Sable 1.7.3-beta.3 adds a layout report to the sign-in page for tracking down
