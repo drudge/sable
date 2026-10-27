@@ -3066,7 +3066,11 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 	.logs-page { min-height: 0; flex: 1; grid-template-rows: auto auto minmax(0, 1fr); }
 	.logs-tab-panel { min-height: 0; }
 	.logs-card { display: flex; height: 100%; min-height: 0; flex-direction: column; }
-	.runtime-log-viewer, .query-log-table-scroll, .logs-empty { flex: 1; }
+	/* Only the reading region gives up height. On a short window, such as an
+	   unfolded iPhone Duo in landscape, a shrinking toolbar let its wrapped
+	   controls spill over the search bar below it. */
+	.logs-card > * { flex: none; }
+	.runtime-log-viewer, .query-log-table-scroll, .logs-empty { flex: 1; min-height: 10rem; }
 	.runtime-log-viewer { height: auto; }
 	.query-log-table-scroll { max-height: none; }
 }
