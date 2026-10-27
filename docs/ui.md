@@ -160,7 +160,7 @@ without it the console never turns into a book. There `.main` becomes the
 `page` container, so the same queries give the phone layout. Opening or
 closing the book, by folding or flattening the phone or with the sidebar
 button, slides the sidebar to the fold or back and opens or closes the crease
-with CSS transitions over .4s, as Fortysix does, and skips them when reduced
+with CSS transitions over .25s, as Fortysix does, and skips them when reduced
 motion is on. Collapsing the sidebar closes the book into one page across the
 screen.
 

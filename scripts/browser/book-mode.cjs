@@ -13,7 +13,7 @@ const layout = page => page.evaluate(() => {
     cardPadding: getComputedStyle(document.querySelector('.cache-card-body')).paddingLeft,
   };
 });
-// The sidebar and the page slide into place over .4s.
+// The sidebar and the page slide into place over .25s.
 const settle = page => page.waitForTimeout(700);
 
 (async () => {

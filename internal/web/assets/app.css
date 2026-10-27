@@ -404,10 +404,13 @@ button { cursor: pointer; }
 /* A dialog that sets no width cap of its own keeps a margin on the right page. */
 :where(.book-pages:not(.sidebar-collapsed) dialog:modal:not(.command-palette)) { max-width: calc(var(--page-width) - 2rem); }
 .book-pages:not(.sidebar-collapsed) :is(.pull-refresh, .dashboard-update-indicator) { left: calc(100vw - var(--page-width) / 2); }
+/* The account menu spans the account button across the left page rather than
+   floating narrow over the middle of the nav. */
+.book-pages:not(.sidebar-collapsed) .account-popover { right: 0; left: 0; width: auto; transform: none; }
 /* The book opens and closes as the phone folds and flattens, or with the
    sidebar's button: the sidebar slides to the fold or back, the crease opens
    or closes, and the page follows. */
-.book-shape :is(.app-shell, .sidebar, .main) { transition-property: width, flex-basis, padding, gap, margin, border-radius; transition-duration: .4s; transition-timing-function: cubic-bezier(.22, .8, .24, 1); }
+.book-shape :is(.app-shell, .sidebar, .main) { transition-property: width, flex-basis, padding, gap, margin, border-radius; transition-duration: .25s; transition-timing-function: cubic-bezier(.22, .8, .24, 1); }
 @media (prefers-reduced-motion: reduce) {
   .book-shape :is(.app-shell, .sidebar, .main) { transition: none; }
 }
@@ -751,6 +754,15 @@ button.ranking-row { width: 100%; border-width: 1px 0 0; background: none; color
 .blocking-status-card > header .button { display: inline-flex; align-items: center; gap: var(--space-2); }
 .blocking-status-card > header .nav-icon { width: 1rem; height: 1rem; }
 .blocking-status-actions { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-2); }
+/* On a narrow page, such as a phone or book mode's right page, the actions
+   leave the description a sliver beside them. The title and actions share
+   the first row and the description runs under both. */
+@container page (max-width: 50rem) {
+	.blocking-status-card > header { flex-wrap: wrap; align-items: center; row-gap: 0; }
+	.blocking-status-card > header > div:first-child { display: contents; }
+	.blocking-status-card > header h2 { flex: 1 1 0; min-width: 0; }
+	.blocking-status-card > header p { flex: 1 0 100%; order: 1; }
+}
 .blocking-status-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: var(--space-8); }
 @container page (min-width: 701px) {
 	.blocking-status-stats .operational-metric-value { width: 100%; justify-content: flex-end; }
@@ -3164,6 +3176,11 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 .query-detail-dialog { position: fixed; inset: 0 0 0 auto; width: min(32rem, var(--page-width)); max-width: none; height: 100dvh; max-height: none; margin: 0; overflow: hidden; border: 0; border-left: 1px solid var(--border); border-radius: var(--radius) 0 0 var(--radius); background: var(--background); color: var(--foreground); padding: 0; box-shadow: -1rem 0 3rem rgb(0 0 0 / .24); }
 .query-detail-dialog[open] { display: flex; flex-direction: column; animation: query-detail-in 120ms cubic-bezier(.2, 0, 0, 1); }
 .query-detail-dialog::backdrop { background: rgb(0 0 0 / .52); animation: backdrop-in 120ms ease-out; }
+/* On a touch screen, such as a Duo, the drawer stops short of the top so its
+   top edge and corner show rather than running under the status bar. */
+@media (pointer: coarse) {
+	.query-detail-dialog { top: max(var(--space-3), env(safe-area-inset-top)); height: auto; border-top: 1px solid var(--border); }
+}
 @keyframes query-detail-in { from { opacity: 0; translate: 1rem 0; } to { opacity: 1; translate: 0 0; } }
 .query-detail-header { position: relative; display: flex; min-height: 5rem; align-items: center; border-bottom: 1px solid var(--border); padding: var(--space-4) 3.5rem var(--space-4) var(--space-5); }
 .query-detail-header > div { display: grid; min-width: 0; gap: .2rem; }
