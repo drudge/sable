@@ -8,6 +8,24 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.3-beta.9] - 2026-10-27
+
+Sable 1.7.3-beta.9 makes book mode on the iPhone Duo slide open and leaves the
+crease clear.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.3-beta.8.
+
+### Console
+
+- Half-folding an unfolded iPhone Duo now slides the sidebar out to the fold
+  and the page over to the right page, and flattening it slides them back.
+  The sidebar's button does the same. In 1.7.3-beta.8 the layout jumped.
+- In book mode, the page now starts past a gap at the crease instead of
+  running into it.
+- A dialog opened in book mode keeps a margin on the right page.
+
 ## [1.7.3-beta.8] - 2026-10-27
 
 Sable 1.7.3-beta.8 opens book mode on the iPhone Duo only when it's
