@@ -99,7 +99,9 @@ func (server *Server) clusterUpdateView(request *http.Request) pages.ClusterUpda
 	status := server.updateStatus()
 	state := server.cluster.Snapshot()
 	rollout := controller.RolloutStatus()
-	if rollout.ClusterID != state.ClusterID || rollout.PrimaryID != state.PrimaryID || state.LocalRole != cluster.RolePrimary {
+	// A rollout that ended before every node reached a newer release some
+	// other way would otherwise keep showing its outcome as current.
+	if rollout.ClusterID != state.ClusterID || rollout.PrimaryID != state.PrimaryID || state.LocalRole != cluster.RolePrimary || rollout.Superseded(state.Nodes) {
 		rollout = cluster.RolloutStatus{}
 	}
 	view := pages.ClusterUpdateView{

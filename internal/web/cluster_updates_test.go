@@ -152,6 +152,40 @@ func TestClusterUpdateOfferedOnlyWhenANodeNeedsNewerRelease(t *testing.T) {
 	}
 }
 
+// A rollout that failed before the cluster reached a newer release another
+// way stops showing as the card's current state, and one whose nodes are still
+// behind keeps its outcome beside Update all.
+func TestClusterUpdateViewDropsSupersededRollout(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		versions    []string
+		wantRollout bool
+	}{
+		{"cluster moved past it", []string{"1.2.0", "1.2.0"}, false},
+		{"replica still behind", []string{"1.2.0", "1.0.0"}, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server := updateTestServer(t, &testUpdateController{status: update.Status{LatestVersion: "1.2.0", CheckedAt: time.Now()}})
+			controller := &testRollingUpdateController{
+				supported: true,
+				state:     cluster.State{Initialized: true, ClusterID: "cluster", PrimaryID: "ns1", LocalRole: cluster.RolePrimary},
+				rollout:   cluster.RolloutStatus{ID: "rollout", ClusterID: "cluster", PrimaryID: "ns1", Version: "v1.1.0", Phase: cluster.RolloutFailed, Error: "ns2: Node restarted"},
+			}
+			for _, version := range test.versions {
+				controller.state.Nodes = append(controller.state.Nodes, cluster.Node{Version: version})
+			}
+			server.SetClusterController(controller)
+			view := server.clusterUpdateView(httptest.NewRequest(http.MethodGet, "/cluster", nil))
+			if (view.Rollout.ID != "") != test.wantRollout {
+				t.Fatalf("rollout shown = %t, want %t", view.Rollout.ID != "", test.wantRollout)
+			}
+			if test.wantRollout && !view.UpdateAvailable() {
+				t.Fatal("a failed rollout must not hide Update all")
+			}
+		})
+	}
+}
+
 func TestNotificationClusterChoiceRequiresCapabilityAndPermission(t *testing.T) {
 	for _, scenario := range []string{"supported", "standalone", "unsupported", "replica", "update permission only", "cluster permission only", "busy", "installed", "unchecked", "rolling"} {
 		t.Run(scenario, func(t *testing.T) {

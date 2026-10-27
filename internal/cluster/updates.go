@@ -113,6 +113,32 @@ func (status RolloutStatus) Active() bool {
 	return status.Phase == rolloutPreparing || status.Phase == rolloutUpdating || status.Phase == updateRestarting || status.Phase == rolloutVerifying
 }
 
+// Superseded reports that a rollout which has ended no longer describes the
+// cluster: every node now runs its release or a newer one, however they got
+// there. A completed rollout stays until a newer release replaces it, so the
+// card can still say the cluster is up to date.
+func (status RolloutStatus) Superseded(nodes []Node) bool {
+	if status.ID == "" || status.Active() || len(nodes) == 0 {
+		return false
+	}
+	target := formatRelease(status.Version)
+	for _, node := range nodes {
+		current := formatRelease(node.Version)
+		if !semver.IsValid(current) {
+			return false
+		}
+		switch semver.Compare(current, target) {
+		case -1:
+			return false
+		case 0:
+			if status.Phase == updateComplete {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 type clusterUpdates struct {
 	mu         sync.Mutex
 	controller UpdateController
@@ -149,7 +175,7 @@ func (service *Service) SetUpdateController(controller UpdateController, restart
 		if sameRelease(service.version, updates.local.Version) {
 			updates.local.Phase, updates.local.Error = updateComplete, ""
 		} else {
-			updates.local.Phase, updates.local.Error = updateFailed, "Node restarted before its update completed. Review it before trying again."
+			updates.local.Phase, updates.local.Error = updateFailed, fmt.Sprintf("Node restarted on %s before its update to %s completed. Review it before trying again.", formatRelease(service.version), formatRelease(updates.local.Version))
 		}
 	}
 	if err := readUpdateState(service.directory, rolloutFileName, &updates.rollout); err != nil {
@@ -173,6 +199,11 @@ func (service *Service) SetUpdateController(controller UpdateController, restart
 	service.updates = updates
 	configured = true
 	return nil
+}
+
+// formatRelease spells a release the way the console does, with its v prefix.
+func formatRelease(release string) string {
+	return "v" + strings.TrimPrefix(release, "v")
 }
 
 func sameRelease(left, right string) bool {
@@ -309,7 +340,7 @@ func (service *Service) StartRollout(_ context.Context, target string) error {
 		if report.ID != "" {
 			return fmt.Errorf("%s is still finishing a previous rollout; wait for it to release", node.Name)
 		}
-		current := "v" + strings.TrimPrefix(node.Version, "v")
+		current := formatRelease(node.Version)
 		if (version.Info{Release: current}).Development() || semver.Compare(target, current) < 0 {
 			return fmt.Errorf("%s cannot be rolled forward to %s", node.Name, target)
 		}
