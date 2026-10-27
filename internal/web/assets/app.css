@@ -1787,6 +1787,14 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
   padding-inline: max(var(--space-6), env(safe-area-inset-left), env(safe-area-inset-right));
 }
 .auth-shell { display: grid; width: min(28rem, 100%); gap: var(--space-4); }
+/* An unfolded iPhone Duo running Sable from the Home Screen gives the page
+   867x669pt and draws its status rail in its own 84pt column to the right,
+   in both landscape directions, without reporting it as an inset or through
+   screen (which keeps the folded 466x678). Centring in the page sits the card
+   42pt left of the glass's centre, so pad the left by the rail's width. */
+@media (display-mode: standalone) and (min-width: 860px) and (max-width: 875px) and (min-height: 660px) and (max-height: 680px) {
+  .auth-body { padding-left: calc(var(--space-6) + 84px); }
+}
 /* The sign-in logo's three-tap layout report (app.js). */
 .auth-brand { touch-action: manipulation; user-select: none; -webkit-user-select: none; }
 .layout-report { position: fixed; bottom: 1rem; left: 50%; z-index: 9999; max-width: min(40rem, 90vw); margin: 0; transform: translateX(-50%); border: 1px solid var(--border); border-radius: .5rem; background: var(--card); padding: .75rem; color: var(--foreground); font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; user-select: text; }
