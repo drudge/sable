@@ -8,6 +8,23 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.3-beta.10] - 2026-10-27
+
+Sable 1.7.3-beta.10 tidies book mode and the drawers on touch screens.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.3-beta.9.
+
+### Console
+
+- On a narrow page, such as a phone or book mode's right page, the Blocking
+  Status description now runs the full width of the card under its title and
+  buttons, instead of squeezing into a sliver beside them.
+- On a touch screen, drawers such as a device's or a query's now stop just short
+  of the top of the screen, so their top edge and corner show.
+- The sidebar now slides to the fold and back faster in book mode.
+
 ## [1.7.3-beta.9] - 2026-10-27
 
 Sable 1.7.3-beta.9 makes book mode on the iPhone Duo slide open and leaves the
