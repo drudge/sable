@@ -8,6 +8,32 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.3-beta.7] - 2026-10-27
+
+Sable 1.7.3-beta.7 opens the console as a book on an unfolded iPhone Duo held
+wide, and tidies the Insights header on mid-width screens.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.3-beta.6.
+
+### Console
+
+- On an unfolded iPhone Duo held wide, the console reads like a book: the
+  sidebar fills the left page and the page you're on fills the right one at
+  iPhone size, in its phone layout, so nothing sits on the fold. Dialogs and
+  drawers open over the right page. Unfolding the phone or using the sidebar
+  button slides the two sides into place, and collapsing the sidebar closes
+  the book into one page. Typing with the on-screen keyboard keeps the book
+  open.
+- Page layouts now follow the width of the page rather than the whole window.
+  On a computer with always-visible scrollbars, a page switches to its
+  narrower layout about 15 pixels sooner than before.
+- On mid-width screens, such as an unfolded iPhone Duo, the Insights subtitle
+  now runs under the title and controls at full width instead of squeezing
+  into a narrow column beside them, and the section tabs stretch across the
+  page.
+
 ## [1.7.3-beta.6] - 2026-10-26
 
 Sable 1.7.3-beta.6 fixes the Logs page on short screens, such as an unfolded
