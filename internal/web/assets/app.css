@@ -4029,6 +4029,22 @@ button.insight-list-link { border: 0; background: none; padding: 0; cursor: poin
 .insight-client-list { display: grid; overflow: hidden; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); }
 
 .insights-tab-list .isotope-tab { min-width: 7.5rem; }
+.insights-page { container: insights-page / inline-size; }
+/* Between a phone and a wide desktop, such as an unfolded iPhone Duo, the
+   header controls leave the subtitle a sliver beside them. The title and
+   controls share the first row, the subtitle runs under both, and the tabs
+   stretch to the page's width. Phones keep their own layout below. */
+@media (min-width: 640px) {
+	@container insights-page (max-width: 50rem) {
+		.insights-heading { flex-wrap: wrap; align-items: center; column-gap: var(--space-4); row-gap: 0; }
+		.insights-heading > .page-heading { display: contents; }
+		.insights-heading h1 { flex: 1 1 auto; }
+		.insights-heading .insights-range { padding-top: 0; }
+		.insights-heading .page-heading p { flex: 1 0 100%; order: 1; }
+		.insights-tab-list { width: 100%; }
+		.insights-tab-list .isotope-tab { min-width: 0; flex: 1; }
+	}
+}
 .insights-tab-list .nav-icon { width: 1rem; height: 1rem; }
 .insights-tab-panel { display: grid; min-width: 0; gap: var(--space-6); }
 .insights-tab-panel[hidden] { display: none; }
