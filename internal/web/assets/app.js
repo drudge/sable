@@ -6277,3 +6277,47 @@ document.addEventListener("click", (event) => {
  const members = select.form.querySelectorAll('input[name="member"]:not(:disabled)');
  members.forEach((member, index) => { member.checked = index < 25; });
 });
+
+// Three quick taps on the sign-in logo show what the browser reports about
+// the screen, so a layout that only goes wrong on one device can be measured
+// there instead of guessed at.
+(() => {
+ let taps = [];
+ const inset = (side) => {
+  const probe = document.createElement("div");
+  probe.className = "layout-report-probe";
+  probe.dataset.side = side;
+  document.body.append(probe);
+  const value = getComputedStyle(probe).paddingLeft;
+  probe.remove();
+  return value;
+ };
+ const report = () => {
+  const card = document.querySelector(".auth-card")?.getBoundingClientRect();
+  const viewport = window.visualViewport;
+  return [
+   "inner " + innerWidth + "x" + innerHeight,
+   "client " + document.documentElement.clientWidth + "x" + document.documentElement.clientHeight,
+   "visual " + (viewport ? Math.round(viewport.width) + "x" + Math.round(viewport.height) + " at " + Math.round(viewport.offsetLeft) + "," + Math.round(viewport.offsetTop) : "none"),
+   "screen " + screen.width + "x" + screen.height + " @" + devicePixelRatio + "x " + (screen.orientation?.type || ""),
+   "insets t " + inset("top") + " r " + inset("right") + " b " + inset("bottom") + " l " + inset("left"),
+   "standalone " + matchMedia("(display-mode: standalone)").matches + " / " + navigator.standalone,
+   "card " + (card ? Math.round(card.left) + "-" + Math.round(card.right) + " centre " + Math.round((card.left + card.right) / 2) : "none"),
+   navigator.userAgent,
+  ].join("\n");
+ };
+ document.addEventListener("click", (event) => {
+  if (!event.target.closest(".auth-brand")) return;
+  const now = Date.now();
+  taps = taps.filter((time) => now - time < 1000).concat(now);
+  if (taps.length < 3) return;
+  taps = [];
+  const existing = document.querySelector("[data-layout-report]");
+  if (existing) { existing.remove(); return; }
+  const panel = document.createElement("pre");
+  panel.dataset.layoutReport = "";
+  panel.className = "layout-report";
+  panel.textContent = report();
+  document.body.append(panel);
+ });
+})();
