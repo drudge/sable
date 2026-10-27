@@ -24,6 +24,8 @@ Nothing new is needed going from 1.7.3-beta.9.
 - On a touch screen, drawers such as a device's or a query's now stop just short
   of the top of the screen, so their top edge and corner show.
 - The sidebar now slides to the fold and back faster in book mode.
+- In book mode, the account menu now spans the account button across the left
+  page instead of floating narrow over the middle of the sidebar.
 
 ## [1.7.3-beta.9] - 2026-10-27
 

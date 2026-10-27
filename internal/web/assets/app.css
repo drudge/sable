@@ -404,6 +404,9 @@ button { cursor: pointer; }
 /* A dialog that sets no width cap of its own keeps a margin on the right page. */
 :where(.book-pages:not(.sidebar-collapsed) dialog:modal:not(.command-palette)) { max-width: calc(var(--page-width) - 2rem); }
 .book-pages:not(.sidebar-collapsed) :is(.pull-refresh, .dashboard-update-indicator) { left: calc(100vw - var(--page-width) / 2); }
+/* The account menu spans the account button across the left page rather than
+   floating narrow over the middle of the nav. */
+.book-pages:not(.sidebar-collapsed) .account-popover { right: 0; left: 0; width: auto; transform: none; }
 /* The book opens and closes as the phone folds and flattens, or with the
    sidebar's button: the sidebar slides to the fold or back, the crease opens
    or closes, and the page follows. */
