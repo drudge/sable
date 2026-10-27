@@ -13,8 +13,8 @@ const layout = page => page.evaluate(() => {
     cardPadding: getComputedStyle(document.querySelector('.cache-card-body')).paddingLeft,
   };
 });
-// The view transition that turns the pages runs on its own clock.
-const settle = page => page.waitForTimeout(500);
+// The sidebar and the page slide into place over .4s.
+const settle = page => page.waitForTimeout(700);
 
 (async () => {
   const browser = await chromium.launch({headless: true, ...(process.env.SABLE_TEST_BROWSER ? {executablePath: process.env.SABLE_TEST_BROWSER} : {})});
@@ -35,11 +35,17 @@ const settle = page => page.waitForTimeout(500);
       await posture.send('Emulation.setDevicePostureOverride', {posture: {type: folded ? 'folded' : 'continuous'}});
       await settle(page);
     };
-    await fold(true);
+    // Half-folding slides the sidebar out to the fold rather than jumping.
+    await posture.send('Emulation.setDevicePostureOverride', {posture: {type: 'folded'}});
+    await page.waitForTimeout(150);
+    const sliding = await layout(page);
+    assert.ok(sliding.sidebarRight > flat.sidebarRight + 10 && sliding.sidebarRight < 470, `the sidebar slides toward the fold: ${sliding.sidebarRight}`);
+    await settle(page);
     let open = await layout(page);
     assert.equal(open.book, true, 'the half-folded Duo is a book');
-    assert.ok(Math.abs(open.sidebarRight - 475.5) < 1, `the sidebar fills the left page: ${open.sidebarRight}`);
-    assert.ok(Math.abs(open.mainLeft - 475.5) < 1 && Math.abs(open.mainWidth - 475.5) < 1, `the page fills the right page: ${open.mainLeft} + ${open.mainWidth}`);
+    assert.ok(Math.abs(open.sidebarRight - 475.5) < 1, `the sidebar runs to the fold: ${open.sidebarRight}`);
+    // The crease gets a 52px gap, on the page's side.
+    assert.ok(Math.abs(open.mainLeft - 527.5) < 1 && Math.abs(open.mainWidth - 423.5) < 1, `the page takes the right page past the crease: ${open.mainLeft} + ${open.mainWidth}`);
     assert.equal(open.cardPadding, '16px', 'the right page uses the phone layout');
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'the book does not scroll sideways');
 
@@ -79,7 +85,7 @@ const settle = page => page.waitForTimeout(500);
     assert.equal(closed.cardPadding, '24px', 'one page across the screen uses the wider layout');
     await page.click('.sidebar-rail');
     await settle(page);
-    assert.equal((await layout(page)).mainLeft > 470, true, 'the sidebar button opens the book again');
+    assert.equal((await layout(page)).mainLeft > 520, true, 'the sidebar button opens the book again');
 
     // A dialog opens over the right page.
     await page.evaluate(() => {
@@ -90,7 +96,7 @@ const settle = page => page.waitForTimeout(500);
       dialog.showModal();
     });
     const dialog = await page.evaluate(() => document.querySelector('.main > dialog').getBoundingClientRect().toJSON());
-    assert.ok(dialog.left >= 475.5 && dialog.right <= 951, `the dialog stays on the right page: ${dialog.left}-${dialog.right}`);
+    assert.ok(dialog.left >= 527.5 && dialog.right <= 951, `the dialog stays on the right page: ${dialog.left}-${dialog.right}`);
     assert.deepEqual(errors, []);
     await duo.close();
 

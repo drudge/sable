@@ -377,39 +377,40 @@ button { cursor: pointer; }
 
 /* Book mode (bootstrap.js sets .book-pages): an unfolded foldable such as the
    iPhone Duo, held wide and half-folded, reads like a book. Opened flat it
-   keeps the usual layout. The sidebar fills the left page
-   and the page you are on fills the right one, at phone size and in its phone
-   layout, so nothing sits on the fold. The fold is the middle of the glass. A
-   Home Screen app on the Duo gives up the glass's right 84pt to the status
-   rail without reporting it, so there the fold is 42pt right of the window's
-   middle and the right page is iPhone-wide. Collapsing the sidebar closes the
-   book into one page across the whole screen. */
-:root { --book-fold: 50vw; --page-width: 100vw; }
+   keeps the usual layout. Half-folded, the sidebar runs to the fold and the
+   page you are on takes the right page, in its phone layout, past a gap where
+   the crease is (on the page's side, as Fortysix and Claude's own app do), so
+   nothing sits on it. The fold is the middle of the glass. A Home Screen app
+   on the Duo gives up the glass's right 84pt to the status rail without
+   reporting it, so there the fold is 42pt right of the window's middle.
+   Collapsing the sidebar closes the book into one page across the screen. */
+:root { --book-fold: 50vw; --book-crease: 52px; --page-width: 100vw; }
 @media (display-mode: standalone) and (min-width: 860px) and (max-width: 875px) and (min-height: 660px) and (max-height: 680px) {
   :root { --book-fold: calc(50vw + 42px); }
 }
-.book-pages:not(.sidebar-collapsed) { --page-width: calc(100vw - var(--book-fold)); }
+.book-pages:not(.sidebar-collapsed) { --page-width: calc(100vw - var(--book-fold) - var(--book-crease)); }
 .book-pages:not(.sidebar-collapsed) .app-shell { gap: 0; padding: 0; }
 .book-pages:not(.sidebar-collapsed) .sidebar { top: 0; width: var(--book-fold); height: 100dvh; max-height: none; flex-basis: var(--book-fold); padding: var(--space-3) var(--space-4); }
 /* The rail sits on the fold, where a thumb resting on the page's edge would
    close the book; the header's button does that instead. */
 .book-pages:not(.sidebar-collapsed) .sidebar-rail { display: none; }
-.book-pages:not(.sidebar-collapsed) .main { container: page / inline-size; min-height: 100dvh; overflow: visible; border-width: 0 0 0 1px; border-radius: 0; box-shadow: none; }
+.book-pages:not(.sidebar-collapsed) .main { container: page / inline-size; min-height: 100dvh; margin-left: var(--book-crease); overflow: visible; border-width: 0 0 0 1px; border-radius: 0; box-shadow: none; }
 /* The phone layout's Logs page scrolls with the page rather than filling a
    window-tall card. */
 .book-pages:not(.sidebar-collapsed) .main:has(.logs-page) { display: block; height: auto; }
 .book-pages:not(.sidebar-collapsed) .main:has(.logs-page) > .content { display: block; }
 /* Dialogs, drawers, and the page's floating chips open over the right page. */
-.book-pages:not(.sidebar-collapsed) dialog:modal:not(.command-palette) { left: var(--book-fold); }
-.book-pages:not(.sidebar-collapsed) :is(.pull-refresh, .dashboard-update-indicator) { left: calc(var(--book-fold) + var(--page-width) / 2); }
-/* The pages turn: the sidebar and the page morph from where they were to
-   where they go (bootstrap.js runs it as a view transition). */
-.book-turning .sidebar { view-transition-name: book-sidebar; transition: none; }
-.book-turning .main { view-transition-name: book-page; }
-/* Each side slides and resizes as a frame over its pictures, which keep their
-   size and cross-fade rather than stretching to fit. */
-::view-transition-group(book-sidebar), ::view-transition-group(book-page) { overflow: clip; animation-duration: 340ms; animation-timing-function: cubic-bezier(.22, .8, .24, 1); }
-::view-transition-old(book-sidebar), ::view-transition-new(book-sidebar), ::view-transition-old(book-page), ::view-transition-new(book-page) { width: auto; height: auto; object-fit: none; object-position: left top; }
+.book-pages:not(.sidebar-collapsed) dialog:modal:not(.command-palette) { left: calc(var(--book-fold) + var(--book-crease)); }
+/* A dialog that sets no width cap of its own keeps a margin on the right page. */
+:where(.book-pages:not(.sidebar-collapsed) dialog:modal:not(.command-palette)) { max-width: calc(var(--page-width) - 2rem); }
+.book-pages:not(.sidebar-collapsed) :is(.pull-refresh, .dashboard-update-indicator) { left: calc(100vw - var(--page-width) / 2); }
+/* The book opens and closes as the phone folds and flattens, or with the
+   sidebar's button: the sidebar slides to the fold or back, the crease opens
+   or closes, and the page follows. */
+.book-shape :is(.app-shell, .sidebar, .main) { transition-property: width, flex-basis, padding, gap, margin, border-radius; transition-duration: .4s; transition-timing-function: cubic-bezier(.22, .8, .24, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .book-shape :is(.app-shell, .sidebar, .main) { transition: none; }
+}
 .dashboard-page { display: grid; gap: var(--space-4); }
 .dashboard-update-indicator { position: fixed; top: 1rem; left: 50%; z-index: 90; display: flex; height: 2.25rem; align-items: center; gap: var(--space-2); border: 1px solid var(--border); border-radius: 999px; background: var(--popover); padding: 0 .85rem; color: var(--popover-foreground); font-size: .75rem; font-weight: 600; white-space: nowrap; box-shadow: 0 .75rem 2rem rgb(0 0 0 / .2); pointer-events: none; transform: translate(-50%, -.5rem); transition: opacity 160ms ease, transform 160ms ease, visibility 160ms; }
 .dashboard-update-indicator.htmx-request { transform: translate(-50%, 0); }
