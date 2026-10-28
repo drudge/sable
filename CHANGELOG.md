@@ -8,6 +8,23 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.3-beta.13] - 2026-10-27
+
+Sable 1.7.3-beta.13 fixes taps and scrolling on the iPhone Duo held tall.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.3-beta.12.
+
+### Console
+
+- On an unfolded iPhone Duo held tall as a Home Screen app, the menu and search
+  buttons in the top band now open, and pages no longer jump back to the top
+  while you scroll. iOS treated touches in the band as a tap on the status bar
+  and scrolled the page to the top instead of passing them on. The console now
+  scrolls inside its own frame there, so the band's taps reach the page.
+  1.7.3-beta.12's lower header row did not fix it.
+
 ## [1.7.3-beta.12] - 2026-10-27
 
 Sable 1.7.3-beta.12 makes the iPhone Duo's top-band header respond to taps.
