@@ -8,6 +8,58 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.3] - 2026-10-28
+
+Sable 1.7.3 builds with Go 1.27.3 for a certificate trust fix, rebuilds the
+Create Zone dialog around picking the zone type first, and lays the console out
+for the unfolded iPhone Duo, including a book mode when it's half-folded.
+
+### Upgrading from 1.7.2
+
+Nothing new is needed. If you use Sable as a Home Screen app on an iPhone,
+remove it from the Home Screen and add it again so iOS picks up the new status
+bar handling.
+
+### Console
+
+- **Create Zone** now starts with the zone type, picked from a
+  Primary / Secondary / Forwarder / More bar. More holds Stub, Alias, Catalog
+  and Secondary Catalog, each with a short description, and a help line under
+  the bar explains the type you picked. The dialog then shows only the fields
+  that type uses.
+- The zone name field gets focus when the dialog opens and checks itself as
+  you type: it flags a pasted URL, an IP address, bad characters, a label over
+  63 characters, and a zone that already exists. The TSIG key choice only
+  appears for types that use it, and Alias says why it's unavailable when
+  there's no primary or secondary zone to mirror yet.
+- On an unfolded iPhone Duo half-folded like a book, the sidebar fills the
+  left page and the page you're on fills the right one in its phone layout,
+  with a gap at the crease. Folding or flattening the phone, or the sidebar
+  button, slides the two sides into place. Telling folded from flat needs
+  Safari's Device Posture API feature flag (Settings › Apps › Safari ›
+  Advanced › Feature Flags); without it the console keeps the usual layout.
+- Page layouts now follow the width of the page rather than the whole window.
+  On a computer with always-visible scrollbars, a page switches to its
+  narrower layout about 15 pixels sooner than before.
+- The sign-in and setup card is centred on the whole screen, including an
+  iPhone in landscape and an unfolded iPhone Duo, and on desktops with classic
+  scrollbars. Tapping the Sable logo there three times shows a layout report
+  for tracking down a screen where it isn't.
+- As a Home Screen app, the console now draws under the iOS status bar and
+  keeps itself clear of it and any notch.
+- On touch screens, drawers stop just short of the top of the screen so their
+  top edge shows.
+- On narrow pages, the Blocking Status description runs the full width of the
+  card, and the Insights subtitle runs under the title and controls at full
+  width with the section tabs stretched across the page.
+- On short screens, such as an unfolded iPhone Duo in landscape, the Logs
+  page's controls and paging no longer spill over or get cut off.
+
+### Dependencies
+
+- Built with Go 1.27.3, which stops trusting the compromised certificate
+  intermediates named in GO-2026-6809.
+
 ## [1.7.3-beta.14] - 2026-10-27
 
 Sable 1.7.3-beta.14 puts the iPhone Duo's header back below the status bar.
