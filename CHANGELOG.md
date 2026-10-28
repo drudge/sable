@@ -8,6 +8,22 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.3-beta.14] - 2026-10-27
+
+Sable 1.7.3-beta.14 puts the iPhone Duo's header back below the status bar.
+
+### Upgrading
+
+Nothing new is needed going from 1.7.3-beta.13.
+
+### Console
+
+- On an unfolded iPhone Duo held tall as a Home Screen app, the header sits
+  below the status bar again, as it does on other iPhones, so its menu and
+  search buttons respond to taps. Moving it up into the top band in
+  1.7.3-beta.11 left the buttons dead, and the fixes in beta.12 and beta.13
+  did not bring them back.
+
 ## [1.7.3-beta.13] - 2026-10-27
 
 Sable 1.7.3-beta.13 fixes taps and scrolling on the iPhone Duo held tall.
