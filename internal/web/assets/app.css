@@ -2094,10 +2094,14 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 /* An unfolded iPhone Duo held tall as a Home Screen app has an 82pt band at
    the top with the status bar only at its right end, so the header moves up
    into the band, as Fortysix's does, with search kept clear of the status
-   icons. On the device, taps high in the band never reach the page, so the
-   row sits at the band's bottom, on the clock's line, where Fortysix puts its
-   tabs. */
+   icons, and sits at the band's bottom, on the clock's line, where Fortysix
+   puts its tabs. iOS hands a tap on the status bar, which here spans the whole
+   band, to the document's scroller as scroll to top, so the header's buttons
+   never got their taps and the page kept jumping back up. The document stays
+   put and the shell scrolls instead, as Fortysix's panels do. */
 @media (display-mode: standalone) and (min-width: 660px) and (max-width: 680px) and (min-height: 850px) and (max-height: 890px) {
+  html, body { height: 100%; overflow: hidden; }
+  .app-shell { height: 100dvh; min-height: 0; align-items: flex-start; overflow-y: auto; }
   .mobile-header { height: max(3.5rem, env(safe-area-inset-top)); align-items: flex-end; padding: 0 0 3px; }
   .mobile-header button { top: auto; bottom: 3px; }
   .mobile-header .mobile-command-palette-trigger { right: 8rem; }

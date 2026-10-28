@@ -15,6 +15,15 @@
 	// page of an unfolded foldable, at phone size.
 	const bookPageOpen = () => document.documentElement.classList.contains("book-pages") && !document.documentElement.classList.contains("sidebar-collapsed");
 
+	// An iPhone Duo held tall as a Home Screen app scrolls the console inside
+	// its shell rather than the document (app.css says why), so anything that
+	// follows the page's scroll asks here which one moves.
+	const pageScroller = () => {
+	  const shell = document.querySelector(".app-shell");
+	  return shell && getComputedStyle(shell).overflowY === "auto" ? shell : null;
+	};
+	const pageScrollTop = () => pageScroller()?.scrollTop ?? window.scrollY;
+
 	document.addEventListener("DOMContentLoaded", () => {
 	const liveStatSnapshots = new Map();
 	const announce = (message) => {
@@ -4358,7 +4367,7 @@
       const hiddenClass = "mobile-header-hidden";
       // Small moves are rubber-band jitter, not a change of direction.
       const threshold = 8;
-      let previous = Math.max(0, window.scrollY);
+      let previous = Math.max(0, pageScrollTop());
       let queued = false;
       const reveal = () => document.documentElement.classList.remove(hiddenClass);
       const update = () => {
@@ -4366,7 +4375,7 @@
         // A modal pins the page at the top of the document; the page hasn't
         // moved, so the header stays as it was.
         if (document.documentElement.classList.contains("modal-scroll-lock")) return;
-        const current = Math.max(0, window.scrollY);
+        const current = Math.max(0, pageScrollTop());
         // Anything still behind the header stays visible, so a page shorter
         // than the viewport can never leave the header stuck off screen.
         if (current <= header.offsetHeight) {
@@ -4379,11 +4388,13 @@
         previous = current;
         document.documentElement.classList.toggle(hiddenClass, delta > 0);
       };
-      window.addEventListener("scroll", () => {
+      const queue = () => {
         if (queued) return;
         queued = true;
         window.requestAnimationFrame(update);
-      }, { passive: true });
+      };
+      window.addEventListener("scroll", queue, { passive: true });
+      document.querySelector(".app-shell")?.addEventListener("scroll", queue, { passive: true });
       window.addEventListener("resize", reveal);
       document.querySelectorAll("[data-sidebar-toggle]").forEach((button) => {
         button.addEventListener("click", reveal);
@@ -4441,7 +4452,7 @@
         pull = null;
         const chip = indicator();
         if (!chip || chip.classList.contains("is-refreshing") || event.touches.length !== 1) return;
-        if (window.scrollY > 0 || blocked() || insideScrolledArea(event.target)) return;
+        if (pageScrollTop() > 0 || blocked() || insideScrolledArea(event.target)) return;
         const touch = event.touches[0];
         pull = { chip, startX: touch.clientX, startY: touch.clientY, travel: 0, decided: false };
       }, { passive: true });
@@ -4459,7 +4470,7 @@
           pull.chip.classList.remove("is-settling");
           pull.chip.classList.add("is-active");
         }
-        if (window.scrollY > 0) {
+        if (pageScrollTop() > 0) {
           const { chip } = pull;
           pull = null;
           settle(chip);
