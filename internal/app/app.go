@@ -593,7 +593,24 @@ func hydrateTSIGKeys(
 }
 
 func ensureRemoteBlockLists(ctx context.Context, configuration config.Config, baseDirectory string) error {
+	return downloadMissingBlockLists(ctx, configuration, baseDirectory, nil)
+}
+
+// ensureRemoteBlockListsWithKey downloads any remote list that has no cached
+// copy yet, completing abuse.ch URLs with the key lookup when there is one.
+// A list that needs a key nobody can supply yet starts out empty instead of
+// stopping Sable from starting; the scheduled update fills it in.
+func ensureRemoteBlockListsWithKey(abuseCHKey func(context.Context) string) func(context.Context, config.Config, string) error {
+	return func(ctx context.Context, configuration config.Config, baseDirectory string) error {
+		return downloadMissingBlockLists(ctx, configuration, baseDirectory, abuseCHKey)
+	}
+}
+
+func downloadMissingBlockLists(ctx context.Context, configuration config.Config, baseDirectory string, abuseCHKey func(context.Context) string) error {
 	updater := blockcompiler.NewUpdater(baseDirectory)
+	if abuseCHKey != nil {
+		updater.SetAbuseCHKey(abuseCHKey)
+	}
 	for _, list := range configuration.Blocking.Lists {
 		if list.URL == "" {
 			continue
@@ -607,7 +624,17 @@ func ensureRemoteBlockLists(ctx context.Context, configuration config.Config, ba
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("inspect cached block list %q: %w", list.Name, err)
 		}
-		if err := updater.Download(ctx, blockcompiler.RemoteSource{Name: list.Name, URL: list.URL, Path: list.Path}); err != nil {
+		err := updater.Download(ctx, blockcompiler.RemoteSource{Name: list.Name, URL: list.URL, Path: list.Path})
+		if errors.Is(err, blockcompiler.ErrAbuseCHKeyMissing) {
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				return fmt.Errorf("prepare remote block list: %w", err)
+			}
+			if err := os.WriteFile(path, nil, 0o644); err != nil {
+				return fmt.Errorf("prepare remote block list: %w", err)
+			}
+			continue
+		}
+		if err != nil {
 			return fmt.Errorf("prepare remote block list: %w", err)
 		}
 	}

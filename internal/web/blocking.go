@@ -98,7 +98,8 @@ func (server *Server) blockingView(request *http.Request, message, errorMessage,
 		LastUpdate:      updateStatus.LastUpdate, NextUpdate: updateStatus.NextUpdate, Updating: updateStatus.Updating,
 		DegradedLists: updateStatus.Degraded,
 		RuleSets:      server.ruleSetViews(request, snapshot.Config), DefaultLists: slices.Clone(snapshot.Config.Blocking.DefaultLists),
-		ActiveTab: activeTab, Message: message, Error: errorMessage,
+		AbuseCHKey: server.abuseCHKeyConfigured(request.Context()),
+		ActiveTab:  activeTab, Message: message, Error: errorMessage,
 	}
 }
 

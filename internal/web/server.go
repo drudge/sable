@@ -114,6 +114,7 @@ type Server struct {
 	runtimeWaitOnce       sync.Once
 	runtimeDone           chan struct{}
 	blockLists            *blockcompiler.Updater
+	abuseCHKeys           abuseCHKeyStore
 	dnssec                dnssecController
 	cluster               clusterController
 	dynamicDNS            dynamicDNSController

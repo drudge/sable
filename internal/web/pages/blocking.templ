@@ -3,6 +3,7 @@ package pages
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -29,6 +30,9 @@ type BlockingPageView struct {
 	// DefaultLists names the block lists for devices without a rule set;
 	// empty means every list.
 	DefaultLists []string
+	// AbuseCHKey reports that an abuse.ch Auth-Key is stored, so the catalog
+	// offers URLhaus straight from abuse.ch instead of the mirror.
+	AbuseCHKey bool
 	ActiveTab string
 	Message string
 	Error string
@@ -64,7 +68,7 @@ var blockListCatalog = []BlockListCatalogItem{
 	{"AdAway Default", "Default blocklist from the AdAway project", "https://adaway.org/hosts.txt", "ads"},
 	{"EasyList", "Primary advertising filter list", "https://easylist.to/easylist/easylist.txt", "ads"},
 	{"Peter Lowe Ad/Tracking", "Known advertising and tracking servers", "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0", "ads"},
-	{"URLhaus Malicious URLs", "Malware distribution sites from abuse.ch, via the malware-filter mirror", blocking.URLhausURL, "malware"},
+	{"URLhaus Malicious URLs", "Malware sites from abuse.ch, mirrored", blocking.URLhausURL, "malware"},
 	{"Phishing Army", "Community phishing domain blocklist", "https://phishing.army/download/phishing_army_blocklist.txt", "malware"},
 	{"EasyPrivacy", "Tracking and privacy protection", "https://easylist.to/easylist/easyprivacy.txt", "privacy"},
 	{"Steven Black + Social", "Base list with social media sites blocked", "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/social/hosts", "social"},
@@ -153,7 +157,7 @@ templ BlockingContent(view BlockingPageView) {
 				<div class="tip-box"><strong>Tip:</strong> Block lists update automatically every { fmt.Sprint(view.UpdateHours) } hours. Change this in <a href="/settings?tab=blocking#block-list-updates">Settings → Blocking</a>.</div>
 			</aside>
 		</div>
-		@AddBlockListDialog(view.Lists)
+		@AddBlockListDialog(view.Lists, view.AbuseCHKey)
 		@DomainDialog("add-blocked-domain-dialog", "Add Blocked Domain", "/ui/blocking/domains/add", "Block Domain", "Enter a domain to block. Use a wildcard such as *.example.com to represent subdomains.")
 		@DomainDialog("add-allowed-domain-dialog", "Add Allowed Domain", "/ui/blocking/allowed/add", "Allow Domain", "Exact entries allow only that name. Use *.example.com to allow its subdomains.")
 		@FlushDomainDialog("flush-blocked-dialog", "Clear Custom Blocked Domains?", "/ui/blocking/domains/flush", len(view.Domains))
@@ -197,7 +201,7 @@ templ BlockListRow(list BlockListSourceView) {
 				<small class="blocklist-health-warning" title={ list.HealthDetail }>@Icon("alert-triangle")<span>{ list.HealthSummary }</span></small>
 			}
 		</div>
-		if list.URL != "" {
+		if list.URL != "" && !blocking.NeedsAbuseCHKey(list.URL) {
 			<a class="icon-button" href={ templ.SafeURL(list.URL) } target="_blank" rel="noreferrer" aria-label={ "Open " + list.Name }>@Icon("external-link")</a>
 		}
 		<button class="icon-button danger" type="button" hx-post="/ui/blocking/lists/delete" hx-vals={ fmt.Sprintf("{\"name\":%q}", list.Name) } hx-target="#blocking-content" hx-swap="outerHTML" hx-confirm={ "Remove " + list.Name + " from the block lists?" } data-confirm-title="Remove block list?" data-confirm-action="Remove Block List" aria-label={ "Remove " + list.Name }>@Icon("trash")</button>
@@ -242,7 +246,7 @@ templ BlockingTab(tab tabOption, active string) { <button type="button" role="ta
 
 templ BlockingGuide(color, title, description string) { <div><i class={ color }></i><p><strong>{ title }</strong><span>{ description }</span></p></div> }
 
-templ AddBlockListDialog(existing []BlockListSourceView) {
+templ AddBlockListDialog(existing []BlockListSourceView, abuseCHKey bool) {
 	@components.Dialog(components.DialogProps{ID: "add-block-list-dialog", TitleID: "add-block-list-title", Title: "Add Block List", Description: "Choose from popular block lists or enter a custom URL", Class: "blocking-dialog catalog-dialog", Attrs: templ.Attributes{"data-catalog-tabs": true}}) {
 		<div class="catalog-tabs" role="tablist" aria-label="Block list categories">
 			for _, category := range []string{"popular", "ads", "malware", "privacy", "social", "custom"} {
@@ -252,9 +256,9 @@ templ AddBlockListDialog(existing []BlockListSourceView) {
 		<div class="catalog-scroll">
 			for _, category := range []string{"popular", "ads", "malware", "privacy", "social"} {
 				<div id={ "catalog-panel-" + category } role="tabpanel" aria-labelledby={ "catalog-tab-" + category } data-catalog-panel={ category } hidden?={ category != "popular" }>
-					for _, item := range blockListCatalog {
+					for _, item := range catalogFor(abuseCHKey) {
 						if item.Category == category {
-							@CatalogRow(item, blockListAdded(existing, item.URL))
+							@CatalogRow(item, blockListAdded(existing, item))
 						}
 					}
 				</div>
@@ -276,7 +280,7 @@ templ BlockListAddLabel() {
 }
 
 templ CatalogRow(item BlockListCatalogItem, added bool) {
-	<article class="catalog-row"><div><strong>{ item.Name }</strong><p title={ item.Description }>{ item.Description }</p></div><a class="icon-button" href={ templ.SafeURL(item.URL) } target="_blank" rel="noreferrer" aria-label={ "View " + item.Name }>@Icon("external-link")</a>
+	<article class="catalog-row"><div><strong>{ item.Name }</strong><p title={ item.Description }>{ item.Description }</p></div><a class="icon-button" href={ templ.SafeURL(catalogLink(item)) } target="_blank" rel="noreferrer" aria-label={ "View " + item.Name }>@Icon("external-link")</a>
 		if added {
 			@components.Button(components.ButtonProps{Label: "Added", Icon: "check", Variant: components.ButtonOutline, Disabled: true, Class: "catalog-added", Attrs: templ.Attributes{"aria-label": item.Name + " already added"}})
 		} else {
@@ -303,7 +307,40 @@ templ FlushDomainDialog(id, title, endpoint string, count int) {
 	}
 }
 
-func blockListAdded(existing []BlockListSourceView, url string) bool { for _, list := range existing { if list.URL == url { return true } }; return false }
+// blockListAdded matches by name as well as URL, because adding refuses a
+// second list with either, and URLhaus is offered at two URLs.
+func blockListAdded(existing []BlockListSourceView, item BlockListCatalogItem) bool {
+	for _, list := range existing {
+		if list.URL == item.URL || strings.EqualFold(list.Name, item.Name) {
+			return true
+		}
+	}
+	return false
+}
+
+// catalogLink opens the list itself, or for a keyed list the project's home
+// page, since the URL can't be opened without the key.
+func catalogLink(item BlockListCatalogItem) string {
+	if blocking.NeedsAbuseCHKey(item.URL) {
+		return "https://urlhaus.abuse.ch/"
+	}
+	return item.URL
+}
+
+// catalogFor offers URLhaus from abuse.ch itself once a key is stored.
+func catalogFor(abuseCHKey bool) []BlockListCatalogItem {
+	if !abuseCHKey {
+		return blockListCatalog
+	}
+	catalog := slices.Clone(blockListCatalog)
+	for index := range catalog {
+		if catalog[index].URL == blocking.URLhausURL {
+			catalog[index].Description = "Malware distribution sites from abuse.ch"
+			catalog[index].URL = blocking.URLhausKeyedURL
+		}
+	}
+	return catalog
+}
 func blockListHealthDescription(degraded int) string { if degraded == 0 { return "Enabled block list sources" }; return fmt.Sprintf("%d %s failing to update", degraded, ifThen(degraded == 1, "source", "sources")) }
 
 func blockListHealthColor(degraded int) string { return ifThen(degraded == 0, "purple", "red") }

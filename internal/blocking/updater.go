@@ -7,8 +7,10 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -48,7 +50,14 @@ type Updater struct {
 	wake          chan struct{}
 	health        *healthTracker
 	now           func() time.Time
+	// abuseCHKey looks up the abuse.ch Auth-Key when a list URL carries
+	// AbuseCHKeyPlaceholder. It holds a func(context.Context) string.
+	abuseCHKey atomic.Value
 }
+
+// ErrAbuseCHKeyMissing is returned for a list that needs an abuse.ch Auth-Key
+// when none is stored.
+var ErrAbuseCHKeyMissing = errors.New("an abuse.ch Auth-Key is required; add one in Settings → Blocking")
 
 func NewUpdater(baseDirectory string) *Updater {
 	return &Updater{
@@ -67,6 +76,43 @@ func NewUpdater(baseDirectory string) *Updater {
 		now:    time.Now,
 	}
 }
+
+// SetAbuseCHKey gives the updater the abuse.ch Auth-Key lookup that list URLs
+// with AbuseCHKeyPlaceholder are completed with.
+func (updater *Updater) SetAbuseCHKey(lookup func(context.Context) string) {
+	updater.abuseCHKey.Store(lookup)
+}
+
+// requestURL fills the abuse.ch Auth-Key into a list URL and returns the key
+// too, so whatever reports a failure can keep it out of the message.
+func (updater *Updater) requestURL(ctx context.Context, source RemoteSource) (string, string, error) {
+	if !NeedsAbuseCHKey(source.URL) {
+		return source.URL, "", nil
+	}
+	lookup, _ := updater.abuseCHKey.Load().(func(context.Context) string)
+	key := ""
+	if lookup != nil {
+		key = strings.TrimSpace(lookup(ctx))
+	}
+	if key == "" {
+		return "", "", fmt.Errorf("download block list %q: %w", source.Name, ErrAbuseCHKeyMissing)
+	}
+	return strings.ReplaceAll(source.URL, AbuseCHKeyPlaceholder, url.PathEscape(key)), key, nil
+}
+
+// redactedError hides a secret that an HTTP error would otherwise quote as
+// part of the request URL.
+type redactedError struct {
+	err    error
+	secret string
+}
+
+func (redacted redactedError) Error() string {
+	message := strings.ReplaceAll(redacted.err.Error(), url.PathEscape(redacted.secret), "<redacted>")
+	return strings.ReplaceAll(message, redacted.secret, "<redacted>")
+}
+
+func (redacted redactedError) Unwrap() error { return redacted.err }
 
 func (updater *Updater) Status() UpdateStatus {
 	sources := updater.health.snapshot()
@@ -256,6 +302,18 @@ func (updater *Updater) downloadSource(ctx context.Context, source RemoteSource)
 }
 
 func (updater *Updater) downloadTemporary(ctx context.Context, source RemoteSource) (string, string, int64, error) {
+	requestURL, secret, err := updater.requestURL(ctx, source)
+	if err != nil {
+		return "", "", 0, err
+	}
+	temporary, target, written, err := updater.fetch(ctx, source, requestURL)
+	if err != nil && secret != "" {
+		err = redactedError{err: err, secret: secret}
+	}
+	return temporary, target, written, err
+}
+
+func (updater *Updater) fetch(ctx context.Context, source RemoteSource, requestURL string) (string, string, int64, error) {
 	if err := ValidateURL(source.URL); err != nil {
 		return "", "", 0, fmt.Errorf("block list %q URL: %w", source.Name, err)
 	}
@@ -263,7 +321,7 @@ func (updater *Updater) downloadTemporary(ctx context.Context, source RemoteSour
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return "", "", 0, fmt.Errorf("create block list directory: %w", err)
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, source.URL, nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return "", "", 0, fmt.Errorf("build block list request: %w", err)
 	}
