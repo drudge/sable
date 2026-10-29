@@ -72,7 +72,7 @@ var blockListCatalog = []BlockListCatalogItem{
 	{"AdAway Default", "Default blocklist from the AdAway project", "https://adaway.org/hosts.txt", "ads"},
 	{"EasyList", "Primary advertising filter list", "https://easylist.to/easylist/easylist.txt", "ads"},
 	{"Peter Lowe Ad/Tracking", "Known advertising and tracking servers", "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0", "ads"},
-	{"URLhaus Malicious URLs", "Malware distribution sites from abuse.ch", "https://urlhaus.abuse.ch/downloads/hostfile/", "malware"},
+	{"URLhaus Malicious URLs", "Malware distribution sites from abuse.ch, via the malware-filter mirror", blocking.URLhausURL, "malware"},
 	{"Phishing Army", "Community phishing domain blocklist", "https://phishing.army/download/phishing_army_blocklist.txt", "malware"},
 	{"EasyPrivacy", "Tracking and privacy protection", "https://easylist.to/easylist/easyprivacy.txt", "privacy"},
 	{"Steven Black + Social", "Base list with social media sites blocked", "https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/social/hosts", "social"},
