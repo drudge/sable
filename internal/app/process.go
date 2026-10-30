@@ -72,6 +72,7 @@ type process struct {
 	tsigSecrets            *tsig.Store
 	alertSecrets           *alerts.SecretStore
 	unifiCredentials       *unifiCredentialStore
+	abuseCHKey             *abuseCHKeyStore
 	oidcSecrets            *oidcSecretStore
 	dnsProviderCredentials *dnsprovider.Store
 
@@ -487,10 +488,12 @@ func (process *process) startZoneWorkers() {
 // carries state between members, and refuses dynamic updates on a replica.
 func (process *process) openCluster() error {
 	process.unifiCredentials = newUniFiCredentialStore(process.secretVault)
+	process.abuseCHKey = newAbuseCHKeyStore(process.secretVault)
 	process.oidcSecrets = newOIDCSecretStore(process.secretVault)
 	process.dnsProviderCredentials = dnsprovider.NewStore(process.secretVault)
 	process.stateReplicator = newClusterStateReplicator(process.configurationManager, process.zoneManager, process.database, process.tsigSecrets, process.unifiCredentials, process.oidcSecrets)
 	process.stateReplicator.setDNSProviderCredentials(process.dnsProviderCredentials)
+	process.stateReplicator.setAbuseCHKey(process.abuseCHKey)
 	process.stateReplicator.setInsightData(process.database)
 	initial := process.initial
 	clusterCertificateFile, _ := initial.EncryptedDNSCertificatePaths(process.configurationDirectory)
@@ -634,6 +637,7 @@ func (process *process) newWebServer() error {
 	webServer.SetCertificateController(process.certificateManager)
 	webServer.SetDynamicDNSController(process.dynamicDNS)
 	webServer.SetUniFiController(process.unifiSync)
+	webServer.SetAbuseCHKeyStore(process.abuseCHKey)
 	webServer.SetTSIGController(tsig.NewManager(process.configurationManager, process.tsigSecrets))
 	return nil
 }

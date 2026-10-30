@@ -38,6 +38,14 @@ type unifiCredentialVault interface {
 	Replace(context.Context, unifi.Credentials) error
 }
 
+// abuseCHKeyVault is the part of the abuse.ch Auth-Key store replication
+// needs.
+type abuseCHKeyVault interface {
+	Get(context.Context) (string, bool)
+	Put(context.Context, string) error
+	Lookup(context.Context) string
+}
+
 // oidcSecretVault is the part of the single sign-on secret store replication
 // needs.
 type oidcSecretVault interface {
@@ -71,6 +79,7 @@ type clusterStateReplicator struct {
 	tsigSecrets            *tsig.Store
 	unifiCredentials       unifiCredentialVault
 	oidcSecret             oidcSecretVault
+	abuseCHKey             abuseCHKeyVault
 	dnsProviderCredentials dnsProviderCredentialVault
 	alertSecrets           *alerts.SecretStore
 	pushKeys               pushKeyVault
@@ -117,6 +126,9 @@ type clusterRuntimeConfiguration struct {
 	// credentials. Without it a replica shows the sign-in button and then fails
 	// the token exchange.
 	OIDCClientSecret string `toml:"oidc_client_secret"`
+	// AbuseCHKey is banked in the receiving node's vault like the UniFi
+	// credentials, because every node downloads its own block lists.
+	AbuseCHKey string `toml:"abusech_key,omitempty"`
 	// Alerts travel whole, so a promoted replica sends to the same places and
 	// a replica can say so when the lead stops answering. A snapshot from a
 	// primary that predates them has none, which leaves this node's own alerts
@@ -196,6 +208,13 @@ func (replicator *clusterStateReplicator) setDNSProviderCredentials(credentials 
 	replicator.dnsProviderCredentials = credentials
 }
 
+// setAbuseCHKey has the replicator carry the abuse.ch Auth-Key and complete
+// keyed block-list URLs with it when it prepares a configuration.
+func (replicator *clusterStateReplicator) setAbuseCHKey(key abuseCHKeyVault) {
+	replicator.abuseCHKey = key
+	replicator.prepareConfiguration = ensureRemoteBlockListsWithKey(key.Lookup)
+}
+
 // setAlerts has the replicator carry alert settings, destination secrets, and
 // what browser pushes need. Alerts replicate only once all three are known,
 // because a replica takes the snapshot's subscriptions as the whole list.
@@ -260,6 +279,9 @@ func (replicator *clusterStateReplicator) Capture(ctx context.Context) ([]byte, 
 		secret, _ := replicator.oidcSecret.Get(ctx)
 		runtimeConfiguration.OIDCClientSecret = secret
 	}
+	if replicator.abuseCHKey != nil {
+		runtimeConfiguration.AbuseCHKey, _ = replicator.abuseCHKey.Get(ctx)
+	}
 	runtimeConfiguration.Alerts = replicator.captureAlerts(ctx, active.Alerts)
 	findings := active.Insights.Findings
 	runtimeConfiguration.InsightFindings = &findings
@@ -321,6 +343,9 @@ func (replicator *clusterStateReplicator) Apply(ctx context.Context, contents []
 		return err
 	}
 	if err := replicator.storeReplicatedOIDCSecret(ctx, &runtimeConfiguration); err != nil {
+		return err
+	}
+	if err := replicator.storeReplicatedAbuseCHKey(ctx, &runtimeConfiguration); err != nil {
 		return err
 	}
 	retiredAlertSecrets, err := replicator.storeReplicatedAlerts(ctx, &runtimeConfiguration)
@@ -592,6 +617,27 @@ func (replicator *clusterStateReplicator) storeReplicatedUniFiCredentials(
 	}
 	if err := replicator.unifiCredentials.Replace(ctx, credentials); err != nil {
 		return fmt.Errorf("store replicated UniFi credentials: %w", err)
+	}
+	return nil
+}
+
+// storeReplicatedAbuseCHKey banks the abuse.ch Auth-Key the primary sent and
+// strips it from the snapshot. The updater reads the vault on every download,
+// so a new key reports no change.
+func (replicator *clusterStateReplicator) storeReplicatedAbuseCHKey(
+	ctx context.Context,
+	runtimeConfiguration *clusterRuntimeConfiguration,
+) error {
+	key := runtimeConfiguration.AbuseCHKey
+	runtimeConfiguration.AbuseCHKey = ""
+	if replicator.abuseCHKey == nil || key == "" {
+		return nil
+	}
+	if stored, found := replicator.abuseCHKey.Get(ctx); found && stored == key {
+		return nil
+	}
+	if err := replicator.abuseCHKey.Put(ctx, key); err != nil {
+		return fmt.Errorf("store replicated abuse.ch Auth-Key: %w", err)
 	}
 	return nil
 }

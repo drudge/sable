@@ -109,6 +109,9 @@ type SettingsPageView struct {
 	BlockingResponseTTL uint32
 	BlockingCustomAddresses string
 	BlockingAllowTXTReport bool
+	// BlockingAbuseCHKey reports that an abuse.ch Auth-Key is stored. The key
+	// itself never travels to the page.
+	BlockingAbuseCHKey bool
 	Backup                 SettingsBackupView
 	// Alerts is the Alerts tab, which saves on its own like TSIG and Backup.
 	Alerts AlertsView
@@ -476,6 +479,14 @@ templ SettingsBlockingPanel(view SettingsPageView) {
 		}
 		@SettingsCard("refresh", "Block List Updates", "Configure automatic refreshes for remote block lists") {
 			<div class="isotope-card-content">@components.Field(components.FieldProps{ID: "settings-blocking-update-hours", Label: "Update Interval (hours)", Help: "Remote block lists are downloaded and compiled on this schedule.", Class: "narrow-control", Input: templ.Attributes{"type": "number", "name": "blocking_update_hours", "min": "1", "max": "8760", "value": fmt.Sprint(view.BlockingUpdateHours), "required": true}})</div>
+		}
+		@SettingsCard("key", "abuse.ch Auth-Key", "Download URLhaus straight from abuse.ch instead of a mirror") {
+			<div class="isotope-card-content">
+				@components.Field(components.FieldProps{ID: "settings-blocking-abusech-key", Label: "Auth-Key", Help: "Free for non-commercial use from auth.abuse.ch. Saving one moves the URLhaus list to abuse.ch; it is stored encrypted and never shown again.", Input: templ.Attributes{"type": "password", "name": "blocking_abusech_key", "autocomplete": "new-password", "placeholder": ifThen(view.BlockingAbuseCHKey, "Configured — leave blank to keep", "abuse.ch Auth-Key")}})
+				if view.BlockingAbuseCHKey {
+					@components.SwitchField(components.SwitchFieldProps{ID: "settings-blocking-abusech-key-remove", Title: "Remove Auth-Key", Description: "Forget the key and move the URLhaus list back to the malware-filter mirror.", Name: "blocking_abusech_key_remove"})
+				}
+			</div>
 		}
 		@SettingsCard("sliders", "Advanced Options", "Additional blocking response behavior") {
 			<div class="isotope-card-content">@components.SwitchField(components.SwitchFieldProps{ID: "settings-blocking-allow-txt-report", Title: "Allow TXT Blocking Report", Description: "Return blocking information when a blocked name is queried for TXT records.", Name: "blocking_allow_txt_report", Checked: view.BlockingAllowTXTReport})</div>

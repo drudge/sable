@@ -61,6 +61,24 @@ format = %q
 	}
 }
 
+func TestRetiredURLhausSubscriptionMovesToTheMirror(t *testing.T) {
+	t.Parallel()
+
+	const retiredURL = "https://urlhaus.abuse.ch/downloads/hostfile/"
+	loaded, err := Decode(strings.NewReader(fmt.Sprintf(`
+[[blocking.lists]]
+name = "URLhaus Malicious URLs"
+url = %q
+`, retiredURL)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := loaded.Blocking.Lists[0]
+	if list.URL != blocking.URLhausURL || list.Path != blocking.CachePath(retiredURL) || list.Format != "auto" {
+		t.Fatalf("migrated subscription = %+v", list)
+	}
+}
+
 func TestHageziMigrationLeavesCustomSourcesAlone(t *testing.T) {
 	t.Parallel()
 

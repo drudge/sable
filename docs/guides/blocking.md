@@ -56,7 +56,9 @@ For one night off, use the buttons on the schedule's row instead of editing it. 
 
 Use **Update Block Lists** to retry sources immediately. A previously successful source can keep using its cached list during a download failure while other sources update. A source with no successful cached download cannot safely contribute a complete replacement.
 
-Since 1.0.1, Hagezi Pro uses its working AdBlock feed. Existing subscriptions to the retired URL migrate automatically while retaining cached data. In Docker, a DNS lookup failure during download can come from container DNS rather than Sable forwarding; follow the [container DNS troubleshooting steps](install-docker.md#block-list-downloads-fail-with-a-dns-lookup-error).
+Since 1.0.1, Hagezi Pro uses its working AdBlock feed. Existing subscriptions to the retired URL migrate automatically while retaining cached data.
+
+abuse.ch stopped serving URLhaus without an Auth-Key on 21 October 2026, so the old URLhaus hostfile answers `410 Gone`. The catalog's **URLhaus Malicious URLs** now uses the [malware-filter mirror](https://gitlab.com/malware-filter/urlhaus-filter), and subscriptions to the old URL move to it automatically. To download from abuse.ch directly, get a free Auth-Key (non-commercial use) at [auth.abuse.ch](https://auth.abuse.ch/) and paste it into **Settings → Blocking → abuse.ch Auth-Key**. Saving it moves your URLhaus list to abuse.ch and updates it right away; removing it moves the list back to the mirror. The key is sealed in Sable's encrypted vault, copied to cluster replicas the same way, and never written to `sable.toml` or shown in the console. In Docker, a DNS lookup failure during download can come from container DNS rather than Sable forwarding; follow the [container DNS troubleshooting steps](install-docker.md#block-list-downloads-fail-with-a-dns-lookup-error).
 
 Inspect last success, last error, and retry status. Sable backs off failed sources rather than hammering them. Never interpret an unchanged domain count alone as evidence of a failed update: the source may simply contain the same names.
 

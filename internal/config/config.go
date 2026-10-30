@@ -1555,9 +1555,9 @@ func (list *BlockList) normalize() {
 	if list.Format == "" {
 		list.Format = string(blockcompiler.FormatAuto)
 	}
-	if list.URL == "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/hosts/pro.txt" {
-		// Keep the cached hosts file usable until the replacement AdBlock list downloads.
-		list.URL = blockcompiler.HageziProURL
+	if replacement, ok := blockcompiler.RetiredURLs[list.URL]; ok {
+		// Keep the cached hosts file usable until the replacement list downloads.
+		list.URL = replacement
 		if list.Format == string(blockcompiler.FormatHosts) {
 			list.Format = string(blockcompiler.FormatAuto)
 		}

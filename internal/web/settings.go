@@ -53,6 +53,12 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 			return
 		}
 	}
+	keyChange, err := server.saveAbuseCHKey(request)
+	if err != nil {
+		server.renderSettingsMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
+		return
+	}
+	urlhausMoved := false
 	err = editor.Update(request.Context(), func(candidate *config.Config) error {
 		if request.PostForm.Has("update_preferences_present") {
 			if err := server.applyUpdatePreferences(request, candidate); err != nil {
@@ -67,6 +73,7 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 		}
 		applyEncryptedDNSSettings(request, &candidate.EncryptedDNS, form)
 		applyLogAndBlockingSettings(request, candidate, form)
+		urlhausMoved = moveURLhaus(&candidate.Blocking, keyChange)
 		return nil
 	})
 	if err != nil {
@@ -75,7 +82,11 @@ func (server *Server) updateSettings(writer http.ResponseWriter, request *http.R
 		return
 	}
 	server.recordControlPlaneAudit(request, "settings.update", "cluster-scoped DNS settings updated")
-	server.blockLists.Schedule(time.Now().Add(server.config.Current().Config.Blocking.UpdateInterval.Duration))
+	if urlhausMoved {
+		server.blockLists.Schedule(time.Now())
+	} else {
+		server.blockLists.Schedule(time.Now().Add(server.config.Current().Config.Blocking.UpdateInterval.Duration))
+	}
 	server.logger.Info("settings updated", "client", requestClientIP(request), "revision", server.config.Current().Revision)
 	server.renderSettingsMutation(writer, request, http.StatusOK, "Settings saved and applied", "")
 }
@@ -572,6 +583,7 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		BlockingResponseType: configuration.Blocking.ResponseType, BlockingResponseTTL: configuration.Blocking.ResponseTTL,
 		BlockingCustomAddresses: strings.Join(configuration.Blocking.CustomAddresses, "\n"),
 		BlockingAllowTXTReport:  configuration.Blocking.AllowTXTReport,
+		BlockingAbuseCHKey:      server.abuseCHKeyConfigured(request.Context()),
 		TSIGKeys:                server.tsigKeyViews(request.Context()),
 		TSIGAlgorithms:          tsig.Algorithms(),
 	}

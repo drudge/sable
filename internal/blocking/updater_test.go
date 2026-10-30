@@ -134,3 +134,42 @@ func TestUpdaterRestoresEveryListWhenActivationFails(t *testing.T) {
 		t.Fatalf("update status after rollback = %+v", updater.Status())
 	}
 }
+
+func TestUpdaterFillsInTheAbuseCHKeyAndKeepsItOutOfErrors(t *testing.T) {
+	t.Parallel()
+
+	const key = "s3cret/key"
+	var requested string
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requested = request.URL.EscapedPath()
+		_, _ = writer.Write([]byte("0.0.0.0 malware.example\n"))
+	}))
+	defer server.Close()
+
+	root := t.TempDir()
+	source := RemoteSource{Name: "URLhaus", URL: server.URL + "/v2/files/exports/" + AbuseCHKeyPlaceholder + "/hostfile.txt", Path: "urlhaus.txt"}
+	updater := NewUpdater(root)
+	if err := updater.Download(context.Background(), source); !errors.Is(err, ErrAbuseCHKeyMissing) {
+		t.Fatalf("Download() without a key = %v, want ErrAbuseCHKeyMissing", err)
+	}
+
+	updater.SetAbuseCHKey(func(context.Context) string { return key })
+	if err := updater.Download(context.Background(), source); err != nil {
+		t.Fatal(err)
+	}
+	if want := "/v2/files/exports/s3cret%2Fkey/hostfile.txt"; requested != want {
+		t.Fatalf("requested %q, want %q", requested, want)
+	}
+
+	updater.client.Transport = failingDownloadTransport{errors.New("connection refused")}
+	err := updater.Download(context.Background(), source)
+	if err == nil {
+		t.Fatal("Download() succeeded through a failing transport")
+	}
+	status := updater.Status()
+	for _, message := range []string{err.Error(), status.Sources[0].LastError, status.Sources[0].URL} {
+		if strings.Contains(message, "s3cret") {
+			t.Fatalf("the abuse.ch key leaked into %q", message)
+		}
+	}
+}
