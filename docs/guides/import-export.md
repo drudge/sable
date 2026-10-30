@@ -34,6 +34,17 @@ www IN CNAME app.lab.example.
 
 Fully qualified target names end in a dot. Inspect imported relative names carefully: zone-file origin rules are not the same as Sable's convenience handling of bare labels in individual console fields.
 
+### Windows DNS Server exports
+
+Files from `dnscmd /zoneexport` or `Export-DnsServerZone` aren't standard zone files: dynamically registered records carry an aging field such as `[AGE:3794565]`, and the zone can hold WINS or WINS-R records. Import them like any other zone file. Sable spots a Windows export by its `Database file` header, its aging fields, or its WINS records, and then:
+
+- removes the aging fields,
+- skips WINS and WINS-R records and lists their owners in the result,
+- gives records without a TTL the SOA minimum, the way Windows does, instead of the TTL of the record before them, and
+- reads the zone name from the export's `Database file … for <zone> zone.` header, since its records use `@` without `$ORIGIN`.
+
+Export and import each zone separately. Active Directory domains usually keep `_msdcs.<domain>` as its own zone, and every reverse zone is its own file.
+
 Sable validates the complete candidate before activation. An invalid SOA, out-of-zone owner, malformed record, or conflicting CNAME prevents a safe import. Correct the source file instead of bypassing validation.
 
 ## Import from a catalog

@@ -2081,6 +2081,31 @@ ip 300 IN APP "What Is My Dns" "WhatIsMyDns.App" -
 	}) {
 		t.Fatalf("new zone imported from file = %#v", importedZone)
 	}
+	windowsZoneFile := `;
+;  Database file windows.test.dns for windows.test zone.
+;      Zone version:  12
+;
+
+@                       IN  SOA dc1.windows.test.  hostmaster.windows.test. (
+                                12           ; serial number
+                                900          ; refresh
+                                600          ; retry
+                                86400        ; expire
+                                3600       ) ; default TTL
+
+@                       NS	dc1.windows.test.
+@                       WINS	L1 C900 ( 192.0.2.80 )
+dc1                     [AGE:3794565]	1200	A	192.0.2.81
+`
+	createdFromWindows := importFile("/ui/zones/import-new", windowsZoneFile, nil)
+	windowsZone := findZone(configuration.zoneSnapshot.Zones, "windows.test")
+	if createdFromWindows.Code != http.StatusOK || !strings.Contains(createdFromWindows.Body.String(), "Zone windows.test imported") ||
+		!strings.Contains(createdFromWindows.Body.String(), "skipped 1 Windows WINS record (@)") || windowsZone == nil ||
+		!slices.ContainsFunc(windowsZone.Records, func(record zonemodel.Record) bool {
+			return record.Name == "dc1" && record.Type == "A" && record.Value == "192.0.2.81" && record.TTL == 1200
+		}) {
+		t.Fatalf("Windows export import response = %d %s zone=%#v", createdFromWindows.Code, createdFromWindows.Body.String(), windowsZone)
+	}
 	settings := post("/ui/zones/settings", url.Values{
 		"zone": {"imported.test"}, "default_ttl": {"1200"}, "zone_transfer": {"acl"},
 		"transfer_acl": {"192.0.2.0/24\n2001:db8::53"}, "notify": {"192.0.2.53\nsecondary.example:5353"},

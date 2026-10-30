@@ -5630,7 +5630,8 @@
 	  const lines = contents.replace(/^\uFEFF/, "").split(/\r?\n/).map(line => line.split(";")[0]);
 	  const origin = lines.map(line => line.match(/^\s*\$ORIGIN\s+(\S+)/i)).find(Boolean);
 	  const soa = lines.map(line => line.match(/^(\S+)\s+(?:(?:IN|CH|HS|[0-9][0-9wdhms]*)\s+)*SOA\s/i)).find(Boolean);
-	  const name = (origin?.[1] || soa?.[1] || "").replace(/\.$/, "").toLowerCase();
+	  const windows = contents.match(/^;\s*Database file \S+ for (\S+) zone\./mi);
+	  const name = (origin?.[1] || (soa?.[1] !== "@" && soa?.[1]) || windows?.[1] || "").replace(/\.$/, "").toLowerCase();
 	  return name.length <= 253 && name.split(".").every(label => /^[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?$/i.test(label)) ? name : "";
 	};
 	const updateDetectedZoneName = async (form) => {
