@@ -56,6 +56,7 @@ func (server *Server) importZone(writer http.ResponseWriter, request *http.Reque
 		server.renderZoneMutation(writer, request, http.StatusNotImplemented, selected, "", "This configuration source is read-only.")
 		return
 	}
+	zoneText, skippedWindowsRecords := cleanWindowsZoneExport(zoneText)
 	overwriteSets := request.FormValue("overwrite") == "true"
 	overwriteZone := request.FormValue("overwrite_zone") == "true"
 	overwriteSOASerial := request.FormValue("overwrite_soa_serial") == "true"
@@ -83,7 +84,7 @@ func (server *Server) importZone(writer http.ResponseWriter, request *http.Reque
 	server.logZoneOperation(request, selected, nil)
 	server.auditZoneMutation(request, selected)
 	server.notifyZoneChange(request.Context(), selected)
-	message := zoneImportMessage("Records imported into "+selected, skippedAPPRecords)
+	message := zoneImportMessage("Records imported into "+selected, skippedAPPRecords, skippedWindowsRecords)
 	server.renderZoneMutation(writer, request, http.StatusOK, selected, message, "")
 }
 
@@ -105,6 +106,7 @@ func (server *Server) importNewZone(writer http.ResponseWriter, request *http.Re
 		server.renderZoneMutation(writer, request, http.StatusNotImplemented, "", "", "This configuration source is read-only.")
 		return
 	}
+	zoneText, skippedWindowsRecords := cleanWindowsZoneExport(zoneText)
 	selected := ""
 	var skippedAPPRecords []string
 	err = editor.UpdateZones(request.Context(), func(zones *[]zonemodel.Zone) error {
@@ -142,7 +144,7 @@ func (server *Server) importNewZone(writer http.ResponseWriter, request *http.Re
 	server.logZoneOperation(request, selected, nil)
 	server.auditZoneMutation(request, selected)
 	server.notifyZoneChange(request.Context(), selected)
-	message := zoneImportMessage("Zone "+selected+" imported", skippedAPPRecords)
+	message := zoneImportMessage("Zone "+selected+" imported", skippedAPPRecords, skippedWindowsRecords)
 	server.renderZoneMutation(writer, request, http.StatusOK, selected, message, "")
 }
 
@@ -194,6 +196,9 @@ func importedZoneName(supplied, contents string) (string, error) {
 		}
 	}
 	if candidate == "" || candidate == "." || candidate == "@" {
+		candidate = windowsZoneExportName(contents)
+	}
+	if candidate == "" || candidate == "." || candidate == "@" {
 		return "", errors.New("zone name could not be inferred; enter a Zone Name or include $ORIGIN in the file")
 	}
 	name, err := dnsname.Normalize(strings.TrimSuffix(candidate, "."))
@@ -203,15 +208,22 @@ func importedZoneName(supplied, contents string) (string, error) {
 	return name, nil
 }
 
-func zoneImportMessage(base string, skippedAPPRecords []string) string {
-	if len(skippedAPPRecords) == 0 {
-		return base
+func zoneImportMessage(base string, skippedAPPRecords, skippedWindowsRecords []string) string {
+	message := base
+	if len(skippedAPPRecords) > 0 {
+		message += fmt.Sprintf("; skipped %d unsupported Technitium APP %s (%s)", len(skippedAPPRecords), recordsLabel(len(skippedAPPRecords)), strings.Join(skippedAPPRecords, ", "))
 	}
-	recordLabel := "records"
-	if len(skippedAPPRecords) == 1 {
-		recordLabel = "record"
+	if len(skippedWindowsRecords) > 0 {
+		message += fmt.Sprintf("; skipped %d Windows WINS %s (%s)", len(skippedWindowsRecords), recordsLabel(len(skippedWindowsRecords)), strings.Join(skippedWindowsRecords, ", "))
 	}
-	return base + fmt.Sprintf("; skipped %d unsupported Technitium APP %s (%s)", len(skippedAPPRecords), recordLabel, strings.Join(skippedAPPRecords, ", "))
+	return message
+}
+
+func recordsLabel(count int) string {
+	if count == 1 {
+		return "record"
+	}
+	return "records"
 }
 
 func parseZoneFile(zone zonemodel.Zone, reader io.Reader) ([]zonemodel.Record, []string, error) {
