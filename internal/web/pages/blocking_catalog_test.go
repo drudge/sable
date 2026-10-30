@@ -1,6 +1,8 @@
 package pages
 
 import (
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/drudge/sable/internal/blocking"
@@ -31,5 +33,22 @@ func TestCatalogOffersURLhausFromAbuseCHOnlyWithAKey(t *testing.T) {
 	mirror := []BlockListSourceView{{Name: "URLhaus Malicious URLs", URL: blocking.URLhausURL}}
 	if !blockListAdded(mirror, keyed) {
 		t.Fatal("the keyed URLhaus was offered beside a mirror subscription with the same name")
+	}
+}
+
+func TestKeyedBlockListRowSaysItUsesTheAuthKey(t *testing.T) {
+	t.Parallel()
+
+	var rendered strings.Builder
+	list := BlockListSourceView{Name: "URLhaus Malicious URLs", URL: blocking.URLhausKeyedURL, Format: "auto", Healthy: true}
+	if err := BlockListRow(list).Render(context.Background(), &rendered); err != nil {
+		t.Fatal(err)
+	}
+	html := rendered.String()
+	if !strings.Contains(html, "Downloads with your abuse.ch Auth-Key") || strings.Contains(html, blocking.AbuseCHKeyPlaceholder) {
+		t.Fatalf("keyed row = %s", html)
+	}
+	if !strings.Contains(html, "urlhaus-api.abuse.ch/v2/files/exports/&lt;Auth-Key&gt;/hostfile.txt") {
+		t.Fatalf("keyed row does not show where the key goes: %s", html)
 	}
 }
