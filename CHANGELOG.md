@@ -8,6 +8,49 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.7.4] - 2026-10-30
+
+Sable 1.7.4 gets the URLhaus block list downloading again after abuse.ch
+started requiring an Auth-Key, imports zone files exported from Windows DNS
+Server, and updates its Go modules.
+
+### Upgrading from 1.7.3
+
+Nothing new is needed. A URLhaus subscription on the old abuse.ch URL moves to
+the malware-filter mirror on its own and keeps its cached list until the first
+download from the mirror succeeds.
+
+### Blocking
+
+- abuse.ch stopped serving URLhaus without an Auth-Key on 21 October 2026, so
+  the old URLhaus hostfile answered `410 Gone` and the list stopped updating.
+  The catalog's **URLhaus Malicious URLs** now downloads from the
+  [malware-filter mirror](https://gitlab.com/malware-filter/urlhaus-filter),
+  and existing subscriptions move to it automatically.
+- To download URLhaus straight from abuse.ch, paste a free Auth-Key from
+  [auth.abuse.ch](https://auth.abuse.ch/) into **Settings › Blocking ›
+  abuse.ch Auth-Key**. Saving it moves the list to abuse.ch and updates it
+  right away; removing it moves the list back to the mirror. The key is sealed
+  in the encrypted vault, copied to cluster replicas the same way, and never
+  written to `sable.toml` or shown in the console again.
+
+### Zones
+
+- Zone files from `dnscmd /zoneexport` or `Export-DnsServerZone` now import.
+  Sable spots a Windows export by its `Database file` header, its `[AGE:n]`
+  aging fields or its WINS records, then strips the aging fields, skips WINS
+  and WINS-R records and lists them in the result, gives records without a TTL
+  the SOA minimum, and reads the zone name from the header. Other zone files
+  import as before.
+- The zone file picker accepts `.dns` files, and the Import Zone dialog names
+  Windows DNS alongside BIND and Technitium.
+
+### Dependencies
+
+- Updated quic-go to 0.64.1, modernc.org/sqlite to 1.61.0, golang.org/x/net
+  to 0.62.0, templ to 0.3.1100, goldmark to 1.8.7, cbor to 2.10.0 and
+  govulncheck to 1.9.0.
+
 ## [1.7.4-beta.1] - 2026-10-30
 
 Sable 1.7.4-beta.1 gets the URLhaus block list downloading again after
