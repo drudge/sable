@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/update"
+	"github.com/drudge/sable/internal/web/pages"
 )
 
 // testUpdateController reports a fixed release state and records what the
@@ -587,6 +589,39 @@ func TestReplicaCanPersistAutomaticUpdatePreference(t *testing.T) {
 	}
 }
 
+// Update preferences are node-local, but on a replica Save Settings belongs to
+// the primary and the console locks every control bound to its form. The card
+// has to post to the replica-local route itself, or a node that joins a cluster
+// can no longer change its own update checks (#500).
+func TestReplicaUpdatePreferencesSaveThroughTheirOwnForm(t *testing.T) {
+	server := updateTestServer(t, &testUpdateController{})
+	server.config = &editableTestConfiguration{snapshot: config.Snapshot{Config: config.Defaults()}}
+	request := httptest.NewRequest(http.MethodGet, "/settings", nil)
+
+	standalone := renderUpdatePreferences(t, server.settingsUpdatePreferencesView(request))
+	if strings.Contains(standalone, `hx-post="/ui/settings/updates"`) || !strings.Contains(standalone, `name="check_on_login"`) ||
+		!regexp.MustCompile(`form="settings-form"[^>]*name="check_schedule"`).MatchString(standalone) {
+		t.Fatalf("a standalone node does not save update preferences with Save Settings:\n%s", standalone)
+	}
+
+	server.SetClusterController(testReplicaClusterController{})
+	replica := renderUpdatePreferences(t, server.settingsUpdatePreferencesView(request))
+	if !strings.Contains(replica, `<form id="settings-update-form" class="isotope-card-content" hx-post="/ui/settings/updates"`) {
+		t.Fatalf("a replica's update preferences have no replica-local form:\n%s", replica)
+	}
+	if strings.Contains(replica, `form="settings-form"`) {
+		t.Fatal("a replica binds update preferences to the primary-only Save Settings form")
+	}
+	for _, name := range []string{"update_preferences_present", "check_on_login", "check_schedule", "check_day", "check_at", "pre_release", "release_channel_present"} {
+		if !regexp.MustCompile(`form="settings-update-form"[^>]*name="` + name + `"|name="` + name + `"[^>]*form="settings-update-form"`).MatchString(replica) {
+			t.Errorf("a replica's %s is not bound to its own form", name)
+		}
+	}
+	if writeRequiresPrimary(testReplicaClusterController{}.Snapshot(), http.MethodPost, routeAt(t, http.MethodPost, "/ui/settings/updates")) {
+		t.Fatal("a replica refuses its own update preferences")
+	}
+}
+
 // The schedule saves with the rest of the update preferences. A time or day
 // left blank keeps the saved one, and a form without a schedule, such as a
 // page from before schedules, leaves it alone.
@@ -688,4 +723,13 @@ func TestSettingsAndAboutShareReleaseChannelPreference(t *testing.T) {
 	if !server.settingsUpdatePreferencesView(request).IncludePreRelease {
 		t.Fatal("Settings did not reflect About change")
 	}
+}
+
+func renderUpdatePreferences(t *testing.T, view pages.SettingsUpdatePreferencesView) string {
+	t.Helper()
+	var rendered strings.Builder
+	if err := pages.SettingsUpdatePreferences(view).Render(context.Background(), &rendered); err != nil {
+		t.Fatal(err)
+	}
+	return rendered.String()
 }
