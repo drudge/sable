@@ -68,9 +68,10 @@ sudo ./sable install --certificate-name dns.example.net
 | --- | --- |
 | `--no-start` | Install and enable the service without starting it |
 | `--enable-web-updates` | Opt into administrator-triggered updates from the console |
+| `--disable-web-updates` | Run the service from the root-owned `/usr/local/bin/sable` again |
 | `--certificate-name` | Additional DNS name or IP for the initial certificate; repeat as needed |
 
-The native installer targets Linux with systemd and requires sufficient privileges to install the service. Its initial HTTPS certificate is self-signed. See [Linux installation](../guides/install-linux.md) for filesystem ownership, ports, and the web-update tradeoff. Containers use a separate [Docker deployment](../guides/install-docker.md); `sable container` is the image's lifecycle entrypoint, not a replacement for native installation.
+Without either web-update flag, a reinstall keeps the layout the installed service already uses. The native installer targets Linux with systemd and requires sufficient privileges to install the service. Its initial HTTPS certificate is self-signed. See [Linux installation](../guides/install-linux.md) for filesystem ownership, ports, and the web-update tradeoff. Containers use a separate [Docker deployment](../guides/install-docker.md); `sable container` is the image's lifecycle entrypoint, not a replacement for native installation.
 
 ## Update the executable
 

@@ -195,8 +195,9 @@ sudo sable install --enable-web-updates
 The service remains non-root and cannot write the system `PATH`; it replaces
 only `/var/lib/sable/bin/sable`, then exits through the controlled-restart path.
 This creates a persistence path for code already running as the `sable` user,
-so use it only with console authentication and trusted HTTPS. Run
-`sudo sable install` without the flag to restore the default immutable layout.
+so use it only with console authentication and trusted HTTPS. Later
+reinstalls, including the bootstrap script, keep the choice. Run
+`sudo sable install --disable-web-updates` to restore the default immutable layout.
 
 Set `SABLE_GITHUB_TOKEN` when repeated update checks exhaust GitHub's anonymous
 API limit. It is used only for GitHub release-metadata requests.

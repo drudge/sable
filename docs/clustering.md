@@ -295,7 +295,10 @@ compatibility is not yet a published long-term contract, so keep a mixed-version
 window short and do not combine an upgrade with a promotion unless recovery
 requires it.
 
-For installations with web updates enabled, each node's About page can check,
+Web updates are a per-node install choice: opt in on every node, replicas
+included, with `sudo sable install --enable-web-updates` (or
+`SABLE_WEB_UPDATES=true` for the bootstrap or the container image). Joining a
+cluster does not carry it over. For installations with web updates enabled, each node's About page can check,
 install, and restart that node, including replicas. Its **Include pre-releases**
 setting is saved locally and is not overwritten by replication.
 

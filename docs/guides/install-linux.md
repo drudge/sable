@@ -51,7 +51,7 @@ Use `sudo sable update` for the default root-owned installation. If you explicit
 sudo sable install --enable-web-updates
 ```
 
-The service then runs `/var/lib/sable/bin/sable`, which it can replace without writing the system path. This is an intentional persistence capability for the service account; protect the console with authentication and trusted HTTPS. Re-running without the flag restores the default layout. See [Update Sable safely](updates.md).
+The service then runs `/var/lib/sable/bin/sable`, which it can replace without writing the system path. This is an intentional persistence capability for the service account; protect the console with authentication and trusted HTTPS. Re-running the installer, or the bootstrap script, keeps this choice; run `sudo sable install --disable-web-updates` to restore the default layout. See [Update Sable safely](updates.md).
 
 ## If the service does not start
 

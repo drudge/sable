@@ -1,6 +1,7 @@
 package install
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -28,6 +29,10 @@ type Options struct {
 	// directory. The service still runs as the unprivileged sable user, but it
 	// can replace that executable after verifying a published release.
 	WebUpdates bool
+	// DisableWebUpdates moves a web-update installation back to running the
+	// root-owned /usr/local/bin/sable. Without either option a reinstall keeps
+	// the layout the installed unit already uses.
+	DisableWebUpdates bool
 }
 
 type Result struct {
@@ -38,6 +43,9 @@ type Result struct {
 	ConsoleHost       string
 	Started           bool
 	WebUpdates        bool
+	// WebUpdatesKept reports that web updates stayed on because the installed
+	// unit already used them, not because this run asked for them.
+	WebUpdatesKept bool
 }
 
 type layout struct {
@@ -81,6 +89,25 @@ func InstalledWebUpdateBinaryPath() string {
 		return ""
 	}
 	return paths.serviceBinaryPath
+}
+
+// resolveWebUpdates decides which layout an install writes. The opt-in is
+// recorded only in the installed unit, so a run that asks for neither keeps the
+// unit's current layout. Re-running the bootstrap is the documented way to
+// update, and it passes no options: without this, every such run moved the
+// service back to the root-owned /usr/local/bin and silently took away the
+// console's ability to install releases (#500).
+func resolveWebUpdates(options Options, installedUnit string) (enabled, kept bool, err error) {
+	switch {
+	case options.WebUpdates && options.DisableWebUpdates:
+		return false, false, errors.New("choose either --enable-web-updates or --disable-web-updates, not both")
+	case options.WebUpdates:
+		return true, false, nil
+	case options.DisableWebUpdates:
+		return false, false, nil
+	}
+	installed := webUpdateServiceInstalled(installedUnit, layoutForOptions(Options{WebUpdates: true}))
+	return installed, installed, nil
 }
 
 func webUpdateServiceInstalled(unit string, paths layout) bool {

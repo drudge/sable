@@ -145,8 +145,8 @@ sudo ./sable install --enable-web-updates
 The systemd sandbox, dedicated user, and capability set stay unchanged. This
 does allow a compromised Sable process to persist as the `sable` user across a
 restart, so enable it only for a console protected by authentication and trusted
-HTTPS. Re-run `sudo sable install` without the flag to return the service to the
-root-owned executable.
+HTTPS. Reinstalls keep the choice; run `sudo sable install --disable-web-updates`
+to return the service to the root-owned executable.
 
 The console starts at `https://HOSTNAME/` on port 443. The same TLS listener
 serves DNS-over-HTTPS at `/dns-query`. The initial certificate is self-signed,
