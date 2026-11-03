@@ -211,6 +211,10 @@ type SettingsUpdatePreferencesView struct {
 	CheckAt string
 	CheckDay string
 	CanEdit bool
+	// NodeForm is set on a cluster replica. Save Settings belongs to the
+	// primary there, but these preferences are this node's own, so the card
+	// saves them itself through the replica-local /ui/settings/updates.
+	NodeForm bool
 	Message string
 	Error string
 }
@@ -222,21 +226,40 @@ var updateCheckDays = [][2]string{
 	{"friday", "Friday"}, {"saturday", "Saturday"}, {"sunday", "Sunday"},
 }
 
+// updatePreferencesFormID is the form the update controls submit with: the
+// page's Save Settings form, or the card's own form on a replica.
+func updatePreferencesFormID(view SettingsUpdatePreferencesView) string {
+	if view.NodeForm {
+		return "settings-update-form"
+	}
+	return "settings-form"
+}
+
 templ SettingsUpdatePreferences(view SettingsUpdatePreferencesView) {
 	<div id="settings-update-preferences">
 		@Toast(view.Message, "success")
 		@Toast(view.Error, "error")
 		@SettingsCard("download", "Software Updates", "Update preferences for this node") {
-			<div class="isotope-card-content">
- <input type="hidden" name="update_preferences_present" value="true" form="settings-form"/>
-				@updateCheckSchedule(view)
-                if view.CanEditReleaseChannel {
-                    <input type="hidden" form="settings-form" name="release_channel_present" value="true"/>
-                }
-                @components.SwitchField(components.SwitchFieldProps{ID: "update-pre-release", Title: "Include pre-releases", Description: "Include preview releases when checking for updates.", Name: "pre_release", Checked: view.IncludePreRelease, Disabled: !view.CanEditReleaseChannel, InputAttrs: templ.Attributes{"form": "settings-form"}})
-			</div>
+			if view.NodeForm {
+				<form id="settings-update-form" class="isotope-card-content" hx-post="/ui/settings/updates" hx-target="#settings-update-preferences" hx-swap="outerHTML" hx-trigger="change delay:500ms" hx-disable="#settings-update-form input, #settings-update-form select">
+					@updatePreferencesControls(view)
+				</form>
+			} else {
+				<div class="isotope-card-content">
+					@updatePreferencesControls(view)
+				</div>
+			}
 		}
 	</div>
+}
+
+templ updatePreferencesControls(view SettingsUpdatePreferencesView) {
+	<input type="hidden" name="update_preferences_present" value="true" form={ updatePreferencesFormID(view) }/>
+	@updateCheckSchedule(view)
+	if view.CanEditReleaseChannel {
+		<input type="hidden" form={ updatePreferencesFormID(view) } name="release_channel_present" value="true"/>
+	}
+	@components.SwitchField(components.SwitchFieldProps{ID: "update-pre-release", Title: "Include pre-releases", Description: "Include preview releases when checking for updates.", Name: "pre_release", Checked: view.IncludePreRelease, Disabled: !view.CanEditReleaseChannel, InputAttrs: templ.Attributes{"form": updatePreferencesFormID(view)}})
 }
 
 // updateCheckSchedule is the Check for updates switch with when to check
@@ -244,17 +267,17 @@ templ SettingsUpdatePreferences(view SettingsUpdatePreferencesView) {
 // show only for the schedules that use them.
 templ updateCheckSchedule(view SettingsUpdatePreferencesView) {
 	<div class="update-check">
-		@components.SwitchField(components.SwitchFieldProps{ID: "update-check-on-login", Title: "Check for updates", Description: "Look for a new release when you sign in and on a schedule. Updates are installed only when you choose.", Name: "check_on_login", Checked: view.CheckOnLogin, Disabled: !view.CanEdit, InputAttrs: templ.Attributes{"form": "settings-form"}})
+		@components.SwitchField(components.SwitchFieldProps{ID: "update-check-on-login", Title: "Check for updates", Description: "Look for a new release when you sign in and on a schedule. Updates are installed only when you choose.", Name: "check_on_login", Checked: view.CheckOnLogin, Disabled: !view.CanEdit, InputAttrs: templ.Attributes{"form": updatePreferencesFormID(view)}})
 		<div class="update-check-schedule" role="group" aria-label="When to check for updates">
 			<span>Check</span>
-			<select form="settings-form" name="check_schedule" aria-label="How often to check for updates" data-styled-select disabled?={ !view.CanEdit }>
+			<select form={ updatePreferencesFormID(view) } name="check_schedule" aria-label="How often to check for updates" data-styled-select disabled?={ !view.CanEdit }>
 				<option value="hourly" selected?={ view.CheckSchedule == "hourly" }>Hourly</option>
 				<option value="daily" selected?={ view.CheckSchedule == "daily" }>Daily</option>
 				<option value="weekly" selected?={ view.CheckSchedule == "weekly" }>Weekly</option>
 			</select>
 			<span class="update-check-day">
 				<span>on</span>
-				<select form="settings-form" name="check_day" aria-label="Day to check for updates" data-styled-select disabled?={ !view.CanEdit }>
+				<select form={ updatePreferencesFormID(view) } name="check_day" aria-label="Day to check for updates" data-styled-select disabled?={ !view.CanEdit }>
 					for _, day := range updateCheckDays {
 						<option value={ day[0] } selected?={ view.CheckDay == day[0] }>{ day[1] }</option>
 					}
@@ -262,7 +285,7 @@ templ updateCheckSchedule(view SettingsUpdatePreferencesView) {
 			</span>
 			<span class="update-check-at">
 				<span>at</span>
-				<input type="time" form="settings-form" name="check_at" value={ view.CheckAt } step="60" aria-label="Time to check for updates" data-styled-time disabled?={ !view.CanEdit }/>
+				<input type="time" form={ updatePreferencesFormID(view) } name="check_at" value={ view.CheckAt } step="60" aria-label="Time to check for updates" data-styled-time disabled?={ !view.CanEdit }/>
 			</span>
 		</div>
 	</div>

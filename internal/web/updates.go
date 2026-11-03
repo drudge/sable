@@ -86,6 +86,10 @@ func (server *Server) settingsUpdatePreferencesView(request *http.Request) pages
 	return pages.SettingsUpdatePreferencesView{
 		CheckOnLogin: preferences.CheckOnLogin, CheckSchedule: preferences.CheckSchedule, CheckAt: preferences.CheckAt, CheckDay: preferences.CheckDay,
 		IncludePreRelease: preferences.PreRelease, CanEdit: canEdit, CanEditReleaseChannel: canEdit && canEditReleaseChannel,
+		// A replica refuses Save Settings, which writes cluster-wide settings,
+		// but [updates] is node-local and never replicated, so the card saves
+		// through its own replica-local route instead of locking up.
+		NodeForm: server.cluster != nil && controlPlaneReadOnly(server.cluster.Snapshot()),
 	}
 }
 
