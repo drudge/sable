@@ -22,6 +22,15 @@ func SystemService(ctx context.Context, options Options) (Result, error) {
 	if os.Geteuid() != 0 {
 		return Result{}, errors.New("install must be run as root")
 	}
+	installedUnit, err := os.ReadFile(ServiceUnitPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return Result{}, fmt.Errorf("read the installed systemd service: %w", err)
+	}
+	webUpdates, kept, err := resolveWebUpdates(options, string(installedUnit))
+	if err != nil {
+		return Result{}, err
+	}
+	options.WebUpdates = webUpdates
 	paths := layoutForOptions(options)
 	certificateNames, hostname := initialCertificateNames(options.CertificateNames)
 	if err := exec.CommandContext(ctx, "systemctl", "--version").Run(); err != nil {
@@ -67,7 +76,7 @@ func SystemService(ctx context.Context, options Options) (Result, error) {
 	return Result{
 		BinaryPath: paths.binaryPath, ServiceBinaryPath: paths.serviceBinaryPath,
 		ConfigurationPath: paths.configurationPath, DataDirectory: paths.dataDirectory,
-		ConsoleHost: consoleHost(certificateNames, hostname), Started: options.Start, WebUpdates: options.WebUpdates,
+		ConsoleHost: consoleHost(certificateNames, hostname), Started: options.Start, WebUpdates: options.WebUpdates, WebUpdatesKept: kept,
 	}, nil
 }
 

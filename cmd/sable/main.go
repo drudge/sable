@@ -99,6 +99,7 @@ func installCommand(arguments []string) error {
 	flags := flag.NewFlagSet("install", flag.ContinueOnError)
 	noStart := flags.Bool("no-start", false, "install and enable the service without starting it")
 	webUpdates := flags.Bool("enable-web-updates", false, "allow administrators to install verified releases from the web console")
+	noWebUpdates := flags.Bool("disable-web-updates", false, "run the service from the root-owned executable again; without either option an existing choice is kept")
 	var certificateNames stringListFlag
 	flags.Var(&certificateNames, "certificate-name", "additional DNS name or IP for the initial HTTPS certificate (repeatable)")
 	if err := flags.Parse(arguments); err != nil {
@@ -108,19 +109,25 @@ func installCommand(arguments []string) error {
 		return err
 	}
 	if flags.NArg() != 0 {
-		return errors.New("usage: sable install [--no-start] [--enable-web-updates] [--certificate-name name-or-ip]")
+		return errors.New("usage: sable install [--no-start] [--enable-web-updates | --disable-web-updates] [--certificate-name name-or-ip]")
 	}
 	result, err := serviceinstall.SystemService(context.Background(), serviceinstall.Options{
-		CertificateNames: certificateNames,
-		Start:            !*noStart,
-		WebUpdates:       *webUpdates,
+		CertificateNames:  certificateNames,
+		Start:             !*noStart,
+		WebUpdates:        *webUpdates,
+		DisableWebUpdates: *noWebUpdates,
 	})
 	if err != nil {
 		return err
 	}
 	fmt.Printf("Sable installed: %s\nConfiguration: %s\nData: %s\n", result.BinaryPath, result.ConfigurationPath, result.DataDirectory)
-	if result.WebUpdates {
+	switch {
+	case result.WebUpdatesKept:
+		fmt.Printf("Web updates: enabled, kept from the installed service (%s)\n", result.ServiceBinaryPath)
+	case result.WebUpdates:
 		fmt.Printf("Web updates: enabled (%s)\n", result.ServiceBinaryPath)
+	default:
+		fmt.Println("Web updates: off. Update with sudo sable update, or re-run with --enable-web-updates to install releases from the console.")
 	}
 	if result.Started {
 		fmt.Printf("Console: https://%s/\n", result.ConsoleHost)

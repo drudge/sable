@@ -57,6 +57,19 @@ verify_archive() {
   [[ "${actual}" == "${expected}" ]] || fail "checksum verification failed for ${archive_name}"
 }
 
+# web_update_arguments turns SABLE_WEB_UPDATES into the matching install
+# option. The bootstrap is usually run as bash -c "$(curl ...)", which leaves no
+# easy way to pass arguments, so the opt-in rides in the environment as it does
+# for the container image. Unset leaves the installed service's choice alone.
+web_update_arguments() {
+  case "${SABLE_WEB_UPDATES:-}" in
+    "") ;;
+    1 | t | T | true | TRUE | True) printf '%s\n' --enable-web-updates ;;
+    0 | f | F | false | FALSE | False) printf '%s\n' --disable-web-updates ;;
+    *) fail "SABLE_WEB_UPDATES must be true or false" ;;
+  esac
+}
+
 main() {
   [[ "$(uname -s)" == "Linux" ]] || fail "this installer supports Linux only"
   [[ "${EUID}" -eq 0 ]] || fail "run this installer as root"
@@ -64,6 +77,8 @@ main() {
   require_command tar
   require_command sha256sum
   require_command systemctl
+  local web_updates
+  web_updates="$(web_update_arguments)"
 
   local tag version architecture archive_name archive_path
   tag="$(release_tag)"
@@ -82,7 +97,7 @@ main() {
 
   local executable="${INSTALL_TEMPORARY_DIRECTORY}/sable_${version}_linux_${architecture}/sable"
   [[ -x "${executable}" ]] || fail "release archive does not contain the Sable executable"
-  "${executable}" install "$@"
+  "${executable}" install ${web_updates:+"${web_updates}"} "$@"
 }
 
 main "$@"

@@ -67,10 +67,17 @@ the service copy under `/var/lib/sable/bin`. The systemd service restarts only
 after replacement succeeds.
 
 Running the bootstrap again is equivalent for the newest stable release and
-also refreshes the systemd unit. Existing configuration and state are retained:
+also refreshes the systemd unit. Existing configuration and state are retained, and
+so is the web-update layout if the container opted in:
 
 ```sh
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/drudge/sable/main/scripts/install.sh)"
+```
+
+To opt in or out while bootstrapping, set `SABLE_WEB_UPDATES`:
+
+```sh
+SABLE_WEB_UPDATES=true bash -c "$(curl -fsSL https://raw.githubusercontent.com/drudge/sable/main/scripts/install.sh)"
 ```
 
 Pin an explicit version when a controlled rollout is required:

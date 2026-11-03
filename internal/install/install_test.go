@@ -76,3 +76,39 @@ func TestConsoleHostPrefersReachableAddress(t *testing.T) {
 		t.Fatalf("console host = %q", got)
 	}
 }
+
+// The opt-in is recorded only in the installed unit, and the documented update
+// path re-runs the bootstrap without options. A reinstall that is not told
+// either way has to keep the unit's layout, or every update quietly moves the
+// service back to the root-owned executable and the console can no longer
+// install releases (#500).
+func TestReinstallKeepsTheInstalledWebUpdateLayout(t *testing.T) {
+	webUnit := systemdUnit(layoutForOptions(Options{WebUpdates: true}))
+	plainUnit := systemdUnit(defaultLayout())
+	tests := []struct {
+		name          string
+		options       Options
+		unit          string
+		enabled, kept bool
+		fails         bool
+	}{
+		{name: "fresh install", unit: ""},
+		{name: "fresh opt-in", options: Options{WebUpdates: true}, enabled: true},
+		{name: "reinstall keeps web updates", unit: webUnit, enabled: true, kept: true},
+		{name: "reinstall keeps the root-owned layout", unit: plainUnit},
+		{name: "opt in on reinstall", options: Options{WebUpdates: true}, unit: plainUnit, enabled: true},
+		{name: "opt out on reinstall", options: Options{DisableWebUpdates: true}, unit: webUnit},
+		{name: "both options", options: Options{WebUpdates: true, DisableWebUpdates: true}, unit: webUnit, fails: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			enabled, kept, err := resolveWebUpdates(test.options, test.unit)
+			if (err != nil) != test.fails {
+				t.Fatalf("error = %v, want failure %v", err, test.fails)
+			}
+			if enabled != test.enabled || kept != test.kept {
+				t.Fatalf("web updates = %v (kept %v), want %v (kept %v)", enabled, kept, test.enabled, test.kept)
+			}
+		})
+	}
+}
