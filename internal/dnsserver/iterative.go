@@ -299,9 +299,9 @@ func (handler *Handler) resolveNetwork(
 	ctx context.Context,
 	request *dns.Msg,
 	runtime *Runtime,
-	forwarders []string,
+	forwarders forwarderList,
 ) (*dns.Msg, error) {
-	if len(forwarders) > 0 {
+	if !forwarders.empty() {
 		return handler.exchangeContext(ctx, request, runtime, forwarders)
 	}
 	if runtime.mode != "recursive" {
@@ -700,7 +700,7 @@ func (handler *Handler) exchangeAuthorities(
 	start := handler.upstreamIndex.Add(1) - 1
 	// A server that just timed out is asked last for a while, so one that is
 	// unreachable from here does not cost every lookup its share of the time.
-	ordered := handler.authorityHealth.order(servers, start)
+	ordered := handler.authorityHealth.order(forwardersOf(servers), start)
 	var failures []error
 	for offset, server := range ordered {
 		// Out of time, no server gets a real turn, so none is tried or counted.
@@ -991,7 +991,7 @@ func (handler *Handler) resolveRecursive(ctx context.Context, request *dns.Msg, 
 		// a flood of names that never resolve cannot pile up work.
 		if len(handler.detached) >= runtime.maxConcurrent || !handler.startBackground() {
 			handler.detachedMu.Unlock()
-			return handler.fetchAndValidate(ctx, request, runtime, nil, wait)
+			return handler.fetchAndValidate(ctx, request, runtime, forwarderList{}, wait)
 		}
 		if handler.detached == nil {
 			handler.detached = make(map[inflightKey]*detachedLookup)
@@ -1031,7 +1031,7 @@ func (handler *Handler) resolveRecursive(ctx context.Context, request *dns.Msg, 
 // question of the client that started it.
 func (handler *Handler) finishRecursiveLookup(key inflightKey, lookup *detachedLookup, request *dns.Msg, runtime *Runtime) {
 	defer handler.backgroundWG.Done()
-	response, err := handler.fetchUpstream(handler.backgroundContext, request, runtime, nil, recursiveFinishBudget(runtime))
+	response, err := handler.fetchUpstream(handler.backgroundContext, request, runtime, forwarderList{}, recursiveFinishBudget(runtime))
 	handler.detachedMu.Lock()
 	lookup.hasFetched = true
 	handler.detachedMu.Unlock()

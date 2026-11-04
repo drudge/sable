@@ -31,7 +31,7 @@ type Runtime struct {
 	zoneCuts               *zoneCutCache
 	nameServers            *addressCache
 	baseRoutes             []ForwardingRoute
-	routes                 map[string][]string
+	routes                 map[string]forwarderList
 	upstreams              string
 	timeout                time.Duration
 	retries                int

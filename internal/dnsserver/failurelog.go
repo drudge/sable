@@ -92,7 +92,7 @@ func (handler *Handler) logResolutionFailure(request *dns.Msg, clientIP, reason 
 // upstreamFailure says where a failed query was sent and how it broke.
 type upstreamFailure struct {
 	runtime    *Runtime
-	forwarders []string
+	forwarders forwarderList
 	err        error
 }
 
@@ -135,8 +135,8 @@ func (handler *Handler) logFailure(request *dns.Msg, clientIP, reason string, up
 // appendFields describes where a query was sent and how it broke.
 func (failure *upstreamFailure) appendFields(fields []any) []any {
 	fields = append(fields, "mode", failure.runtime.mode)
-	if len(failure.forwarders) > 0 {
-		fields = append(fields, "forwarders", strings.Join(failure.forwarders, " "))
+	if len(failure.forwarders.endpoints) > 0 {
+		fields = append(fields, "forwarders", strings.Join(failure.forwarders.endpoints, " "))
 	}
 	if failure.err != nil {
 		fields = append(fields, "error", failure.err.Error())

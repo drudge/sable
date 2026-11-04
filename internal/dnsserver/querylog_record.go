@@ -9,8 +9,8 @@ import (
 	"github.com/drudge/sable/internal/querylog"
 )
 
-func resolverDecision(runtime *Runtime, forwarders []string) querylog.ResolverDecision {
-	if len(forwarders) > 0 || runtime.mode == "forward" {
+func resolverDecision(runtime *Runtime, forwarders forwarderList) querylog.ResolverDecision {
+	if !forwarders.empty() || runtime.mode == "forward" {
 		return querylog.ResolverForwarded
 	}
 	return querylog.ResolverRecursive

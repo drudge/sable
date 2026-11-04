@@ -312,7 +312,7 @@ func (handler *Handler) resolveRequest(request *dns.Msg, name string, runtime *R
 	// A name only a local network can answer never goes to the internet. A
 	// route or a forwarder zone for it still wins, since that names a server
 	// that does know it.
-	if len(forwarders) == 0 && runtime.mode == "recursive" {
+	if forwarders.empty() && runtime.mode == "recursive" {
 		if zone, found := locallyServedZone(request.Question[0].Name); found {
 			handler.localAnswers.Add(1)
 			return resolution{response: locallyServedResponse(request, zone), source: querylog.SourceLocal,
@@ -358,7 +358,7 @@ func recursionRefused(request *dns.Msg) resolution {
 // Only the leader runs the resolution, so a failure is logged against the client
 // that started it. Followers asking the same question at the same moment share
 // that outcome without appearing in the line.
-func (handler *Handler) resolveShared(ctx context.Context, request *dns.Msg, name string, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string) resolution {
+func (handler *Handler) resolveShared(ctx context.Context, request *dns.Msg, name string, runtime *Runtime, forwarders forwarderList, staleFallback bool, clientIP string) resolution {
 	arrived := time.Now()
 	key := coalesceKeyFor(request, name)
 	key.runtime = runtime
@@ -481,7 +481,7 @@ func coalesceKeyFor(request *dns.Msg, name string) inflightKey {
 	}
 }
 
-func (handler *Handler) resolveWithStaleWait(request *dns.Msg, name string, runtime *Runtime, forwarders []string, clientIP string, release func()) resolution {
+func (handler *Handler) resolveWithStaleWait(request *dns.Msg, name string, runtime *Runtime, forwarders forwarderList, clientIP string, release func()) resolution {
 	if !handler.startBackground() {
 		release()
 		return handler.resolveUpstreamFailure(request, runtime)
@@ -513,7 +513,7 @@ func (handler *Handler) resolveWithStaleWait(request *dns.Msg, name string, runt
 
 // resolveLiveUpstream resolves a cache miss, waiting up to wait for the
 // network.
-func (handler *Handler) resolveLiveUpstream(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, staleFallback bool, clientIP string, wait time.Duration) resolution {
+func (handler *Handler) resolveLiveUpstream(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders forwarderList, staleFallback bool, clientIP string, wait time.Duration) resolution {
 	response, validation, validationErr := handler.resolveUpstream(ctx, request, runtime, forwarders, wait)
 	decision := querylog.Decision{Resolver: resolverDecision(runtime, forwarders), DNSSEC: dnssecDecision(validation)}
 	if validation == validationBogus {

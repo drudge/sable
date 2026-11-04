@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -189,8 +190,8 @@ func (runtime *Runtime) compilePolicy(configuration RuntimeConfig) error {
 
 // compileRoutes builds the conditional forwarding table, keyed by the
 // normalized domain.
-func compileRoutes(configured []ForwardingRoute) (map[string][]string, error) {
-	routes := make(map[string][]string, len(configured))
+func compileRoutes(configured []ForwardingRoute) (map[string]forwarderList, error) {
+	routes := make(map[string]forwarderList, len(configured))
 	for _, route := range configured {
 		domain, err := dnsname.Normalize(route.Domain)
 		if err != nil || len(route.Forwarders) == 0 {
@@ -199,7 +200,7 @@ func compileRoutes(configured []ForwardingRoute) (map[string][]string, error) {
 		if _, duplicate := routes[domain]; duplicate {
 			return nil, fmt.Errorf("duplicate conditional forwarding route %q", route.Domain)
 		}
-		routes[domain] = append([]string(nil), route.Forwarders...)
+		routes[domain] = forwardersOf(append([]string(nil), route.Forwarders...))
 	}
 	return routes, nil
 }
@@ -361,11 +362,12 @@ func (runtime *Runtime) routeZoneForwarders(zone *authoritativeZone) error {
 		if _, duplicate := runtime.routes[owner]; duplicate {
 			return fmt.Errorf("authoritative zone %q FWD owner duplicates forwarding route %q", zone.name, owner)
 		}
-		endpoints := make([]string, 0, len(ordered))
+		route := forwarderList{endpoints: make([]string, 0, len(ordered)), ranks: make([]int, 0, len(ordered))}
 		for _, forwarder := range ordered {
-			endpoints = append(endpoints, forwarder.endpoint)
+			route.endpoints = append(route.endpoints, forwarder.endpoint)
+			route.ranks = append(route.ranks, int(forwarder.priority))
 		}
-		runtime.routes[owner] = endpoints
+		runtime.routes[owner] = route
 		zone.forwarders[owner] = ordered
 	}
 	return nil
@@ -382,12 +384,14 @@ func (runtime *Runtime) compileStubZone(configuredZone AuthoritativeZone, zoneNa
 	if protocol == "" {
 		protocol = "udp"
 	}
+	var primaries []string
 	for _, primary := range configuredZone.PrimaryServers {
-		runtime.routes[zoneName] = append(runtime.routes[zoneName], protocol+"://"+primary)
+		primaries = append(primaries, protocol+"://"+primary)
 	}
-	if len(runtime.routes[zoneName]) == 0 {
+	if len(primaries) == 0 {
 		return fmt.Errorf("stub zone %q requires at least one primary server", zoneName)
 	}
+	runtime.routes[zoneName] = forwardersOf(primaries)
 	return nil
 }
 
@@ -527,12 +531,13 @@ func withZones(base *Runtime, zones []AuthoritativeZone, keys []TSIGKey) (*Runti
 	return &candidate, nil
 }
 
-func forwardingRouteMapsEqual(left, right map[string][]string) bool {
+func forwardingRouteMapsEqual(left, right map[string]forwarderList) bool {
 	if len(left) != len(right) {
 		return false
 	}
 	for domain, leftForwarders := range left {
-		if !slices.Equal(leftForwarders, right[domain]) {
+		rightForwarders, found := right[domain]
+		if !found || !slices.Equal(leftForwarders.endpoints, rightForwarders.endpoints) || !slices.Equal(leftForwarders.ranks, rightForwarders.ranks) {
 			return false
 		}
 	}
@@ -560,7 +565,7 @@ func dnssecRuntimeSignature(configuration RuntimeConfig) string {
 		strings.Join(configuration.DNSSECTrustAnchors, "\x00"), strings.Join(configuration.DNSSECNegativeTrustAnchors, "\x00"))
 }
 
-func upstreamSignature(forwarders []string, routes map[string][]string) string {
+func upstreamSignature(forwarders []string, routes map[string]forwarderList) string {
 	var signature strings.Builder
 	for _, forwarder := range forwarders {
 		signature.WriteString(forwarder)
@@ -574,8 +579,13 @@ func upstreamSignature(forwarders []string, routes map[string][]string) string {
 	for _, domain := range domains {
 		signature.WriteString(domain)
 		signature.WriteByte(1)
-		for _, forwarder := range routes[domain] {
+		route := routes[domain]
+		for index, forwarder := range route.endpoints {
 			signature.WriteString(forwarder)
+			if route.ranks != nil {
+				signature.WriteByte(2)
+				signature.WriteString(strconv.Itoa(route.ranks[index]))
+			}
 			signature.WriteByte(0)
 		}
 	}
