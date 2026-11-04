@@ -1,7 +1,7 @@
 package pages
 
 import (
-	"fmt"
+	"strings"
 
 	"github.com/drudge/sable/internal/web/pages/components"
 )
@@ -21,12 +21,13 @@ type ForwarderStatView struct {
 	// Status is "ok", "cooling", "failing", or "idle".
 	Status    string
 	LastError string
+	// Test is this forwarder's result when the card was drawn by Test
+	// Forwarders, and nil otherwise.
+	Test *ForwarderTestView
 }
 
 // ForwarderTestView is one forwarder's result from the Test button.
 type ForwarderTestView struct {
-	Forwarder    string
-	Route        string
 	OK           bool
 	ResponseTime string
 	ResponseCode string
@@ -40,7 +41,10 @@ type ForwarderTestView struct {
 // handler to ask, as in some tests.
 type ForwardersCardView struct {
 	Available bool
-	Stats     []ForwarderStatView
+	// Tested is set when Test Forwarders drew the list, so each row carries
+	// its result.
+	Tested bool
+	Stats  []ForwarderStatView
 }
 
 var settingsForwarderOrderField = components.FieldProps{ID: "settings-forwarder-order", Label: "Forwarder Order", Help: "How each query picks among forwarders of the same priority. A forwarder that just failed always waits behind the healthy ones, and FWD priority always comes first.", Class: "narrow-control"}
@@ -64,39 +68,51 @@ templ SettingsForwarderActivity(view ForwardersCardView) {
 					<p>Since Sable started. Times are the median and 95th percentile of each forwarder's latest answers.</p>
 				</div>
 				@components.Button(components.ButtonProps{Label: "Test Forwarders", Icon: "zap", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{
-					"hx-post": "/ui/settings/forwarders/test", "hx-target": "#forwarder-test-results", "hx-swap": "innerHTML",
-					"hx-disabled-elt": "this", "hx-indicator": "#forwarder-test-results",
+					"hx-post": "/ui/settings/forwarders/test", "hx-target": "#forwarder-activity-list", "hx-swap": "outerHTML",
+					"hx-disabled-elt": "this", "hx-indicator": "#forwarder-activity-list",
 				}})
 			</div>
-			if len(view.Stats) == 0 {
-				<p class="forwarder-empty">No forwarders are configured.</p>
-			} else {
-				<ul class="forwarder-stat-list">
-					for _, stat := range view.Stats {
-						<li class="forwarder-stat-row">
-							<div class="forwarder-stat-name">
-								<code>{ stat.Forwarder }</code>
-								if stat.Route != "" {
-									<span class="forwarder-route">{ "for " + stat.Route }</span>
-								}
-								@forwarderStatusBadge(stat)
-							</div>
-							@components.FactList(components.FactListProps{Class: "forwarder-stat-facts"}) {
-								@components.Fact(components.FactProps{Label: "Answered", Value: formatNumber(stat.Answered)})
-								@components.Fact(components.FactProps{Label: "Median", Value: stat.Median})
-								@components.Fact(components.FactProps{Label: "95th pct", Value: stat.P95})
-								@components.Fact(components.FactProps{Label: "Timeouts", Value: formatNumber(stat.Timeouts)})
-								@components.Fact(components.FactProps{Label: "Errors", Value: formatNumber(stat.Errors)})
-							}
-							if stat.LastError != "" {
-								<p class="forwarder-last-error">Last error: { stat.LastError }</p>
-							}
-						</li>
-					}
-				</ul>
-			}
-			<div id="forwarder-test-results" class="forwarder-test-results" aria-live="polite"></div>
+			@SettingsForwarderList(view)
 		</section>
+	}
+}
+
+// SettingsForwarderList is the forwarder rows, which Test Forwarders redraws
+// with fresh numbers and each forwarder's test result.
+templ SettingsForwarderList(view ForwardersCardView) {
+	<div id="forwarder-activity-list" class="forwarder-activity-list" aria-live="polite">
+		if len(view.Stats) == 0 {
+			<p class="forwarder-empty">No forwarders are configured.</p>
+		} else {
+			<div class="forwarder-list isotope-source-list">
+				for _, stat := range view.Stats {
+					<article class="forwarder-row">
+						<span class="forwarder-row-icon">@Icon(forwarderIcon(stat.Forwarder))</span>
+						<div>
+							<strong>{ stat.Forwarder }</strong>
+							<small>{ forwarderStatsSummary(stat) }</small>
+							if stat.Test != nil {
+								@forwarderTestLine(*stat.Test)
+							} else if stat.LastError != "" {
+								<small class={ ifThen(stat.Status == "failing" || stat.Status == "cooling", "forwarder-row-warning", "forwarder-row-note") }>@Icon("alert-triangle")<span>{ stat.LastError }</span></small>
+							}
+						</div>
+						@forwarderStatusBadge(stat)
+					</article>
+				}
+			</div>
+		}
+		if view.Tested {
+			<p class="forwarder-test-note">Tested just now from this node: example.com three times and dnssec-failed.org once, over each forwarder's own transport.</p>
+		}
+	</div>
+}
+
+templ forwarderTestLine(test ForwarderTestView) {
+	if test.OK {
+		<small class="forwarder-row-passed">@Icon("check-circle")<span>{ "Test passed · " + forwarderTestSummary(test) }</span></small>
+	} else {
+		<small class="forwarder-row-warning">@Icon("x-circle")<span>{ "Test failed · " + ifThen(test.Error != "", test.Error, "answered "+test.ResponseCode) }</span></small>
 	}
 }
 
@@ -113,51 +129,47 @@ templ forwarderStatusBadge(stat ForwarderStatView) {
 	}
 }
 
-templ ForwarderTestResults(results []ForwarderTestView) {
-	<h4 class="forwarder-test-title">Test Results</h4>
-	<p class="forwarder-test-note">Each forwarder was asked { forwarderProbeSummary() } over its own transport, straight from this node.</p>
-	if len(results) == 0 {
-		<p class="forwarder-empty">No forwarders are configured.</p>
-	} else {
-		<ul class="forwarder-stat-list">
-			for _, result := range results {
-				<li class="forwarder-stat-row">
-					<div class="forwarder-stat-name">
-						<code>{ result.Forwarder }</code>
-						if result.Route != "" {
-							<span class="forwarder-route">{ "for " + result.Route }</span>
-						}
-						if result.OK {
-							@components.Badge(components.BadgeProps{Label: "Passed", Tone: components.BadgeSuccess})
-						} else {
-							@components.Badge(components.BadgeProps{Label: "Failed", Tone: components.BadgeDanger})
-						}
-					</div>
-					if result.Error != "" {
-						<p class="forwarder-last-error">{ result.Error }</p>
-					} else {
-						@components.FactList(components.FactListProps{Class: "forwarder-stat-facts"}) {
-							@components.Fact(components.FactProps{Label: "Response time", Value: result.ResponseTime})
-							@components.Fact(components.FactProps{Label: "Response", Value: result.ResponseCode})
-							@components.Fact(components.FactProps{Label: "Validates DNSSEC", Value: forwarderValidates(result.Validates)})
-						}
-					}
-				</li>
-			}
-		</ul>
-	}
-}
-
-func forwarderProbeSummary() string {
-	return fmt.Sprintf("%s three times and %s once", "example.com", "dnssec-failed.org")
-}
-
-func forwarderValidates(value string) string {
-	switch value {
+// forwarderTestSummary is a passed test in a line: the response time and
+// whether the forwarder validates DNSSEC.
+func forwarderTestSummary(test ForwarderTestView) string {
+	switch test.Validates {
 	case "yes":
-		return "Yes"
+		return test.ResponseTime + " · validates DNSSEC"
 	case "no":
-		return "No"
+		return test.ResponseTime + " · doesn't validate DNSSEC"
 	}
-	return "Couldn't tell"
+	return test.ResponseTime
+}
+
+// forwarderStatsSummary is a forwarder's numbers in one line, the way the
+// block list rows give theirs.
+func forwarderStatsSummary(stat ForwarderStatView) string {
+	parts := []string{}
+	if stat.Route != "" {
+		parts = append(parts, "For "+stat.Route)
+	}
+	if stat.Status == "idle" {
+		return strings.Join(append(parts, "No queries yet"), " · ")
+	}
+	parts = append(parts, formatNumber(stat.Answered)+" answered")
+	if stat.Median != "" {
+		parts = append(parts, "median "+stat.Median, "95th pct "+stat.P95)
+	}
+	if stat.Timeouts > 0 {
+		parts = append(parts, formatNumber(stat.Timeouts)+" "+plural(int(stat.Timeouts), "timeout", "timeouts"))
+	}
+	if stat.Errors > 0 {
+		parts = append(parts, formatNumber(stat.Errors)+" "+plural(int(stat.Errors), "error", "errors"))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// forwarderIcon marks an encrypted forwarder apart from a plain one.
+func forwarderIcon(forwarder string) string {
+	for _, scheme := range []string{"tls://", "quic://", "https://"} {
+		if strings.HasPrefix(strings.ToLower(forwarder), scheme) {
+			return "globe-lock"
+		}
+	}
+	return "server"
 }

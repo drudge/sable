@@ -157,7 +157,7 @@ func (table *forwarderStatsTable) observe(forwarder string, elapsed time.Duratio
 		}
 		if err != nil {
 			stats.mu.Lock()
-			stats.lastError, stats.lastErrorAt = err.Error(), now
+			stats.lastError, stats.lastErrorAt = forwarderTestError(err), now
 			stats.mu.Unlock()
 		}
 		return

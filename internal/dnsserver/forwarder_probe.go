@@ -136,7 +136,7 @@ func forwarderTestError(err error) string {
 		return "no answer in time"
 	}
 	if errors.Is(err, context.Canceled) {
-		return "test cancelled"
+		return "cancelled"
 	}
 	return err.Error()
 }

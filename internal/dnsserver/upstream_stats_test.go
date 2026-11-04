@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"slices"
 	"sync"
 	"testing"
@@ -352,3 +353,18 @@ func TestForwarderPoolMarksNewConnections(t *testing.T) {
 		}
 	}
 }
+
+func TestForwarderStatsNameTimeoutsPlainly(t *testing.T) {
+	t.Parallel()
+	table := newForwarderStatsTable()
+	table.observe("a", time.Second, nil, &net.OpError{Op: "read", Net: "udp", Err: timeoutError{}}, false)
+	if stats := table.snapshot("a"); stats.Timeouts != 1 || stats.LastError != "no answer in time" {
+		t.Fatalf("stats = %+v, want the timeout counted and named plainly", stats)
+	}
+}
+
+type timeoutError struct{}
+
+func (timeoutError) Error() string   { return "i/o timeout" }
+func (timeoutError) Timeout() bool   { return true }
+func (timeoutError) Temporary() bool { return true }
