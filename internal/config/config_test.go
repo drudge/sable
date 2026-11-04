@@ -926,3 +926,48 @@ tools = ["everything"]
 		t.Fatalf("unknown tool error = %v", err)
 	}
 }
+
+// Forwarders are checked with the parser the resolver dials them with, so an
+// encrypted upstream written the natural way is accepted and one the resolver
+// cannot use is refused when it is saved rather than at query time.
+func TestForwardersAcceptWhatTheResolverCanDial(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		forwarder string
+		valid     bool
+	}{
+		{"1.1.1.1", true},
+		{"1.1.1.1:53", true},
+		{"[2606:4700:4700::1111]:53", true},
+		{"2606:4700:4700::1111", true},
+		{"tcp://1.1.1.1", true},
+		{"tls://1.1.1.1", true},
+		{"tls://1.1.1.1:853", true},
+		{"TLS://[2620:fe::fe]:853", true},
+		{"quic://94.140.14.14:853", true},
+		{"https://1.1.1.1/dns-query", false},
+		{"doh://1.1.1.1", false},
+		{"tls://1.1.1.1:0", false},
+		{"tls://", false},
+		{"this-server", false},
+		{"udp://this-server:53", false},
+	} {
+		configuration := Defaults()
+		configuration.Resolver.Mode = "forward"
+		configuration.Resolver.Forwarders = []string{test.forwarder}
+		configuration.Resolver.Routes = []ForwardRoute{{Domain: "corp.example", Forwarders: []string{test.forwarder}}}
+		configuration.normalize()
+		err := configuration.Validate()
+		if (err == nil) != test.valid {
+			t.Errorf("%q: error = %v, want valid %v", test.forwarder, err, test.valid)
+		}
+		if !test.valid && err != nil && !strings.Contains(err.Error(), "resolver.routes[0].forwarders[0]") {
+			t.Errorf("%q: conditional route forwarder was not checked: %v", test.forwarder, err)
+		}
+	}
+	configuration := Defaults()
+	configuration.Resolver.Forwarders = []string{"https://1.1.1.1/dns-query"}
+	if err := configuration.Validate(); err == nil || !strings.Contains(err.Error(), "use tls:// or quic://") {
+		t.Fatalf("a DoH upstream should explain the alternatives: %v", err)
+	}
+}

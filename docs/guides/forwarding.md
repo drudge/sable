@@ -49,7 +49,15 @@ When migrating from Technitium, a [Secondary Forwarder](../reference/zones/forwa
 
 ## Encrypt an upstream connection
 
-Forwarder endpoints accept `udp://`, `tcp://`, `tls://`, and `quic://`. TLS and QUIC default to port 853; UDP and TCP default to port 53. Upstream forwarding currently does not accept a `doh://` endpoint. This differs from the built-in DNS client's ability to issue DoH queries.
+Every forwarder, in **Settings → Recursion → DNS Forwarders**, `resolver.forwarders`, conditional routes, and FWD records, accepts `udp://`, `tcp://`, `tls://` (DNS over TLS, RFC 7858), and `quic://` (DNS over QUIC, RFC 9250). A forwarder without a scheme uses plain DNS. TLS and QUIC default to port 853; UDP and TCP default to port 53, so `1.1.1.1`, `tls://1.1.1.1`, and `tls://1.1.1.1:853` all work:
+
+```toml
+[resolver]
+mode = "forward"
+forwarders = ["tls://1.1.1.1:853", "quic://94.140.14.140"]
+```
+
+Upstream forwarding does not accept DNS over HTTPS (`https://` or `doh://`), and Sable refuses such a forwarder when it is saved. This differs from the built-in DNS client's ability to issue DoH queries. Use an IP address for an encrypted upstream so reaching it does not depend on resolving its name first; the upstream's certificate must cover that address.
 
 The whole request shares a timeout budget. In forward mode the remaining upstreams share it, so a short timeout with a long pool can leave each attempt very little time. Test the failure path as well as the fastest upstream.
 
