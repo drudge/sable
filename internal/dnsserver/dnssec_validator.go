@@ -159,6 +159,15 @@ func (validator *dnssecValidator) validate(
 	question dns.Question,
 	query dnssecQuery,
 ) (validationState, error) {
+	// Trust anchors, and the DS and DNSKEY records that extend them, exist
+	// only in class IN (RFC 4033 §5, RFC 4035 §4.3). An answer in any other
+	// class, such as CHAOS for whoami.cloudflare or id.server, has no chain of
+	// trust to check, so it is Indeterminate (RFC 4035 §4.3 and §5): passed
+	// through without AD. Walking the IN tree instead would call it bogus
+	// whenever the same name happens to sit under a signed IN zone.
+	if question.Qclass != dns.ClassINET {
+		return validationIndeterminate, nil
+	}
 	qname := normalizeFQDN(question.Name)
 	if validator.validationExempt(qname) {
 		return validationInsecure, nil
