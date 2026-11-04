@@ -8,6 +8,78 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.8.0-beta.1] - 2026-11-04
+
+Sable 1.8.0-beta.1 forwards to DNS over HTTPS upstreams, shows how each
+forwarder is answering with a button to test them all, and lets you choose how
+queries pick a forwarder. FWD record priorities now work as documented,
+forwarded CHAOS-class lookups no longer fail DNSSEC validation, re-running the
+installer keeps web updates turned on, and cluster replicas can change their
+own update settings again.
+
+### Upgrading from 1.7.4
+
+- FWD records now honor priority. A forwarder with a higher priority value is
+  only asked when every lower one has failed or is waiting after a failure.
+  Before, every query took the next forwarder in turn across all priorities,
+  so a backup at priority 20 answered its share of everyday queries. If you
+  relied on that sharing, give those forwarders the same priority.
+- Saving a new `https://`, `tls://` or `quic://` forwarder named by a host name
+  now needs the server's IP address in parentheses, such as
+  `tls://dns.quad9.net (9.9.9.9)`. Existing `tls://` and `quic://` entries
+  without one still load, with a warning in the log.
+- Nothing else is needed.
+
+### Forwarding
+
+- Forwarders can use DNS over HTTPS (RFC 8484): write
+  `https://cloudflare-dns.com/dns-query (1.1.1.1)` in **Settings › Recursion ›
+  DNS Forwarders**, `resolver.forwarders`, conditional routes, forwarder zones,
+  or FWD records. Sable connects to the address in parentheses and checks the
+  certificate against the host name, so it never has to look up its own
+  upstream through itself. The same `(ip)` works on `tls://` and `quic://`.
+- Sable keeps one HTTP/2 connection per DNS over HTTPS forwarder while it is
+  quiet and spreads busy traffic over more, because Cloudflare stalls a single
+  connection past about 150 queries a second.
+- `tls://1.1.1.1:853` and plain addresses such as `1.1.1.1` now save in
+  Settings. The check used to refuse the first and misread schemes, and it no
+  longer accepts an `https://` forwarder that could not be dialed.
+- **Settings › Recursion › DNS Forwarders** has a table of every forwarder on
+  this node: its status, answers, median and 95th-percentile response times,
+  and failures. Answers that waited for a new TLS or QUIC connection are
+  counted but not timed, so a forwarder used now and then doesn't look slow
+  because of its handshake.
+- **Test Forwarders** asks each saved forwarder `example.com` and
+  `dnssec-failed.org` over its own transport, straight from this node, and
+  fills in a Test column with its response time and whether it validates
+  DNSSEC. Each cluster node tests from where it sits.
+- **Forwarder Order** (`resolver.forwarder_order`) picks how each query
+  chooses among forwarders of the same priority. `round_robin`, the default,
+  takes turns as before. `in_order` always starts with the first one listed,
+  for a list ordered for privacy or filtering. `fastest` starts with the one
+  that has been answering fastest on this node, and sends one query in 32 to
+  the one that has waited longest so the others stay measured. A forwarder
+  that just failed still waits behind the healthy ones in every order.
+
+### DNSSEC
+
+- Forwarded lookups in classes other than IN, such as
+  `dig whoami.cloudflare TXT CH`, no longer fail with SERVFAIL and EDE 6
+  "DNSSEC Bogus". Only class IN has trust anchors, so these answers are now
+  passed through unvalidated, and IN answers are checked as before.
+
+### Updates and clusters
+
+- Re-running the installer, which is how the docs say to update, no longer
+  turns web updates off. A reinstall keeps the layout already installed,
+  `sable install --disable-web-updates` turns them off on purpose, and the
+  bootstrap script accepts `SABLE_WEB_UPDATES=true` or `false`. If web updates
+  stopped working after an earlier reinstall, run
+  `sudo sable install --enable-web-updates` once on each node.
+- On a cluster replica, **Settings › General › Software Updates** can be
+  changed and saved again. Since 1.3.0 its switches and schedule were greyed
+  out on replicas.
+
 ## [1.7.4] - 2026-10-30
 
 Sable 1.7.4 gets the URLhaus block list downloading again after abuse.ch
