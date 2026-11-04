@@ -39,7 +39,7 @@ func forwarderStatView(stats dnsserver.ForwarderStats, now time.Time) pages.Forw
 	view := pages.ForwarderStatView{
 		Forwarder: stats.Forwarder, Route: stats.Route,
 		Answered: stats.Answers, Timeouts: stats.Timeouts, Errors: stats.Errors,
-		Median: "—", P95: "—", Status: "ok",
+		Status: "ok",
 	}
 	if stats.Samples > 0 {
 		view.Median, view.P95 = formatResponseTime(stats.Median), formatResponseTime(stats.P95)
@@ -53,13 +53,13 @@ func forwarderStatView(stats dnsserver.ForwarderStats, now time.Time) pages.Forw
 		view.Status = "failing"
 	}
 	if stats.LastError != "" {
-		view.LastError = stats.LastError + " (" + formatApproximateDuration(now.Sub(stats.LastErrorAt)) + " ago)"
+		view.LastError = "Last error " + formatApproximateDuration(now.Sub(stats.LastErrorAt)) + " ago: " + stats.LastError
 	}
 	return view
 }
 
 // testForwarders asks every forwarder the test names from this node and
-// shows how each answered.
+// redraws the forwarder list with fresh numbers and each one's result.
 func (server *Server) testForwarders(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	reporter, ok := server.forwarders()
@@ -67,18 +67,22 @@ func (server *Server) testForwarders(writer http.ResponseWriter, request *http.R
 		http.Error(writer, "forwarder tests are unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	var views []pages.ForwarderTestView
+	results := make(map[[2]string]pages.ForwarderTestView)
 	for _, result := range reporter.TestForwarders(request.Context()) {
-		view := pages.ForwarderTestView{
-			Forwarder: result.Forwarder, Route: result.Route, OK: result.OK,
-			ResponseCode: result.ResponseCode, Validates: result.Validates, Error: result.Error,
-		}
+		test := pages.ForwarderTestView{OK: result.OK, ResponseCode: result.ResponseCode, Validates: result.Validates, Error: result.Error}
 		if result.Error == "" {
-			view.ResponseTime = formatResponseTime(result.ResponseTime)
+			test.ResponseTime = formatResponseTime(result.ResponseTime)
 		}
-		views = append(views, view)
+		results[[2]string{result.Route, result.Forwarder}] = test
 	}
-	server.render(writer, request, pages.ForwarderTestResults(views))
+	view := server.forwardersCardView()
+	view.Tested = true
+	for index := range view.Stats {
+		if test, found := results[[2]string{view.Stats[index].Route, view.Stats[index].Forwarder}]; found {
+			view.Stats[index].Test = &test
+		}
+	}
+	server.render(writer, request, pages.SettingsForwarderList(view))
 }
 
 // formatResponseTime shows a response time to the precision that matters:
