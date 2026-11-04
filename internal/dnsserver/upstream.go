@@ -1,12 +1,14 @@
 package dnsserver
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/miekg/dns"
@@ -36,8 +38,7 @@ func (handler *Handler) exchangeContext(ctx context.Context, request *dns.Msg, r
 	if forwarders.empty() {
 		return nil, errors.New("no forwarding endpoints are available")
 	}
-	start := handler.upstreamIndex.Add(1) - 1
-	ordered := handler.upstreamHealth.order(forwarders, start)
+	ordered := handler.orderForwarders(runtime, forwarders)
 	var exchangeErrors []error
 	for index, forwarder := range ordered {
 		attemptContext, release := forwarderBudget(ctx, len(ordered)-index)
@@ -50,7 +51,7 @@ func (handler *Handler) exchangeContext(ctx context.Context, request *dns.Msg, r
 			}
 			response, err = handler.resolveNetwork(attemptContext, request, runtime, defaults)
 		} else {
-			response, err = handler.exchangeWithRetries(attemptContext, request, forwarder, runtime.retryTimeout, runtime.retries)
+			response, err = handler.exchangeWithRetries(attemptContext, request, forwarder, runtime.retryTimeout, runtime.retries, handler.forwarderStats)
 		}
 		release()
 		if err == nil {
@@ -132,50 +133,125 @@ func newAuthorityHealthTracker() *upstreamHealthTracker {
 	return tracker
 }
 
-// order returns the endpoints in the order to try them. Each priority rank
-// begins at its own rotation of start, so the endpoints of one rank share the
-// load while a later rank is held back as a fallback, the way FWD priority
-// works in Technitium. Endpoints cooling down after a failure then move after
-// the healthy ones, keeping that order within each group. The result is only
-// read, so a single endpoint comes back as given.
-func (tracker *upstreamHealthTracker) order(forwarders forwarderList, start uint64) []string {
-	endpoints := forwarders.endpoints
-	if len(endpoints) <= 1 {
-		return endpoints
+// fastestExploreEvery is how often fastest-first ordering sends a query to
+// the forwarder that has gone longest without one, to keep the response times
+// of the slower forwarders current. dnsmasq re-tests its servers every 50
+// queries for the same reason.
+const fastestExploreEvery = 32
+
+// orderForwarders returns the endpoints one query tries, in order: by
+// priority rank, by the configured order within a rank, and then with any
+// forwarder cooling down after a failure moved after the healthy ones.
+func (handler *Handler) orderForwarders(runtime *Runtime, forwarders forwarderList) []string {
+	if len(forwarders.endpoints) <= 1 {
+		return forwarders.endpoints
 	}
+	start := handler.upstreamIndex.Add(1) - 1
+	switch runtime.forwarderOrder {
+	case forwarding.OrderInOrder:
+		start = 0
+	case forwarding.OrderFastest:
+		ordered := forwarders.fastestFirst(handler.forwarderStats)
+		if start%fastestExploreEvery == 0 {
+			forwarders.exploreStalest(ordered, handler.forwarderStats)
+		}
+		return handler.upstreamHealth.deprioritize(ordered)
+	}
+	return handler.upstreamHealth.order(forwarders, start)
+}
+
+// rotated returns a copy of the endpoints with each priority rank rotated to
+// begin at its own turn of start, so the endpoints of one rank share the load
+// while a later rank is held back as a fallback, the way FWD priority works
+// in Technitium.
+func (list forwarderList) rotated(start uint64) []string {
+	endpoints := list.endpoints
 	rotated := make([]string, len(endpoints))
 	for first := 0; first < len(endpoints); {
-		last := len(endpoints)
-		if forwarders.ranks != nil {
-			last = first + 1
-			for last < len(endpoints) && forwarders.ranks[last] == forwarders.ranks[first] {
-				last++
-			}
-		}
+		last := list.rankEnd(first)
 		size := uint64(last - first)
 		for offset := range last - first {
 			rotated[first+offset] = endpoints[first+int((start+uint64(offset))%size)]
 		}
 		first = last
 	}
+	return rotated
+}
+
+// fastestFirst returns a copy of the endpoints with each priority rank sorted
+// by response time; see orderingRTT.
+func (list forwarderList) fastestFirst(stats *forwarderStatsTable) []string {
+	ordered := slices.Clone(list.endpoints)
+	for first := 0; first < len(ordered); {
+		last := list.rankEnd(first)
+		slices.SortStableFunc(ordered[first:last], func(left, right string) int {
+			return cmp.Compare(stats.orderingRTT(left), stats.orderingRTT(right))
+		})
+		first = last
+	}
+	return ordered
+}
+
+// exploreStalest moves the first rank's forwarder that has gone longest
+// without a query to the front, so the forwarders fastest-first passes over
+// still get measured, each in its turn.
+func (list forwarderList) exploreStalest(ordered []string, stats *forwarderStatsTable) {
+	last := list.rankEnd(0)
+	stalest := 0
+	for index := 1; index < last; index++ {
+		if stats.lastUsedAt(ordered[index]) < stats.lastUsedAt(ordered[stalest]) {
+			stalest = index
+		}
+	}
+	explored := ordered[stalest]
+	copy(ordered[1:stalest+1], ordered[:stalest])
+	ordered[0] = explored
+}
+
+// rankEnd returns the index just past the priority rank that begins at first.
+func (list forwarderList) rankEnd(first int) int {
+	if list.ranks == nil {
+		return len(list.endpoints)
+	}
+	last := first + 1
+	for last < len(list.endpoints) && list.ranks[last] == list.ranks[first] {
+		last++
+	}
+	return last
+}
+
+// order rotates each priority rank to start, then moves the servers cooling
+// down after a failure after the healthy ones. The result is only read, so a
+// single server comes back as given.
+func (tracker *upstreamHealthTracker) order(forwarders forwarderList, start uint64) []string {
+	if len(forwarders.endpoints) <= 1 {
+		return forwarders.endpoints
+	}
+	return tracker.deprioritize(forwarders.rotated(start))
+}
+
+// deprioritize moves the servers cooling down after a failure after the
+// healthy ones, keeping the order within each group. It reorders the slice
+// it is given.
+func (tracker *upstreamHealthTracker) deprioritize(ordered []string) []string {
 	tracker.mu.RLock()
 	defer tracker.mu.RUnlock()
 	if len(tracker.retryAfter) == 0 {
-		return rotated
+		return ordered
 	}
 	now := tracker.now()
 	healthy := 0
 	var cooling []string
-	for _, forwarder := range rotated {
+	for _, forwarder := range ordered {
 		if until, found := tracker.retryAfter[forwarder]; found && now.Before(until) {
 			cooling = append(cooling, forwarder)
 		} else {
-			rotated[healthy] = forwarder
+			ordered[healthy] = forwarder
 			healthy++
 		}
 	}
-	copy(rotated[healthy:], cooling)
-	return rotated
+	copy(ordered[healthy:], cooling)
+	return ordered
 }
 
 func (tracker *upstreamHealthTracker) markUnhealthy(forwarder string) {
@@ -204,6 +280,17 @@ func (tracker *upstreamHealthTracker) markUnhealthy(forwarder string) {
 // it clears the ones whose cooldown is over.
 const maximumTrackedUnhealthy = 1024
 
+// coolingUntil is when a server that failed lately is tried in its usual
+// place again, or zero when it is not cooling down.
+func (tracker *upstreamHealthTracker) coolingUntil(forwarder string) time.Time {
+	tracker.mu.RLock()
+	defer tracker.mu.RUnlock()
+	if until, found := tracker.retryAfter[forwarder]; found && tracker.now().Before(until) {
+		return until
+	}
+	return time.Time{}
+}
+
 func (tracker *upstreamHealthTracker) markHealthy(forwarder string) {
 	tracker.mu.RLock()
 	_, tracked := tracker.retryAfter[forwarder]
@@ -225,7 +312,9 @@ var errForwarderNotTried = errors.New("no time left in the query budget")
 // error (a dropped packet reads as a timeout) until it succeeds, the retry count
 // is spent, or the surrounding deadline passes. Each attempt waits up to
 // retryTimeout, itself bounded by the caller's context.
-func (handler *Handler) exchangeWithRetries(ctx context.Context, request *dns.Msg, endpoint string, retryTimeout time.Duration, retries int) (*dns.Msg, error) {
+//
+// When stats is set, every attempt is counted against the endpoint there.
+func (handler *Handler) exchangeWithRetries(ctx context.Context, request *dns.Msg, endpoint string, retryTimeout time.Duration, retries int, stats *forwarderStatsTable) (*dns.Msg, error) {
 	if retries < 1 {
 		retries = 1
 	}
@@ -244,8 +333,16 @@ func (handler *Handler) exchangeWithRetries(ctx context.Context, request *dns.Ms
 			break
 		}
 		attemptContext, stopAttempt := context.WithTimeout(ctx, retryTimeout)
+		var connected *atomic.Bool
+		if stats != nil {
+			attemptContext, connected = withConnectionMark(attemptContext)
+		}
+		started := time.Now()
 		response, err := handler.upstreamExchange(attemptContext, request, endpoint, retryTimeout)
 		stopAttempt()
+		if stats != nil {
+			stats.observe(endpoint, time.Since(started), response, err, connected.Load())
+		}
 		if err == nil && response != nil {
 			return response, nil
 		}

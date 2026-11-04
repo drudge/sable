@@ -195,6 +195,7 @@ func (pool *forwarderPool) doqConnection(
 			}
 			ready := state.ready
 			pool.mu.Unlock()
+			markConnectionOpened(ctx)
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -207,6 +208,7 @@ func (pool *forwarderPool) doqConnection(
 		pool.doqConnections[key] = state
 		pool.mu.Unlock()
 
+		markConnectionOpened(ctx)
 		connection, err := pool.dialDoQ(ctx, address, host, timeout)
 		pool.mu.Lock()
 		current, owned := pool.doqConnections[key]
@@ -286,6 +288,7 @@ func (pool *forwarderPool) exchangeStream(ctx context.Context, request *dns.Msg,
 		_ = connection.Close()
 	}
 
+	markConnectionOpened(ctx)
 	connection, err := pool.dial(protocol, address, host, timeout)
 	if err != nil {
 		return nil, err

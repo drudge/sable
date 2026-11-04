@@ -2590,7 +2590,7 @@ func TestExchangeWithRetriesReportsExpiredContextInsteadOfEmptyResult(t *testing
 
 	request := new(dns.Msg)
 	request.SetQuestion("example.com.", dns.TypeA)
-	response, err := handler.exchangeWithRetries(ctx, request, "udp://127.0.0.1:53", time.Second, 2)
+	response, err := handler.exchangeWithRetries(ctx, request, "udp://127.0.0.1:53", time.Second, 2, nil)
 	if response != nil {
 		t.Fatalf("expired context returned a response: %+v", response)
 	}
@@ -2615,7 +2615,7 @@ func TestExchangeWithRetriesRejectsEmptyUpstreamResult(t *testing.T) {
 
 	request := new(dns.Msg)
 	request.SetQuestion("example.com.", dns.TypeA)
-	response, err := handler.exchangeWithRetries(context.Background(), request, "udp://127.0.0.1:53", time.Second, 1)
+	response, err := handler.exchangeWithRetries(context.Background(), request, "udp://127.0.0.1:53", time.Second, 1, nil)
 	if response != nil || err == nil {
 		t.Fatalf("empty upstream result = (%+v, %v), want (nil, error)", response, err)
 	}

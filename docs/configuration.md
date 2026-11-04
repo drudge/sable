@@ -203,6 +203,7 @@ To use upstream recursive services instead:
 [resolver]
 mode = "forward"
 forwarders = ["1.1.1.1:53", "9.9.9.9:53"]
+forwarder_order = "round_robin"
 timeout = "3s"
 cache_size = 65536
 cache_minimum_ttl = 10
@@ -241,6 +242,12 @@ parentheses after it, such as `https://dns.quad9.net/dns-query (9.9.9.9)`; see
 [Give a host name its IP address](guides/forwarding.md#give-a-host-name-its-ip-address).
 The same protocols are valid in the protocol field of a Forwarder zone's `FWD`
 record.
+
+`forwarder_order` picks which forwarder each query tries first: `round_robin`
+(the default) takes turns, `in_order` always starts at the first one listed, and
+`fastest` starts at the one with the lowest smoothed response time. It applies to
+conditional routes and FWD records too, within one FWD priority. See
+[Choose how queries pick a forwarder](guides/forwarding.md#choose-how-queries-pick-a-forwarder).
 
 Conditional routes match the requested name by longest DNS suffix. In the
 example, `api.dev.corp.example` uses `10.2.0.53`, while

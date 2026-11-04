@@ -24,6 +24,7 @@ type Runtime struct {
 	maxConcurrentPerClient int
 	recursion              clientaccess.Policy
 	mode                   string
+	forwarderOrder         string
 	forwarders             []string
 	rootHints              []string
 	qnameMinimization      bool
@@ -100,7 +101,10 @@ type RuntimeConfig struct {
 	RecursionClients       []string
 	Mode                   string
 	Forwarders             []string
-	RootHints              []string
+	// ForwarderOrder is how each query picks among forwarders of one
+	// priority, one of forwarding.Orders; empty means round robin.
+	ForwarderOrder string
+	RootHints      []string
 	// DisableQNAMEMinimization has iterative resolution ask every server for
 	// the full name. Minimization is on unless this is set.
 	DisableQNAMEMinimization bool
@@ -338,6 +342,7 @@ type Handler struct {
 	upstreamExchange     upstreamExchangeFunc
 	forwarderConnections *forwarderPool
 	upstreamHealth       *upstreamHealthTracker
+	forwarderStats       *forwarderStatsTable
 	// authorityHealth is upstreamHealth for the authoritative servers
 	// iterative resolution asks.
 	authorityHealth *upstreamHealthTracker
@@ -390,7 +395,7 @@ func NewHandler(runtime *Runtime) *Handler {
 	backgroundContext, backgroundCancel := context.WithCancel(context.Background())
 	handler := &Handler{
 		startedAt: time.Now(), upstreamExchange: forwarders.exchange, forwarderConnections: forwarders,
-		upstreamHealth: newUpstreamHealthTracker(), authorityHealth: newAuthorityHealthTracker(), inflight: newInflightGroup(),
+		upstreamHealth: newUpstreamHealthTracker(), forwarderStats: newForwarderStatsTable(), authorityHealth: newAuthorityHealthTracker(), inflight: newInflightGroup(),
 		zoneTransfer: exchangeZoneTransfer, zoneRefresh: exchangeIncrementalZoneTransfer,
 		zoneJournals: make(map[string][]zoneDelta), notifications: make(chan ZoneNotification, 256),
 		failureLog:      newFailureLogLimiter(),

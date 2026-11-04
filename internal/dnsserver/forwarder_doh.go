@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -77,6 +78,9 @@ func (pool *forwarderPool) exchangeHTTPS(
 	defer endpoint.inflight.Add(-1)
 	connection := endpoint.connection(pool, inflight)
 	if !connection.warm.Load() {
+		// This query waits for the connection's first exchange, and so for
+		// its handshake.
+		markConnectionOpened(ctx)
 		select {
 		case connection.first <- struct{}{}:
 			defer func() { <-connection.first }()
@@ -84,6 +88,11 @@ func (pool *forwarderPool) exchangeHTTPS(
 			return nil, ctx.Err()
 		}
 	}
+	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{GotConn: func(info httptrace.GotConnInfo) {
+		if !info.Reused {
+			markConnectionOpened(ctx)
+		}
+	}})
 	response, err := dnsclient.ExchangeDoH(ctx, connection.client, upstream.URL(), request)
 	if err == nil || errors.Is(err, dnsclient.ErrDoHAnswer) {
 		connection.warm.Store(true)

@@ -246,7 +246,10 @@ type Resolver struct {
 	RecursionClients       []string `toml:"recursion_clients"`
 	Mode                   string   `toml:"mode"`
 	Forwarders             []string `toml:"forwarders"`
-	RootHints              []string `toml:"root_hints"`
+	// ForwarderOrder is how each query picks among forwarders of one
+	// priority: round_robin, in_order, or fastest. See forwarding.Orders.
+	ForwarderOrder string   `toml:"forwarder_order"`
+	RootHints      []string `toml:"root_hints"`
 	// QNAMEMinimization has recursive mode ask each zone only for the next
 	// label (RFC 9156), so parent zones never see the full name. It is on by
 	// default; turning it off is an escape hatch for a DNS provider that
@@ -590,6 +593,7 @@ func Defaults() Config {
 			Recursion:                "private",
 			Mode:                     "forward",
 			Forwarders:               []string{"1.1.1.1:53", "9.9.9.9:53"},
+			ForwarderOrder:           forwarding.OrderRoundRobin,
 			Timeout:                  Duration{Duration: defaultResolverTimeout},
 			Retries:                  defaultResolverRetries,
 			RetryTimeout:             Duration{Duration: defaultResolverRetryWait},
@@ -895,6 +899,9 @@ func (settings Resolver) validate() []error {
 	}
 	if _, err := clientaccess.Compile(settings.Recursion, settings.RecursionClients); err != nil {
 		validationErrors = append(validationErrors, fmt.Errorf("resolver: %w", err))
+	}
+	if !slices.Contains(forwarding.Orders, settings.ForwarderOrder) {
+		validationErrors = append(validationErrors, fmt.Errorf("resolver.forwarder_order must be one of %s", strings.Join(forwarding.Orders, ", ")))
 	}
 	if settings.Mode == "forward" && len(settings.Forwarders) == 0 {
 		validationErrors = append(validationErrors, errors.New("resolver.forwarders must contain at least one address in forward mode"))
@@ -1457,6 +1464,10 @@ func (settings *Resolver) normalize() {
 	settings.Mode = strings.ToLower(strings.TrimSpace(settings.Mode))
 	if settings.Mode == "" {
 		settings.Mode = "forward"
+	}
+	settings.ForwarderOrder = strings.ToLower(strings.TrimSpace(settings.ForwarderOrder))
+	if settings.ForwarderOrder == "" {
+		settings.ForwarderOrder = forwarding.OrderRoundRobin
 	}
 	settings.RootHints = uniqueTrimmed(settings.RootHints)
 	settings.DNSSECTrustAnchors = uniqueTrimmed(settings.DNSSECTrustAnchors)
