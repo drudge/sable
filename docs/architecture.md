@@ -22,7 +22,8 @@ on an upstream query. Recursive answers pass through DNSSEC validation before
 they enter the cache, and UDP, TCP, DoT, DoH, and DoQ all use the same handler.
 
 Default and conditional forwarding pools use round-robin selection with an
-overall query deadline divided across failover attempts. Conditional routes use
+overall query deadline divided across failover attempts. FWD records rotate
+only among forwarders of the same priority; a higher value is a fallback. Conditional routes use
 longest-suffix matching, so a narrow zone overrides a broader parent route
 without a trie allocation on each request. Compatible upstream DoT and DoQ
 connections are multiplexed and reused rather than established for every query.

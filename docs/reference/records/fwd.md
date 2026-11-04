@@ -14,7 +14,7 @@ quic 20 dns.example.net:853 (2001:db8::53)
 https 30 https://dns.quad9.net/dns-query (9.9.9.9)
 ```
 
-Priority is an unsigned 16-bit number; lower values are preferred. The address is a host or IP with an optional port. UDP/TCP default to 53, TLS/QUIC to 853, HTTPS to 443. Explicit IPv6 ports use bracketed address syntax. An `https` address is a URL; with no path, Sable uses `/dns-query`, and `https 30 dns.quad9.net (9.9.9.9)` means the same as the example above.
+Priority is an unsigned 16-bit number. Sable sends each query to the lowest-priority forwarders first, sharing the load among those with the same value, and moves to a higher value only when every lower one has failed or is cooling down after a failure, as Technitium does. The address is a host or IP with an optional port. UDP/TCP default to 53, TLS/QUIC to 853, HTTPS to 443. Explicit IPv6 ports use bracketed address syntax. An `https` address is a URL; with no path, Sable uses `/dns-query`, and `https 30 dns.quad9.net (9.9.9.9)` means the same as the example above.
 
 An encrypted forwarder (`tls`, `quic`, or `https`) named by host name needs its IP address in parentheses, so Sable can reach it without looking the name up through itself. Sable connects to that address and checks the certificate against the host name. Sable refuses a new or changed record that leaves it out. `tls` and `quic` records saved by earlier releases still load, with a warning in the log. See [Give a host name its IP address](../../guides/forwarding.md#give-a-host-name-its-ip-address).
 

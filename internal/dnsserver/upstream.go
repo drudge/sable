@@ -14,8 +14,26 @@ import (
 	"github.com/drudge/sable/internal/forwarding"
 )
 
-func (handler *Handler) exchangeContext(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string) (*dns.Msg, error) {
-	if len(forwarders) == 0 {
+// forwarderList is the endpoints a query may be forwarded to, in the order of
+// their priority.
+type forwarderList struct {
+	endpoints []string
+	// ranks gives each endpoint's priority rank, never decreasing along
+	// endpoints. Only endpoints of one rank share the load, and a rank is
+	// tried only after every endpoint of the ranks before it. Nil puts every
+	// endpoint in one rank, which is how resolver.forwarders, configured
+	// routes, and stub zones behave.
+	ranks []int
+}
+
+func forwardersOf(endpoints []string) forwarderList {
+	return forwarderList{endpoints: endpoints}
+}
+
+func (list forwarderList) empty() bool { return len(list.endpoints) == 0 }
+
+func (handler *Handler) exchangeContext(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders forwarderList) (*dns.Msg, error) {
+	if forwarders.empty() {
 		return nil, errors.New("no forwarding endpoints are available")
 	}
 	start := handler.upstreamIndex.Add(1) - 1
@@ -26,9 +44,9 @@ func (handler *Handler) exchangeContext(ctx context.Context, request *dns.Msg, r
 		var response *dns.Msg
 		var err error
 		if forwarder == forwarding.ThisServer {
-			defaults := runtime.forwarders
+			defaults := forwardersOf(runtime.forwarders)
 			if runtime.mode == "recursive" {
-				defaults = nil
+				defaults = forwarderList{}
 			}
 			response, err = handler.resolveNetwork(attemptContext, request, runtime, defaults)
 		} else {
@@ -114,16 +132,31 @@ func newAuthorityHealthTracker() *upstreamHealthTracker {
 	return tracker
 }
 
-// order rotates forwarders to begin at start, then moves the ones cooling
-// down after the healthy ones, keeping the rotation within each group. The
-// result is only read, so a single server comes back as given.
-func (tracker *upstreamHealthTracker) order(forwarders []string, start uint64) []string {
-	if len(forwarders) <= 1 {
-		return forwarders
+// order returns the endpoints in the order to try them. Each priority rank
+// begins at its own rotation of start, so the endpoints of one rank share the
+// load while a later rank is held back as a fallback, the way FWD priority
+// works in Technitium. Endpoints cooling down after a failure then move after
+// the healthy ones, keeping that order within each group. The result is only
+// read, so a single endpoint comes back as given.
+func (tracker *upstreamHealthTracker) order(forwarders forwarderList, start uint64) []string {
+	endpoints := forwarders.endpoints
+	if len(endpoints) <= 1 {
+		return endpoints
 	}
-	rotated := make([]string, len(forwarders))
-	for offset := range forwarders {
-		rotated[offset] = forwarders[(start+uint64(offset))%uint64(len(forwarders))]
+	rotated := make([]string, len(endpoints))
+	for first := 0; first < len(endpoints); {
+		last := len(endpoints)
+		if forwarders.ranks != nil {
+			last = first + 1
+			for last < len(endpoints) && forwarders.ranks[last] == forwarders.ranks[first] {
+				last++
+			}
+		}
+		size := uint64(last - first)
+		for offset := range last - first {
+			rotated[first+offset] = endpoints[first+int((start+uint64(offset))%size)]
+		}
+		first = last
 	}
 	tracker.mu.RLock()
 	defer tracker.mu.RUnlock()
@@ -229,8 +262,8 @@ func (handler *Handler) exchangeWithRetries(ctx context.Context, request *dns.Ms
 
 // resolveUpstream resolves and validates a request, waiting up to wait.
 // A recursive lookup runs on apart from the wait; see resolveRecursive.
-func (handler *Handler) resolveUpstream(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, wait time.Duration) (*dns.Msg, validationState, error) {
-	if len(forwarders) == 0 && runtime.mode == "recursive" && len(request.Question) == 1 {
+func (handler *Handler) resolveUpstream(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders forwarderList, wait time.Duration) (*dns.Msg, validationState, error) {
+	if forwarders.empty() && runtime.mode == "recursive" && len(request.Question) == 1 {
 		return handler.resolveRecursive(ctx, request, runtime, wait)
 	}
 	return handler.fetchAndValidate(ctx, request, runtime, forwarders, wait)
@@ -238,14 +271,14 @@ func (handler *Handler) resolveUpstream(ctx context.Context, request *dns.Msg, r
 
 // fetchAndValidate resolves a request, waiting up to wait for the network, and
 // validates the answer under its own budget.
-func (handler *Handler) fetchAndValidate(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, wait time.Duration) (*dns.Msg, validationState, error) {
+func (handler *Handler) fetchAndValidate(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders forwarderList, wait time.Duration) (*dns.Msg, validationState, error) {
 	response, err := handler.fetchUpstream(ctx, request, runtime, forwarders, wait)
 	return handler.validateUpstream(ctx, request, runtime, response, err)
 }
 
 // fetchUpstream sends a request upstream, with DO and CD set when Sable
 // validates, waiting up to wait.
-func (handler *Handler) fetchUpstream(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders []string, wait time.Duration) (*dns.Msg, error) {
+func (handler *Handler) fetchUpstream(ctx context.Context, request *dns.Msg, runtime *Runtime, forwarders forwarderList, wait time.Duration) (*dns.Msg, error) {
 	networkContext, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
 	if runtime.dnssec != nil {
@@ -367,7 +400,7 @@ func dnssecBogusResponse(request *dns.Msg, validationErr error) *dns.Msg {
 	return response
 }
 
-func (runtime *Runtime) forwardersFor(name string) ([]string, bool) {
+func (runtime *Runtime) forwardersFor(name string) (forwarderList, bool) {
 	forwarders, route := runtime.forwardersAndRouteFor(name)
 	return forwarders, route != ""
 }
@@ -375,7 +408,7 @@ func (runtime *Runtime) forwardersFor(name string) ([]string, bool) {
 // forwardersAndRouteFor returns the selected endpoints and the normalized
 // conditional-forwarding suffix that selected them. The endpoints stay in
 // memory; only the suffix is safe and useful enough for a persisted decision.
-func (runtime *Runtime) forwardersAndRouteFor(name string) ([]string, string) {
+func (runtime *Runtime) forwardersAndRouteFor(name string) (forwarderList, string) {
 	name = normalizeName(name)
 	for name != "" {
 		if forwarders, found := runtime.routes[name]; found {
@@ -388,7 +421,7 @@ func (runtime *Runtime) forwardersAndRouteFor(name string) ([]string, string) {
 		name = name[separator+1:]
 	}
 	if runtime.mode == "recursive" {
-		return nil, ""
+		return forwarderList{}, ""
 	}
-	return runtime.forwarders, ""
+	return forwardersOf(runtime.forwarders), ""
 }

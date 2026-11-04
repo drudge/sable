@@ -10,7 +10,7 @@ Create a **Forwarder Zone**, enter an upstream address, protocol, and priority. 
 | --- | --- |
 | Name | The owner and its subtree that this route applies to; `@` is the apex |
 | Protocol | UDP, TCP, TLS, or QUIC in the underlying model |
-| Priority | Lower numeric values are preferred |
+| Priority | Lower values are tried first; equal values share the load, higher values are fallbacks |
 | Address | Upstream host or address, optionally with a port |
 
 The current console picker offers UDP, TCP, and TLS. The underlying parser also accepts QUIC; do not confuse that with a visible QUIC picker option. See [FWD](../records/fwd.md) for exact syntax.

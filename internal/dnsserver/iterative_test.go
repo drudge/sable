@@ -397,11 +397,11 @@ func TestRecursiveModeKeepsConditionalForwardingRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	forwarders, routed := runtime.forwardersFor("host.corp.example.")
-	if !routed || !slices.Equal(forwarders, []string{"192.0.2.53:53"}) {
+	if !routed || !slices.Equal(forwarders.endpoints, []string{"192.0.2.53:53"}) {
 		t.Fatalf("conditional recursive-mode route = %v, %t", forwarders, routed)
 	}
 	forwarders, routed = runtime.forwardersFor("public.example.")
-	if routed || len(forwarders) != 0 {
+	if routed || !forwarders.empty() {
 		t.Fatalf("recursive default unexpectedly forwarded: %v, %t", forwarders, routed)
 	}
 }
@@ -460,7 +460,7 @@ func TestForwardExchangeRetriesDroppedPacket(t *testing.T) {
 
 	request := new(dns.Msg)
 	request.SetQuestion("example.net.", dns.TypeA)
-	response, err := handler.exchangeContext(context.Background(), request, runtime, []string{"1.1.1.1:53"})
+	response, err := handler.exchangeContext(context.Background(), request, runtime, forwardersOf([]string{"1.1.1.1:53"}))
 	if err != nil {
 		t.Fatalf("exchangeContext with one dropped packet: %v", err)
 	}
@@ -492,7 +492,7 @@ func TestForwardExchangeHonorsConfiguredRetries(t *testing.T) {
 
 	request := new(dns.Msg)
 	request.SetQuestion("example.net.", dns.TypeA)
-	if _, err := handler.exchangeContext(context.Background(), request, runtime, []string{"1.1.1.1:53"}); err != nil {
+	if _, err := handler.exchangeContext(context.Background(), request, runtime, forwardersOf([]string{"1.1.1.1:53"})); err != nil {
 		t.Fatalf("exchangeContext with retries=3: %v", err)
 	}
 	if attempts != 3 {

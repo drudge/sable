@@ -133,7 +133,7 @@ func TestActivateZonesReusesCompiledPolicyAndCache(t *testing.T) {
 	if _, found := activated.zones["old.test"]; found {
 		t.Fatal("old zone remains active")
 	}
-	if got := activated.routes["corp.test"]; !slices.Equal(got, []string{"192.0.2.53:53"}) {
+	if got := activated.routes["corp.test"].endpoints; !slices.Equal(got, []string{"192.0.2.53:53"}) {
 		t.Fatalf("base forwarding route = %v", got)
 	}
 }
@@ -1507,7 +1507,7 @@ func TestAuthoritativeFWDRecordRoutesSubtreeByPriority(t *testing.T) {
 	}
 	forwarders, routed := runtime.forwardersFor(request.Question[0].Name)
 	want := []string{"udp://192.0.2.54:53", "tcp://192.0.2.53:53"}
-	if !routed || !slices.Equal(forwarders, want) {
+	if !routed || !slices.Equal(forwarders.endpoints, want) {
 		t.Fatalf("forwardersFor() = %v, %v; want %v", forwarders, routed, want)
 	}
 	handler := NewHandler(runtime)
@@ -1526,6 +1526,65 @@ func TestAuthoritativeFWDRecordRoutesSubtreeByPriority(t *testing.T) {
 	result := handler.resolve(request, runtime)
 	if result.source != querylog.SourceUpstream || len(result.response.Answer) != 1 || result.response.Authoritative {
 		t.Fatalf("FWD result = source %q response %+v", result.source, result.response)
+	}
+}
+
+// FWD priority follows Technitium: a lower value is always tried first, and
+// only forwarders of the same priority share the load. Every query rotating
+// over the whole list sent a priority-20 backup every other query.
+func TestFWDRecordPriorityKeepsBackupsInReserve(t *testing.T) {
+	t.Parallel()
+
+	configuration := testRuntimeConfig()
+	configuration.Zones = []AuthoritativeZone{{
+		Name: "example.test",
+		Records: []ZoneRecord{
+			{Name: "@", Type: "SOA", TTL: 300, Value: "ns1.example.test. hostmaster.example.test. 2026080801 3600 600 1209600 300"},
+			{Name: "@", Type: "NS", TTL: 300, Value: "ns1.example.test."},
+			{Name: "corp", Type: "FWD", TTL: 300, Value: "udp 20 192.0.2.60:53"},
+			{Name: "corp", Type: "FWD", TTL: 300, Value: "udp 10 192.0.2.10:53"},
+			{Name: "corp", Type: "FWD", TTL: 300, Value: "udp 10 192.0.2.11:53"},
+		},
+	}}
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	handler := NewHandler(runtime)
+	var mu sync.Mutex
+	var down bool
+	asked := make(map[string]int)
+	handler.upstreamExchange = func(_ context.Context, query *dns.Msg, forwarder string, _ time.Duration) (*dns.Msg, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		asked[forwarder]++
+		if down && forwarder != "udp://192.0.2.60:53" {
+			return nil, errors.New("unreachable")
+		}
+		response := new(dns.Msg)
+		response.SetReply(query)
+		return response, nil
+	}
+	ask := func(name string) {
+		request := new(dns.Msg)
+		request.SetQuestion(name, dns.TypeA)
+		if result := handler.resolve(request, runtime); result.response == nil || result.response.Rcode != dns.RcodeSuccess {
+			t.Fatalf("resolve %s = %+v", name, result.response)
+		}
+	}
+	for index := range 8 {
+		ask(fmt.Sprintf("host%d.corp.example.test.", index))
+	}
+	if asked["udp://192.0.2.60:53"] != 0 || asked["udp://192.0.2.10:53"] != 4 || asked["udp://192.0.2.11:53"] != 4 {
+		t.Fatalf("with every forwarder up, asked = %v; want the two priority-10 forwarders sharing every query", asked)
+	}
+
+	mu.Lock()
+	down, asked = true, make(map[string]int)
+	mu.Unlock()
+	ask("down.corp.example.test.")
+	if asked["udp://192.0.2.60:53"] != 1 {
+		t.Fatalf("with priority 10 down, asked = %v; want the priority-20 forwarder to answer", asked)
 	}
 }
 
@@ -1663,11 +1722,11 @@ func TestRuntimeUsesLongestConditionalForwardingSuffix(t *testing.T) {
 		t.Fatalf("Compile() error = %v", err)
 	}
 	forwarders, routed := runtime.forwardersFor("service.dev.corp.example.")
-	if !routed || len(forwarders) != 1 || forwarders[0] != "192.0.2.2:53" {
+	if !routed || len(forwarders.endpoints) != 1 || forwarders.endpoints[0] != "192.0.2.2:53" {
 		t.Fatalf("forwardersFor() = %v, %v; want longest matching route", forwarders, routed)
 	}
 	forwarders, routed = runtime.forwardersFor("unrelated.test.")
-	if routed || forwarders[0] != configuration.Forwarders[0] {
+	if routed || forwarders.endpoints[0] != configuration.Forwarders[0] {
 		t.Fatalf("forwardersFor(default) = %v, %v", forwarders, routed)
 	}
 }
@@ -1747,7 +1806,7 @@ func TestUpstreamHealthTrackerDeprioritizesFailedForwarder(t *testing.T) {
 	tracker := newUpstreamHealthTracker()
 	now := time.Now()
 	tracker.now = func() time.Time { return now }
-	forwarders := []string{"a", "b", "c"}
+	forwarders := forwardersOf([]string{"a", "b", "c"})
 
 	if got := tracker.order(forwarders, 1); !slices.Equal(got, []string{"b", "c", "a"}) {
 		t.Fatalf("all-healthy order from start=1 = %v, want round-robin", got)
@@ -1767,6 +1826,27 @@ func TestUpstreamHealthTrackerDeprioritizesFailedForwarder(t *testing.T) {
 	tracker.markHealthy("a")
 	if got := tracker.order(forwarders, 0); !slices.Equal(got, []string{"a", "b", "c"}) {
 		t.Fatalf("after markHealthy = %v, want the cleared forwarder in rotation", got)
+	}
+}
+
+func TestUpstreamHealthTrackerOrdersByPriorityRank(t *testing.T) {
+	t.Parallel()
+	tracker := newUpstreamHealthTracker()
+	now := time.Now()
+	tracker.now = func() time.Time { return now }
+	forwarders := forwarderList{endpoints: []string{"a", "b", "c", "d", "e"}, ranks: []int{0, 0, 5, 5, 9}}
+
+	for start, want := range [][]string{{"a", "b", "c", "d", "e"}, {"b", "a", "d", "c", "e"}, {"a", "b", "c", "d", "e"}} {
+		if got := tracker.order(forwarders, uint64(start)); !slices.Equal(got, want) {
+			t.Fatalf("order from start=%d = %v, want %v: each rank rotates on its own", start, got, want)
+		}
+	}
+	// Health still comes first: a failed first-rank forwarder waits behind
+	// every healthy one, whatever its priority.
+	tracker.markUnhealthy("a")
+	tracker.markUnhealthy("b")
+	if got := tracker.order(forwarders, 0); !slices.Equal(got, []string{"c", "d", "e", "a", "b"}) {
+		t.Fatalf("cooling order = %v, want the next rank first and the failed ones last", got)
 	}
 }
 
@@ -1893,7 +1973,7 @@ func TestExchangeContextLeavesUntriedForwardersHealthy(t *testing.T) {
 	}
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 	defer cancel()
-	_, err = handler.exchangeContext(ctx, cacheRequest("spent.example.", 1), runtime, configuration.Forwarders)
+	_, err = handler.exchangeContext(ctx, cacheRequest("spent.example.", 1), runtime, forwardersOf(configuration.Forwarders))
 	if !errors.Is(err, errForwarderNotTried) {
 		t.Fatalf("exchangeContext() error = %v, want it to report %v", err, errForwarderNotTried)
 	}

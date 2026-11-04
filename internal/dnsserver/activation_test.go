@@ -108,7 +108,7 @@ func TestActivateKeepsZoneChangeMadeWhileReloadCompiled(t *testing.T) {
 	if _, found := active.zones["old.test"]; found {
 		t.Fatal("reload put back a zone the zone change removed")
 	}
-	if got := active.routes["corp.test"]; !slices.Equal(got, []string{"192.0.2.53:53"}) {
+	if got := active.routes["corp.test"].endpoints; !slices.Equal(got, []string{"192.0.2.53:53"}) {
 		t.Fatalf("reloaded forwarding route = %v", got)
 	}
 }
