@@ -23,6 +23,7 @@ import (
 	"github.com/drudge/sable/internal/dnsname"
 	"github.com/drudge/sable/internal/dnsprovider"
 	"github.com/drudge/sable/internal/durationfmt"
+	"github.com/drudge/sable/internal/forwarding"
 	"github.com/drudge/sable/internal/unifi"
 )
 
@@ -777,7 +778,7 @@ func (settings Server) validateAddresses() []error {
 func (settings Resolver) validateUpstreams() []error {
 	var validationErrors []error
 	for index, address := range settings.Forwarders {
-		validationErrors = append(validationErrors, validateAddress(fmt.Sprintf("resolver.forwarders[%d]", index), address))
+		validationErrors = append(validationErrors, validateForwarder(fmt.Sprintf("resolver.forwarders[%d]", index), address))
 	}
 	for index, address := range settings.RootHints {
 		validationErrors = append(validationErrors, validateRootHint(fmt.Sprintf("resolver.root_hints[%d]", index), address))
@@ -844,7 +845,7 @@ func validateRoutes(routes []ForwardRoute) []error {
 		}
 		seenDomains[route.Domain] = struct{}{}
 		for forwarderIndex, address := range route.Forwarders {
-			validationErrors = append(validationErrors, validateAddress(
+			validationErrors = append(validationErrors, validateForwarder(
 				fmt.Sprintf("%s.forwarders[%d]", field, forwarderIndex),
 				address,
 			))
@@ -1846,6 +1847,30 @@ func validateAddress(field, address string) error {
 	}
 	if _, _, err := net.SplitHostPort(address); err != nil {
 		return fmt.Errorf("%s must be host:port: %w", field, err)
+	}
+	return nil
+}
+
+// validateForwarder accepts exactly what the resolver can dial, by checking
+// with the parser it uses: an optional udp://, tcp://, tls:// (DNS over TLS,
+// RFC 7858), or quic:// (DNS over QUIC, RFC 9250) scheme, then a host with an
+// optional port. A plain host:port check rejected tls://1.1.1.1:853 and let
+// https://.../dns-query through to fail at query time instead.
+func validateForwarder(field, endpoint string) error {
+	if strings.TrimSpace(endpoint) == "" {
+		return fmt.Errorf("%s is required", field)
+	}
+	_, address, err := forwarding.ParseEndpoint(endpoint)
+	if err != nil {
+		if scheme, _, found := strings.Cut(strings.TrimSpace(endpoint), "://"); found && strings.EqualFold(scheme, "https") {
+			return fmt.Errorf("%s: DNS over HTTPS upstreams are not supported; use tls:// or quic://", field)
+		}
+		return fmt.Errorf("%s: %w", field, err)
+	}
+	// this-server names the local resolver in FWD records. As an upstream it
+	// would send every query straight back to Sable.
+	if host, _, _ := net.SplitHostPort(address); strings.EqualFold(host, forwarding.ThisServer) {
+		return fmt.Errorf("%s cannot forward to %s", field, forwarding.ThisServer)
 	}
 	return nil
 }
