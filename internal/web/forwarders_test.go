@@ -65,8 +65,10 @@ func TestSettingsShowForwarderActivity(t *testing.T) {
 	body := response.Body.String()
 	for _, want := range []string{
 		`name="forwarder_order"`, `<option value="round_robin" selected>`,
-		"On This Node", "1,204 answered · median 23 ms · 95th pct 61 ms · 6 timeouts", "Answering",
-		"Tried last", "4 errors", "tls: failed to verify certificate", "Not used yet", "For corp.example · No queries yet",
+		"On This Node", `<th scope="col" class="right-cell">95th pct</th>`, `<td class="right-cell">1,204</td>`, `<td class="right-cell">23 ms</td>`,
+		`<td class="right-cell">61 ms</td>`, `title="6 timeouts, 0 errors">6</td>`, "Answering",
+		"Tried last", "tls: failed to verify certificate", "Not used yet", "For corp.example",
+		"1,204 answered · 23 ms median · 61 ms 95th pct · 6 failed",
 		`hx-post="/ui/settings/forwarders/test"`,
 	} {
 		if !strings.Contains(body, want) {
@@ -91,20 +93,19 @@ func TestForwarderTestRoute(t *testing.T) {
 	if response.Code != http.StatusOK || !tested {
 		t.Fatalf("test route = %d, tested %v: %s", response.Code, tested, body)
 	}
-	// The test redraws the same rows with each one's result, rather than
-	// listing the forwarders a second time.
-	for _, want := range []string{`id="forwarder-activity-list"`, "Tested just now", "Test passed · 8.2 ms · validates DNSSEC",
-		"Test failed · no answer in time", "1,204 answered"} {
+	// The test redraws the same table with each result in its Test column,
+	// rather than listing the forwarders a second time.
+	for _, want := range []string{`id="forwarder-activity-list"`, "Tested just now", "<span>8.2 ms</span>", "Validates DNSSEC",
+		"<span>Failed</span>", "no answer in time", "Test: 8.2 ms · Validates DNSSEC", `<td class="right-cell">1,204</td>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("test results lack %q: %s", want, body)
 		}
 	}
-	if rows := strings.Count(body, `class="forwarder-row"`); rows != 3 {
-		t.Errorf("test drew %d forwarder rows, want the 3 forwarders once each", rows)
+	if rows := strings.Count(body, "<tr><td"); rows != 3 {
+		t.Errorf("test drew %d table rows, want the 3 forwarders once each", rows)
 	}
-	// The row whose forwarder was not tested keeps its plain line.
-	if strings.Count(body, "Test passed")+strings.Count(body, "Test failed") != 2 {
-		t.Errorf("test results = %s, want exactly the two tested forwarders marked", body)
+	if strings.Count(body, `class="forwarder-test passed"`)+strings.Count(body, `class="forwarder-test failed"`) != 4 {
+		t.Errorf("want the two tested forwarders marked once in the table and once in the phone list: %s", body)
 	}
 }
 
