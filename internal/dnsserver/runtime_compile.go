@@ -90,10 +90,15 @@ func compileResolver(configuration RuntimeConfig) (*Runtime, error) {
 			return nil, fmt.Errorf("compile DNSSEC validator: %w", err)
 		}
 	}
+	forwarderOrder := cmp.Or(configuration.ForwarderOrder, forwarding.OrderRoundRobin)
+	if !slices.Contains(forwarding.Orders, forwarderOrder) {
+		return nil, fmt.Errorf("forwarder order %q must be one of %s", configuration.ForwarderOrder, strings.Join(forwarding.Orders, ", "))
+	}
 	return &Runtime{
 		maxConcurrent: totalLimit, maxConcurrentPerClient: clientLimit,
 		recursion:         recursion,
 		mode:              mode,
+		forwarderOrder:    forwarderOrder,
 		forwarders:        append([]string(nil), configuration.Forwarders...),
 		rootHints:         rootHints,
 		qnameMinimization: !configuration.DisableQNAMEMinimization,

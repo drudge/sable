@@ -13,6 +13,7 @@ import (
 	"github.com/drudge/sable/internal/certificates"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/durationfmt"
+	"github.com/drudge/sable/internal/forwarding"
 	"github.com/drudge/sable/internal/tsig"
 	"github.com/drudge/sable/internal/web/pages"
 )
@@ -298,6 +299,14 @@ func applyResolverSettings(request *http.Request, candidate *config.Config, form
 		resolver.RecursionClients = formLines(request.FormValue("recursion_clients"))
 	}
 	resolver.Forwarders = forwarders
+	// A form from before the order picker leaves the order as it was.
+	if request.Form.Has("forwarder_order") {
+		order := strings.TrimSpace(request.FormValue("forwarder_order"))
+		if !slices.Contains(forwarding.Orders, order) {
+			return errors.New("forwarder order must be round robin, in order, or fastest first")
+		}
+		resolver.ForwarderOrder = order
+	}
 	resolver.RootHints = formLines(request.FormValue("root_hints"))
 	resolver.Timeout = config.Duration{Duration: resolverTimeout}
 	resolver.Retries = resolverRetries
@@ -547,6 +556,7 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		Recursion: configuration.Resolver.Recursion, RecursionClients: strings.Join(configuration.Resolver.RecursionClients, "\n"),
 		AttachedNetworks: server.attachedNetworkViews(), MaxConcurrent: configuration.Resolver.MaxConcurrent, MaxConcurrentPerClient: configuration.Resolver.MaxConcurrentPerClient,
 		ResolverMode: configuration.Resolver.Mode, Forwarders: strings.Join(configuration.Resolver.Forwarders, "\n"),
+		ForwarderOrder: configuration.Resolver.ForwarderOrder, ForwardersCard: server.forwardersCardView(),
 		RootHints: strings.Join(configuration.Resolver.RootHints, "\n"), ResolverTimeout: configuration.Resolver.Timeout.String(),
 		ResolverRetries: configuration.Resolver.Retries, ResolverRetryTimeout: configuration.Resolver.RetryTimeout.String(),
 		CacheSize: configuration.Resolver.CacheSize, DNSSECValidation: configuration.Resolver.DNSSECValidation,

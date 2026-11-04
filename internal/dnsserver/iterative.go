@@ -721,7 +721,7 @@ func (handler *Handler) exchangeAuthorities(
 		if offset == len(ordered)-1 {
 			retryTimeout, retries = runtime.retryTimeout, runtime.retries
 		}
-		response, err := handler.exchangeWithRetries(attemptContext, request, "udp://"+server, retryTimeout, retries)
+		response, err := handler.exchangeWithRetries(attemptContext, request, "udp://"+server, retryTimeout, retries, nil)
 		release()
 		if err != nil {
 			// A server is only held against when it had a fair turn: the

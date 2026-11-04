@@ -3020,6 +3020,23 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 .settings-blocking-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .settings-blocking-actions .button { display: inline-flex; align-items: center; gap: .45rem; }
 .settings-blocking-actions .nav-icon { width: 1rem; height: 1rem; }
+.forwarder-activity { display: grid; gap: var(--space-3); border-top: 1px solid var(--border); padding-top: .85rem; }
+.forwarder-activity-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.forwarder-activity h4, .forwarder-test-title { margin: 0; font-size: .8125rem; font-weight: 600; }
+.forwarder-activity-header p, .forwarder-test-note, .forwarder-empty { margin: .2rem 0 0; color: var(--muted-foreground); font-size: .75rem; }
+.forwarder-stat-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.forwarder-stat-row { display: grid; gap: .5rem; border: 1px solid var(--border); border-radius: var(--radius-md, .5rem); padding: .65rem .8rem; }
+.forwarder-stat-name { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; min-width: 0; }
+.forwarder-stat-name code { min-width: 0; font-family: var(--font-mono, monospace); font-size: .8rem; overflow-wrap: anywhere; }
+.forwarder-route { color: var(--muted-foreground); font-size: .75rem; }
+.forwarder-stat-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr)); gap: .25rem var(--space-3); margin: 0; }
+.forwarder-stat-facts > div { display: grid; gap: .1rem; }
+.forwarder-stat-facts dt { color: var(--muted-foreground); font-size: .6875rem; }
+.forwarder-stat-facts dd { margin: 0; font-size: .8125rem; font-variant-numeric: tabular-nums; }
+.forwarder-last-error { margin: 0; color: var(--muted-foreground); font-size: .75rem; overflow-wrap: anywhere; }
+.forwarder-test-results:empty { display: none; }
+.forwarder-test-results { display: grid; gap: var(--space-2); }
+.forwarder-test-results.htmx-request { opacity: .6; }
 .settings-advanced { border-top: 1px solid var(--border); padding-top: .85rem; }
 .settings-advanced > summary { display: flex; width: 100%; align-items: center; gap: .45rem; cursor: pointer; list-style: none; color: var(--muted-foreground); font-size: .72rem; font-weight: 600; }
 .settings-advanced > summary::-webkit-details-marker { display: none; }

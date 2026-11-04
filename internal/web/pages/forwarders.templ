@@ -1,0 +1,163 @@
+package pages
+
+import (
+	"fmt"
+
+	"github.com/drudge/sable/internal/web/pages/components"
+)
+
+// ForwarderStatView is one forwarder's line in the DNS Forwarders card: how
+// it has been answering this node since Sable started.
+type ForwarderStatView struct {
+	Forwarder string
+	// Route is the domain a route, forwarder zone, or FWD record sends to it;
+	// empty for the resolver's own forwarders.
+	Route    string
+	Answered uint64
+	Timeouts uint64
+	Errors   uint64
+	Median   string
+	P95      string
+	// Status is "ok", "cooling", "failing", or "idle".
+	Status    string
+	LastError string
+}
+
+// ForwarderTestView is one forwarder's result from the Test button.
+type ForwarderTestView struct {
+	Forwarder    string
+	Route        string
+	OK           bool
+	ResponseTime string
+	ResponseCode string
+	// Validates is "yes", "no", or "" when the test could not tell.
+	Validates string
+	Error     string
+}
+
+// ForwardersCardView drives the stats and test half of the DNS Forwarders
+// card. Available is false when this build of the console has no DNS
+// handler to ask, as in some tests.
+type ForwardersCardView struct {
+	Available bool
+	Stats     []ForwarderStatView
+}
+
+var settingsForwarderOrderField = components.FieldProps{ID: "settings-forwarder-order", Label: "Forwarder Order", Help: "How each query picks among forwarders of the same priority. A forwarder that just failed always waits behind the healthy ones, and FWD priority always comes first.", Class: "narrow-control"}
+
+templ SettingsForwarderOrder(order string) {
+	@components.Field(settingsForwarderOrderField) {
+		<select { components.FieldAttrs(settingsForwarderOrderField)... } name="forwarder_order" data-styled-select>
+			<option value="round_robin" selected?={ order == "" || order == "round_robin" }>Round robin</option>
+			<option value="in_order" selected?={ order == "in_order" }>In order (first listed first)</option>
+			<option value="fastest" selected?={ order == "fastest" }>Fastest first</option>
+		</select>
+	}
+}
+
+templ SettingsForwarderActivity(view ForwardersCardView) {
+	if view.Available {
+		<section class="forwarder-activity" aria-labelledby="forwarder-activity-title">
+			<div class="forwarder-activity-header">
+				<div>
+					<h4 id="forwarder-activity-title">On This Node</h4>
+					<p>Since Sable started. Times are the median and 95th percentile of each forwarder's latest answers.</p>
+				</div>
+				@components.Button(components.ButtonProps{Label: "Test Forwarders", Icon: "zap", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{
+					"hx-post": "/ui/settings/forwarders/test", "hx-target": "#forwarder-test-results", "hx-swap": "innerHTML",
+					"hx-disabled-elt": "this", "hx-indicator": "#forwarder-test-results",
+				}})
+			</div>
+			if len(view.Stats) == 0 {
+				<p class="forwarder-empty">No forwarders are configured.</p>
+			} else {
+				<ul class="forwarder-stat-list">
+					for _, stat := range view.Stats {
+						<li class="forwarder-stat-row">
+							<div class="forwarder-stat-name">
+								<code>{ stat.Forwarder }</code>
+								if stat.Route != "" {
+									<span class="forwarder-route">{ "for " + stat.Route }</span>
+								}
+								@forwarderStatusBadge(stat)
+							</div>
+							@components.FactList(components.FactListProps{Class: "forwarder-stat-facts"}) {
+								@components.Fact(components.FactProps{Label: "Answered", Value: formatNumber(stat.Answered)})
+								@components.Fact(components.FactProps{Label: "Median", Value: stat.Median})
+								@components.Fact(components.FactProps{Label: "95th pct", Value: stat.P95})
+								@components.Fact(components.FactProps{Label: "Timeouts", Value: formatNumber(stat.Timeouts)})
+								@components.Fact(components.FactProps{Label: "Errors", Value: formatNumber(stat.Errors)})
+							}
+							if stat.LastError != "" {
+								<p class="forwarder-last-error">Last error: { stat.LastError }</p>
+							}
+						</li>
+					}
+				</ul>
+			}
+			<div id="forwarder-test-results" class="forwarder-test-results" aria-live="polite"></div>
+		</section>
+	}
+}
+
+templ forwarderStatusBadge(stat ForwarderStatView) {
+	switch stat.Status {
+		case "cooling":
+			@components.Badge(components.BadgeProps{Label: "Tried last", Tone: components.BadgeWarning, Title: "It failed lately, so it waits behind the healthy forwarders for a few seconds."})
+		case "failing":
+			@components.Badge(components.BadgeProps{Label: "Not answering", Tone: components.BadgeDanger})
+		case "idle":
+			@components.Badge(components.BadgeProps{Label: "Not used yet"})
+		default:
+			@components.Badge(components.BadgeProps{Label: "Answering", Tone: components.BadgeSuccess})
+	}
+}
+
+templ ForwarderTestResults(results []ForwarderTestView) {
+	<h4 class="forwarder-test-title">Test Results</h4>
+	<p class="forwarder-test-note">Each forwarder was asked { forwarderProbeSummary() } over its own transport, straight from this node.</p>
+	if len(results) == 0 {
+		<p class="forwarder-empty">No forwarders are configured.</p>
+	} else {
+		<ul class="forwarder-stat-list">
+			for _, result := range results {
+				<li class="forwarder-stat-row">
+					<div class="forwarder-stat-name">
+						<code>{ result.Forwarder }</code>
+						if result.Route != "" {
+							<span class="forwarder-route">{ "for " + result.Route }</span>
+						}
+						if result.OK {
+							@components.Badge(components.BadgeProps{Label: "Passed", Tone: components.BadgeSuccess})
+						} else {
+							@components.Badge(components.BadgeProps{Label: "Failed", Tone: components.BadgeDanger})
+						}
+					</div>
+					if result.Error != "" {
+						<p class="forwarder-last-error">{ result.Error }</p>
+					} else {
+						@components.FactList(components.FactListProps{Class: "forwarder-stat-facts"}) {
+							@components.Fact(components.FactProps{Label: "Response time", Value: result.ResponseTime})
+							@components.Fact(components.FactProps{Label: "Response", Value: result.ResponseCode})
+							@components.Fact(components.FactProps{Label: "Validates DNSSEC", Value: forwarderValidates(result.Validates)})
+						}
+					}
+				</li>
+			}
+		</ul>
+	}
+}
+
+func forwarderProbeSummary() string {
+	return fmt.Sprintf("%s three times and %s once", "example.com", "dnssec-failed.org")
+}
+
+func forwarderValidates(value string) string {
+	switch value {
+	case "yes":
+		return "Yes"
+	case "no":
+		return "No"
+	}
+	return "Couldn't tell"
+}

@@ -946,7 +946,7 @@ func TestSettingsEditorValidatesPersistsAndRendersRuntimeSettings(t *testing.T) 
 	form := url.Values{
 		"update_preferences_present": {"true"}, "release_channel_present": {"true"}, "pre_release": {"true"},
 		"check_schedule": {"weekly"}, "check_day": {"friday"}, "check_at": {"18:30"},
-		"dns_listen": {"127.0.0.1:5353\n[::1]:5353"}, "forwarders": {"1.1.1.1:53\n9.9.9.9:53"},
+		"dns_listen": {"127.0.0.1:5353\n[::1]:5353"}, "forwarders": {"1.1.1.1:53\n9.9.9.9:53"}, "forwarder_order": {"fastest"},
 		"max_concurrent": {"512"}, "max_concurrent_per_client": {"16"},
 		"recursion": {"acl"}, "recursion_clients": {"192.0.2.0/24\n2001:db8::/32"},
 		"resolver_mode": {"recursive"}, "root_hints": {"192.0.2.1:53\n192.0.2.2:53"},
@@ -986,6 +986,7 @@ func TestSettingsEditorValidatesPersistsAndRendersRuntimeSettings(t *testing.T) 
 		updated.Config.Resolver.MaxConcurrent != 512 || updated.Config.Resolver.MaxConcurrentPerClient != 16 ||
 		updated.Config.Resolver.Recursion != "acl" || len(updated.Config.Resolver.RecursionClients) != 2 ||
 		updated.Config.Resolver.Mode != "recursive" || len(updated.Config.Resolver.RootHints) != 2 ||
+		updated.Config.Resolver.ForwarderOrder != "fastest" ||
 		!updated.Config.Resolver.SaveCache || updated.Config.Resolver.CacheStaleResetTTL != 30 ||
 		updated.Config.Resolver.CacheStaleMaxWait.Duration != 1800*time.Millisecond ||
 		updated.Config.Resolver.CachePrefetchSample.Duration != 5*time.Minute || updated.Config.Resolver.CachePrefetchHitsPerHour != 30 ||

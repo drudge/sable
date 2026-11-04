@@ -44,6 +44,8 @@ type SettingsPageView struct {
 	AttachedNetworks []AttachedNetworkView
  ResolverMode        string
 	Forwarders          string
+	ForwarderOrder      string
+	ForwardersCard      ForwardersCardView
 	RootHints           string
 	ResolverTimeout     string
 	ResolverRetries     int
@@ -470,7 +472,11 @@ templ SettingsRecursionPanel(view SettingsPageView) {
 			</div>
 		}
 		@SettingsCard("arrow-left-right", "DNS Forwarders", "Forward queries to upstream DNS servers instead of recursive resolution") {
-			<div class="isotope-card-content">@components.Field(settingsForwardersField) {<textarea { components.FieldAttrs(settingsForwardersField)... } name="forwarders" rows="4" spellcheck="false" placeholder={ "1.1.1.1\ntls://dns.quad9.net (9.9.9.9)\nhttps://cloudflare-dns.com/dns-query (1.1.1.1)" }>{ view.Forwarders }</textarea>}</div>
+			<div class="isotope-card-content">
+				@components.Field(settingsForwardersField) {<textarea { components.FieldAttrs(settingsForwardersField)... } name="forwarders" rows="4" spellcheck="false" placeholder={ "1.1.1.1\ntls://dns.quad9.net (9.9.9.9)\nhttps://cloudflare-dns.com/dns-query (1.1.1.1)" }>{ view.Forwarders }</textarea>}
+				@SettingsForwarderOrder(view.ForwarderOrder)
+				@SettingsForwarderActivity(view.ForwardersCard)
+			</div>
 		}
 		@SettingsSaveButton("recursion")
 	</div>

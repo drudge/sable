@@ -343,6 +343,8 @@ func routeTable() []route {
 		{pattern: "POST /ui/settings", handler: (*Server).updateSettings, perm: auth.PermissionSettingsWrite},
 		// Release channels belong to this process, not the cluster.
 		{pattern: "POST /ui/settings/updates", handler: (*Server).updatePreferences, perm: auth.PermissionSettingsWrite, replicaLocal: true},
+		// Each node tests its own forwarders, from where it sits.
+		{pattern: "POST /ui/settings/forwarders/test", handler: (*Server).testForwarders, perm: auth.PermissionSettingsWrite, replicaLocal: true},
 		{pattern: "POST /ui/settings/insights", handler: (*Server).saveInsightsSwitch, perm: auth.PermissionSettingsWrite},
 		{pattern: "POST /ui/settings/insights/delete", handler: (*Server).deleteInsightData, perm: auth.PermissionSettingsWrite},
 		{pattern: "POST /ui/settings/tsig/save", handler: (*Server).saveTSIGKey, perm: auth.PermissionSettingsWrite},

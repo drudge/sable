@@ -339,6 +339,7 @@ func compileRuntime(configuration config.Config, configuredZones []zone.Zone, ba
 		Mode:          configuration.Resolver.Mode,
 		MaxConcurrent: configuration.Resolver.MaxConcurrent, MaxConcurrentPerClient: configuration.Resolver.MaxConcurrentPerClient,
 		Forwarders:                 configuration.Resolver.Forwarders,
+		ForwarderOrder:             configuration.Resolver.ForwarderOrder,
 		Recursion:                  configuration.Resolver.Recursion,
 		RecursionClients:           configuration.Resolver.RecursionClients,
 		RootHints:                  configuration.Resolver.RootHints,

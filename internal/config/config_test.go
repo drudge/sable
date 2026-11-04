@@ -1014,3 +1014,21 @@ func TestHostnameForwardersLoadButAreNotAdded(t *testing.T) {
 		t.Fatalf("a new hostname forwarder should be refused: %v", errs)
 	}
 }
+
+func TestForwarderOrder(t *testing.T) {
+	t.Parallel()
+	if order := Defaults().Resolver.ForwarderOrder; order != "round_robin" {
+		t.Fatalf("default forwarder_order = %q", order)
+	}
+	for order, valid := range map[string]bool{"": true, "round_robin": true, " In_Order ": true, "fastest": true, "random": false, "parallel": false} {
+		configuration := Defaults()
+		configuration.Resolver.ForwarderOrder = order
+		configuration.normalize()
+		if err := configuration.Validate(); (err == nil) != valid {
+			t.Errorf("forwarder_order %q: error = %v, want valid %v", order, err, valid)
+		}
+		if valid && order == "" && configuration.Resolver.ForwarderOrder != "round_robin" {
+			t.Errorf("an empty forwarder_order became %q, want round_robin", configuration.Resolver.ForwarderOrder)
+		}
+	}
+}

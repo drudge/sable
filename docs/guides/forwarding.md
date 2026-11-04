@@ -23,6 +23,36 @@ timeout = "3s"
 
 Choose upstreams that match your privacy and availability requirements. The addresses above are examples, not a requirement. Configure through Settings where available, or edit the existing resolver section—not a second duplicate TOML section.
 
+## Choose how queries pick a forwarder
+
+`forwarder_order`, or **Forwarder Order** in **Settings → Recursion → DNS Forwarders**, decides which forwarder each query tries first:
+
+| Order | What it does | Use it when |
+| --- | --- | --- |
+| `round_robin` (default) | Each query starts at the next forwarder in turn. | The forwarders are interchangeable and you want the load spread. |
+| `in_order` | Every query starts at the first forwarder listed and moves down only when one fails. | The list is ordered on purpose, such as a filtering or private resolver first and a public one as backup. dnsmasq calls this `strict-order`. |
+| `fastest` | Each query starts at the forwarder that has been answering fastest on this node. One query in 32 goes to the forwarder that has gone longest without one instead, so a forwarder that gets faster is noticed. | You want the lowest latency and any forwarder on the list is acceptable. |
+
+```toml
+[resolver]
+mode = "forward"
+forwarders = ["https://dns.quad9.net/dns-query (9.9.9.9)", "tls://1.1.1.1"]
+forwarder_order = "fastest"
+```
+
+Sable never reorders the list you saved. In every order, a forwarder that just failed is tried after the healthy ones for a few seconds, and the order applies within one FWD priority: a lower priority value is always tried first. "Fastest" uses a smoothed response time: the average of a forwarder's first eight answers, so a first answer slowed by a TLS or QUIC handshake washes out quickly, and after that each answer moves it an eighth of the way, as TCP smooths round-trip times (RFC 6298 §2.3). A forwarder that has never been asked goes first once, so it gets measured; one that has only ever failed goes last.
+
+### See how each forwarder is doing
+
+The **On This Node** list under the forwarders shows, for each forwarder, how many queries it answered since Sable started, the median and 95th percentile of its latest 128 response times, its timeouts and other errors, and its last error. Each cluster node shows its own numbers on its own Settings page.
+
+**Test Forwarders** asks every saved forwarder, straight from this node and over its own transport:
+
+- `example.com` three times. It reports the median response time and the response code.
+- `dnssec-failed.org` once. That name is deliberately signed wrong, so a validating forwarder answers it SERVFAIL. If the forwarder also set AD on `example.com`, the test reports that it validates DNSSEC.
+
+The test skips the cache and does not count in the numbers above. It tests the saved list, so save a change before testing it. AdGuard Home has a similar **Test upstreams** button; Technitium and Pi-hole don't show per-forwarder response times.
+
 ## Route a private suffix
 
 Add a conditional route for the namespace another resolver owns:
