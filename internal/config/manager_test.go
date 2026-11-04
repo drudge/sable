@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -204,5 +205,41 @@ func TestManagerChangedClosesAfterCommitOnly(t *testing.T) {
 	case <-next:
 		t.Fatal("the next Changed() channel is already closed")
 	default:
+	}
+}
+
+func TestManagerRefusesNewHostnameForwarder(t *testing.T) {
+	t.Parallel()
+	path := writeConfiguration(t, "[resolver]\nmode = \"forward\"\nforwarders = [\"tls://dns.quad9.net\"]\n")
+	configuration, err := Load(path)
+	if err != nil {
+		t.Fatalf("a saved hostname forwarder must still load: %v", err)
+	}
+	manager := NewManager(path, configuration, func(context.Context, Config, Config) error { return nil })
+	if err := manager.Update(context.Background(), func(candidate *Config) error {
+		candidate.Resolver.CacheSize++
+		return nil
+	}); err != nil {
+		t.Fatalf("editing another setting beside a saved hostname forwarder: %v", err)
+	}
+	err = manager.Update(context.Background(), func(candidate *Config) error {
+		candidate.Resolver.Forwarders = append(candidate.Resolver.Forwarders, "https://dns.quad9.net/dns-query")
+		return nil
+	})
+	if err == nil {
+		t.Fatal("a DoH forwarder without a bootstrap address was saved")
+	}
+	err = manager.Update(context.Background(), func(candidate *Config) error {
+		candidate.Resolver.Forwarders = append(candidate.Resolver.Forwarders, "quic://dns.adguard-dns.com")
+		return nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "in parentheses") {
+		t.Fatalf("a new DoQ forwarder without a bootstrap address: %v", err)
+	}
+	if err := manager.Update(context.Background(), func(candidate *Config) error {
+		candidate.Resolver.Forwarders = append(candidate.Resolver.Forwarders, "https://dns.quad9.net/dns-query (9.9.9.9)")
+		return nil
+	}); err != nil {
+		t.Fatalf("a bootstrapped DoH forwarder: %v", err)
 	}
 }

@@ -4,8 +4,8 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/miekg/dns"
@@ -24,13 +24,21 @@ import (
 // out for exclusive use, so one query ever owns a connection at a time and no
 // response demultiplexing is needed. DoQ keeps one connection per endpoint and
 // opens a stream per query, allowing concurrent exchanges without additional
-// handshakes. DoT and DoQ also share a TLS client session cache for re-dials.
+// handshakes. DoH sends concurrent queries as streams on a shared HTTP/2
+// connection (RFC 8484 §5.2 recommends HTTP/2), opening up to a few more per
+// endpoint only when enough queries are in flight; see dohStreamsPerConnection. DoT, DoQ, and DoH share a TLS client session cache for re-dials.
 type forwarderPool struct {
 	mu             sync.Mutex
 	idle           map[string][]idleConnection
 	doqConnections map[string]*pooledDoQConnection
+	dohClients     map[string]*dohEndpoint
 	sessions       tls.ClientSessionCache
 	closed         bool
+
+	// upstreams caches each forwarder string's parse, so the query path does
+	// not parse the same few configured strings on every query.
+	upstreams     sync.Map
+	upstreamCount atomic.Int64
 
 	maxIdlePerHost int
 	idleTimeout    time.Duration
@@ -39,6 +47,7 @@ type forwarderPool struct {
 	// so tests can trust a self-signed upstream; production uses defaultTLSConfig.
 	tlsConfig    func(host string) *tls.Config
 	doqTLSConfig func(host string) *tls.Config
+	dohTLSConfig func(host string) *tls.Config
 }
 
 type idleConnection struct {
@@ -57,12 +66,14 @@ func newForwarderPool() *forwarderPool {
 	pool := &forwarderPool{
 		idle:           make(map[string][]idleConnection),
 		doqConnections: make(map[string]*pooledDoQConnection),
+		dohClients:     make(map[string]*dohEndpoint),
 		sessions:       tls.NewLRUClientSessionCache(0),
 		maxIdlePerHost: 8,
 		idleTimeout:    30 * time.Second,
 	}
 	pool.tlsConfig = pool.defaultTLSConfig
 	pool.doqTLSConfig = pool.defaultDoQTLSConfig
+	pool.dohTLSConfig = pool.defaultTLSConfig
 	return pool
 }
 
@@ -88,36 +99,56 @@ func (pool *forwarderPool) exchange(ctx context.Context, request *dns.Msg, forwa
 	if pool.isClosed() {
 		return nil, errForwarderPoolClosed
 	}
-	protocol, address, err := forwarding.ParseEndpoint(forwarder)
+	upstream, err := pool.upstream(forwarder)
 	if err != nil {
 		return nil, err
 	}
-	switch protocol {
+	switch upstream.Protocol {
 	case "quic":
-		host, _, splitErr := net.SplitHostPort(address)
-		if splitErr != nil {
-			return nil, splitErr
-		}
-		return pool.exchangeQUIC(ctx, request, address, host, timeout)
+		return pool.exchangeQUIC(ctx, request, upstream, timeout)
+	case "https":
+		return pool.exchangeHTTPS(ctx, request, upstream, timeout)
 	case "udp":
-		return pool.exchangeUDP(ctx, request, address, timeout)
+		return pool.exchangeUDP(ctx, request, upstream.Address, timeout)
 	default: // tcp, tls
-		return pool.exchangeStream(ctx, request, protocol, address, timeout)
+		return pool.exchangeStream(ctx, request, upstream, timeout)
 	}
+}
+
+// maximumCachedUpstreams bounds the parse cache. Forwarders come from the
+// configuration and FWD records, so a long-running server that keeps
+// changing them starts the cache over rather than growing it forever.
+const maximumCachedUpstreams = 4096
+
+func (pool *forwarderPool) upstream(forwarder string) (forwarding.Upstream, error) {
+	if cached, found := pool.upstreams.Load(forwarder); found {
+		return cached.(forwarding.Upstream), nil
+	}
+	upstream, err := forwarding.Parse(forwarder)
+	if err != nil {
+		return forwarding.Upstream{}, err
+	}
+	if pool.upstreamCount.Add(1) > maximumCachedUpstreams {
+		pool.upstreams.Clear()
+		pool.upstreamCount.Store(1)
+	}
+	pool.upstreams.Store(forwarder, upstream)
+	return upstream, nil
 }
 
 func (pool *forwarderPool) exchangeQUIC(
 	ctx context.Context,
 	request *dns.Msg,
-	address, host string,
+	upstream forwarding.Upstream,
 	timeout time.Duration,
 ) (*dns.Msg, error) {
+	address, host := upstream.DialAddress(), upstream.Host()
 	if timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
-	key := "quic|" + address
+	key := "quic|" + address + "|" + host
 	var exchangeErr error
 	for attempt := 0; attempt < 2; attempt++ {
 		connection, err := pool.doqConnection(ctx, key, address, host, timeout)
@@ -237,14 +268,15 @@ func (pool *forwarderPool) exchangeUDP(ctx context.Context, request *dns.Msg, ad
 		return response, nil
 	}
 	// A truncated UDP answer is retried over a pooled TCP connection.
-	return pool.exchangeStream(ctx, request, "tcp", address, timeout)
+	return pool.exchangeStream(ctx, request, forwarding.Upstream{Protocol: "tcp", Address: address}, timeout)
 }
 
 // exchangeStream runs a TCP or DoT exchange, reusing a pooled connection when one
 // is available. A reused connection may have been closed by the upstream while
 // idle, so a failure on a pooled connection is retried once on a fresh dial.
-func (pool *forwarderPool) exchangeStream(ctx context.Context, request *dns.Msg, protocol, address string, timeout time.Duration) (*dns.Msg, error) {
-	key := protocol + "|" + address
+func (pool *forwarderPool) exchangeStream(ctx context.Context, request *dns.Msg, upstream forwarding.Upstream, timeout time.Duration) (*dns.Msg, error) {
+	protocol, address, host := upstream.Protocol, upstream.DialAddress(), upstream.Host()
+	key := protocol + "|" + address + "|" + host
 	if connection := pool.take(key); connection != nil {
 		response, err := roundTrip(ctx, connection, request, timeout)
 		if err == nil {
@@ -254,7 +286,7 @@ func (pool *forwarderPool) exchangeStream(ctx context.Context, request *dns.Msg,
 		_ = connection.Close()
 	}
 
-	connection, err := pool.dial(protocol, address, timeout)
+	connection, err := pool.dial(protocol, address, host, timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -267,13 +299,12 @@ func (pool *forwarderPool) exchangeStream(ctx context.Context, request *dns.Msg,
 	return response, nil
 }
 
-func (pool *forwarderPool) dial(protocol, address string, timeout time.Duration) (*dns.Conn, error) {
+// dial connects to address. A DoT server is authenticated as host, which
+// differs from address when the forwarder has a bootstrap address
+// (RFC 7858 §4.2).
+func (pool *forwarderPool) dial(protocol, address, host string, timeout time.Duration) (*dns.Conn, error) {
 	client := &dns.Client{Timeout: timeout, DialTimeout: timeout}
 	if protocol == "tls" {
-		host, _, err := net.SplitHostPort(address)
-		if err != nil {
-			return nil, err
-		}
 		client.Net = "tcp-tls"
 		client.TLSConfig = pool.tlsConfig(host)
 	} else {
@@ -401,9 +432,18 @@ func (pool *forwarderPool) Close() {
 			state.ready = nil
 		}
 	}
+	doh := make([]*dohEndpoint, 0, len(pool.dohClients))
+	for _, endpoint := range pool.dohClients {
+		doh = append(doh, endpoint)
+	}
 	clear(pool.idle)
 	clear(pool.doqConnections)
+	clear(pool.dohClients)
 	pool.mu.Unlock()
+
+	for _, endpoint := range doh {
+		endpoint.close()
+	}
 
 	for _, connection := range streams {
 		_ = connection.Close()

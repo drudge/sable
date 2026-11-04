@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -35,6 +36,9 @@ func (manager *Manager) Update(ctx context.Context, mutate func(*Config) error) 
 	}
 	candidate.normalize()
 	if err := candidate.Validate(); err != nil {
+		return err
+	}
+	if err := errors.Join(NewForwarderErrors(active.Config, candidate)...); err != nil {
 		return err
 	}
 	encoded, err := toml.Marshal(candidate)
