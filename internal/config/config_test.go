@@ -945,7 +945,19 @@ func TestForwardersAcceptWhatTheResolverCanDial(t *testing.T) {
 		{"tls://1.1.1.1:853", true},
 		{"TLS://[2620:fe::fe]:853", true},
 		{"quic://94.140.14.14:853", true},
-		{"https://1.1.1.1/dns-query", false},
+		{"https://1.1.1.1/dns-query", true},
+		{"https://cloudflare-dns.com/dns-query (1.1.1.1)", true},
+		{"https://dns.quad9.net (2620:fe::fe)", true},
+		{"https://dns.quad9.net/dns-query", false},
+		{"https://user:secret@dns.quad9.net/dns-query (9.9.9.9)", false},
+		{"https://dns.quad9.net/dns-query#x (9.9.9.9)", false},
+		{"https://dns.quad9.net/dns-query (dns.quad9.net)", false},
+		{"http://dns.quad9.net/dns-query (9.9.9.9)", false},
+		{"tls://dns.quad9.net (9.9.9.9)", true},
+		{"quic://dns.adguard-dns.com (94.140.14.14)", true},
+		{"tls://dns.quad9.net", true},
+		{"quic://dns.adguard-dns.com", true},
+		{"udp://dns.example (192.0.2.1)", false},
 		{"doh://1.1.1.1", false},
 		{"tls://1.1.1.1:0", false},
 		{"tls://", false},
@@ -966,8 +978,39 @@ func TestForwardersAcceptWhatTheResolverCanDial(t *testing.T) {
 		}
 	}
 	configuration := Defaults()
-	configuration.Resolver.Forwarders = []string{"https://1.1.1.1/dns-query"}
-	if err := configuration.Validate(); err == nil || !strings.Contains(err.Error(), "use tls:// or quic://") {
-		t.Fatalf("a DoH upstream should explain the alternatives: %v", err)
+	configuration.Resolver.Forwarders = []string{"https://dns.quad9.net/dns-query"}
+	if err := configuration.Validate(); err == nil || !strings.Contains(err.Error(), "(9.9.9.9)") {
+		t.Fatalf("a DoH upstream named by host should ask for a bootstrap address: %v", err)
+	}
+}
+
+// TestHostnameForwardersLoadButAreNotAdded covers tls:// and quic://
+// forwarders named by host name. Earlier releases accepted them, so a saved
+// configuration still loads with a warning, but a new one is refused.
+func TestHostnameForwardersLoadButAreNotAdded(t *testing.T) {
+	t.Parallel()
+	active := Defaults()
+	active.Resolver.Mode = "forward"
+	active.Resolver.Forwarders = []string{"tls://dns.quad9.net", "1.1.1.1"}
+	active.Resolver.Routes = []ForwardRoute{{Domain: "corp.example", Forwarders: []string{"quic://dns.corp.example:853"}}}
+	active.normalize()
+	if err := active.Validate(); err != nil {
+		t.Fatalf("a saved hostname forwarder must still load: %v", err)
+	}
+	warnings := active.ForwarderWarnings()
+	if len(warnings) != 2 || !strings.Contains(warnings[0], "resolver.forwarders[0]") ||
+		!strings.Contains(warnings[1], "resolver.routes[0].forwarders[0]") {
+		t.Fatalf("warnings = %q", warnings)
+	}
+	if errs := NewForwarderErrors(active, active); len(errs) != 0 {
+		t.Fatalf("saving unchanged forwarders refused: %v", errs)
+	}
+
+	candidate := active
+	candidate.Resolver.Forwarders = []string{"tls://dns.quad9.net", "quic://dns.adguard-dns.com", "tls://dns.google (8.8.8.8)"}
+	errs := NewForwarderErrors(active, candidate)
+	if len(errs) != 1 || !strings.Contains(errs[0].Error(), "resolver.forwarders[1]") ||
+		!strings.Contains(errs[0].Error(), "in parentheses") {
+		t.Fatalf("a new hostname forwarder should be refused: %v", errs)
 	}
 }

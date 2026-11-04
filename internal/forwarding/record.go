@@ -12,15 +12,19 @@ import (
 // ThisServer selects the local resolver's default recursion or forwarding path.
 const ThisServer = "this-server"
 
+// Record is an FWD record: a forwarder and its priority among the name's
+// other forwarders.
 type Record struct {
-	Protocol string
+	Upstream
 	Priority uint16
-	Address  string
 }
 
+// ParseRecord reads "protocol priority forwarder [(bootstrap)]". The
+// forwarder may repeat its scheme, so "https 0 https://dns.quad9.net/dns-query
+// (9.9.9.9)" and "https 0 dns.quad9.net (9.9.9.9)" are the same record.
 func ParseRecord(value string) (Record, error) {
 	fields := strings.Fields(value)
-	if len(fields) != 3 {
+	if len(fields) < 3 {
 		return Record{}, errors.New("FWD value must contain protocol, priority, and forwarder address")
 	}
 	protocol := strings.ToLower(fields[0])
@@ -31,17 +35,35 @@ func ParseRecord(value string) (Record, error) {
 	if err != nil {
 		return Record{}, errors.New("FWD priority must be an unsigned 16-bit integer")
 	}
-	if strings.EqualFold(fields[2], ThisServer) {
+	if len(fields) == 3 && strings.EqualFold(fields[2], ThisServer) {
 		if protocol != "udp" {
 			return Record{}, errors.New("this-server forwarding requires udp")
 		}
-		return Record{Protocol: protocol, Priority: uint16(priority), Address: ThisServer}, nil
+		return Record{Upstream: Upstream{Protocol: protocol, Address: ThisServer}, Priority: uint16(priority)}, nil
 	}
-	address, err := normalizeAddress(fields[2], protocol)
+	upstream, err := parseUpstream(strings.Join(fields[2:], " "), protocol)
 	if err != nil {
 		return Record{}, err
 	}
-	return Record{Protocol: protocol, Priority: uint16(priority), Address: address}, nil
+	// DoT and DoQ records named by host name predate bootstrap addresses and
+	// still load; CheckBootstrap refuses new ones. DoH never had them.
+	if upstream.Protocol == "https" && upstream.NeedsBootstrap() {
+		return Record{}, ErrNeedsBootstrap
+	}
+	return Record{Upstream: upstream, Priority: uint16(priority)}, nil
+}
+
+// CheckRecordBootstrap refuses a new FWD record whose encrypted forwarder is
+// named by host name with no bootstrap address.
+func CheckRecordBootstrap(value string) error {
+	record, err := ParseRecord(value)
+	if err != nil {
+		return err
+	}
+	if record.NeedsBootstrap() {
+		return ErrNeedsBootstrap
+	}
+	return nil
 }
 
 func NewRecord(protocol, priority, address string) (Record, error) {
@@ -49,28 +71,15 @@ func NewRecord(protocol, priority, address string) (Record, error) {
 }
 
 func (record Record) String() string {
-	return fmt.Sprintf("%s %d %s", record.Protocol, record.Priority, record.Address)
+	return fmt.Sprintf("%s %d %s%s", record.Protocol, record.Priority, record.target(), record.bootstrapSuffix())
 }
 
+// Endpoint is the forwarder as resolver.forwarders writes it.
 func (record Record) Endpoint() string {
 	if record.Address == ThisServer {
 		return ThisServer
 	}
-	return record.Protocol + "://" + record.Address
-}
-
-func ParseEndpoint(value string) (protocol, address string, err error) {
-	protocol = "udp"
-	address = strings.TrimSpace(value)
-	if parsedProtocol, parsedAddress, found := strings.Cut(address, "://"); found {
-		protocol = strings.ToLower(parsedProtocol)
-		address = parsedAddress
-	}
-	if !supportedProtocol(protocol) {
-		return "", "", fmt.Errorf("unsupported forwarding protocol %q", protocol)
-	}
-	address, err = normalizeAddress(address, protocol)
-	return protocol, address, err
+	return record.Upstream.String()
 }
 
 func normalizeAddress(value, protocol string) (string, error) {
@@ -89,8 +98,8 @@ func normalizeAddress(value, protocol string) (string, error) {
 		host, port = value, defaultPort(protocol)
 	}
 	host = strings.TrimSpace(host)
-	if host == "" {
-		return "", errors.New("forwarder host is required")
+	if err := validHost(host); err != nil {
+		return "", err
 	}
 	parsedPort, err := strconv.ParseUint(port, 10, 16)
 	if err != nil || parsedPort == 0 {
@@ -100,10 +109,11 @@ func normalizeAddress(value, protocol string) (string, error) {
 }
 
 // supportedProtocol reports whether a forwarder can be reached over the named
-// transport. "tls" is DNS-over-TLS and "quic" is RFC 9250 DNS-over-QUIC.
+// transport: "tls" is DNS over TLS (RFC 7858), "quic" is DNS over QUIC
+// (RFC 9250), and "https" is DNS over HTTPS (RFC 8484).
 func supportedProtocol(protocol string) bool {
 	switch protocol {
-	case "udp", "tcp", "tls", "quic":
+	case "udp", "tcp", "tls", "quic", "https":
 		return true
 	default:
 		return false
@@ -111,8 +121,11 @@ func supportedProtocol(protocol string) bool {
 }
 
 func defaultPort(protocol string) string {
-	if protocol == "tls" || protocol == "quic" {
+	switch protocol {
+	case "tls", "quic":
 		return "853"
+	case "https":
+		return "443"
 	}
 	return "53"
 }

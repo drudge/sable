@@ -17,7 +17,7 @@ var (
 	settingsACMEDirectoryURLField      = components.FieldProps{ID: "settings-acme-directory-url", Label: "Certificate Authority", Help: "Use staging while testing to avoid production rate limits."}
 	settingsRecursionClientsField      = components.FieldProps{ID: "settings-recursion-clients", Label: "Allowed Recursive Clients", Help: "Used with “Listed clients only”. Enter one IP address or CIDR network per line. An empty list denies all client recursion."}
 	settingsRootHintsField             = components.FieldProps{ID: "settings-root-hints", Label: "Root Server Addresses", Help: "Optional IP:port seed addresses, one per line. Leave empty to use the bundled root hints."}
-	settingsForwardersField            = components.FieldProps{ID: "settings-forwarders", Label: "Forwarder Addresses", Help: "One per line. Plain DNS unless prefixed with tls:// for DNS over TLS or quic:// for DNS over QUIC (port 853 by default). Required in forwarding mode; conditional routes and forwarder zones remain active in iterative mode."}
+	settingsForwardersField            = components.FieldProps{ID: "settings-forwarders", Label: "Forwarder Addresses", Help: "One per line: an IP address for plain DNS, or `tls://`, `quic://`, or `https://` with a host name's IP in parentheses, such as `https://dns.quad9.net/dns-query (9.9.9.9)`. Required in forwarding mode; conditional routes and forwarder zones remain active in iterative mode."}
 	settingsServerLogLevelField        = components.FieldProps{ID: "settings-server-log-level", Label: "Minimum Log Level", Help: "Applies to both persisted history and stderr.", Class: "narrow-control"}
 )
 
@@ -470,7 +470,7 @@ templ SettingsRecursionPanel(view SettingsPageView) {
 			</div>
 		}
 		@SettingsCard("arrow-left-right", "DNS Forwarders", "Forward queries to upstream DNS servers instead of recursive resolution") {
-			<div class="isotope-card-content">@components.Field(settingsForwardersField) {<textarea { components.FieldAttrs(settingsForwardersField)... } name="forwarders" rows="4" spellcheck="false" placeholder={ "1.1.1.1\ntls://9.9.9.9" }>{ view.Forwarders }</textarea>}</div>
+			<div class="isotope-card-content">@components.Field(settingsForwardersField) {<textarea { components.FieldAttrs(settingsForwardersField)... } name="forwarders" rows="4" spellcheck="false" placeholder={ "1.1.1.1\ntls://dns.quad9.net (9.9.9.9)\nhttps://cloudflare-dns.com/dns-query (1.1.1.1)" }>{ view.Forwarders }</textarea>}</div>
 		}
 		@SettingsSaveButton("recursion")
 	</div>

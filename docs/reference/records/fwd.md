@@ -4,24 +4,27 @@ FWD is Sable-specific routing metadata. It directs queries for an owner and its 
 
 ## Value syntax
 
-The stored value has exactly three fields:
+The stored value is a protocol, a priority, and an address, with an optional bootstrap address in parentheses:
 
 ```text
-protocol priority address
+protocol priority address [(bootstrap)]
 udp 0 10.0.0.53:53
-tls 10 dns.example.net:853
-quic 20 dns.example.net:853
+tls 10 dns.example.net:853 (192.0.2.53)
+quic 20 dns.example.net:853 (2001:db8::53)
+https 30 https://dns.quad9.net/dns-query (9.9.9.9)
 ```
 
-Priority is an unsigned 16-bit number; lower values are preferred. The address is a host or IP with an optional port. UDP/TCP default to 53, TLS/QUIC to 853. Explicit IPv6 ports use bracketed address syntax.
+Priority is an unsigned 16-bit number; lower values are preferred. The address is a host or IP with an optional port. UDP/TCP default to 53, TLS/QUIC to 853, HTTPS to 443. Explicit IPv6 ports use bracketed address syntax. An `https` address is a URL; with no path, Sable uses `/dns-query`, and `https 30 dns.quad9.net (9.9.9.9)` means the same as the example above.
+
+An encrypted forwarder (`tls`, `quic`, or `https`) named by host name needs its IP address in parentheses, so Sable can reach it without looking the name up through itself. Sable connects to that address and checks the certificate against the host name. Sable refuses a new or changed record that leaves it out. `tls` and `quic` records saved by earlier releases still load, with a warning in the log. See [Give a host name its IP address](../../guides/forwarding.md#give-a-host-name-its-ip-address).
 
 The special value `udp 0 this-server` selects Sable's default resolver path: configured upstreams in forward mode, or iterative resolution in recursive mode. It is not a network hostname. Only UDP syntax is supported for this marker; the actual default upstream configuration controls forwarding transport.
 
-Technitium catalog transfers decode its private FWD wire records into Sable's format. This is separate from parsing Technitium's textual zone exports. See [forwarder migration](../../guides/technitium-migration.md#forwarder-members) for supported settings and limitations.
+Technitium catalog transfers decode its private FWD wire records into Sable's format, including DNS over HTTPS forwarders and bootstrap addresses such as `https://dns.quad9.net/dns-query (9.9.9.9)`. This is separate from parsing Technitium's textual zone exports. See [forwarder migration](../../guides/technitium-migration.md#forwarder-members) for supported settings and limitations.
 
 ## Console and parser support
 
-The console offers UDP, TCP, and TLS in its FWD picker. The underlying parser also accepts `quic`. Do not interpret parser support as a visible console option. `doh` is not accepted as a forwarding protocol.
+The console's FWD picker offers UDP, TCP, DNS-over-TLS, DNS-over-QUIC, and DNS-over-HTTPS. `doh` is not a protocol name; use `https`.
 
 In a [Forwarder zone](../zones/forwarder.md), use `@` for the apex route. The zone must retain at least one enabled apex FWD. A more-specific owner can route a narrower subtree elsewhere.
 

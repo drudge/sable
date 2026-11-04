@@ -232,10 +232,15 @@ forwarders = ["10.2.0.53:53"]
 ```
 
 A forwarder address may carry an explicit transport prefix: `udp://`, `tcp://`,
-`tls://` for DNS-over-TLS, or `quic://` for RFC 9250 DNS-over-QUIC. The prefix
-is optional and defaults to `udp`. `tls` and `quic` default to port 853, and
-the other transports default to port 53. The same prefixes are valid in the
-protocol field of a Forwarder zone's `FWD` record.
+`tls://` for DNS over TLS (RFC 7858), `quic://` for DNS over QUIC (RFC 9250), or
+`https://` for DNS over HTTPS (RFC 8484). The prefix is optional and defaults to
+`udp`. `tls` and `quic` default to port 853, `https` to port 443, and the other
+transports to port 53. A DNS over HTTPS forwarder is a URL whose path defaults to
+`/dns-query`. An encrypted forwarder named by host name needs its IP address in
+parentheses after it, such as `https://dns.quad9.net/dns-query (9.9.9.9)`; see
+[Give a host name its IP address](guides/forwarding.md#give-a-host-name-its-ip-address).
+The same protocols are valid in the protocol field of a Forwarder zone's `FWD`
+record.
 
 Conditional routes match the requested name by longest DNS suffix. In the
 example, `api.dev.corp.example` uses `10.2.0.53`, while

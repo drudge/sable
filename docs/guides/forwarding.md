@@ -49,15 +49,43 @@ When migrating from Technitium, a [Secondary Forwarder](../reference/zones/forwa
 
 ## Encrypt an upstream connection
 
-Every forwarder, in **Settings → Recursion → DNS Forwarders**, `resolver.forwarders`, conditional routes, and FWD records, accepts `udp://`, `tcp://`, `tls://` (DNS over TLS, RFC 7858), and `quic://` (DNS over QUIC, RFC 9250). A forwarder without a scheme uses plain DNS. TLS and QUIC default to port 853; UDP and TCP default to port 53, so `1.1.1.1`, `tls://1.1.1.1`, and `tls://1.1.1.1:853` all work:
+Every forwarder, in **Settings → Recursion → DNS Forwarders**, `resolver.forwarders`, conditional routes, and FWD records, accepts these transports:
+
+| Prefix | Transport | Default port |
+| --- | --- | --- |
+| none, `udp://` | Plain DNS over UDP, retried over TCP when truncated | 53 |
+| `tcp://` | Plain DNS over TCP | 53 |
+| `tls://` | DNS over TLS (RFC 7858) | 853 |
+| `quic://` | DNS over QUIC (RFC 9250) | 853 |
+| `https://` | DNS over HTTPS (RFC 8484) | 443 |
+
+So `1.1.1.1`, `tls://1.1.1.1`, and `tls://1.1.1.1:853` all work. A DNS over HTTPS forwarder is a URL. With no path, Sable uses `/dns-query`.
 
 ```toml
 [resolver]
 mode = "forward"
-forwarders = ["tls://1.1.1.1:853", "quic://94.140.14.140"]
+forwarders = [
+  "https://cloudflare-dns.com/dns-query (1.1.1.1)",
+  "https://dns.quad9.net/dns-query (2620:fe::fe)",
+  "tls://dns.quad9.net (9.9.9.9)",
+  "quic://94.140.14.140",
+]
 ```
 
-Upstream forwarding does not accept DNS over HTTPS (`https://` or `doh://`), and Sable refuses such a forwarder when it is saved. This differs from the built-in DNS client's ability to issue DoH queries. Use an IP address for an encrypted upstream so reaching it does not depend on resolving its name first; the upstream's certificate must cover that address.
+### Give a host name its IP address
+
+An encrypted upstream named by host name needs its IP address after it, in parentheses. This is the bootstrap address. Sable connects to that address and still checks the server's certificate against the host name, so the certificate doesn't have to cover the address. Write an IPv6 address bare, as in `(2620:fe::fe)`. Technitium writes bootstrap addresses the same way.
+
+Without a bootstrap address, Sable would have to look the name up through the system resolver. On a Sable server that's usually Sable itself, so the lookup can loop. Sable refuses a new `https://`, `tls://`, or `quic://` forwarder named by host name without one. A forwarder written as an IP address, such as `https://1.1.1.1/dns-query`, needs no bootstrap address, but the certificate must cover that address.
+
+Earlier releases accepted `tls://` and `quic://` forwarders named by host name. Those still load and still work, but Sable logs a warning for each one at startup. Add the bootstrap address the next time you edit them.
+
+### How DNS over HTTPS behaves
+
+- Sable sends each query as an HTTP POST with the `application/dns-message` type, and sends the DNS message ID as 0 (RFC 8484 §4.1).
+- Only an HTTP 200 answer with the `application/dns-message` type counts. Any other status or type is a failed attempt, which counts against the forwarder's health like a timeout does.
+- Answers can be up to 65,535 bytes and are never truncated, so there's no retry over TCP (RFC 8484 §6).
+- Sable keeps one HTTP/2 connection open to each DNS over HTTPS forwarder and sends concurrent queries over it. It never uses an HTTP proxy from the environment.
 
 The whole request shares a timeout budget. In forward mode the remaining upstreams share it, so a short timeout with a long pool can leave each attempt very little time. Test the failure path as well as the fastest upstream.
 

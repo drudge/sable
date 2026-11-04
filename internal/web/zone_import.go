@@ -267,6 +267,8 @@ func parseZoneFile(zone zonemodel.Zone, reader io.Reader) ([]zonemodel.Record, [
 		return nil, nil, fmt.Errorf("parse zone file: %w", err)
 	}
 	for _, record := range customForwarders {
+		// An imported zone is usually one Sable exported, so its DoT and DoQ
+		// records load the way saved ones do, bootstrap address or not.
 		if _, err := forwarding.ParseRecord(record.Value); err != nil {
 			return nil, nil, fmt.Errorf("invalid imported FWD record for %q: %w", record.Name, err)
 		}

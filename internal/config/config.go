@@ -1853,26 +1853,86 @@ func validateAddress(field, address string) error {
 
 // validateForwarder accepts exactly what the resolver can dial, by checking
 // with the parser it uses: an optional udp://, tcp://, tls:// (DNS over TLS,
-// RFC 7858), or quic:// (DNS over QUIC, RFC 9250) scheme, then a host with an
-// optional port. A plain host:port check rejected tls://1.1.1.1:853 and let
-// https://.../dns-query through to fail at query time instead.
+// RFC 7858), quic:// (DNS over QUIC, RFC 9250), or https:// (DNS over HTTPS,
+// RFC 8484) scheme, a host with an optional port (and path for https://), and
+// an optional bootstrap address in parentheses.
+//
+// A DNS over HTTPS forwarder named by host name needs its bootstrap address.
+// tls:// and quic:// forwarders named by host name were accepted before
+// bootstrap addresses existed, so they still load, with a warning from
+// ForwarderWarnings, and only new ones are refused (see NewForwarderErrors).
 func validateForwarder(field, endpoint string) error {
 	if strings.TrimSpace(endpoint) == "" {
 		return fmt.Errorf("%s is required", field)
 	}
-	_, address, err := forwarding.ParseEndpoint(endpoint)
+	upstream, err := forwarding.Parse(endpoint)
 	if err != nil {
-		if scheme, _, found := strings.Cut(strings.TrimSpace(endpoint), "://"); found && strings.EqualFold(scheme, "https") {
-			return fmt.Errorf("%s: DNS over HTTPS upstreams are not supported; use tls:// or quic://", field)
-		}
 		return fmt.Errorf("%s: %w", field, err)
 	}
 	// this-server names the local resolver in FWD records. As an upstream it
 	// would send every query straight back to Sable.
-	if host, _, _ := net.SplitHostPort(address); strings.EqualFold(host, forwarding.ThisServer) {
+	if strings.EqualFold(upstream.Host(), forwarding.ThisServer) {
 		return fmt.Errorf("%s cannot forward to %s", field, forwarding.ThisServer)
 	}
+	if upstream.Protocol == "https" && upstream.NeedsBootstrap() {
+		return fmt.Errorf("%s: %w", field, forwarding.ErrNeedsBootstrap)
+	}
 	return nil
+}
+
+// forwarderFields lists every forwarder in the configuration with the field
+// that holds it.
+func (configuration Config) forwarderFields() (fields, forwarders []string) {
+	for index, forwarder := range configuration.Resolver.Forwarders {
+		fields = append(fields, fmt.Sprintf("resolver.forwarders[%d]", index))
+		forwarders = append(forwarders, forwarder)
+	}
+	for routeIndex, route := range configuration.Resolver.Routes {
+		for index, forwarder := range route.Forwarders {
+			fields = append(fields, fmt.Sprintf("resolver.routes[%d].forwarders[%d]", routeIndex, index))
+			forwarders = append(forwarders, forwarder)
+		}
+	}
+	return fields, forwarders
+}
+
+// ForwarderWarnings describes forwarders that load but should be changed: an
+// encrypted forwarder named by host name with no bootstrap address, which
+// Sable can only reach by looking the name up through the system resolver,
+// often Sable itself.
+func (configuration Config) ForwarderWarnings() []string {
+	var warnings []string
+	fields, forwarders := configuration.forwarderFields()
+	for index, forwarder := range forwarders {
+		if upstream, err := forwarding.Parse(forwarder); err == nil && upstream.NeedsBootstrap() {
+			warnings = append(warnings, fmt.Sprintf("%s %q has no bootstrap address; add the server's IP address in parentheses, "+
+				"as in %q", fields[index], forwarder, upstream.String()+" (192.0.2.53)"))
+		}
+	}
+	return warnings
+}
+
+// NewForwarderErrors refuses forwarders that candidate adds over active and
+// that would need the system resolver to find. Ones already in active stay
+// accepted so a configuration that predates bootstrap addresses can still be
+// edited.
+func NewForwarderErrors(active, candidate Config) []error {
+	_, existing := active.forwarderFields()
+	known := make(map[string]struct{}, len(existing))
+	for _, forwarder := range existing {
+		known[strings.TrimSpace(forwarder)] = struct{}{}
+	}
+	var refused []error
+	fields, forwarders := candidate.forwarderFields()
+	for index, forwarder := range forwarders {
+		if _, found := known[strings.TrimSpace(forwarder)]; found {
+			continue
+		}
+		if err := forwarding.CheckBootstrap(forwarder); err != nil {
+			refused = append(refused, fmt.Errorf("%s: %w", fields[index], err))
+		}
+	}
+	return refused
 }
 
 func validateRootHint(field, address string) error {

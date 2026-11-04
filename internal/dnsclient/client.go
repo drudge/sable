@@ -1,13 +1,10 @@
 package dnsclient
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io"
-	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -239,45 +236,7 @@ func exchangeDoHWithClient(
 	endpoint string,
 	client *http.Client,
 ) (*dns.Msg, time.Duration, error) {
-	wire, err := message.Pack()
-	if err != nil {
-		return nil, 0, fmt.Errorf("pack DNS request: %w", err)
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(wire))
-	if err != nil {
-		return nil, 0, fmt.Errorf("create HTTPS request: %w", err)
-	}
-	request.Header.Set("Accept", dohMediaType)
-	request.Header.Set("Content-Type", dohMediaType)
-
 	started := time.Now()
-	response, err := client.Do(request)
-	elapsed := time.Since(started)
-	if err != nil {
-		return nil, elapsed, err
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4<<10))
-		return nil, elapsed, fmt.Errorf("DoH server returned HTTP %d", response.StatusCode)
-	}
-	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
-	if err != nil || mediaType != dohMediaType {
-		return nil, elapsed, fmt.Errorf("DoH server returned content type %q", response.Header.Get("Content-Type"))
-	}
-	responseWire, err := io.ReadAll(io.LimitReader(response.Body, 65_536))
-	if err != nil {
-		return nil, elapsed, fmt.Errorf("read DNS response: %w", err)
-	}
-	if len(responseWire) > 65_535 {
-		return nil, elapsed, errors.New("DoH server returned an oversized DNS response")
-	}
-	dnsResponse := new(dns.Msg)
-	if err := dnsResponse.Unpack(responseWire); err != nil {
-		return nil, elapsed, fmt.Errorf("unpack DNS response: %w", err)
-	}
-	if dnsResponse.Id != message.Id {
-		return nil, elapsed, errors.New("DoH response ID does not match request")
-	}
-	return dnsResponse, elapsed, nil
+	response, err := ExchangeDoH(ctx, client, endpoint, message)
+	return response, time.Since(started), err
 }

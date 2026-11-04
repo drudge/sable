@@ -190,7 +190,7 @@ func TestHandlerAnswersAliasZonesAuthoritativelyAndRefusesDynamicUpdates(t *test
 	}
 }
 
-func testRR(t *testing.T, text string) dns.RR {
+func testRR(t testing.TB, text string) dns.RR {
 	t.Helper()
 	record, err := dns.NewRR(text)
 	if err != nil {
