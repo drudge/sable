@@ -25,7 +25,9 @@ func ParseTechnitiumRecord(value string) (Record, bool, error) {
 	if err != nil || decodeErr != nil || len(data) != size || len(data) < 2 {
 		return Record{}, false, errors.New("malformed Technitium FWD data")
 	}
-	protocols := map[byte]string{0: "udp", 1: "tcp", 2: "tls", 5: "quic"}
+	// Technitium's DnsTransportProtocol: 3 is RFC 8484 DNS over HTTPS and 4 is
+	// its retired JSON variant, which Technitium itself now reads as 3.
+	protocols := map[byte]string{0: "udp", 1: "tcp", 2: "tls", 3: "https", 4: "https", 5: "quic"}
 	protocol, supported := protocols[data[0]]
 	if !supported {
 		return Record{}, false, fmt.Errorf("Technitium FWD transport %d is not supported", data[0])
@@ -34,9 +36,12 @@ func ParseTechnitiumRecord(value string) (Record, bool, error) {
 	if end > len(data) {
 		return Record{}, false, errors.New("truncated Technitium FWD address")
 	}
+	// Technitium writes a bootstrap address the way Sable reads one:
+	// "https://dns.quad9.net/dns-query (9.9.9.9)", with an IPv6 address in
+	// brackets and, for DoT and DoQ, sometimes the port again.
 	address := string(data[2:end])
-	if strings.ContainsAny(address, "()/\\ \t\r\n") {
-		return Record{}, false, errors.New("Technitium FWD address syntax is not supported; use a plain IP address or hostname with optional port")
+	if strings.ContainsAny(address, "\r\n") {
+		return Record{}, false, errors.New("malformed Technitium FWD address")
 	}
 	validation := false
 	priority := byte(0)

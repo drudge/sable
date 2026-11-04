@@ -220,6 +220,7 @@ func (process *process) startDNS(ctx context.Context) error {
 	}
 	process.zoneManager = zoneManager
 	warnCNAMEConflicts(process.logger, zoneManager.Current().Zones)
+	warnUnbootstrappedForwarders(process.logger, process.initial, zoneManager.Current().Zones)
 	runtime, err := compileRuntime(
 		hydrateTSIGKeys(ctx, process.tsigSecrets, process.initial, process.logger),
 		zoneManager.Current().Zones,

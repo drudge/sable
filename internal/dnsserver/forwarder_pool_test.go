@@ -37,7 +37,7 @@ func (listener *countingListener) Accept() (net.Conn, error) {
 	return connection, err
 }
 
-func startTestDoTServer(t *testing.T) (endpoint string, accepted *atomic.Int64, roots *x509.CertPool) {
+func startTestDoTServer(t testing.TB) (endpoint string, accepted *atomic.Int64, roots *x509.CertPool) {
 	t.Helper()
 	certificate, pool := selfSignedDoTCertificate(t)
 	base, err := net.Listen("tcp", "127.0.0.1:0")
@@ -266,7 +266,7 @@ func testForwarderRequest() *dns.Msg {
 	return request
 }
 
-func selfSignedDoTCertificate(t *testing.T) (tls.Certificate, *x509.CertPool) {
+func selfSignedDoTCertificate(t testing.TB) (tls.Certificate, *x509.CertPool) {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -280,6 +280,7 @@ func selfSignedDoTCertificate(t *testing.T) (tls.Certificate, *x509.CertPool) {
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
+		DNSNames:     []string{"dns.example.test"},
 	}
 	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
 	if err != nil {

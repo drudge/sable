@@ -26,7 +26,7 @@ var (
 	settingsACMEDirectoryURLField = components.FieldProps{ID: "settings-acme-directory-url", Label: "Certificate Authority", Help: "Use staging while testing to avoid production rate limits."}
 	settingsRecursionClientsField = components.FieldProps{ID: "settings-recursion-clients", Label: "Allowed Recursive Clients", Help: "Used with “Listed clients only”. Enter one IP address or CIDR network per line. An empty list denies all client recursion."}
 	settingsRootHintsField        = components.FieldProps{ID: "settings-root-hints", Label: "Root Server Addresses", Help: "Optional IP:port seed addresses, one per line. Leave empty to use the bundled root hints."}
-	settingsForwardersField       = components.FieldProps{ID: "settings-forwarders", Label: "Forwarder Addresses", Help: "One per line. Plain DNS unless prefixed with tls:// for DNS over TLS or quic:// for DNS over QUIC (port 853 by default). Required in forwarding mode; conditional routes and forwarder zones remain active in iterative mode."}
+	settingsForwardersField       = components.FieldProps{ID: "settings-forwarders", Label: "Forwarder Addresses", Help: "One per line: an IP address for plain DNS, or `tls://`, `quic://`, or `https://` with a host name's IP in parentheses, such as `https://dns.quad9.net/dns-query (9.9.9.9)`. Required in forwarding mode; conditional routes and forwarder zones remain active in iterative mode."}
 	settingsServerLogLevelField   = components.FieldProps{ID: "settings-server-log-level", Label: "Minimum Log Level", Help: "Applies to both persisted history and stderr.", Class: "narrow-control"}
 )
 
@@ -3092,9 +3092,9 @@ func SettingsRecursionPanel(view SettingsPageView) templ.Component {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var90 string
-					templ_7745c5c3_Var90, templ_7745c5c3_Err = templruntime.NewAttributeExpression("1.1.1.1\ntls://9.9.9.9").Resolve(ctx)
+					templ_7745c5c3_Var90, templ_7745c5c3_Err = templruntime.NewAttributeExpression("1.1.1.1\ntls://dns.quad9.net (9.9.9.9)\nhttps://cloudflare-dns.com/dns-query (1.1.1.1)").Resolve(ctx)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 473, Col: 229}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 473, Col: 293}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var90)
 					if templ_7745c5c3_Err != nil {
@@ -3121,7 +3121,7 @@ func SettingsRecursionPanel(view SettingsPageView) templ.Component {
 				var templ_7745c5c3_Var91 string
 				templ_7745c5c3_Var91, templ_7745c5c3_Err = templ.JoinStringErrs(view.Forwarders)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 473, Col: 249}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `settings.templ`, Line: 473, Col: 313}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var91))
 				if templ_7745c5c3_Err != nil {

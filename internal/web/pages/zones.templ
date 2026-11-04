@@ -444,11 +444,11 @@ func zoneRecordParsedField(recordType, value, field string) string {
 	}
 	if recordType == "FWD" {
 		parts := strings.Fields(value)
-		if len(parts) == 3 {
+		if len(parts) >= 3 {
 			switch field {
 			case "fwd_protocol": return parts[0]
 			case "fwd_priority": return parts[1]
-			case "fwd_address": return parts[2]
+			case "fwd_address": return strings.Join(parts[2:], " ")
 			}
 		}
 		return ""
@@ -979,8 +979,8 @@ templ CreateZoneDialog(aliasSources []string, tsigKeys []string) {
 				</select><small>Every record of the source zone is republished here and kept in step whenever the source changes.</small></label>
 			</section>
 			<section class="zone-create-options" data-zone-create-options="forwarder" hidden>
-				<label><span>Forwarder Address</span><input class="mono-input" name="forwarder_address" placeholder="1.1.1.1 or dns.example:53" disabled required/></label>
-				<div class="record-field-grid two"><label><span>Protocol</span><select name="forwarder_protocol" data-styled-select disabled><option value="udp">UDP</option><option value="tcp">TCP</option><option value="tls">DNS-over-TLS</option></select></label><label><span>Priority</span><input type="number" name="forwarder_priority" min="0" max="65535" value="0" disabled required/></label></div>
+				<label><span>Forwarder Address</span><input class="mono-input" name="forwarder_address" placeholder="9.9.9.9 or https://dns.quad9.net/dns-query (9.9.9.9)" disabled required/></label>
+				<div class="record-field-grid two"><label><span>Protocol</span><select name="forwarder_protocol" data-styled-select disabled>@forwarderProtocolOptions("udp")</select></label><label><span>Priority</span><input type="number" name="forwarder_priority" min="0" max="65535" value="0" disabled required/></label></div>
 			</section>
 			<section class="zone-create-options" data-zone-create-options="resolution" hidden>
 				<input type="hidden" name="dnssec_validation_present" value="1" disabled/>
@@ -1141,10 +1141,22 @@ templ ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) {
 			<div class="record-field-grid three"><label class="record-field secondary"><span>Serial</span><input type="number" name={ prefix + "serial" } min="0" max="4294967295" value={ zoneRecordParsedField(recordType, value, "serial") } disabled?={ disabled } required/></label><label class="record-field secondary"><span>Refresh</span><input type="number" name={ prefix + "refresh" } min="0" max="4294967295" value={ zoneRecordParsedField(recordType, value, "refresh") } disabled?={ disabled } required/></label><label class="record-field secondary"><span>Retry</span><input type="number" name={ prefix + "retry" } min="0" max="4294967295" value={ zoneRecordParsedField(recordType, value, "retry") } disabled?={ disabled } required/></label></div>
 			<div class="record-field-grid three"><label class="record-field secondary"><span>Expire</span><input type="number" name={ prefix + "expire" } min="0" max="4294967295" value={ zoneRecordParsedField(recordType, value, "expire") } disabled?={ disabled } required/></label><label class="record-field secondary"><span>Minimum TTL</span><input type="number" name={ prefix + "minimum" } min="0" max="4294967295" value={ zoneRecordParsedField(recordType, value, "minimum") } disabled?={ disabled } required/></label></div>
 		case "FWD":
-			<label class="record-field"><span>Forwarder Address</span><input class="mono-input" name={ prefix + "fwd_address" } value={ zoneRecordParsedField(recordType, value, "fwd_address") } placeholder="8.8.8.8, dns.example, or host:port" autocomplete="off" disabled?={ disabled } required/><small>This record applies to the owner name and every name below it.</small></label>
-			<div class="record-field-grid two"><label class="record-field secondary"><span>Protocol</span><select name={ prefix + "fwd_protocol" } data-styled-select disabled?={ disabled }><option value="udp" selected?={ zoneRecordParsedField(recordType, value, "fwd_protocol") == "" || zoneRecordParsedField(recordType, value, "fwd_protocol") == "udp" }>UDP</option><option value="tcp" selected?={ zoneRecordParsedField(recordType, value, "fwd_protocol") == "tcp" }>TCP</option><option value="tls" selected?={ zoneRecordParsedField(recordType, value, "fwd_protocol") == "tls" }>DNS-over-TLS</option></select></label><label class="record-field secondary"><span>Priority</span><input type="number" name={ prefix + "fwd_priority" } min="0" max="65535" value={ ifThen(zoneRecordParsedField(recordType, value, "fwd_priority") == "", "0", zoneRecordParsedField(recordType, value, "fwd_priority")) } disabled?={ disabled } required/></label></div>
+			<label class="record-field"><span>Forwarder Address</span><input class="mono-input" name={ prefix + "fwd_address" } value={ zoneRecordParsedField(recordType, value, "fwd_address") } placeholder="9.9.9.9 or https://dns.quad9.net/dns-query (9.9.9.9)" autocomplete="off" disabled?={ disabled } required/><small>This record applies to the owner name and every name below it.</small></label>
+			<div class="record-field-grid two"><label class="record-field secondary"><span>Protocol</span><select name={ prefix + "fwd_protocol" } data-styled-select disabled?={ disabled }>@forwarderProtocolOptions(zoneRecordParsedField(recordType, value, "fwd_protocol"))</select></label><label class="record-field secondary"><span>Priority</span><input type="number" name={ prefix + "fwd_priority" } min="0" max="65535" value={ ifThen(zoneRecordParsedField(recordType, value, "fwd_priority") == "", "0", zoneRecordParsedField(recordType, value, "fwd_priority")) } disabled?={ disabled } required/></label></div>
 		default:
 			<label class="record-field"><span>Value</span><input class="mono-input" name={ prefix + "value" } value={ value } placeholder="Record value" autocomplete="off" disabled?={ disabled } required/></label>
+	}
+}
+
+// forwarderProtocols are the transports an FWD record can use, in the order
+// the protocol pickers list them.
+var forwarderProtocols = []struct{ value, label string }{
+	{"udp", "UDP"}, {"tcp", "TCP"}, {"tls", "DNS-over-TLS"}, {"quic", "DNS-over-QUIC"}, {"https", "DNS-over-HTTPS"},
+}
+
+templ forwarderProtocolOptions(selected string) {
+	for _, protocol := range forwarderProtocols {
+		<option value={ protocol.value } selected?={ protocol.value == selected || selected == "" && protocol.value == "udp" }>{ protocol.label }</option>
 	}
 }
 

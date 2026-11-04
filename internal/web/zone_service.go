@@ -335,6 +335,9 @@ func newZoneForwarder(input zoneCreate) (forwarding.Record, error) {
 		priority = "0"
 	}
 	forwarder, err := forwarding.NewRecord(protocol, priority, input.ForwarderAddress)
+	if err == nil && forwarder.NeedsBootstrap() {
+		err = forwarding.ErrNeedsBootstrap
+	}
 	if err != nil {
 		return forwarding.Record{}, fmt.Errorf("forwarder: %w", err)
 	}
@@ -621,6 +624,11 @@ func (service zoneService) UpdateRecord(ctx context.Context, who actor, zoneName
 			if _, err := zonemodel.ParseRecord(*zone, after); err != nil {
 				return false, err
 			}
+			if after.Value != before.Value {
+				if err := checkNewForwarder(after); err != nil {
+					return false, err
+				}
+			}
 			zone.Records[index] = after
 			if after.Name != before.Name || after.Value != before.Value {
 				for other, record := range zone.Records {
@@ -774,7 +782,20 @@ func newRecord(zone zonemodel.Zone, input recordInput) (zonemodel.Record, error)
 	if _, err := zonemodel.ParseRecord(zone, record); err != nil {
 		return zonemodel.Record{}, err
 	}
+	if err := checkNewForwarder(record); err != nil {
+		return zonemodel.Record{}, err
+	}
 	return record, nil
+}
+
+// checkNewForwarder refuses a new or changed FWD record whose encrypted
+// forwarder would have to be looked up through the system resolver. Saved
+// records predate bootstrap addresses, so they still load and edit.
+func checkNewForwarder(record zonemodel.Record) error {
+	if record.Type != "FWD" {
+		return nil
+	}
+	return forwarding.CheckRecordBootstrap(record.Value)
 }
 
 // recordValue stores a value the same way whoever typed it: canonical

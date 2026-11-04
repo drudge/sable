@@ -18,6 +18,7 @@ import (
 	"github.com/drudge/sable/internal/certificates"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsserver"
+	"github.com/drudge/sable/internal/forwarding"
 	"github.com/drudge/sable/internal/insights/services"
 	"github.com/drudge/sable/internal/serverlog"
 	"github.com/drudge/sable/internal/store"
@@ -428,6 +429,30 @@ func warnCNAMEConflicts(logger *slog.Logger, configuredZones []zone.Zone) {
 		for _, name := range zone.CNAMEConflicts(current, now) {
 			logger.Warn("CNAME record shares its name with other records; answers differ by query type until one is removed",
 				"zone", current.Name, "name", name)
+		}
+	}
+}
+
+// warnUnbootstrappedForwarders names tls:// and quic:// forwarders that are
+// named by host name with no bootstrap address. Releases before bootstrap
+// addresses accepted them, so they load, but Sable reaches them by looking the
+// name up through the host's resolver, which is often Sable itself.
+func warnUnbootstrappedForwarders(logger *slog.Logger, configuration config.Config, configuredZones []zone.Zone) {
+	if logger == nil {
+		return
+	}
+	for _, warning := range configuration.ForwarderWarnings() {
+		logger.Warn("forwarder needs a bootstrap address", "detail", warning)
+	}
+	for _, current := range configuredZones {
+		for _, record := range current.Records {
+			if record.Type != "FWD" {
+				continue
+			}
+			if forwarder, err := forwarding.ParseRecord(record.Value); err == nil && forwarder.NeedsBootstrap() {
+				logger.Warn("forwarder needs a bootstrap address; add the server's IP address in parentheses",
+					"zone", current.Name, "name", record.Name, "forwarder", forwarder.Endpoint())
+			}
 		}
 	}
 }

@@ -2269,7 +2269,7 @@ func TestZoneEditorCreatesAndResyncsSecondaryStubAndForwarderZones(t *testing.T)
 		"name": {"stub.test"}, "type": {"stub"}, "primary_servers": {"192.0.2.54"}, "primary_protocol": {"udp"},
 	})
 	forwarder := post("/ui/zones/add", url.Values{
-		"name": {"forward.test"}, "type": {"forwarder"}, "forwarder_address": {"dns.example"},
+		"name": {"forward.test"}, "type": {"forwarder"}, "forwarder_address": {"dns.example (192.0.2.55)"},
 		"forwarder_protocol": {"tls"}, "forwarder_priority": {"5"},
 	})
 	if secondary.Code != http.StatusOK || stub.Code != http.StatusOK || forwarder.Code != http.StatusOK {
@@ -2285,7 +2285,7 @@ func TestZoneEditorCreatesAndResyncsSecondaryStubAndForwarderZones(t *testing.T)
 		t.Fatalf("stub zone = %#v", stubZone)
 	}
 	if forwarderZone == nil || forwarderZone.Type != "forwarder" || !slices.ContainsFunc(forwarderZone.Records, func(record zonemodel.Record) bool {
-		return record.Type == "FWD" && record.Value == "tls 5 dns.example:853"
+		return record.Type == "FWD" && record.Value == "tls 5 dns.example:853 (192.0.2.55)"
 	}) {
 		t.Fatalf("forwarder zone = %#v", forwarderZone)
 	}
@@ -2597,7 +2597,8 @@ func TestZoneRecordValueFromTypeSpecificFields(t *testing.T) {
 		{recordType: "URI", values: url.Values{"uri_priority": {"10"}, "uri_weight": {"1"}, "uri": {"https://example.test/"}}, want: `10 1 "https://example.test/"`},
 		{recordType: "NAPTR", values: url.Values{"naptr_order": {"10"}, "naptr_preference": {"20"}, "naptr_flags": {"S"}, "naptr_services": {"SIP+D2U"}, "naptr_replacement": {"_sip._udp.example.test."}}, want: `10 20 "S" "SIP+D2U" "" _sip._udp.example.test.`},
 		{recordType: "SOA", values: url.Values{"primary_ns": {"ns1.example.test"}, "responsible": {"hostmaster@example.test"}, "serial": {"2026080801"}, "refresh": {"3600"}, "retry": {"600"}, "expire": {"1209600"}, "minimum": {"300"}}, want: "ns1.example.test. hostmaster.example.test. 2026080801 3600 600 1209600 300"},
-		{recordType: "FWD", values: url.Values{"fwd_protocol": {"tls"}, "fwd_priority": {"10"}, "fwd_address": {"dns.example.test"}}, want: "tls 10 dns.example.test:853"},
+		{recordType: "FWD", values: url.Values{"fwd_protocol": {"tls"}, "fwd_priority": {"10"}, "fwd_address": {"dns.example.test (192.0.2.53)"}}, want: "tls 10 dns.example.test:853 (192.0.2.53)"},
+		{recordType: "FWD", values: url.Values{"fwd_protocol": {"https"}, "fwd_priority": {"0"}, "fwd_address": {"dns.quad9.net (2620:fe::fe)"}}, want: "https 0 https://dns.quad9.net/dns-query (2620:fe::fe)"},
 	}
 	for _, test := range tests {
 		t.Run(test.recordType, func(t *testing.T) {
