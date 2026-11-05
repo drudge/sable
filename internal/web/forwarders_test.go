@@ -67,7 +67,7 @@ func TestSettingsShowForwarderActivity(t *testing.T) {
 		`name="forwarder_order"`, `<option value="round_robin" selected>`,
 		"On This Node", `<th scope="col" class="right-cell">95th pct</th>`, `<td class="right-cell">1,204</td>`, `<td class="right-cell">23 ms</td>`,
 		`<td class="right-cell">61 ms</td>`, `title="6 timeouts, 0 errors">6</td>`, "Answering",
-		"Tried last", "tls: failed to verify certificate", "Not used yet", "For corp.example",
+		"Tried last", "tls: failed to verify certificate", "No traffic yet", "Cached answers and tests don't count", "For corp.example",
 		"1,204 answered · 23 ms median · 61 ms 95th pct · 6 failed",
 		`hx-post="/ui/settings/forwarders/test"`,
 	} {

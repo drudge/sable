@@ -3022,6 +3022,7 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 .settings-blocking-actions .nav-icon { width: 1rem; height: 1rem; }
 .forwarder-activity { display: grid; gap: var(--space-3); border-top: 1px solid var(--border); padding-top: .85rem; }
 .forwarder-activity-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.forwarder-activity-header > div { flex: 1 1 18rem; min-width: 0; }
 .forwarder-activity h4 { margin: 0; font-size: .8125rem; font-weight: 600; }
 .forwarder-activity-header p, .forwarder-test-note, .forwarder-empty { margin: .2rem 0 0; color: var(--muted-foreground); font-size: .75rem; }
 .forwarder-activity-list { display: grid; gap: var(--space-2); }

@@ -175,7 +175,7 @@ func SettingsForwarderActivity(view ForwardersCardView) templ.Component {
 		ctx = templ.InitializeContext(ctx)
 		ctx = templ.ClearChildren(ctx)
 		if view.Available {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<section class=\"forwarder-activity\" aria-labelledby=\"forwarder-activity-title\"><div class=\"forwarder-activity-header\"><div><h4 id=\"forwarder-activity-title\">On This Node</h4><p>Since Sable started. Times are the median and 95th percentile of each forwarder's latest answers.</p></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<section class=\"forwarder-activity\" aria-labelledby=\"forwarder-activity-title\"><div class=\"forwarder-activity-header\"><div><h4 id=\"forwarder-activity-title\">On This Node</h4><p>Client queries that reached each forwarder since Sable started. Cached answers and tests don't count.</p></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -688,7 +688,7 @@ func forwarderStatusBadge(stat ForwarderStatView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		case "idle":
-			templ_7745c5c3_Err = components.Badge(components.BadgeProps{Label: "Not used yet"}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = components.Badge(components.BadgeProps{Label: "No traffic yet", Title: "No client query has reached this forwarder since Sable started. Answers from the cache don't count."}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -718,7 +718,7 @@ func forwarderValidation(value string) string {
 // phone layout, which has no columns.
 func forwarderMobileSummary(stat ForwarderStatView) string {
 	if stat.Status == "idle" {
-		return "No queries yet"
+		return "No traffic yet"
 	}
 	parts := []string{formatNumber(stat.Answered) + " answered"}
 	if stat.Median != "" {
