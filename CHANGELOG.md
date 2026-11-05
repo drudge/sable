@@ -8,6 +8,24 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.8.0-beta.5] - 2026-11-05
+
+Sable 1.8.0-beta.5 makes the Insights Devices tab open without waiting on
+busy networks.
+
+### Upgrading from 1.8.0-beta.4
+
+Nothing new is needed.
+
+### Insights
+
+- The **Devices** tab no longer recounts each device's first-time names on
+  every visit. Those counts take one query per device with more than one
+  address, so on a busy network the tab waited for them each time. They are
+  now kept like the rest of Insights and refreshed in the background, so the
+  tab answers from the last count. A device that just gained a second address
+  shows its new count within a minute.
+
 ## [1.8.0-beta.4] - 2026-11-05
 
 Sable 1.8.0-beta.4 makes the Settings page open without a pause on busy
