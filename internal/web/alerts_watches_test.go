@@ -1,15 +1,18 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/store"
 )
 
 // saveWatch posts the Add or Edit Watch form.
@@ -207,5 +210,39 @@ func TestWithInsightsOffWatchesPickByAddress(t *testing.T) {
 	response := server.saveWatch(t, url.Values{"domains": {"discord.com"}, "any_device": {"false"}, "addresses": {"fd00::5"}})
 	if response.Code != http.StatusOK || !slices.Equal(server.onlyWatch(t).Devices, []string{"fd00::5"}) {
 		t.Fatalf("saving = %d %+v", response.Code, server.alertsConfig().Watches)
+	}
+}
+
+// newDomainCounter counts the per-device first-time name queries, which only
+// the Insights pages need.
+type newDomainCounter struct {
+	*store.Store
+	calls *atomic.Int64
+}
+
+func (counter newDomainCounter) ClientNewDomainCount(ctx context.Context, clients []string, since, until time.Time) (uint64, error) {
+	counter.calls.Add(1)
+	return counter.Store.ClientNewDomainCount(ctx, clients, since, until)
+}
+
+// Settings lists the devices Insights knows in the watch picker, but must not
+// count each device's first-time names: one query per device with more than
+// one address made every Settings page wait on a busy network.
+func TestSettingsWatchPickerSkipsNewDomainCounts(t *testing.T) {
+	t.Parallel()
+	server := newAlertsTestServer(t)
+	calls := new(atomic.Int64)
+	server.Server.queries = newDomainCounter{Store: server.store, calls: calls}
+	page := server.get(t, "everything", "/settings?tab=alerts", false).Body.String()
+	if !strings.Contains(page, `name="device" value="mac:3c:22:fb:01:02:03"`) {
+		t.Fatal("the watch picker lost the devices Insights knows")
+	}
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("rendering Settings ran %d first-time name counts, want none", got)
+	}
+	// The Devices tab still counts them, for its "new names" column.
+	server.get(t, "everything", "/ui/insights/overview?range=day&tab=devices", true)
+	if calls.Load() == 0 {
+		t.Fatal("the Insights devices tab stopped counting first-time names")
 	}
 }
