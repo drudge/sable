@@ -65,7 +65,7 @@ templ SettingsForwarderActivity(view ForwardersCardView) {
 			<div class="forwarder-activity-header">
 				<div>
 					<h4 id="forwarder-activity-title">On This Node</h4>
-					<p>Since Sable started. Times are the median and 95th percentile of each forwarder's latest answers.</p>
+					<p>Client queries that reached each forwarder since Sable started. Cached answers and tests don't count.</p>
 				</div>
 				@components.Button(components.ButtonProps{Label: "Test Forwarders", Icon: "zap", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{
 					"hx-post": "/ui/settings/forwarders/test", "hx-target": "#forwarder-activity-list", "hx-swap": "outerHTML",
@@ -167,7 +167,7 @@ templ forwarderStatusBadge(stat ForwarderStatView) {
 		case "failing":
 			@components.Badge(components.BadgeProps{Label: "Not answering", Tone: components.BadgeDanger})
 		case "idle":
-			@components.Badge(components.BadgeProps{Label: "Not used yet"})
+			@components.Badge(components.BadgeProps{Label: "No traffic yet", Title: "No client query has reached this forwarder since Sable started. Answers from the cache don't count."})
 		default:
 			@components.Badge(components.BadgeProps{Label: "Answering", Tone: components.BadgeSuccess})
 	}
@@ -189,7 +189,7 @@ func forwarderValidation(value string) string {
 // phone layout, which has no columns.
 func forwarderMobileSummary(stat ForwarderStatView) string {
 	if stat.Status == "idle" {
-		return "No queries yet"
+		return "No traffic yet"
 	}
 	parts := []string{formatNumber(stat.Answered) + " answered"}
 	if stat.Median != "" {

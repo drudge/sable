@@ -44,7 +44,7 @@ Sable never reorders the list you saved. In every order, a forwarder that just f
 
 ### See how each forwarder is doing
 
-The **On This Node** list under the forwarders shows, for each forwarder, how many queries it answered since Sable started, the median and 95th percentile of its latest 128 response times, its timeouts and other errors, and its last error. Each cluster node shows its own numbers on its own Settings page.
+The **On This Node** table under the forwarders counts client queries that missed the cache and reached each forwarder since Sable started, so a forwarder shows **No traffic yet** until one does, even if it tests fine. For each forwarder it shows how many queries it answered, the median and 95th percentile of its latest 128 response times, its timeouts and other errors, and its last error. Each cluster node shows its own numbers on its own Settings page.
 
 **Test Forwarders** asks every saved forwarder, straight from this node and over its own transport:
 
