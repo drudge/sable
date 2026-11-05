@@ -2,10 +2,13 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/web/pages"
 )
@@ -22,15 +25,35 @@ func (server *Server) forwarders() (forwarderReporter, bool) {
 	return reporter, ok
 }
 
-func (server *Server) forwardersCardView() pages.ForwardersCardView {
-	reporter, ok := server.forwarders()
-	if !ok {
-		return pages.ForwardersCardView{}
-	}
-	view := pages.ForwardersCardView{Available: true}
+// forwarderEditorView builds the DNS Forwarders list from the saved
+// forwarders, joined with this node's stats and any test results, keyed by
+// route and forwarder.
+func (server *Server) forwarderEditorView(saved []string, tests map[[2]string]pages.ForwarderTestView) pages.ForwarderEditorView {
+	view := pages.ForwarderEditorView{Text: strings.Join(saved, "\n"), Tested: tests != nil}
 	now := time.Now()
-	for _, stats := range reporter.ForwarderStats() {
-		view.Stats = append(view.Stats, forwarderStatView(stats, now))
+	stats := make(map[[2]string]pages.ForwarderStatView)
+	if reporter, ok := server.forwarders(); ok {
+		view.Stats = true
+		for _, entry := range reporter.ForwarderStats() {
+			stat := forwarderStatView(entry, now)
+			if test, found := tests[[2]string{entry.Route, entry.Forwarder}]; found {
+				stat.Test = &test
+			}
+			if entry.Route != "" {
+				view.Routes = append(view.Routes, stat)
+				continue
+			}
+			stats[[2]string{"", entry.Forwarder}] = stat
+		}
+	}
+	for _, forwarder := range saved {
+		stat, found := stats[[2]string{"", forwarder}]
+		if !found {
+			// Saved but not running yet, such as on a node whose
+			// configuration has not been applied.
+			stat = pages.ForwarderStatView{Forwarder: forwarder, Status: "idle"}
+		}
+		view.Forwarders = append(view.Forwarders, stat)
 	}
 	return view
 }
@@ -75,14 +98,8 @@ func (server *Server) testForwarders(writer http.ResponseWriter, request *http.R
 		}
 		results[[2]string{result.Route, result.Forwarder}] = test
 	}
-	view := server.forwardersCardView()
-	view.Tested = true
-	for index := range view.Stats {
-		if test, found := results[[2]string{view.Stats[index].Route, view.Stats[index].Forwarder}]; found {
-			view.Stats[index].Test = &test
-		}
-	}
-	server.render(writer, request, pages.SettingsForwarderList(view))
+	view := server.forwarderEditorView(server.config.Current().Config.Resolver.Forwarders, results)
+	server.render(writer, request, pages.SettingsForwarderEditorBody(view))
 }
 
 // formatResponseTime shows a response time to the precision that matters:
@@ -93,4 +110,41 @@ func formatResponseTime(duration time.Duration) string {
 		return fmt.Sprintf("%.1f ms", milliseconds)
 	}
 	return fmt.Sprintf("%.0f ms", milliseconds)
+}
+
+// forwarderCheck is the answer to checkForwarders: the forwarders to keep,
+// one per line as given, or why one can't be saved.
+type forwarderCheck struct {
+	Forwarders []string `json:"forwarders"`
+	Error      string   `json:"error,omitempty"`
+}
+
+// checkForwarders tells the forwarder editor whether the forwarders it holds
+// would save, before the operator saves: the rules a saved forwarder meets,
+// and a bootstrap address for a new encrypted one named by host name.
+func (server *Server) checkForwarders(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
+	saved := make(map[string]bool)
+	for _, forwarder := range server.config.Current().Config.Resolver.Forwarders {
+		saved[forwarder] = true
+	}
+	result := forwarderCheck{Forwarders: []string{}}
+	seen := make(map[string]bool)
+	for _, forwarder := range formLines(request.FormValue("forwarders")) {
+		if seen[forwarder] {
+			continue
+		}
+		seen[forwarder] = true
+		check := config.CheckNewForwarder
+		if saved[forwarder] {
+			check = func(string) error { return nil }
+		}
+		if err := check(forwarder); err != nil {
+			result.Error = fmt.Sprintf("%s: %s", forwarder, strings.TrimPrefix(err.Error(), "forwarder: "))
+			break
+		}
+		result.Forwarders = append(result.Forwarders, forwarder)
+	}
+	writer.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(writer).Encode(result)
 }

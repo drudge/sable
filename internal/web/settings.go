@@ -255,7 +255,9 @@ func applyResolverSettings(request *http.Request, candidate *config.Config, form
 	if resolverMode == "" {
 		resolverMode = candidate.Resolver.Mode
 	}
-	forwarders := formLines(request.FormValue("forwarders"))
+	// The forwarder list sends one field per forwarder and Edit as Text sends
+	// one field of lines, so both arrive the same way.
+	forwarders := formLines(strings.Join(request.Form["forwarders"], "\n"))
 	if resolverMode != "forward" && resolverMode != "recursive" {
 		return errors.New("resolution mode must be iterative recursion or forwarding")
 	}
@@ -556,7 +558,7 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		Recursion: configuration.Resolver.Recursion, RecursionClients: strings.Join(configuration.Resolver.RecursionClients, "\n"),
 		AttachedNetworks: server.attachedNetworkViews(), MaxConcurrent: configuration.Resolver.MaxConcurrent, MaxConcurrentPerClient: configuration.Resolver.MaxConcurrentPerClient,
 		ResolverMode: configuration.Resolver.Mode, Forwarders: strings.Join(configuration.Resolver.Forwarders, "\n"),
-		ForwarderOrder: configuration.Resolver.ForwarderOrder, ForwardersCard: server.forwardersCardView(),
+		ForwarderOrder: configuration.Resolver.ForwarderOrder, ForwarderEditor: server.forwarderEditorView(configuration.Resolver.Forwarders, nil),
 		RootHints: strings.Join(configuration.Resolver.RootHints, "\n"), ResolverTimeout: configuration.Resolver.Timeout.String(),
 		ResolverRetries: configuration.Resolver.Retries, ResolverRetryTimeout: configuration.Resolver.RetryTimeout.String(),
 		CacheSize: configuration.Resolver.CacheSize, DNSSECValidation: configuration.Resolver.DNSSECValidation,

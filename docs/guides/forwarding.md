@@ -42,11 +42,20 @@ forwarder_order = "fastest"
 
 Sable never reorders the list you saved. In every order, a forwarder that just failed is tried after the healthy ones for a few seconds, and the order applies within one FWD priority: a lower priority value is always tried first. "Fastest" uses a smoothed response time: the average of a forwarder's first eight answers, so a first answer slowed by a TLS or QUIC handshake washes out quickly, and after that each answer moves it an eighth of the way, as TCP smooths round-trip times (RFC 6298 §2.3). A forwarder that has never been asked goes first once, so it gets measured; one that has only ever failed goes last.
 
-### See how each forwarder is doing
+### Edit the list and see how each forwarder is doing
 
-The **On This Node** table under the forwarders counts client queries that missed the cache and reached each forwarder since Sable started, so a forwarder shows **No traffic yet** until one does, even if it tests fine. For each forwarder it shows how many queries it answered, the median and 95th percentile of its latest 128 response times, its timeouts and other errors, and its last error. Each cluster node shows its own numbers on its own Settings page.
+**Settings › Recursion › DNS Forwarders** lists the forwarders in the order Sable saves them.
 
-**Test Forwarders** asks every saved forwarder, straight from this node and over its own transport:
+- **Add Forwarder** offers Cloudflare, Quad9, Google Public DNS and AdGuard DNS over each transport they support, with their IP addresses filled in, or a custom server. For an encrypted forwarder named by host name, it asks for the server's IP address in its own field and shows the line it will add.
+- Drag a row, or use its up and down buttons, to change the order. That order matters when **Forwarder Order** is **In order**.
+- **Edit as Text** switches to one forwarder per line, for pasting a list. **Done** checks every line with the same rules as saving.
+- Changes take effect when you save the settings. A new row says **Not saved yet** until then.
+
+Forwarders that conditional routes and forwarder zones use are listed under **Routes and forwarder zones**, read-only. You change them in **Zones** and `resolver.routes`.
+
+The numbers count client queries that missed the cache and reached each forwarder since Sable started, so a forwarder shows **No traffic yet** until one does, even if it tests fine. For each forwarder the table shows how many queries it answered, the median and 95th percentile of its latest 128 response times, its timeouts and other errors, and its last error. Each cluster node shows its own numbers on its own Settings page.
+
+**Test** asks every saved forwarder, straight from this node and over its own transport:
 
 - `example.com` three times. It reports the median response time and the response code.
 - `dnssec-failed.org` once. That name is deliberately signed wrong, so a validating forwarder answers it SERVFAIL. If the forwarder also set AD on `example.com`, the test reports that it validates DNSSEC.
