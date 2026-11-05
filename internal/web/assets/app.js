@@ -3573,6 +3573,7 @@
 		row.querySelector('[data-forwarder-move="-1"]').setAttribute("aria-label", `Move ${forwarder} up`);
 		row.querySelector('[data-forwarder-move="1"]').setAttribute("aria-label", `Move ${forwarder} down`);
 		row.querySelector("[data-forwarder-remove]").setAttribute("aria-label", `Remove ${forwarder}`);
+		row.querySelector("[data-forwarder-edit]")?.setAttribute("aria-label", `Edit ${forwarder}`);
 	  };
 	  const newRow = (forwarder) => {
 		const row = template.content.firstElementChild.cloneNode(true);
@@ -3588,12 +3589,38 @@
 		rows().forEach((row) => row.remove());
 		forwarders.forEach((forwarder) => tbody.insertBefore(existing.get(forwarder) || newRow(forwarder), empty));
 	  };
+	  // flash marks a row that just moved or changed, so the eye can follow it.
+	  const flash = (row) => {
+		row.classList.remove("just-moved");
+		void row.offsetWidth;
+		row.classList.add("just-moved");
+		window.setTimeout(() => row.classList.remove("just-moved"), 1200);
+	  };
+	  const announceMove = (row) => {
+		const list = rows();
+		announce(`Moved ${row.querySelector("[data-forwarder-value]").value} to position ${list.indexOf(row) + 1} of ${list.length}`);
+	  };
+	  // Replaces a row's forwarder where it stands. Its numbers were for the
+	  // old forwarder, so it becomes a new, unsaved row.
+	  root.sableReplaceForwarder = (row, forwarder) => {
+		const current = row.querySelector("[data-forwarder-value]").value;
+		if (forwarder === current) return row;
+		if (values().includes(forwarder)) return null;
+		const replacement = newRow(forwarder);
+		row.replaceWith(replacement);
+		changed();
+		flash(replacement);
+		announce(`Changed ${current} to ${forwarder}`);
+		return replacement;
+	  };
 	  root.sableAddForwarder = (forwarder) => {
 		if (values().includes(forwarder)) return false;
 		if (textareaActive()) {
 		  textarea.value = `${textarea.value.trim()}\n${forwarder}`.trim();
 		} else {
-		  rowsBody().insertBefore(newRow(forwarder), rowsBody().querySelector("[data-forwarder-empty]"));
+		  const row = newRow(forwarder);
+		  rowsBody().insertBefore(row, rowsBody().querySelector("[data-forwarder-empty]"));
+		  flash(row);
 		}
 		changed();
 		return true;
@@ -3643,8 +3670,13 @@
 	  root.addEventListener("click", (event) => {
 		const move = event.target.closest("[data-forwarder-move]");
 		const remove = event.target.closest("[data-forwarder-remove]");
-		const row = (move || remove)?.closest("[data-forwarder-row]");
+		const edit = event.target.closest("[data-forwarder-edit]");
+		const row = (move || remove || edit)?.closest("[data-forwarder-row]");
 		if (!row) return;
+		if (edit) {
+		  document.querySelector("[data-add-forwarder-form]")?.sableEdit?.(row, row.querySelector("[data-forwarder-value]").value, edit);
+		  return;
+		}
 		if (remove) {
 		  const next = row.nextElementSibling?.matches("[data-forwarder-row]") ? row.nextElementSibling : row.previousElementSibling;
 		  row.remove();
@@ -3656,30 +3688,71 @@
 		if (!sibling?.matches("[data-forwarder-row]")) return;
 		if (move.dataset.forwarderMove === "-1") sibling.before(row); else sibling.after(row);
 		changed();
+		flash(row);
+		announceMove(row);
 		(move.disabled ? row.querySelector(`[data-forwarder-move="${-Number(move.dataset.forwarderMove)}"]`) : move)?.focus();
 	  });
 	  // Dragging a row is a shortcut for the move buttons, which stay the way
 	  // to reorder from a keyboard or a phone.
+	  // The dragged row stays where it is, outlined, while a line shows where
+	  // it will land; it moves only on drop.
 	  let dragged = null;
+	  let dropTarget = null;
+	  let dropAfter = false;
+	  const clearDropMarker = () => {
+		rows().forEach((row) => row.classList.remove("drop-before", "drop-after"));
+		dropTarget = null;
+	  };
 	  root.addEventListener("dragstart", (event) => {
 		dragged = event.target.closest?.("[data-forwarder-row]");
 		if (!dragged) return;
-		dragged.classList.add("dragging");
 		event.dataTransfer.effectAllowed = "move";
 		event.dataTransfer.setData("text/plain", dragged.querySelector("[data-forwarder-value]").value);
+		// Mark it after the browser has taken its picture, so the picture
+		// shows the row as it was.
+		window.requestAnimationFrame(() => dragged?.classList.add("dragging"));
+		rowsBody()?.classList.add("reordering");
 	  });
 	  root.addEventListener("dragover", (event) => {
+		if (!dragged) return;
 		const over = event.target.closest?.("[data-forwarder-row]");
-		if (!dragged || !over || over === dragged) return;
+		if (!over) return;
 		event.preventDefault();
+		event.dataTransfer.dropEffect = "move";
 		const box = over.getBoundingClientRect();
-		if (event.clientY < box.top + box.height / 2) over.before(dragged); else over.after(dragged);
+		let after = event.clientY >= box.top + box.height / 2;
+		let target = over;
+		// Normalize to "before the next row" so a gap has one marker.
+		if (after && over.nextElementSibling?.matches("[data-forwarder-row]")) { target = over.nextElementSibling; after = false; }
+		// Dropping right next to itself changes nothing, so show nothing.
+		const noop = target === dragged || (!after && target.previousElementSibling === dragged) || (after && target === dragged);
+		if (target === dropTarget && after === dropAfter) return;
+		clearDropMarker();
+		if (noop) return;
+		dropTarget = target;
+		dropAfter = after;
+		target.classList.add(after ? "drop-after" : "drop-before");
+	  });
+	  root.addEventListener("drop", (event) => {
+		if (!dragged) return;
+		event.preventDefault();
+		if (dropTarget) {
+		  if (dropAfter) dropTarget.after(dragged); else dropTarget.before(dragged);
+		  changed();
+		  flash(dragged);
+		  announceMove(dragged);
+		}
+		clearDropMarker();
+	  });
+	  root.addEventListener("dragleave", (event) => {
+		if (dragged && !rowsBody()?.contains(event.relatedTarget)) clearDropMarker();
 	  });
 	  root.addEventListener("dragend", () => {
 		if (!dragged) return;
 		dragged.classList.remove("dragging");
+		rowsBody()?.classList.remove("reordering");
+		clearDropMarker();
 		dragged = null;
-		changed();
 	  });
 	  // A test or save redraws the rows from the saved list.
 	  root.addEventListener("htmx:after:swap", () => { dirty = false; sync(); });
@@ -3726,6 +3799,11 @@
 	  const preview = form.querySelector("[data-forwarder-preview]");
 	  const error = form.querySelector("[data-forwarder-add-error]");
 	  const dialog = form.closest("dialog");
+	  const title = dialog?.querySelector("h2");
+	  const description = dialog?.querySelector(".dialog-header p");
+	  const submitButton = form.querySelector('button[type="submit"]');
+	  const addText = {title: title?.textContent, description: description?.textContent, submit: submitButton?.textContent};
+	  let editing = null;
 	  const update = () => {
 		const encrypted = transport.value !== "udp" && transport.value !== "tcp";
 		bootstrapField.hidden = !encrypted || !server.value.trim() || isAddressLiteral(forwarderHost(server.value));
@@ -3754,7 +3832,41 @@
 		update();
 	  });
 	  bootstrap.addEventListener("input", update);
+	  // sableEdit opens the dialog on a row's forwarder: it finds the
+	  // transport, server, and IP address in the line, and the provider when
+	  // the line is one of the presets.
+	  form.sableEdit = (row, value, opener) => {
+		editing = {row, opener};
+		const bootstrapMatch = value.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
+		const address = (bootstrapMatch ? bootstrapMatch[1] : value).trim();
+		const scheme = address.match(/^([a-z]+):\/\//i)?.[1].toLowerCase() || "udp";
+		transport.value = ["https", "tls", "quic", "udp", "tcp"].includes(scheme) ? scheme : "udp";
+		server.value = scheme === "https" ? address : address.replace(/^[a-z]+:\/\//i, "");
+		bootstrap.value = bootstrapMatch ? bootstrapMatch[2].trim() : "";
+		const match = Object.entries(forwarderPresets).find(([, presets]) => {
+		  const preset = presets[transport.value];
+		  return preset && composeForwarder(transport.value, preset[0], preset[1]) === value;
+		});
+		provider.value = match ? match[0] : "custom";
+		[...transport.options].forEach((option) => { option.disabled = Boolean(match) && !forwarderPresets[match[0]][option.value]; });
+		provider.sableSyncStyledSelect?.();
+		transport.sableSyncStyledSelect?.();
+		if (title) title.textContent = "Edit Forwarder";
+		if (description) description.textContent = "Change this forwarder where it stands in the list; save the settings to use it.";
+		if (submitButton) submitButton.textContent = "Save Forwarder";
+		form.querySelector("[data-forwarder-preview-label]").textContent = "Saves as";
+		update();
+		dialog?.showModal();
+		server.focus();
+	  };
 	  dialog?.addEventListener("close", () => {
+		const returnFocus = editing?.opener;
+		editing = null;
+		if (title) title.textContent = addText.title;
+		if (description) description.textContent = addText.description;
+		if (submitButton) submitButton.textContent = addText.submit;
+		form.querySelector("[data-forwarder-preview-label]").textContent = "Adds";
+		if (returnFocus?.isConnected) returnFocus.focus();
 		form.reset();
 		[...transport.options].forEach((option) => { option.disabled = false; });
 		provider.sableSyncStyledSelect?.();
@@ -3773,7 +3885,15 @@
 		try {
 		  const result = await checkForwarders([forwarder]);
 		  if (result.error) return fail(result.error);
-		  if (!editor?.sableAddForwarder(result.forwarders[0] || forwarder)) return fail("That forwarder is already in the list.");
+		  const checked = result.forwarders[0] || forwarder;
+		  if (editing) {
+			const replaced = editor?.sableReplaceForwarder(editing.row, checked);
+			if (!replaced) return fail("That forwarder is already in the list.");
+			// Focus returns to the row's edit button once the dialog closes.
+			editing.opener = replaced.querySelector("[data-forwarder-edit]");
+		  } else if (!editor?.sableAddForwarder(checked)) {
+			return fail("That forwarder is already in the list.");
+		  }
 		  dialog?.close();
 		} catch (failure) {
 		  fail(failure.message);

@@ -168,6 +168,7 @@ templ forwarderEditableRow(forwarder ForwarderStatView, stats bool) {
 		}
 		<td class="forwarder-row-actions">
 			<div class="forwarder-row-buttons">
+				<button class="icon-button" type="button" data-replica-primary-action data-forwarder-edit aria-label={ "Edit " + forwarder.Forwarder } title="Edit">@Icon("pencil")</button>
 				<button class="icon-button" type="button" data-replica-primary-action data-forwarder-move="-1" aria-label={ "Move " + forwarder.Forwarder + " up" } title="Move up">@Icon("chevron-up")</button>
 				<button class="icon-button" type="button" data-replica-primary-action data-forwarder-move="1" aria-label={ "Move " + forwarder.Forwarder + " down" } title="Move down">@Icon("chevron-down")</button>
 				<button class="icon-button danger" type="button" data-replica-primary-action data-forwarder-remove aria-label={ "Remove " + forwarder.Forwarder } title="Remove">@Icon("trash")</button>
@@ -295,7 +296,7 @@ templ AddForwarderDialog() {
 			</div>
 			<label><span>Server</span><input class="mono-input" name="server" data-forwarder-server autocomplete="off" spellcheck="false" placeholder="dns.example.com"/><small data-forwarder-server-help>A host name or IP address, with :port if it isn't the default.</small></label>
 			<label data-forwarder-bootstrap-field><span>IP Address</span><input class="mono-input" name="bootstrap" data-forwarder-bootstrap autocomplete="off" spellcheck="false" placeholder="192.0.2.53"/><small>The server's address. Sable connects to it and checks the certificate against the host name, so it never has to look up its own forwarder through itself.</small></label>
-			<div class="forwarder-preview"><span>Adds</span><code data-forwarder-preview>—</code></div>
+			<div class="forwarder-preview"><span data-forwarder-preview-label>Adds</span><code data-forwarder-preview>—</code></div>
 			<p class="query-error" role="alert" data-forwarder-add-error hidden></p>
 			@components.DialogFooter("Cancel") {
 				@components.Button(components.ButtonProps{Label: "Add Forwarder", Type: "submit"})
