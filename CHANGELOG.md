@@ -8,6 +8,35 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.8.0-beta.2] - 2026-11-04
+
+Sable 1.8.0-beta.2 turns the forwarder box into a list you edit in place,
+with presets for well-known resolvers, and explains what the forwarder
+numbers count.
+
+### Upgrading from 1.8.0-beta.1
+
+Nothing new is needed.
+
+### Forwarding
+
+- **Settings › Recursion › DNS Forwarders** is now one table you edit in
+  place. Drag a row or use its up and down buttons to change the order, remove
+  a row, or add one; save the settings to apply the changes. Each row shows
+  its transport, status, numbers and Test result. Forwarders that routes and
+  forwarder zones use are listed below them, read-only.
+- **Add Forwarder** offers Cloudflare, Quad9, Google Public DNS and AdGuard DNS
+  over each transport they support, with their IP addresses filled in, or a
+  custom server. For an encrypted server named by host name it asks for the IP
+  address in its own field, previews the exact line it adds, and checks it
+  with the same rules as saving.
+- **Edit as Text** switches to one forwarder per line for pasting a list;
+  **Done** checks every line.
+- **Test** waits until changes are saved, since it tests the saved list.
+- The forwarder table says its numbers count client queries that reached each
+  forwarder since Sable started, leaving out cached answers and tests, and a
+  forwarder with none yet shows **No traffic yet** instead of "Not used yet".
+
 ## [1.8.0-beta.1] - 2026-11-04
 
 Sable 1.8.0-beta.1 forwards to DNS over HTTPS upstreams, shows how each
