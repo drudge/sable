@@ -3699,8 +3699,36 @@
 	  let dragged = null;
 	  let dropTarget = null;
 	  let dropAfter = false;
+	  // The marker is its own element over the table, not part of a row, so
+	  // its dot can sit outside the table's left border without being
+	  // clipped by the table's scroller.
+	  const dropMarker = () => {
+		const container = body();
+		let marker = container?.querySelector(":scope > .forwarder-drop-marker");
+		if (container && !marker) {
+		  marker = document.createElement("div");
+		  marker.className = "forwarder-drop-marker";
+		  marker.setAttribute("aria-hidden", "true");
+		  marker.hidden = true;
+		  container.append(marker);
+		}
+		return marker;
+	  };
+	  const showDropMarker = (row, after) => {
+		const marker = dropMarker();
+		const table = row.closest(".forwarder-table");
+		if (!marker || !table) return;
+		const origin = body().getBoundingClientRect();
+		const box = row.getBoundingClientRect();
+		const frame = table.getBoundingClientRect();
+		marker.style.top = `${(after ? box.bottom : box.top) - origin.top}px`;
+		marker.style.left = `${frame.left - origin.left}px`;
+		marker.style.width = `${frame.width}px`;
+		marker.hidden = false;
+	  };
 	  const clearDropMarker = () => {
-		rows().forEach((row) => row.classList.remove("drop-before", "drop-after"));
+		const marker = body()?.querySelector(":scope > .forwarder-drop-marker");
+		if (marker) marker.hidden = true;
 		dropTarget = null;
 	  };
 	  root.addEventListener("dragstart", (event) => {
@@ -3731,7 +3759,7 @@
 		if (noop) return;
 		dropTarget = target;
 		dropAfter = after;
-		target.classList.add(after ? "drop-after" : "drop-before");
+		showDropMarker(target, after);
 	  });
 	  root.addEventListener("drop", (event) => {
 		if (!dragged) return;
