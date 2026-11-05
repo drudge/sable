@@ -240,9 +240,15 @@ func TestSettingsWatchPickerSkipsNewDomainCounts(t *testing.T) {
 	if got := calls.Load(); got != 0 {
 		t.Fatalf("rendering Settings ran %d first-time name counts, want none", got)
 	}
-	// The Devices tab still counts them, for its "new names" column.
+	// The Devices tab still counts them, for its "new names" column, and
+	// keeps the counts, so the next visit doesn't wait for them again.
 	server.get(t, "everything", "/ui/insights/overview?range=day&tab=devices", true)
-	if calls.Load() == 0 {
+	counted := calls.Load()
+	if counted == 0 {
 		t.Fatal("the Insights devices tab stopped counting first-time names")
+	}
+	server.get(t, "everything", "/ui/insights/overview?range=day&tab=devices", true)
+	if calls.Load() != counted {
+		t.Fatalf("a second visit to the Devices tab ran %d more counts, want it served from the kept counts", calls.Load()-counted)
 	}
 }
