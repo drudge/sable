@@ -8,6 +8,22 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.8.0-beta.4] - 2026-11-05
+
+Sable 1.8.0-beta.4 makes the Settings page open without a pause on busy
+networks.
+
+### Upgrading from 1.8.0-beta.3
+
+Nothing new is needed.
+
+### Console
+
+- Opening **Settings** no longer waits about a second on a busy network. To
+  list devices for domain watches, the page counted every device's first-time
+  names, once per device with more than one address, though the list never
+  shows that number. It now lists the same devices without counting.
+
 ## [1.8.0-beta.3] - 2026-11-05
 
 Sable 1.8.0-beta.3 lets you edit a forwarder where it stands in the list and
