@@ -47,6 +47,7 @@ Sable never reorders the list you saved. In every order, a forwarder that just f
 **Settings › Recursion › DNS Forwarders** lists the forwarders in the order Sable saves them.
 
 - **Add Forwarder** offers Cloudflare, Quad9, Google Public DNS and AdGuard DNS over each transport they support, with their IP addresses filled in, or a custom server. For an encrypted forwarder named by host name, it asks for the server's IP address in its own field and shows the line it will add.
+- A row's pencil opens the same dialog filled in from that forwarder; saving it changes the row where it stands.
 - Drag a row, or use its up and down buttons, to change the order. That order matters when **Forwarder Order** is **In order**.
 - **Edit as Text** switches to one forwarder per line, for pasting a list. **Done** checks every line with the same rules as saving.
 - Changes take effect when you save the settings. A new row says **Not saved yet** until then.

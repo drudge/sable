@@ -3037,7 +3037,15 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 .forwarder-edit-table .forwarder-handle-cell { width: 2rem; padding-inline: var(--space-3) 0; }
 .forwarder-handle { display: grid; place-items: center; color: var(--muted-foreground); cursor: grab; }
 .forwarder-handle .nav-icon { width: 1rem; height: 1rem; }
-.forwarder-edit-row.dragging { opacity: .45; }
+.forwarder-edit-row.dragging { opacity: .5; outline: 1.5px dashed var(--border); outline-offset: -3px; background: var(--muted); }
+.forwarder-edit-row.dragging .forwarder-handle { cursor: grabbing; }
+.reordering .forwarder-edit-row:not(.dragging) { cursor: grabbing; }
+.forwarder-editor-body { position: relative; }
+.forwarder-drop-marker { position: absolute; z-index: 2; height: 2px; margin-top: -1px; background: var(--primary); pointer-events: none; }
+.forwarder-drop-marker::before { content: ""; position: absolute; top: 50%; left: 0; width: .5rem; height: .5rem; border-radius: 50%; background: var(--primary); transform: translate(-100%, -50%); }
+@keyframes forwarder-moved { from { background: color-mix(in oklch, var(--primary) 14%, transparent); } to { background: transparent; } }
+.forwarder-edit-row.just-moved > td { animation: forwarder-moved 1.2s ease-out; }
+@media (prefers-reduced-motion: reduce) { .forwarder-edit-row.just-moved > td { animation: none; background: color-mix(in oklch, var(--primary) 10%, transparent); } }
 .forwarder-row-actions { width: 1%; white-space: nowrap; text-align: right; }
 .forwarder-row-buttons { display: inline-flex; gap: .1rem; }
 .forwarder-row-buttons .icon-button { width: 1.85rem; height: 1.85rem; flex-basis: 1.85rem; border-color: transparent; background: transparent; color: var(--muted-foreground); }
