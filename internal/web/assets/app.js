@@ -3504,6 +3504,286 @@
 	// Each entry sets up one behaviour on every element its selector matches,
 	// whether that is the swapped root itself or something inside it. Order
 	// matters where one setup reads what another leaves behind.
+	// The forwarder editor keeps resolver.forwarders as rows, each carrying a
+	// hidden "forwarders" field, so the settings form saves them in the order
+	// shown. Edit as Text swaps the rows for one textarea under the same name;
+	// only one of the two is enabled at a time. Test Forwarders redraws the
+	// rows from the saved list, so it waits until changes are saved.
+	const consoleHeaders = () => {
+	  try { return JSON.parse(document.body.getAttribute("hx-headers:inherited") || document.body.getAttribute("hx-headers") || "{}"); } catch (_) { return {}; }
+	};
+	const checkForwarders = async (lines) => {
+	  const response = await fetch("/ui/settings/forwarders/check", {
+		method: "POST",
+		headers: {...consoleHeaders(), "HX-Request": "true", "Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
+		body: new URLSearchParams({forwarders: lines.join("\n")}),
+	  });
+	  if (!response.ok) throw new Error(response.status === 403 ? "You don't have permission to change forwarders." : `Sable couldn't check the forwarders (HTTP ${response.status}).`);
+	  return response.json();
+	};
+	const setupForwarderEditor = (root) => {
+	  if (!root || root.dataset.forwarderEditorReady === "true") return;
+	  root.dataset.forwarderEditorReady = "true";
+	  const template = root.querySelector("[data-forwarder-row-template]");
+	  const textPanel = root.querySelector("[data-forwarder-text-panel]");
+	  const textarea = root.querySelector("[data-forwarder-text]");
+	  const textError = root.querySelector("[data-forwarder-text-error]");
+	  const textToggle = root.querySelector("[data-forwarder-text-toggle]");
+	  const testButton = root.querySelector("[data-forwarder-test]");
+	  const addButton = root.querySelector("[data-forwarder-add]");
+	  const body = () => root.querySelector("[data-forwarder-body]");
+	  const rowsBody = () => root.querySelector("[data-forwarder-rows]");
+	  const rows = () => [...(rowsBody()?.querySelectorAll(":scope > [data-forwarder-row]") || [])];
+	  const values = () => rows().map((row) => row.querySelector("[data-forwarder-value]").value);
+	  let dirty = false;
+	  const sync = () => {
+		const list = rows();
+		// A replica can't change forwarders; its buttons stay as the
+		// read-only pass left them.
+		const settable = (button) => button && button.dataset.replicaPrimaryOnly !== "true";
+		list.forEach((row, index) => {
+		  const up = row.querySelector('[data-forwarder-move="-1"]');
+		  const down = row.querySelector('[data-forwarder-move="1"]');
+		  if (settable(up)) up.disabled = index === 0;
+		  if (settable(down)) down.disabled = index === list.length - 1;
+		});
+		const empty = rowsBody()?.querySelector("[data-forwarder-empty]");
+		if (empty) empty.hidden = list.length > 0;
+		if (testButton) {
+		  testButton.disabled = dirty || textareaActive();
+		  testButton.title = dirty || textareaActive() ? "Save your changes to test them." : "Ask each saved forwarder example.com and dnssec-failed.org from this node";
+		}
+	  };
+	  const changed = () => {
+		dirty = true;
+		// Hidden fields don't fire input, so tell the form it has been edited.
+		root.closest("form")?.dispatchEvent(new Event("change", {bubbles: true}));
+		sync();
+	  };
+	  const textareaActive = () => textPanel && !textPanel.hidden;
+	  const label = (row, forwarder) => {
+		row.querySelector("[data-forwarder-value]").value = forwarder;
+		row.querySelector("[data-forwarder-label]").textContent = forwarder;
+		const kind = row.querySelector("[data-forwarder-kind]");
+		if (kind) {
+		  const lower = forwarder.toLowerCase();
+		  kind.textContent = lower.startsWith("https://") ? "DNS over HTTPS" : lower.startsWith("tls://") ? "DNS over TLS" :
+			lower.startsWith("quic://") ? "DNS over QUIC" : lower.startsWith("tcp://") ? "Plain DNS over TCP" : "Plain DNS";
+		}
+		row.querySelector('[data-forwarder-move="-1"]').setAttribute("aria-label", `Move ${forwarder} up`);
+		row.querySelector('[data-forwarder-move="1"]').setAttribute("aria-label", `Move ${forwarder} down`);
+		row.querySelector("[data-forwarder-remove]").setAttribute("aria-label", `Remove ${forwarder}`);
+	  };
+	  const newRow = (forwarder) => {
+		const row = template.content.firstElementChild.cloneNode(true);
+		label(row, forwarder);
+		return row;
+	  };
+	  // Puts the rows in the given order, keeping each saved row (and its
+	  // numbers) and adding rows for the rest.
+	  const setRows = (forwarders) => {
+		const existing = new Map(rows().map((row) => [row.querySelector("[data-forwarder-value]").value, row]));
+		const tbody = rowsBody();
+		const empty = tbody.querySelector("[data-forwarder-empty]");
+		rows().forEach((row) => row.remove());
+		forwarders.forEach((forwarder) => tbody.insertBefore(existing.get(forwarder) || newRow(forwarder), empty));
+	  };
+	  root.sableAddForwarder = (forwarder) => {
+		if (values().includes(forwarder)) return false;
+		if (textareaActive()) {
+		  textarea.value = `${textarea.value.trim()}\n${forwarder}`.trim();
+		} else {
+		  rowsBody().insertBefore(newRow(forwarder), rowsBody().querySelector("[data-forwarder-empty]"));
+		}
+		changed();
+		return true;
+	  };
+	  const setTextMode = (on) => {
+		textPanel.hidden = !on;
+		textarea.disabled = !on;
+		body().hidden = on;
+		rows().forEach((row) => { row.querySelector("[data-forwarder-value]").disabled = on; });
+		textToggle.setAttribute("aria-pressed", String(on));
+		const toggleLabel = textToggle.querySelector("span:last-child") || textToggle;
+		toggleLabel.textContent = on ? "Done" : "Edit as Text";
+		addButton.hidden = false;
+		if (textError) textError.hidden = true;
+		sync();
+	  };
+	  textToggle?.addEventListener("click", async () => {
+		if (!textareaActive()) {
+		  textarea.value = values().join("\n");
+		  setTextMode(true);
+		  textarea.focus();
+		  return;
+		}
+		const lines = textarea.value.split(/[\n\r,]+/).map((line) => line.trim()).filter(Boolean);
+		textToggle.disabled = true;
+		try {
+		  const result = await checkForwarders(lines);
+		  if (result.error) {
+			textError.textContent = result.error;
+			textError.hidden = false;
+			textarea.focus();
+			return;
+		  }
+		  const before = values().join("\n");
+		  setRows(result.forwarders);
+		  if (values().join("\n") !== before) changed();
+		  setTextMode(false);
+		  textToggle.focus();
+		} catch (error) {
+		  textError.textContent = error.message;
+		  textError.hidden = false;
+		} finally {
+		  textToggle.disabled = false;
+		}
+	  });
+	  textarea?.addEventListener("input", () => { dirty = true; sync(); });
+	  root.addEventListener("click", (event) => {
+		const move = event.target.closest("[data-forwarder-move]");
+		const remove = event.target.closest("[data-forwarder-remove]");
+		const row = (move || remove)?.closest("[data-forwarder-row]");
+		if (!row) return;
+		if (remove) {
+		  const next = row.nextElementSibling?.matches("[data-forwarder-row]") ? row.nextElementSibling : row.previousElementSibling;
+		  row.remove();
+		  changed();
+		  (next?.querySelector("[data-forwarder-remove]") || addButton)?.focus();
+		  return;
+		}
+		const sibling = move.dataset.forwarderMove === "-1" ? row.previousElementSibling : row.nextElementSibling;
+		if (!sibling?.matches("[data-forwarder-row]")) return;
+		if (move.dataset.forwarderMove === "-1") sibling.before(row); else sibling.after(row);
+		changed();
+		(move.disabled ? row.querySelector(`[data-forwarder-move="${-Number(move.dataset.forwarderMove)}"]`) : move)?.focus();
+	  });
+	  // Dragging a row is a shortcut for the move buttons, which stay the way
+	  // to reorder from a keyboard or a phone.
+	  let dragged = null;
+	  root.addEventListener("dragstart", (event) => {
+		dragged = event.target.closest?.("[data-forwarder-row]");
+		if (!dragged) return;
+		dragged.classList.add("dragging");
+		event.dataTransfer.effectAllowed = "move";
+		event.dataTransfer.setData("text/plain", dragged.querySelector("[data-forwarder-value]").value);
+	  });
+	  root.addEventListener("dragover", (event) => {
+		const over = event.target.closest?.("[data-forwarder-row]");
+		if (!dragged || !over || over === dragged) return;
+		event.preventDefault();
+		const box = over.getBoundingClientRect();
+		if (event.clientY < box.top + box.height / 2) over.before(dragged); else over.after(dragged);
+	  });
+	  root.addEventListener("dragend", () => {
+		if (!dragged) return;
+		dragged.classList.remove("dragging");
+		dragged = null;
+		changed();
+	  });
+	  // A test or save redraws the rows from the saved list.
+	  root.addEventListener("htmx:after:swap", () => { dirty = false; sync(); });
+	  root.closest("form")?.addEventListener("reset", () => { dirty = false; sync(); });
+	  sync();
+	};
+
+	const forwarderPresets = {
+	  cloudflare: {https: ["https://cloudflare-dns.com/dns-query", "1.1.1.1"], tls: ["cloudflare-dns.com", "1.1.1.1"], udp: ["1.1.1.1", ""], tcp: ["1.1.1.1", ""]},
+	  quad9: {https: ["https://dns.quad9.net/dns-query", "9.9.9.9"], tls: ["dns.quad9.net", "9.9.9.9"], udp: ["9.9.9.9", ""], tcp: ["9.9.9.9", ""]},
+	  google: {https: ["https://dns.google/dns-query", "8.8.8.8"], tls: ["dns.google", "8.8.8.8"], udp: ["8.8.8.8", ""], tcp: ["8.8.8.8", ""]},
+	  adguard: {https: ["https://dns.adguard-dns.com/dns-query", "94.140.14.14"], tls: ["dns.adguard-dns.com", "94.140.14.14"], quic: ["dns.adguard-dns.com", "94.140.14.14"], udp: ["94.140.14.14", ""], tcp: ["94.140.14.14", ""]},
+	};
+	// forwarderHost is the host part of what the Server field holds, without
+	// a scheme, path, or port, so the dialog knows whether it is an address.
+	const forwarderHost = (server) => {
+	  let rest = server.trim().replace(/^[a-z]+:\/\//i, "").split("/")[0];
+	  if (rest.startsWith("[")) return rest.slice(1, rest.indexOf("]") > 0 ? rest.indexOf("]") : undefined);
+	  if ((rest.match(/:/g) || []).length === 1) rest = rest.split(":")[0];
+	  return rest;
+	};
+	const isAddressLiteral = (host) => /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || (host.includes(":") && /^[0-9a-f:.]+$/i.test(host));
+	const composeForwarder = (transport, server, bootstrap) => {
+	  let value = server.trim().replace(/^[a-z]+:\/\//i, "");
+	  if (!value) return "";
+	  const needsBootstrap = transport !== "udp" && transport !== "tcp" && !isAddressLiteral(forwarderHost(value));
+	  const suffix = needsBootstrap && bootstrap.trim() ? ` (${bootstrap.trim()})` : "";
+	  if (transport === "https") {
+		if (!value.includes("/")) value += "/dns-query";
+		return `https://${value}${suffix}`;
+	  }
+	  if (transport === "udp") return value;
+	  return `${transport}://${value}${suffix}`;
+	};
+	const setupAddForwarderDialog = (form) => {
+	  if (!form || form.dataset.addForwarderReady === "true") return;
+	  form.dataset.addForwarderReady = "true";
+	  const provider = form.querySelector("[data-forwarder-provider]");
+	  const transport = form.querySelector("[data-forwarder-transport]");
+	  const server = form.querySelector("[data-forwarder-server]");
+	  const bootstrap = form.querySelector("[data-forwarder-bootstrap]");
+	  const bootstrapField = form.querySelector("[data-forwarder-bootstrap-field]");
+	  const serverHelp = form.querySelector("[data-forwarder-server-help]");
+	  const preview = form.querySelector("[data-forwarder-preview]");
+	  const error = form.querySelector("[data-forwarder-add-error]");
+	  const dialog = form.closest("dialog");
+	  const update = () => {
+		const encrypted = transport.value !== "udp" && transport.value !== "tcp";
+		bootstrapField.hidden = !encrypted || !server.value.trim() || isAddressLiteral(forwarderHost(server.value));
+		server.placeholder = transport.value === "https" ? "https://dns.example.com/dns-query" : encrypted ? "dns.example.com" : "192.0.2.53";
+		serverHelp.textContent = transport.value === "https" ? "The server's DNS over HTTPS URL. Without a path, Sable uses /dns-query." : "A host name or IP address, with :port if it isn't the default.";
+		preview.textContent = composeForwarder(transport.value, server.value, bootstrap.value) || "—";
+		error.hidden = true;
+	  };
+	  const applyPreset = () => {
+		const presets = forwarderPresets[provider.value];
+		[...transport.options].forEach((option) => { option.disabled = Boolean(presets) && !presets[option.value]; });
+		if (presets) {
+		  if (!presets[transport.value]) transport.value = "https";
+		  [server.value, bootstrap.value] = presets[transport.value];
+		}
+		transport.sableSyncStyledSelect?.();
+		update();
+	  };
+	  provider.addEventListener("change", applyPreset);
+	  transport.addEventListener("change", () => {
+		if (forwarderPresets[provider.value]) applyPreset(); else update();
+	  });
+	  server.addEventListener("input", () => {
+		// Typing over a preset makes it a custom forwarder.
+		if (forwarderPresets[provider.value]) { provider.value = "custom"; [...transport.options].forEach((option) => { option.disabled = false; }); provider.sableSyncStyledSelect?.(); transport.sableSyncStyledSelect?.(); }
+		update();
+	  });
+	  bootstrap.addEventListener("input", update);
+	  dialog?.addEventListener("close", () => {
+		form.reset();
+		[...transport.options].forEach((option) => { option.disabled = false; });
+		provider.sableSyncStyledSelect?.();
+		transport.sableSyncStyledSelect?.();
+		update();
+	  });
+	  form.addEventListener("submit", async (event) => {
+		event.preventDefault();
+		const editor = document.querySelector("[data-forwarder-editor]");
+		const forwarder = composeForwarder(transport.value, server.value, bootstrap.value);
+		const fail = (message, field) => { error.textContent = message; error.hidden = false; (field || server).focus(); };
+		if (!forwarder) return fail("Enter the server's address.");
+		if (!bootstrapField.hidden && !bootstrap.value.trim()) return fail("Enter the server's IP address, so Sable can reach it without looking its name up through itself.", bootstrap);
+		const submit = form.querySelector('button[type="submit"]');
+		submit.disabled = true;
+		try {
+		  const result = await checkForwarders([forwarder]);
+		  if (result.error) return fail(result.error);
+		  if (!editor?.sableAddForwarder(result.forwarders[0] || forwarder)) return fail("That forwarder is already in the list.");
+		  dialog?.close();
+		} catch (failure) {
+		  fail(failure.message);
+		} finally {
+		  submit.disabled = false;
+		}
+	  });
+	  update();
+	};
+
 	const swappedContentSetups = [
 	  ["#cluster-updates", followRollout],
 	  ["[data-resolver-combobox]", setupResolverCombobox],
@@ -3529,6 +3809,8 @@
 	  ["[data-certificate-settings]", setupCertificateSettings],
 	  ["[data-acme-provider-root]", setupDNSProviderFields],
 	  ["[data-dynamic-dns-editor]", setupDynamicDNSPublishers],
+	  ["[data-forwarder-editor]", setupForwarderEditor],
+	  ["[data-add-forwarder-form]", setupAddForwarderDialog],
 	  ["[data-cluster-onboarding]", setupClusterOnboarding],
 	  ["[data-sable-restart]", setupManagedRestart],
 	  ["[data-dialog-tabs]", setupDialogTabs],

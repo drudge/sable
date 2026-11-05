@@ -1946,6 +1946,16 @@ func NewForwarderErrors(active, candidate Config) []error {
 	return refused
 }
 
+// CheckNewForwarder applies the rules a forwarder being added must meet: the
+// ones every saved forwarder meets, and a bootstrap address for an encrypted
+// forwarder named by host name (see NewForwarderErrors).
+func CheckNewForwarder(forwarder string) error {
+	if err := validateForwarder("forwarder", forwarder); err != nil {
+		return err
+	}
+	return forwarding.CheckBootstrap(forwarder)
+}
+
 func validateRootHint(field, address string) error {
 	if err := validateAddress(field, address); err != nil {
 		return err
