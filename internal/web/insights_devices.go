@@ -57,8 +57,22 @@ type deviceReport struct {
 	window    insightWindow
 }
 
-// insightDevices groups the window's client activity into named devices.
+// insightDevices groups the window's client activity into named devices,
+// with how many names each device asked for the first time.
 func (server *Server) insightDevices(ctx context.Context, reader deviceInsightReader, window insightWindow) (deviceReport, error) {
+	return server.buildDevices(ctx, reader, window, true)
+}
+
+// namedDevices groups the window's client activity into named devices, for
+// pickers that only list them. It leaves out the first-time name counts,
+// which take one query of the per-device history for every device with more
+// than one address and made each Settings page wait about a second on a busy
+// network, all for a number the picker never shows.
+func (server *Server) namedDevices(ctx context.Context, reader deviceInsightReader, window insightWindow) (deviceReport, error) {
+	return server.buildDevices(ctx, reader, window, false)
+}
+
+func (server *Server) buildDevices(ctx context.Context, reader deviceInsightReader, window insightWindow, countNewDomains bool) (deviceReport, error) {
 	activity, counted, err := server.deviceActivityCache.load(ctx, window, reader.ClientActivity)
 	if err != nil {
 		return deviceReport{}, err
@@ -81,7 +95,7 @@ func (server *Server) insightDevices(ctx context.Context, reader deviceInsightRe
 		Servers: server.sableServers(),
 	})
 	for index := range built {
-		if len(built[index].Addresses) < 2 {
+		if !countNewDomains || len(built[index].Addresses) < 2 {
 			continue
 		}
 		// Each address counts its own first-time names; across addresses the
