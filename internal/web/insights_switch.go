@@ -171,6 +171,7 @@ func (server *Server) renderSettingsInsights(writer http.ResponseWriter, request
 func (server *Server) forgetInsightCaches() {
 	server.deviceActivityCache.forget()
 	server.deviceSignalCache.forget()
+	server.deviceNewDomainCache.forget()
 	server.repeatedLookupCache.forget()
 	server.appSightingCache.forget()
 }

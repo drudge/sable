@@ -94,17 +94,10 @@ func (server *Server) buildDevices(ctx context.Context, reader deviceInsightRead
 		Names:   server.discoveredClientNames(activity, snapshot.Resolver.Hosts),
 		Servers: server.sableServers(),
 	})
-	for index := range built {
-		if !countNewDomains || len(built[index].Addresses) < 2 {
-			continue
-		}
-		// Each address counts its own first-time names; across addresses the
-		// same name must count once.
-		count, err := reader.ClientNewDomainCount(ctx, built[index].ClientAddresses(), counted.Start, counted.End)
-		if err != nil {
+	if countNewDomains {
+		if err := server.countDeviceNewDomains(ctx, reader, counted, built); err != nil {
 			return deviceReport{}, err
 		}
-		built[index].NewDomains = count
 	}
 	signals, _, err := server.deviceSignalCache.load(ctx, window, deviceSignals(reader))
 	if err != nil {
@@ -113,6 +106,46 @@ func (server *Server) buildDevices(ctx context.Context, reader deviceInsightRead
 	}
 	devices.Identify(built, signals)
 	return deviceReport{devices: built, seenSince: activity.SeenSince, window: counted}, nil
+}
+
+// countDeviceNewDomains sets NewDomains on each device with more than one
+// address: each address counts its own first-time names, and across a
+// device's addresses the same name must count once. It takes one query of
+// the per-device history for each such device, so the counts are kept like
+// the rest of Insights and refreshed in the background, rather than making
+// every visit to the Devices tab wait for them. A device that gained its
+// second address since the last count keeps its per-address count until the
+// next one.
+func (server *Server) countDeviceNewDomains(ctx context.Context, reader deviceInsightReader, window insightWindow, built []devices.Device) error {
+	multi := make(map[string][]string)
+	for _, device := range built {
+		if len(device.Addresses) > 1 {
+			multi[device.Key] = device.ClientAddresses()
+		}
+	}
+	if len(multi) == 0 {
+		return nil
+	}
+	counts, _, err := server.deviceNewDomainCache.load(ctx, window, func(ctx context.Context, since, until time.Time) (map[string]uint64, error) {
+		counts := make(map[string]uint64, len(multi))
+		for key, clients := range multi {
+			count, err := reader.ClientNewDomainCount(ctx, clients, since, until)
+			if err != nil {
+				return nil, err
+			}
+			counts[key] = count
+		}
+		return counts, nil
+	})
+	if err != nil {
+		return err
+	}
+	for index := range built {
+		if count, found := counts[built[index].Key]; found {
+			built[index].NewDomains = count
+		}
+	}
+	return nil
 }
 
 // deviceSignals reads, for each client address, the names it queried that say

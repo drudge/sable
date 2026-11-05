@@ -99,36 +99,39 @@ type Server struct {
 	blockingActivityCache windowCache[querylog.BlockingActivity]
 	deviceActivityCache   windowCache[querylog.ClientActivityReport]
 	deviceSignalCache     windowCache[map[string][]string]
-	repeatedLookupCache   windowCache[[]querylog.LookupTimes]
-	appActivityCache      windowCache[querylog.AppActivity]
-	appSightingCache      windowCache[querylog.AppSightings]
-	blockListAnalysis     blockinginsights.ContributionCache
-	baseDirectory         string
-	historyPrune          chan struct{}
-	runtimeContext        context.Context
-	runtimeCancel         context.CancelFunc
-	runtimeLifecycleMu    sync.Mutex
-	runtimeStarted        bool
-	runtimeClosed         bool
-	runtimeWG             sync.WaitGroup
-	runtimeWaitOnce       sync.Once
-	runtimeDone           chan struct{}
-	blockLists            *blockcompiler.Updater
-	abuseCHKeys           abuseCHKeyStore
-	dnssec                dnssecController
-	cluster               clusterController
-	dynamicDNS            dynamicDNSController
-	unifi                 unifiController
-	certificates          certificateController
-	tsigKeys              tsigController
-	updates               updateController
-	backups               backupController
-	backupStaging         backupStaging
-	administrator         administrator
-	restart               func()
-	restartRequested      atomic.Bool
-	instanceID            string
-	demoLogin             devDemoAutoLoginState
+	// deviceNewDomainCache holds each multi-address device's first-time name
+	// count, which takes one query of the per-device history per device.
+	deviceNewDomainCache windowCache[map[string]uint64]
+	repeatedLookupCache  windowCache[[]querylog.LookupTimes]
+	appActivityCache     windowCache[querylog.AppActivity]
+	appSightingCache     windowCache[querylog.AppSightings]
+	blockListAnalysis    blockinginsights.ContributionCache
+	baseDirectory        string
+	historyPrune         chan struct{}
+	runtimeContext       context.Context
+	runtimeCancel        context.CancelFunc
+	runtimeLifecycleMu   sync.Mutex
+	runtimeStarted       bool
+	runtimeClosed        bool
+	runtimeWG            sync.WaitGroup
+	runtimeWaitOnce      sync.Once
+	runtimeDone          chan struct{}
+	blockLists           *blockcompiler.Updater
+	abuseCHKeys          abuseCHKeyStore
+	dnssec               dnssecController
+	cluster              clusterController
+	dynamicDNS           dynamicDNSController
+	unifi                unifiController
+	certificates         certificateController
+	tsigKeys             tsigController
+	updates              updateController
+	backups              backupController
+	backupStaging        backupStaging
+	administrator        administrator
+	restart              func()
+	restartRequested     atomic.Bool
+	instanceID           string
+	demoLogin            devDemoAutoLoginState
 
 	// mcpUse is the MCP call count, saved by flushMCPUse under mcpUseMu.
 	mcpUse       store.MCPUse
@@ -242,6 +245,7 @@ func New(
 	server.blockingActivityCache.serveStale()
 	server.deviceActivityCache.serveStale()
 	server.deviceSignalCache.serveStale()
+	server.deviceNewDomainCache.serveStale()
 	server.repeatedLookupCache.serveStale()
 	server.appActivityCache.serveStale()
 	server.appSightingCache.serveStale()
@@ -253,6 +257,7 @@ func New(
 	server.blockingActivityCache.background = server.goBackground
 	server.deviceActivityCache.background = server.goBackground
 	server.deviceSignalCache.background = server.goBackground
+	server.deviceNewDomainCache.background = server.goBackground
 	server.repeatedLookupCache.background = server.goBackground
 	if administration, ok := authentication.(administrator); ok {
 		server.administrator = administration
