@@ -8,6 +8,25 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.8.0-beta.3] - 2026-11-05
+
+Sable 1.8.0-beta.3 lets you edit a forwarder where it stands in the list and
+makes reordering forwarders by dragging clearer.
+
+### Upgrading from 1.8.0-beta.2
+
+Nothing new is needed.
+
+### Forwarding
+
+- Each row in **Settings › Recursion › DNS Forwarders** has an Edit button.
+  It opens the forwarder dialog filled in from that row, with its provider
+  when it is one of the presets, and saving changes the row where it stands.
+- Dragging a row no longer shuffles the list under the pointer. The row stays
+  in place, outlined, while a line shows where it will land, and it moves when
+  you drop it. A row that moved or changed is highlighted for a moment, and
+  screen readers hear its new position.
+
 ## [1.8.0-beta.2] - 2026-11-04
 
 Sable 1.8.0-beta.2 turns the forwarder box into a list you edit in place,
