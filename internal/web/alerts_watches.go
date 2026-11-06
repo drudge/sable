@@ -73,7 +73,11 @@ func (server *Server) watchDevices(ctx context.Context, console pages.DashboardV
 	if !ok {
 		return known
 	}
-	report, err := server.namedDevices(ctx, reader, insightsWindow("", time.Now()))
+	var report deviceReport
+	var err error
+	serverTimingsFrom(ctx).measure("watch-devices", func() {
+		report, err = server.namedDevices(ctx, reader, insightsWindow("", time.Now()))
+	})
 	if err != nil {
 		server.logger.Warn("read devices for domain watches", "error", err)
 		return known

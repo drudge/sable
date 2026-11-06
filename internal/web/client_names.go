@@ -93,6 +93,22 @@ func (cache *reverseNameCache) names(addresses []string) map[string]string {
 	return known
 }
 
+// knownNames returns what is already known for the given addresses and starts
+// lookups for the rest without waiting for them, so a page that only offers
+// the names, such as a picker, never stalls on a slow or silent reverse zone.
+// Answers that arrive are cached for the next render.
+func (cache *reverseNameCache) knownNames(addresses []string) map[string]string {
+	if cache == nil || cache.resolver == nil {
+		return nil
+	}
+	known, pending := cache.partition(addresses)
+	if len(pending) > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), reverseNameDeadline)
+		go cache.resolve(ctx, cancel, pending)
+	}
+	return known
+}
+
 // partition splits addresses into the ones already answered and the ones that
 // need a lookup, claiming the latter so two renders at once ask only once.
 func (cache *reverseNameCache) partition(addresses []string) (map[string]string, []string) {
@@ -260,6 +276,14 @@ func (server *Server) givenClientNames(ctx context.Context, since time.Time) dev
 // nameRankedClients fills in the hostname beside every client the given names,
 // local zones, and host overrides could not already account for.
 func (server *Server) nameRankedClients(clients []pages.RankedStatView) {
+	server.nameRankedClientsWaiting(clients, true)
+}
+
+// nameRankedClientsWaiting names clients from reverse lookups. With wait it
+// gives lookups not yet answered a short budget, as the dashboard does;
+// without it, it uses only cached answers and looks the rest up in the
+// background.
+func (server *Server) nameRankedClientsWaiting(clients []pages.RankedStatView, wait bool) {
 	if server.reverseNames == nil {
 		return
 	}
@@ -272,7 +296,12 @@ func (server *Server) nameRankedClients(clients []pages.RankedStatView) {
 	if len(unnamed) == 0 {
 		return
 	}
-	names := server.reverseNames.names(unnamed)
+	var names map[string]string
+	if wait {
+		names = server.reverseNames.names(unnamed)
+	} else {
+		names = server.reverseNames.knownNames(unnamed)
+	}
 	for index := range clients {
 		if clients[index].Secondary == "" {
 			clients[index].Secondary = names[clients[index].Name]

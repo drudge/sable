@@ -252,3 +252,35 @@ func TestSettingsWatchPickerSkipsNewDomainCounts(t *testing.T) {
 		t.Fatalf("a second visit to the Devices tab ran %d more counts, want it served from the kept counts", calls.Load()-counted)
 	}
 }
+
+// Settings says where its time goes, so a slow page on a real deployment can
+// be read from the browser's network panel.
+func TestSettingsReportsServerTiming(t *testing.T) {
+	t.Parallel()
+	server := newAlertsTestServer(t)
+	response := server.get(t, "everything", "/settings?tab=alerts", false)
+	timing := response.Header().Get("Server-Timing")
+	for _, part := range []string{"console;dur=", "backups;dur=", "forwarders;dur=", "alerts;dur=", "watch-devices;dur=", "insights;dur=", "total;dur="} {
+		if !strings.Contains(timing, part) {
+			t.Errorf("Server-Timing = %q, want %q", timing, part)
+		}
+	}
+}
+
+// A reverse zone that never answers must not hold up Settings: the watch
+// picker takes names already looked up rather than waiting for new ones.
+func TestSettingsDoesNotWaitForReverseLookups(t *testing.T) {
+	t.Parallel()
+	server := newAlertsTestServer(t)
+	resolver := &stubReverseResolver{block: make(chan struct{}), blockAll: true}
+	t.Cleanup(func() { close(resolver.block) })
+	server.Server.reverseNames = newTestNameCache(resolver)
+	started := time.Now()
+	server.get(t, "everything", "/settings?tab=alerts", false)
+	if elapsed := time.Since(started); elapsed >= reverseNameBudget/2 {
+		t.Fatalf("Settings took %v with reverse lookups hanging, want it not to wait for them", elapsed)
+	}
+	if resolver.calls.Load() == 0 {
+		t.Fatal("no reverse lookups were started for the unnamed clients")
+	}
+}
