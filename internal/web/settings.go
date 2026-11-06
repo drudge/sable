@@ -29,7 +29,11 @@ type certificateGenerator interface {
 }
 
 func (server *Server) settingsPage(writer http.ResponseWriter, request *http.Request) {
-	view := server.settingsView(request, "", "")
+	timings := &serverTimings{}
+	started := time.Now()
+	view := server.settingsView(request.WithContext(withServerTimings(request.Context(), timings)), "", "")
+	timings.entries = append(timings.entries, serverTiming{name: "total", duration: time.Since(started)})
+	writer.Header().Set("Server-Timing", timings.header())
 	server.render(writer, request, pages.SettingsPage(view))
 }
 
@@ -545,20 +549,35 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 	default:
 		activeTab = "general"
 	}
+	timings := serverTimingsFrom(request.Context())
+	var console pages.DashboardView
+	timings.measure("console", func() { console = server.consoleView(request) })
+	var updatePreferences pages.SettingsUpdatePreferencesView
+	timings.measure("updates", func() { updatePreferences = server.settingsUpdatePreferencesView(request) })
+	var backupView pages.SettingsBackupView
+	timings.measure("backups", func() { backupView = server.backupView(request, "", "") })
+	var attachedNetworks []pages.AttachedNetworkView
+	timings.measure("networks", func() { attachedNetworks = server.attachedNetworkViews() })
+	var forwarderEditor pages.ForwarderEditorView
+	timings.measure("forwarders", func() { forwarderEditor = server.forwarderEditorView(configuration.Resolver.Forwarders, nil) })
+	var abuseCHKey bool
+	timings.measure("abusech", func() { abuseCHKey = server.abuseCHKeyConfigured(request.Context()) })
+	var tsigKeys []pages.SettingsTSIGKeyView
+	timings.measure("tsig", func() { tsigKeys = server.tsigKeyViews(request.Context()) })
 	view := pages.SettingsPageView{
-		Console: server.consoleView(request), Revision: snapshot.Revision,
+		Console: console, Revision: snapshot.Revision,
 		TimeFormat:        requestTimeFormat(request),
 		TimeZone:          requestTimeDisplay(request).Zone(),
 		ActiveTab:         activeTab,
-		UpdatePreferences: server.settingsUpdatePreferencesView(request),
+		UpdatePreferences: updatePreferences,
 		Message:           message, Error: errorMessage,
-		Backup:     server.backupView(request, "", ""),
+		Backup:     backupView,
 		HTTPListen: configuration.Server.HTTPListen, HTTPSListen: configuration.Server.HTTPSListen, DNSListen: strings.Join(configuration.Server.DNSListen, "\n"),
 		DatabaseDriver: configuration.Database.Driver, DatabaseDSN: configuration.Database.DSN,
 		Recursion: configuration.Resolver.Recursion, RecursionClients: strings.Join(configuration.Resolver.RecursionClients, "\n"),
-		AttachedNetworks: server.attachedNetworkViews(), MaxConcurrent: configuration.Resolver.MaxConcurrent, MaxConcurrentPerClient: configuration.Resolver.MaxConcurrentPerClient,
+		AttachedNetworks: attachedNetworks, MaxConcurrent: configuration.Resolver.MaxConcurrent, MaxConcurrentPerClient: configuration.Resolver.MaxConcurrentPerClient,
 		ResolverMode: configuration.Resolver.Mode, Forwarders: strings.Join(configuration.Resolver.Forwarders, "\n"),
-		ForwarderOrder: configuration.Resolver.ForwarderOrder, ForwarderEditor: server.forwarderEditorView(configuration.Resolver.Forwarders, nil),
+		ForwarderOrder: configuration.Resolver.ForwarderOrder, ForwarderEditor: forwarderEditor,
 		RootHints: strings.Join(configuration.Resolver.RootHints, "\n"), ResolverTimeout: configuration.Resolver.Timeout.String(),
 		ResolverRetries: configuration.Resolver.Retries, ResolverRetryTimeout: configuration.Resolver.RetryTimeout.String(),
 		CacheSize: configuration.Resolver.CacheSize, DNSSECValidation: configuration.Resolver.DNSSECValidation,
@@ -595,16 +614,17 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		BlockingResponseType: configuration.Blocking.ResponseType, BlockingResponseTTL: configuration.Blocking.ResponseTTL,
 		BlockingCustomAddresses: strings.Join(configuration.Blocking.CustomAddresses, "\n"),
 		BlockingAllowTXTReport:  configuration.Blocking.AllowTXTReport,
-		BlockingAbuseCHKey:      server.abuseCHKeyConfigured(request.Context()),
-		TSIGKeys:                server.tsigKeyViews(request.Context()),
+		BlockingAbuseCHKey:      abuseCHKey,
+		TSIGKeys:                tsigKeys,
 		TSIGAlgorithms:          tsig.Algorithms(),
 	}
-	view.Alerts = server.alertsView(request.Context(), view.Console)
+	timings.measure("alerts", func() { view.Alerts = server.alertsView(request.Context(), view.Console) })
 	if view.Alerts.Available && view.Alerts.CanEdit {
 		view.Alerts.OpenWatch = alertWatchOpenURL(request.URL.Query())
 	}
 	if server.certificates != nil {
-		status := server.certificates.Status(request.Context(), configuration.EncryptedDNS)
+		var status certificates.Status
+		timings.measure("certificate", func() { status = server.certificates.Status(request.Context(), configuration.EncryptedDNS) })
 		view.ACMECredentialsConfigured = status.CredentialsConfigured
 		view.ACMEIssuer = status.Issuer
 		if !status.NotAfter.IsZero() {
@@ -626,7 +646,7 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		view.ACMEProviderEndpoint = status.ProviderEndpoint
 		view.ACMETSIGAlgorithm = status.TSIGAlgorithm
 	}
-	view.Insights = server.settingsInsightsView(request.Context(), view.Console, "", "")
+	timings.measure("insights", func() { view.Insights = server.settingsInsightsView(request.Context(), view.Console, "", "") })
 	return view
 }
 

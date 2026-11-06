@@ -64,7 +64,8 @@ func (server *Server) insightDevices(ctx context.Context, reader deviceInsightRe
 }
 
 // namedDevices groups the window's client activity into named devices, for
-// pickers that only list them. It leaves out the first-time name counts,
+// pickers that only list them. It names them from reverse lookups already
+// answered without waiting for new ones, and leaves out the first-time name counts,
 // which take one query of the per-device history for every device with more
 // than one address and made each Settings page wait about a second on a busy
 // network, all for a number the picker never shows.
@@ -91,7 +92,11 @@ func (server *Server) buildDevices(ctx context.Context, reader deviceInsightRead
 	snapshot := server.config.Current().Config
 	built := devices.Build(devices.Input{
 		Activity: activity, Identities: identities, Clients: snapshot.Clients,
-		Names:   server.discoveredClientNames(activity, snapshot.Resolver.Hosts),
+		// A picker only lists devices, so it takes the names already looked
+		// up rather than waiting up to reverseNameBudget for slow reverse
+		// zones, which on a network of short-lived IPv6 addresses was most
+		// renders of Settings.
+		Names:   server.discoveredClientNames(activity, snapshot.Resolver.Hosts, countNewDomains),
 		Servers: server.sableServers(),
 	})
 	if countNewDomains {
@@ -159,7 +164,7 @@ func deviceSignals(reader deviceInsightReader) func(context.Context, time.Time, 
 
 // discoveredClientNames names addresses from local host entries, local reverse
 // zones, and then the resolver's PTR answers, which is what the dashboard uses.
-func (server *Server) discoveredClientNames(activity querylog.ClientActivityReport, hosts []config.HostOverride) map[string]devices.DiscoveredName {
+func (server *Server) discoveredClientNames(activity querylog.ClientActivityReport, hosts []config.HostOverride, waitForLookups bool) map[string]devices.DiscoveredName {
 	counts := make(map[string]uint64, len(activity.Clients))
 	for _, client := range activity.Clients {
 		counts[client.Client] = client.Queries + client.Baseline
@@ -173,7 +178,7 @@ func (server *Server) discoveredClientNames(activity querylog.ClientActivityRepo
 	names := make(map[string]devices.DiscoveredName, len(counts))
 	// Given names are left to devices.Build, which ranks them above these.
 	ranked := rankedStats(counts, dashboardClientNames(counts, devices.GivenNames{}, nil, server.zones.Current().Zones), len(counts))
-	server.nameRankedClients(ranked)
+	server.nameRankedClientsWaiting(ranked, waitForLookups)
 	for _, client := range ranked {
 		switch {
 		case local[client.Name] != "":

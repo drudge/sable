@@ -337,3 +337,33 @@ func TestNameRankedClientsWithoutAResolver(t *testing.T) {
 		t.Fatalf("client view = %+v", clients[0])
 	}
 }
+
+// knownNames never waits on a lookup: a slow reverse zone costs the picker
+// nothing, and the answer is cached for the next render.
+func TestReverseNameCacheKnownNamesDoesNotWait(t *testing.T) {
+	t.Parallel()
+
+	resolver := &stubReverseResolver{names: map[string]string{"2001:db8::5": "phone.home.arpa"}, block: make(chan struct{}), blockAll: true}
+	cache := newTestNameCache(resolver)
+	started := time.Now()
+	if names := cache.knownNames([]string{"2001:db8::5"}); len(names) != 0 {
+		t.Fatalf("knownNames = %+v before any answer", names)
+	}
+	if elapsed := time.Since(started); elapsed > reverseNameBudget/4 {
+		t.Fatalf("knownNames took %v, want it not to wait for the lookup", elapsed)
+	}
+	close(resolver.block)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if names := cache.knownNames([]string{"2001:db8::5"}); names["2001:db8::5"] == "phone.home.arpa" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the background lookup never cached its answer")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if calls := resolver.calls.Load(); calls != 1 {
+		t.Fatalf("reverse lookups = %d, want the one started in the background", calls)
+	}
+}
