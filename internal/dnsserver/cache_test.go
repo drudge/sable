@@ -280,6 +280,35 @@ func TestResponseCacheElectsSinglePopularPrefetch(t *testing.T) {
 	}
 }
 
+// A plain Get, as an internal lookup or an ANAME flatten does, counts the hit
+// but has no way to refresh the entry, so it must not keep the election from
+// the next client hit that can.
+func TestResponseCacheGetLeavesPrefetchElectable(t *testing.T) {
+	t.Parallel()
+
+	clock := time.Date(2026, time.August, 8, 0, 0, 0, 0, time.UTC)
+	cache := NewResponseCacheWithOptions(4, CacheOptions{
+		PrefetchMinTTL: 30, PrefetchAtTTL: 10, PrefetchSample: 5 * time.Minute, PrefetchHits: 24,
+	})
+	cache.now = func() time.Time { return clock }
+	request := cacheRequest("popular.example.", 1)
+	cache.Set(request, positiveResponse(request, 60), true)
+	clock = clock.Add(51 * time.Second)
+
+	if _, found := cache.Get(request); !found {
+		t.Fatal("first Get() missed")
+	}
+	if _, found := cache.Get(request); !found {
+		t.Fatal("second Get() missed")
+	}
+	if _, found, prefetch := cache.GetWithPrefetch(request); !found || !prefetch {
+		t.Fatalf("client hit after Get() found = %v, prefetch = %v; want the election", found, prefetch)
+	}
+	if candidates := cache.PrefetchCandidates(10); len(candidates) != 0 {
+		t.Fatalf("PrefetchCandidates() = %d after the client hit won, want the election exclusive", len(candidates))
+	}
+}
+
 func TestResponseCacheExportRestoreRoundTrip(t *testing.T) {
 	t.Parallel()
 
