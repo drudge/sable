@@ -8,6 +8,160 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.8.0] - 2026-11-07
+
+Sable 1.8.0 forwards to DNS over HTTPS upstreams and turns the forwarder
+settings into a list you edit in place, with presets, live numbers, a test
+for every forwarder, and a choice of how queries pick one. It makes cluster
+recovery safe when a former primary comes back, lets devices cache blocked
+answers, keeps secondary zones from outliving their expiry across restarts,
+and makes Settings, the dashboard and Insights open without waiting on busy
+networks.
+
+### Upgrading from 1.7.4
+
+- Update every node in a cluster. A former primary is only told to step down
+  when both nodes run this release, and the primary refuses to enroll a node
+  running an older release. Existing clusters start at primary term 0; the
+  next promotion starts term 1.
+- FWD records now honor priority. A forwarder with a higher priority value is
+  only asked when every lower one has failed or is waiting after a failure.
+  Before, every query took the next forwarder in turn across all priorities,
+  so a backup at priority 20 answered its share of everyday queries. If you
+  relied on that sharing, give those forwarders the same priority.
+- Saving a new `https://`, `tls://` or `quic://` forwarder named by a host name
+  now needs the server's IP address in parentheses, such as
+  `tls://dns.quad9.net (9.9.9.9)`. Existing `tls://` and `quic://` entries
+  without one still load, with a warning in the log.
+- Each secondary zone's expire timer starts counting from the upgrade, or from
+  its next successful refresh, and from then on survives restarts.
+- Nothing else is needed.
+
+### Forwarding
+
+- Forwarders can use DNS over HTTPS (RFC 8484): write
+  `https://cloudflare-dns.com/dns-query (1.1.1.1)` in **Settings › Recursion ›
+  DNS Forwarders**, `resolver.forwarders`, conditional routes, forwarder zones,
+  or FWD records. Sable connects to the address in parentheses and checks the
+  certificate against the host name, so it never has to look up its own
+  upstream through itself. The same `(ip)` works on `tls://` and `quic://`.
+- Sable keeps one HTTP/2 connection per DNS over HTTPS forwarder while it is
+  quiet and spreads busy traffic over more, because Cloudflare stalls a single
+  connection past about 150 queries a second.
+- **Settings › Recursion › DNS Forwarders** is now one table you edit in
+  place. Each row shows its transport, status, answers, median and
+  95th-percentile response times, failures and Test result, and has an Edit
+  button. Drag a row or use its up and down buttons to change the order, remove
+  a row, or add one; save the settings to apply the changes. While you drag, a
+  line shows where the row will land, and screen readers hear its new
+  position. Forwarders that routes and forwarder zones use are listed below,
+  read-only.
+- The numbers count client queries that reached each forwarder since Sable
+  started, leaving out cached answers and tests. Answers that waited for a new
+  TLS or QUIC connection are counted but not timed, so a forwarder used now and
+  then doesn't look slow because of its handshake.
+- **Add Forwarder** offers Cloudflare, Quad9, Google Public DNS and AdGuard DNS
+  over each transport they support, with their IP addresses filled in, or a
+  custom server. For an encrypted server named by host name it asks for the IP
+  address in its own field, previews the exact line it adds, and checks it
+  with the same rules as saving. **Edit as Text** switches to one forwarder per
+  line for pasting a list.
+- **Test Forwarders** asks each saved forwarder `example.com` and
+  `dnssec-failed.org` over its own transport, straight from this node, and
+  shows its response time and whether it validates DNSSEC. Each cluster node
+  tests from where it sits.
+- **Forwarder Order** (`resolver.forwarder_order`) picks how each query
+  chooses among forwarders of the same priority. `round_robin`, the default,
+  takes turns as before. `in_order` always starts with the first one listed,
+  for a list ordered for privacy or filtering. `fastest` starts with the one
+  that has been answering fastest on this node, and sends one query in 32 to
+  the one that has waited longest so the others stay measured. A forwarder
+  that just failed still waits behind the healthy ones in every order.
+- `tls://1.1.1.1:853` and plain addresses such as `1.1.1.1` now save in
+  Settings. The check used to refuse the first and misread schemes.
+
+### Blocking
+
+- Blocked answers in **NX Domain** mode now carry an SOA record whose TTL is
+  the blocking TTL. Before, they had none, and a device can't cache a negative
+  answer without one, so a device that retries a blocked name asked again
+  straight away. A Roku retrying its blocked telemetry hosts sent hundreds of
+  thousands of lookups an hour this way. **Any Address** and **Custom
+  Address** modes do the same for the empty answer they give a record type
+  their block addresses don't cover, such as AAAA when only an IPv4 address is
+  set.
+
+### DNSSEC
+
+- Forwarded lookups in classes other than IN, such as
+  `dig whoami.cloudflare TXT CH`, no longer fail with SERVFAIL and EDE 6
+  "DNSSEC Bogus". Only class IN has trust anchors, so these answers are now
+  passed through unvalidated, and IN answers are checked as before.
+
+### Zones
+
+- A secondary zone, stub zone, or catalog whose primaries can't be reached
+  now stops answering once its SOA expire time has passed since the last
+  refresh that worked. Before, every restart started the expire time again,
+  so the zone could keep serving an old copy indefinitely.
+
+### Clustering
+
+- A former primary that comes back after a replica was promoted in its place,
+  such as one restored from a backup, now steps down on its own. Every
+  promotion starts a new primary term, and a primary checks the other members
+  every 10 seconds. When it finds a newer term on any of them, it becomes a
+  replica of the newer primary and takes its data. Before, both nodes kept
+  accepting changes, and each showed the other as **Sync unknown**.
+- When two nodes are primary in the same term, as after two recovery
+  promotions at once or promotions made before terms existed, the **Cluster**
+  page shows **Two primaries** and marks both nodes **Also primary**.
+  **Keep This Node as Primary** on the node whose data should win makes the
+  other step down. The assistant's cluster status reports the conflict too.
+- Joining a cluster that this node once deleted no longer kicks the other
+  members out after a handoff makes it the primary. Nodes already in this
+  state heal when they restart on this release.
+- The primary refuses to enroll a node running an older release, and says
+  which version to update it to. The enrollment token stays valid, so the same
+  token works after the update. Before, an older node could fail halfway
+  through its first synchronization with a database error.
+
+### Updates
+
+- Re-running the installer, which is how the docs say to update, no longer
+  turns web updates off. A reinstall keeps the layout already installed,
+  `sable install --disable-web-updates` turns them off on purpose, and the
+  bootstrap script accepts `SABLE_WEB_UPDATES=true` or `false`. If web updates
+  stopped working after an earlier reinstall, run
+  `sudo sable install --enable-web-updates` once on each node.
+- On a cluster replica, **Settings › General › Software Updates** can be
+  changed and saved again. Since 1.3.0 its switches and schedule were greyed
+  out on replicas.
+
+### Console
+
+- **Settings**, the dashboard and Insights no longer pause for up to a second
+  on busy networks or on networks whose reverse DNS zones don't answer. The
+  domain-watch device list no longer counts every device's first-time names
+  or waits for new reverse lookups, and a reverse lookup that runs out of time
+  is remembered for two minutes, like a name that doesn't exist.
+- Settings sends a `Server-Timing` header that shows how long each part of the
+  page took to build, which the browser's network panel displays.
+
+### Insights
+
+- The **Devices** tab answers from counts kept in the background instead of
+  recounting each device's first-time names on every visit, so it opens
+  without waiting on busy networks. A device that just gained a second address
+  shows its new count within a minute.
+
+### Integrations
+
+- Saving Dynamic DNS settings while a sync is already running now publishes
+  the new records as soon as that sync finishes. Before, the save was dropped
+  and the records waited for the next scheduled sync. **Sync Now** behaves the
+  same way.
+
 ## [1.8.0-beta.9] - 2026-11-07
 
 Sable 1.8.0-beta.9 lets devices cache blocked answers, so a device that
