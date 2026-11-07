@@ -19,12 +19,12 @@ Nothing new is needed.
 
 ### Blocking
 
-- Blocked answers in **NXDOMAIN** mode now carry an SOA record whose TTL is
+- Blocked answers in **NX Domain** mode now carry an SOA record whose TTL is
   the blocking TTL. Before, they had none, and a device can't cache a
   negative answer without one, so a device that retries a blocked name
   asked again straight away. A Roku retrying its blocked telemetry hosts
   sent hundreds of thousands of lookups an hour this way. **Any Address**
-  and **Custom** modes do the same for the empty answer they give a
+  and **Custom Address** modes do the same for the empty answer they give a
   record type their block addresses don't cover, such as AAAA when only
   an IPv4 address is set.
 
