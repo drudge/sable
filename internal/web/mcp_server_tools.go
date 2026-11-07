@@ -182,7 +182,7 @@ func (server *Server) mcpGetVersion(request *http.Request, arguments json.RawMes
 	if status.Error != "" {
 		result["error"] = status.Error
 	}
-	if status.Installed {
+	if status.Installed() {
 		result["note"] = "The newer release is installed. Sable runs it after a restart."
 	}
 	return result, nil

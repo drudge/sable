@@ -23,7 +23,7 @@ func TestManagerCheckReportsAnAvailableReleaseWithoutInstallingIt(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !status.Available || status.Installed || status.LatestVersion != "9.9.9" {
+	if !status.Available || status.Installed() || status.LatestVersion != "9.9.9" {
 		t.Fatalf("status = %+v", status)
 	}
 	if !status.Checked() || status.Busy() || status.UpToDate() {
@@ -67,7 +67,7 @@ func TestManagerInstallReplacesTheExecutableInTheBackground(t *testing.T) {
 		t.Fatal(err)
 	}
 	status := awaitInstall(t, manager)
-	if status.Phase != PhaseInstalled || !status.Installed || status.LatestVersion != "9.9.9" {
+	if status.Phase != PhaseInstalled || !status.Installed() || status.LatestVersion != "9.9.9" {
 		t.Fatalf("status = %+v", status)
 	}
 	if status.BinaryPath != binaryPath {
@@ -94,7 +94,7 @@ func TestManagerInstallRecordsAFailedDownload(t *testing.T) {
 		t.Fatal(err)
 	}
 	status := awaitInstall(t, manager)
-	if status.Phase != PhaseFailed || status.Installed {
+	if status.Phase != PhaseFailed || status.Installed() {
 		t.Fatalf("status = %+v", status)
 	}
 	if !strings.Contains(status.Error, "checksum verification failed") {
@@ -290,7 +290,7 @@ func TestNewerReleaseComparesTheFoundReleaseWithTheRunningBuild(t *testing.T) {
 		{name: "a development build", status: Status{CurrentVersion: "dev", LatestVersion: "1.6.0", Development: true}},
 		{name: "a later check still running", status: Status{CurrentVersion: "1.5.2", LatestVersion: "1.6.0", Phase: PhaseChecking}, want: true},
 		{name: "a later check that failed", status: Status{CurrentVersion: "1.5.2", LatestVersion: "1.6.0", Phase: PhaseFailed, Error: "GitHub is unreachable"}, want: true},
-		{name: "installed and waiting for a restart", status: Status{CurrentVersion: "1.5.2", LatestVersion: "1.6.0", Installed: true}, want: true},
+		{name: "installed and waiting for a restart", status: Status{CurrentVersion: "1.5.2", LatestVersion: "1.6.0", Phase: PhaseInstalled}, want: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -327,14 +327,56 @@ func TestReservedUpdatePinsVersionAndBlocksOtherOperations(t *testing.T) {
 	if err := manager.InstallVersion("rollout-1", "v1.1.0"); err != nil {
 		t.Fatal(err)
 	}
-	if status := awaitInstall(t, manager); !status.Installed || status.LatestVersion != "1.1.0" {
+	if status := awaitInstall(t, manager); !status.Installed() || status.LatestVersion != "1.1.0" {
 		t.Fatalf("install = %+v", status)
 	}
 	manager.Release("rollout-1")
 	if _, err := manager.Check(context.Background(), false); !errors.Is(err, ErrUpdateInProgress) {
 		t.Fatalf("check erased pending restart: %v", err)
 	}
-	if !manager.Status().Installed {
+	if !manager.Status().Installed() {
 		t.Fatal("pending installation was lost")
+	}
+}
+
+// TestInstalledIsTerminalUntilRestart covers every way out of PhaseInstalled:
+// none may start, and the pending installation survives each attempt.
+func TestInstalledIsTerminalUntilRestart(t *testing.T) {
+	setTestRelease(t, "1.0.0")
+	requireExecutableScripts(t)
+	source := releaseServer(t, "v1.1.0", false, nil)
+	manager := NewManager(Options{APIBaseURL: source.URL, BinaryPath: installedExecutable(t, "#!/bin/sh\necho old\n")})
+	if err := manager.Reserve("rollout-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.InstallVersion("rollout-1", "v1.1.0"); err != nil {
+		t.Fatal(err)
+	}
+	if status := awaitInstall(t, manager); !status.Installed() {
+		t.Fatalf("install = %+v", status)
+	}
+	attempts := []struct {
+		name string
+		run  func() error
+	}{
+		{"reinstall by the holding rollout", func() error { return manager.InstallVersion("rollout-1", "v1.1.0") }},
+		{"reserve by another rollout", func() error { return manager.Reserve("rollout-2") }},
+		{"local check", func() error { _, err := manager.Check(context.Background(), false); return err }},
+		{"local install", func() error { return manager.Install(false) }},
+	}
+	for _, attempt := range attempts {
+		if err := attempt.run(); !errors.Is(err, ErrUpdateInProgress) {
+			t.Errorf("%s = %v, want ErrUpdateInProgress", attempt.name, err)
+		}
+	}
+	manager.Release("rollout-1")
+	if err := manager.Reserve("rollout-2"); !errors.Is(err, ErrUpdateInProgress) {
+		t.Errorf("reserve after release = %v, want ErrUpdateInProgress", err)
+	}
+	if _, err := manager.CheckAutomatically(context.Background(), false); err != nil {
+		t.Errorf("automatic check = %v", err)
+	}
+	if status := manager.Status(); status.Phase != PhaseInstalled || status.ClusterUpdate {
+		t.Fatalf("status after refused transitions = %+v", status)
 	}
 }
