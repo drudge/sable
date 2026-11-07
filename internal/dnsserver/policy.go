@@ -243,6 +243,7 @@ func (runtime *Runtime) blockedResponse(request *dns.Msg) *dns.Msg {
 		response := new(dns.Msg)
 		response.SetRcode(request, dns.RcodeNameError)
 		response.RecursionAvailable = true
+		response.Ns = []dns.RR{syntheticSOA(question.Name, runtime.blockTTL)}
 		return response
 	}
 	response := new(dns.Msg)
@@ -257,6 +258,11 @@ func (runtime *Runtime) blockedResponse(request *dns.Msg) *dns.Msg {
 			header.Rrtype = dns.TypeAAAA
 			response.Answer = append(response.Answer, &dns.AAAA{Hdr: header, AAAA: net.IP(address.AsSlice())})
 		}
+	}
+	if len(response.Answer) == 0 {
+		// A type the block addresses do not cover, such as AAAA with only an
+		// IPv4 block address, gets an empty answer. It needs the SOA too.
+		response.Ns = []dns.RR{syntheticSOA(question.Name, runtime.blockTTL)}
 	}
 	return response
 }
