@@ -38,7 +38,7 @@ func TestReleaseNotesSurviveClusterInstallAndRestartOffline(t *testing.T) {
 		t.Fatal(err)
 	}
 	installed := awaitInstall(t, manager)
-	if !installed.Installed || installed.ReleaseNotes == "" {
+	if !installed.Installed() || installed.ReleaseNotes == "" {
 		t.Fatalf("installation = %+v", installed)
 	}
 	source.Close()
@@ -48,7 +48,7 @@ func TestReleaseNotesSurviveClusterInstallAndRestartOffline(t *testing.T) {
 	if status.ReleaseNotes != installed.ReleaseNotes || status.ReleaseURL != installed.ReleaseURL || status.LatestVersion != "1.1.0" {
 		t.Fatalf("release details lost after restart: %+v", status)
 	}
-	if !status.UpToDate() || status.Available || status.Installed || status.ClusterUpdate || status.Phase != PhaseIdle || status.CurrentVersion != "1.1.0" {
+	if !status.UpToDate() || status.Available || status.Installed() || status.ClusterUpdate || status.Phase != PhaseIdle || status.CurrentVersion != "1.1.0" {
 		t.Fatalf("restart restored obsolete installation state: %+v", status)
 	}
 	if _, err := restarted.CheckAutomatically(context.Background(), false); err != nil {
@@ -102,7 +102,7 @@ func TestReleaseCacheRespectsSourceAndChannelAndToleratesStorageFailure(t *testi
 			}
 			if scenario == "storage failure" {
 				status := manager.finish(Result{CurrentVersion: "1.0.0", LatestVersion: "1.1.0", ReleaseNotes: "Fresh notes", Applied: true}, nil)
-				if !status.Installed || status.Error != "" || status.ReleaseNotes != "Fresh notes" {
+				if !status.Installed() || status.Error != "" || status.ReleaseNotes != "Fresh notes" {
 					t.Fatalf("cache failure broke installation: %+v", status)
 				}
 			}

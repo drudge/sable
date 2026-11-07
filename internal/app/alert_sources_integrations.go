@@ -214,7 +214,7 @@ func (source updateAlertSource) Alerts(_ context.Context, now time.Time) ([]aler
 		summary = fmt.Sprintf("Sable %s is out as a pre-release, and this server runs %s.", latest, running)
 		newest += ", a pre-release"
 	}
-	if status.Installed {
+	if status.Installed() {
 		summary += " It is installed and starts when Sable restarts."
 	} else {
 		summary += " Read what changed and install it from the About page when you're ready."
