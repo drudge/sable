@@ -1,23 +1,14 @@
 package unifi
 
-import "time"
+import "github.com/drudge/sable/internal/jobstatus"
 
 // Status is the synchronizer state the console renders. It lives here rather
 // than beside the reconciler so the web layer can read it without depending on
 // the application wiring.
 type Status struct {
-	Enabled     bool
-	Running     bool
-	LastAttempt time.Time
-	LastSuccess time.Time
-	NextAttempt time.Time
-	Duration    time.Duration
-	LastError   string
-	// ConsecutiveFailures counts the attempts in a row that failed, so an
-	// alert can let one dropped request pass and still speak up about a
-	// controller that stays out of reach. A successful sync resets it.
-	ConsecutiveFailures int
-	Hosts               int
+	jobstatus.Attempts
+	Enabled bool
+	Hosts   int
 	// HostsByNetwork counts the hosts the controller reported on each mapped
 	// network, keyed by network ID, so the console can show a per-network total
 	// without reading the controller on every page load.

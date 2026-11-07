@@ -642,7 +642,7 @@ func (server *Server) settingsView(request *http.Request, message, errorMessage 
 		view.ACMECoveredNames = status.CoveredNames
 		view.ACMEPendingNames = pendingCertificateNames(status.Domains, status.CoveredNames)
 		view.ACMELastError = status.LastError
-		view.ACMERenewing = status.Renewing
+		view.ACMERenewing = status.Running
 		view.ACMEProviderEndpoint = status.ProviderEndpoint
 		view.ACMETSIGAlgorithm = status.TSIGAlgorithm
 	}
