@@ -2362,6 +2362,8 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 .cluster-sync-badge.current { background: rgb(6 182 212 / .13); color: #0891b2; }
 .cluster-sync-badge.unverified { background: rgb(245 158 11 / .13); color: var(--warning-strong); }
 .cluster-sync-badge.behind { background: rgb(239 68 68 / .13); color: var(--danger); }
+.cluster-sync-badge.conflict { background: rgb(239 68 68 / .13); color: var(--danger); }
+.cluster-conflict-warning { margin: var(--space-6) var(--space-6) 0; }
 .cluster-sync-progress { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); }
 .cluster-sync-progress progress { width: 100%; height: .35rem; overflow: hidden; border: 0; border-radius: 999px; background: var(--muted); appearance: none; }
 .cluster-sync-progress progress::-webkit-progress-bar { border-radius: 999px; background: var(--muted); }
@@ -2526,7 +2528,7 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 
 @container page (max-width: 1050px) { .cluster-layout { grid-template-columns: 1fr; } .cluster-aside { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cluster-aside .warning-box { grid-column: 1 / -1; } }
 @container page (max-width: 800px) { .cluster-identity, .cluster-sync-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cluster-sync-grid > div:nth-child(3) { border-left: 0; padding-left: 0; } }
-@container page (max-width: 639px) { .cluster-metrics { grid-template-columns: 1fr; padding: var(--space-4); } }
+@container page (max-width: 639px) { .cluster-metrics { grid-template-columns: 1fr; padding: var(--space-4); } .cluster-conflict-warning { margin: var(--space-4) var(--space-4) 0; } }
 @container page (max-width: 700px) { .cluster-identity, .cluster-sync-grid, .cluster-aside { grid-template-columns: 1fr; } .cluster-sync-grid > div { border-top: 1px solid var(--border); border-left: 0; padding: .55rem 0 0; } .cluster-sync-grid > div:first-child { border-top: 0; padding-top: 0; } .cluster-aside .warning-box { grid-column: auto; } .cluster-danger-card { align-items: stretch; flex-direction: column; } .cluster-danger-card .button { width: 100%; justify-content: center; } .cluster-node-meta { display: none; } .cluster-node-actions .button { width: 100%; justify-content: center; } .cluster-node-actions, .cluster-node-actions form { width: 100%; } .cluster-nodes-card > header { align-items: flex-start; flex-wrap: wrap; } }
 /* On a phone the columns stack, which left Rolling Updates below every node.
    Flatten both columns into one list so it follows Cluster Status. */

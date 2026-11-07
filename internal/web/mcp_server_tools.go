@@ -107,7 +107,8 @@ var mcpServerTools = []mcpTool{
 		Description: "Say how the cluster is doing: which node leads, which nodes are online, whether each has " +
 			"caught up with the latest changes, what version each runs, each node's open problems, and any " +
 			"rolling update under way. A node is online when its last heartbeat is under 5 seconds old; lag is " +
-			"how many changes it has yet to apply.",
+			"how many changes it has yet to apply. conflict names another node that also acts as primary in this " +
+			"primary's term.",
 		InputSchema: mcpObjectSchema(map[string]any{
 			"node": mcpString("Optional node name or ID, to report on that node alone."),
 		}, nil),
@@ -723,7 +724,7 @@ func (server *Server) mcpGetClusterStatus(request *http.Request, arguments json.
 		})
 	}
 	result := map[string]any{
-		"mode": state.Mode, "cluster_domain": state.ClusterDomain, "generation": state.Generation,
+		"mode": state.Mode, "cluster_domain": state.ClusterDomain, "generation": state.Generation, "term": state.Term,
 		"local_node": names[state.NodeID], "primary": names[state.PrimaryID], "summary": mcpClusterSummary(nodes),
 		"rollout": server.mcpRollout(state, names, now),
 	}
@@ -741,6 +742,15 @@ func (server *Server) mcpGetClusterStatus(request *http.Request, arguments json.
 		nodes = nodes[index : index+1]
 	}
 	result["nodes"] = nodes
+	if state.Conflict != nil {
+		result["summary"] = fmt.Sprintf("%s; %s also accepts changes as primary", result["summary"], state.Conflict.Name)
+		result["conflict"] = map[string]any{
+			"node": state.Conflict.Name, "term": state.Conflict.Term, "generation": state.Conflict.Generation,
+			"observed_at": state.Conflict.ObservedAt,
+			"resolve": "Promote the node whose data should win on that node itself; the other primary then steps down " +
+				"and takes its data.",
+		}
+	}
 	if state.LocalRole == cluster.RoleReplica {
 		result["note"] = "This node is a replica, so it hears only from the primary. Connect to the primary " +
 			"for every node's heartbeat, lag, and problems."

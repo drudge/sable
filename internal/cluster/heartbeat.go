@@ -52,6 +52,10 @@ type Heartbeat struct {
 	// lately, when it last did, as a JSON object of Unix seconds. It is
 	// carried only to a primary that advertised it takes them.
 	Lookups json.RawMessage `json:"lookups,omitempty"`
+	// Primary is set only on a primary's probe of another member, and says
+	// the sender leads in that term. A member that does not know the field
+	// refuses the probe, which leaves its own role alone.
+	Primary *PrimaryClaim `json:"primary,omitempty"`
 }
 
 type SyncConfiguration struct {
@@ -59,6 +63,7 @@ type SyncConfiguration struct {
 	ClusterID      string         `json:"cluster_id"`
 	ClusterDomain  string         `json:"cluster_domain"`
 	Generation     uint64         `json:"generation"`
+	Term           uint64         `json:"term,omitempty"`
 	UpdatedAt      time.Time      `json:"updated_at"`
 	PrimaryID      string         `json:"primary_id"`
 	StatusKey      string         `json:"status_key"`
@@ -98,6 +103,7 @@ func (service *Service) StartMonitoring(ctx context.Context) {
 			gathering.Go(func() { service.gatherLocalAlerts(monitorContext) })
 			gathering.Go(func() { service.gatherLocalLookups(monitorContext) })
 			gathering.Go(func() { service.gatherClientIdentities(monitorContext) })
+			gathering.Go(func() { service.probePeers(monitorContext) })
 			service.monitorPrimary(monitorContext)
 			gathering.Wait()
 		}()
@@ -118,7 +124,7 @@ func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, si
 	service.mu.Lock()
 	defer func() {
 		service.mu.Unlock()
-		if resultErr == nil {
+		if resultErr == nil && heartbeat.Primary == nil {
 			result.UpdateCommand = service.updateCommand(heartbeat.NodeID)
 			if service.updates != nil {
 				result.UpdateProtocol = updateProtocolVersion
@@ -129,6 +135,9 @@ func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, si
 		return SyncConfiguration{}, err
 	}
 	now := time.Now()
+	if heartbeat.Primary != nil {
+		return service.answerPrimaryProbeLocked(heartbeat, now)
+	}
 	localIsPrimary := service.manifest.PrimaryID == service.nodeID
 	if heartbeat.AdvertiseURL != "" && localIsPrimary {
 		if err := service.recordMemberIdentityLocked(heartbeat, now); err != nil {
@@ -431,7 +440,7 @@ func (service *Service) adoptSyncConfiguration(ctx context.Context, primary memb
 	}
 	service.mu.RLock()
 	active := service.manifest
-	if active == nil || candidate.ClusterID != active.ClusterID || candidate.Generation < active.Generation {
+	if active == nil || candidate.ClusterID != active.ClusterID || manifestOlder(candidate, active) {
 		service.mu.RUnlock()
 		return nil
 	}
@@ -448,7 +457,7 @@ func (service *Service) adoptSyncConfiguration(ctx context.Context, primary memb
 	}
 	service.mu.Lock()
 	defer service.mu.Unlock()
-	if service.manifest == nil || candidate.ClusterID != service.manifest.ClusterID || candidate.Generation < service.manifest.Generation {
+	if service.manifest == nil || candidate.ClusterID != service.manifest.ClusterID || manifestOlder(candidate, service.manifest) {
 		return nil
 	}
 	manifestChanged := !reflect.DeepEqual(candidate, service.manifest)

@@ -98,6 +98,10 @@ type State struct {
 	Connected     int       `json:"connected"`
 	Synchronized  int       `json:"synchronized"`
 	Nodes         []Node    `json:"nodes"`
+	// Term counts primary changes; see manifest.Term.
+	Term uint64 `json:"term"`
+	// Conflict is another node that accepts changes in this primary's term.
+	Conflict *PrimaryConflict `json:"conflict,omitempty"`
 }
 
 type member struct {
@@ -112,15 +116,19 @@ type member struct {
 }
 
 type manifest struct {
-	FormatVersion int       `json:"format_version"`
-	ClusterID     string    `json:"cluster_id"`
-	ClusterDomain string    `json:"cluster_domain"`
-	Generation    uint64    `json:"generation"`
-	UpdatedAt     time.Time `json:"updated_at"`
-	PrimaryID     string    `json:"primary_id"`
-	StatusKey     string    `json:"status_key"`
-	StateDigest   string    `json:"state_digest,omitempty"`
-	Nodes         []member  `json:"nodes"`
+	FormatVersion int    `json:"format_version"`
+	ClusterID     string `json:"cluster_id"`
+	ClusterDomain string `json:"cluster_domain"`
+	Generation    uint64 `json:"generation"`
+	// Term counts primary changes. Only Promote raises it, so a primary
+	// restored from an old backup carries a lower term than the one that
+	// replaced it, however many changes it has made since.
+	Term        uint64    `json:"term,omitempty"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	PrimaryID   string    `json:"primary_id"`
+	StatusKey   string    `json:"status_key"`
+	StateDigest string    `json:"state_digest,omitempty"`
+	Nodes       []member  `json:"nodes"`
 }
 
 type Service struct {
@@ -187,6 +195,12 @@ type Service struct {
 	identityRecording identityRecorder
 	// attachedNetworks reads this node's IPv6 networks and takes the lead's.
 	attachedNetworks AttachedNetworks
+	// primaryClaims is the latest claim to lead seen from each other node,
+	// in a probe it sent or a probe answer. probeSeen guards those probes
+	// against replay, and probeNow asks for a probe round at once.
+	primaryClaims map[string]primaryClaim
+	probeSeen     map[string]time.Time
+	probeNow      chan struct{}
 }
 
 func Open(options Options) (*Service, error) {
@@ -235,6 +249,7 @@ func Open(options Options) (*Service, error) {
 		telemetry: make(map[string]nodeTelemetry), httpClient: baseHTTPClient,
 		baseHTTPClient: baseHTTPClient, memberClients: make(map[string]*http.Client), replicator: options.Replicator,
 		logger: options.Logger, reportedAlerts: make(map[string]reportedAlerts), reportedLookups: make(map[string]reportedLookups),
+		primaryClaims: make(map[string]primaryClaim), probeSeen: make(map[string]time.Time), probeNow: make(chan struct{}, 1),
 	}
 	if service.nodeName == "" {
 		service.nodeName = nodeID[:8]
@@ -276,6 +291,7 @@ func (service *Service) Snapshot() State {
 	state.ClusterID = service.manifest.ClusterID
 	state.ClusterDomain = service.manifest.ClusterDomain
 	state.Generation = service.manifest.Generation
+	state.Term = service.manifest.Term
 	state.Mode = "primary-replica"
 	state.PrimaryID = service.manifest.PrimaryID
 	state.UpdatedAt = service.manifest.UpdatedAt
@@ -324,6 +340,9 @@ func (service *Service) Snapshot() State {
 				}
 			}
 		}
+	}
+	if conflict, found := service.primaryConflictLocked(now); found {
+		applyPrimaryConflict(&state, conflict)
 	}
 	sortClusterNodes(state.Nodes, state.PrimaryID)
 	return state
@@ -408,9 +427,11 @@ func (service *Service) Initialize(ctx context.Context, domain string, addresses
 	return nil
 }
 
-// Promote changes the writable primary. The current primary may perform a
-// planned handoff to a replica; a replica may promote only itself for manual
-// disaster recovery when the primary is unavailable.
+// Promote changes the writable primary and starts a new term. The current
+// primary may perform a planned handoff to a replica; a replica may promote
+// only itself for manual disaster recovery when the primary is unavailable.
+// A primary that conflicts with another primary in its term may promote
+// itself again to keep the role, which makes the other one step down.
 func (service *Service) Promote(_ context.Context, nodeID string) error {
 	service.mu.Lock()
 	defer service.mu.Unlock()
@@ -422,7 +443,9 @@ func (service *Service) Promote(_ context.Context, nodeID string) error {
 		return errors.New("cluster node was not found")
 	}
 	if service.manifest.PrimaryID == nodeID {
-		return nil
+		if _, conflict := service.primaryConflictLocked(service.clock()); !conflict || nodeID != service.nodeID {
+			return nil
+		}
 	}
 	localIsPrimary := service.manifest.PrimaryID == service.nodeID
 	if !localIsPrimary && nodeID != service.nodeID {
@@ -436,6 +459,7 @@ func (service *Service) Promote(_ context.Context, nodeID string) error {
 	}
 	candidate := cloneManifest(service.manifest)
 	candidate.Generation++
+	candidate.Term++
 	candidate.UpdatedAt = service.clock()
 	candidate.PrimaryID = nodeID
 	for index := range candidate.Nodes {
@@ -452,6 +476,7 @@ func (service *Service) Promote(_ context.Context, nodeID string) error {
 	clear(service.telemetry)
 	clear(service.reportedAlerts)
 	clear(service.reportedLookups)
+	clear(service.primaryClaims)
 	return nil
 }
 

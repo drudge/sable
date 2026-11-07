@@ -48,7 +48,7 @@ Insights findings, the query log, and the runtime log describe what each device 
 
 `get_dynamic_dns` sends your public IP addresses to your assistant's AI provider whenever it calls the tool. Leave it off if you would rather not share them. Provider errors are shown the way **Integrations** shows them, and any stored credential that appears in one is blanked. Dynamic DNS runs only on the cluster primary, so a replica answers with a note to ask the primary, and `sync_dynamic_dns` refuses there.
 
-`get_cluster_status` shows what the **Cluster** page shows, plus each node's open problems, such as a failing certificate renewal. It leaves out node addresses. A replica hears only from the primary, so ask the primary for the whole cluster. The assistant cannot promote, remove, or add nodes.
+`get_cluster_status` shows what the **Cluster** page shows, plus each node's open problems, such as a failing certificate renewal, and names a second primary when two nodes accept changes in one term. It leaves out node addresses. A replica hears only from the primary, so ask the primary for the whole cluster. The assistant cannot promote, remove, or add nodes.
 
 When you change the tools in **Edit Setup**, or upgrade to a version with new ones, Sable tells connected assistants to fetch the list again, so the new tools appear without restarting them. Claude Code, and Claude Desktop through `mcp-remote`, act on this. A Claude Code session running inside the Claude Desktop app does not yet; start a new session there. After a restart that takes longer than about a minute, `mcp-remote` stops listening for changes until Claude Desktop restarts.
 

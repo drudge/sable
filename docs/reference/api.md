@@ -99,7 +99,7 @@ These actions require their matching administrative permissions. Reload responds
 | `POST /api/v1/cluster/enrollment-tokens` | Create an enrollment token |
 | `POST /api/v1/cluster/enroll` | Enroll a node |
 | `POST /api/v1/cluster/sync` | Request synchronization |
-| `POST /api/v1/cluster/nodes/{node}/promote` | Promote a member using the supported handoff/recovery workflow |
+| `POST /api/v1/cluster/nodes/{node}/promote` | Promote a member using the supported handoff/recovery workflow, or keep this node as primary when another primary shares its term |
 | `DELETE /api/v1/cluster/nodes/{node}` | Remove a member |
 | `DELETE /api/v1/cluster/membership` | Leave the cluster |
 | `DELETE /api/v1/cluster` | Delete the cluster |
