@@ -287,7 +287,7 @@ func TestLeadOutageSourceTellsOnceFromTheLowestReplica(t *testing.T) {
 func TestRolloutAlertSourceTellsEachStepForADay(t *testing.T) {
 	t.Parallel()
 	now := clusterAlertStart
-	rollout := func(phase string, startedAgo, finishedAgo time.Duration) cluster.RolloutStatus {
+	rollout := func(phase cluster.RolloutPhase, startedAgo, finishedAgo time.Duration) cluster.RolloutStatus {
 		status := cluster.RolloutStatus{
 			ID: "rollout-1", ClusterID: "cluster", PrimaryID: firstNodeID, Version: "v1.9.0", Phase: phase,
 			Nodes: []cluster.RolloutNode{{ID: secondNodeID, Name: "ns2"}, {ID: thirdNodeID, Name: "ns3"}, {ID: firstNodeID, Name: "ns1"}},

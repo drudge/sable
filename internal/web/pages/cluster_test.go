@@ -81,8 +81,8 @@ func TestClusterConflictOffersKeepingThisNodeAndHidesReplicaActions(t *testing.T
 }
 
 func TestClusterProgressSurvivesRestartsWithoutOfferingAnotherRollout(t *testing.T) {
-	for _, phase := range []string{"preparing", "updating", "restarting", "verifying", "complete", "failed", "stopped"} {
-		t.Run(phase, func(t *testing.T) {
+	for _, phase := range []cluster.RolloutPhase{"preparing", "updating", "restarting", "verifying", "complete", "failed", "stopped"} {
+		t.Run(string(phase), func(t *testing.T) {
 			view := ClusterUpdateView{CanApply: true, Rollout: cluster.RolloutStatus{ID: "rollout", Version: "v1.2.0", Phase: phase}}
 			var response bytes.Buffer
 			if err := ClusterUpdatePanel(view, true).Render(context.Background(), &response); err != nil {
@@ -103,8 +103,10 @@ func TestClusterProgressSurvivesRestartsWithoutOfferingAnotherRollout(t *testing
 
 func TestClusterProgressDistinguishesCompletedActiveAndWaitingNodes(t *testing.T) {
 	for _, test := range []struct {
-		phase, nodePhase, label string
-		spinners                int
+		phase     cluster.RolloutPhase
+		nodePhase cluster.RolloutNodePhase
+		label     string
+		spinners  int
 	}{
 		{"preparing", "queued", "Checking nodes", 0},
 		{"updating", "install", "Installing", 1},
@@ -113,7 +115,7 @@ func TestClusterProgressDistinguishesCompletedActiveAndWaitingNodes(t *testing.T
 		{"failed", "install", "Failed", 0},
 		{"stopped", "restart", "Stopped", 0},
 	} {
-		t.Run(test.phase+"/"+test.nodePhase, func(t *testing.T) {
+		t.Run(string(test.phase)+"/"+string(test.nodePhase), func(t *testing.T) {
 			view := ClusterUpdateView{Rollout: cluster.RolloutStatus{ID: "rollout", Phase: test.phase, Index: 1, Nodes: []cluster.RolloutNode{
 				{Name: "ns2", Phase: "complete"}, {Name: "ns3", Phase: test.nodePhase}, {Name: "ns1", Phase: "queued"},
 			}}}
