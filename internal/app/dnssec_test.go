@@ -589,7 +589,7 @@ func verifySignedTestZone(t *testing.T, zone zonemodel.Zone) *dns.DNSKEY {
 	return dataKey
 }
 
-func keyStatusByRoleState(t *testing.T, status dnssecstate.Status, role, state string) dnssecstate.KeyStatus {
+func keyStatusByRoleState(t *testing.T, status dnssecstate.Status, role string, state dnssecstate.KeyState) dnssecstate.KeyStatus {
 	t.Helper()
 	for _, key := range status.Keys {
 		if key.Role == role && key.State == state {

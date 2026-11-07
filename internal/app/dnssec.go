@@ -367,7 +367,7 @@ func generateSignedZoneRecords(
 func publishedSigningKeys(keys []zoneSigningKey, zone zonemodel.Zone) []zoneSigningKey {
 	result := make([]zoneSigningKey, 0, len(keys))
 	for _, key := range keys {
-		if !isPublishedKeyState(key.state) {
+		if !key.state.Valid() {
 			continue
 		}
 		copy := key
@@ -377,15 +377,6 @@ func publishedSigningKeys(keys []zoneSigningKey, zone zonemodel.Zone) []zoneSign
 		result = append(result, copy)
 	}
 	return result
-}
-
-func isPublishedKeyState(state string) bool {
-	switch state {
-	case dnssecstate.StatePublished, dnssecstate.StateReady, dnssecstate.StateActive, dnssecstate.StateRetiring:
-		return true
-	default:
-		return false
-	}
 }
 
 func signingKeysForRRSet(keys []zoneSigningKey, recordType uint16) []zoneSigningKey {

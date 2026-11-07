@@ -42,7 +42,7 @@ func populateManagedKeyView(status dnssecstate.Status, view *pages.ZoneView, dis
 	view.DNSSECParentDSKeyTag = status.ParentDSKeyTag
 	for _, key := range status.Keys {
 		item := pages.DNSSECKeyView{
-			Role: strings.ToUpper(key.Role), State: key.State, KeyTag: key.KeyTag,
+			Role: strings.ToUpper(key.Role), State: string(key.State), KeyTag: key.KeyTag,
 			DNSKEY: key.DNSKEY, DS: key.DS,
 		}
 		if !key.ReadyAt.IsZero() {
