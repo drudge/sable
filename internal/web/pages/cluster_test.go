@@ -48,6 +48,38 @@ func TestClusterNodeStatusUsesAvatarIndicators(t *testing.T) {
 	}
 }
 
+func TestClusterConflictOffersKeepingThisNodeAndHidesReplicaActions(t *testing.T) {
+	t.Parallel()
+	var response bytes.Buffer
+	view := ClusterPageView{
+		Initialized:  true,
+		LocalRole:    "Primary",
+		ConflictNode: "ns2",
+		Nodes: []ClusterNodeView{
+			{ID: "node-a", Name: "ns1", Role: "Primary", State: "online", SyncState: "conflict", Local: true},
+			{ID: "node-b", Name: "ns2", Role: "Primary", State: "online", SyncState: "conflict"},
+		},
+	}
+	if err := ClusterContent(view).Render(context.Background(), &response); err != nil {
+		t.Fatal(err)
+	}
+	markup := response.String()
+	for _, expected := range []string{
+		`class="warning-box cluster-conflict-warning"`, `</strong> ns2 also accepts changes`,
+		`hx-post="/ui/cluster/nodes/node-a/promote"`, `Keep This Node as Primary`,
+		`class="cluster-sync-badge conflict"`, `Also primary`,
+	} {
+		if !strings.Contains(markup, expected) {
+			t.Fatalf("conflict content missing %q: %s", expected, markup)
+		}
+	}
+	for _, unexpected := range []string{`/ui/cluster/nodes/node-b/remove`, `/ui/cluster/nodes/node-b/promote`, `Promote to Primary`} {
+		if strings.Contains(markup, unexpected) {
+			t.Fatalf("conflict content offers %q for the other primary: %s", unexpected, markup)
+		}
+	}
+}
+
 func TestClusterProgressSurvivesRestartsWithoutOfferingAnotherRollout(t *testing.T) {
 	for _, phase := range []string{"preparing", "updating", "restarting", "verifying", "complete", "failed", "stopped"} {
 		t.Run(phase, func(t *testing.T) {

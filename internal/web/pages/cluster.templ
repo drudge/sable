@@ -20,6 +20,9 @@ type ClusterPageView struct {
 	Generation uint64
 	Mode string
 	LocalRole string
+	// ConflictNode names another node that also acts as primary in this
+	// primary's term.
+	ConflictNode string
 	PrimaryID string
 	PrimaryURL string
 	ObservedAt time.Time
@@ -222,6 +225,9 @@ templ ClusterLiveStatus(view ClusterPageView) {
 					<div class="cluster-live-indicator"><i></i><span>Live</span></div>
 				</div>
 			}
+			if view.ConflictNode != "" {
+				<div class="warning-box cluster-conflict-warning"><strong>Two primaries:</strong> { view.ConflictNode } also accepts changes. Keep the node whose data should win; the other steps down and takes its data.</div>
+			}
 			<div class="operational-metric-grid cluster-metrics">
 				@OperationalMetricCard(ifThen(view.LocalRole == "Primary", "crown", "server"), "This Node", view.LocalRole, "Local cluster role", "blue")
 				@OperationalMetricCard("layers", "Generation", fmt.Sprint(view.Generation), "Current configuration revision", "purple")
@@ -404,6 +410,7 @@ templ EnrollmentTokenDialog(view ClusterPageView) {
 templ ClusterGuide(color, title, description string) { <div><i class={ color }></i><p><strong>{ title }</strong><span>{ description }</span></p></div> }
 
 func clusterStatusDescription(view ClusterPageView) string {
+	if view.ConflictNode != "" { return "Another node also accepts changes; keep one of them as primary" }
 	if view.LocalRole == "Primary" { return "This server accepts configuration changes and synchronizes replicas" }
 	if view.LocalRole == "Replica" { return "This server answers DNS locally and synchronizes from the primary" }
 	return "This server is operating independently"
@@ -426,11 +433,11 @@ func clusterNodeEndpoint(node ClusterNodeView) string { if node.AdvertiseURL != 
 func clusterNodeAvatar(node ClusterNodeView) string { return "cluster-node-icon " + ifThen(node.State == "online", "online", ifThen(node.State == "unreachable", "unreachable", "unknown")) + ifThen(node.Local, " local", "") }
 func nodeStateLabel(state string) string { if state == "online" { return "Online" }; if state == "unreachable" { return "Unreachable" }; return "Unknown" }
 func nodeSyncBadge(state string) string { return "cluster-sync-badge " + state }
-func syncStateLabel(state string) string { switch state { case "current": return "In sync"; case "behind": return "Behind"; case "unverified": return "Sync unverified"; default: return "Sync unknown" } }
+func syncStateLabel(state string) string { switch state { case "current": return "In sync"; case "behind": return "Behind"; case "unverified": return "Sync unverified"; case "conflict": return "Also primary"; default: return "Sync unknown" } }
 func syncProgressMaximum(generation uint64) uint64 { if generation == 0 { return 1 }; return generation }
-func syncProgressLabel(node ClusterNodeView) string { if node.SyncState == "current" { return "Fully synchronized" }; if node.SyncState == "unverified" { return "Awaiting primary verification" }; if node.Lag > 0 { return fmt.Sprintf("%d generations behind", node.Lag) }; return "Synchronization unavailable" }
+func syncProgressLabel(node ClusterNodeView) string { if node.SyncState == "conflict" { return "Accepting changes as primary" }; if node.SyncState == "current" { return "Fully synchronized" }; if node.SyncState == "unverified" { return "Awaiting primary verification" }; if node.Lag > 0 { return fmt.Sprintf("%d generations behind", node.Lag) }; return "Synchronization unavailable" }
 func nodeUptimeLabel(node ClusterNodeView) string { if node.UpSince == "" { return "Uptime unavailable" }; if node.State == "unreachable" { return "Last reported up " + node.UpSince }; return "Up " + node.UpSince }
-func nodeLagLabel(node ClusterNodeView) string { if node.SyncState == "unknown" || node.SyncState == "unverified" { return "Unknown" }; return lagLabel(node.Lag) }
+func nodeLagLabel(node ClusterNodeView) string { if node.SyncState == "unknown" || node.SyncState == "unverified" || node.SyncState == "conflict" { return "Unknown" }; return lagLabel(node.Lag) }
 func lagLabel(lag uint64) string { if lag == 0 { return "No lag" }; if lag == 1 { return "1 generation" }; return fmt.Sprintf("%d generations", lag) }
 
 // ClusterNodeRoute is where a node's details panel lives. Each node's address
@@ -574,8 +581,22 @@ templ clusterNodeFooter(view ClusterNodeDrawerView) {
 // clusterNodeActions are the node's Promote and Remove buttons, in its row or
 // its panel. An action taken from the panel closes it, returning to the page.
 templ clusterNodeActions(node ClusterNodeView, localRole string, inPanel bool) {
-	if (node.Local && node.Role == "Replica") || (!node.Local && localRole == "Primary") {
-		<div class={ "cluster-node-actions", templ.KV("split", !node.Local && localRole == "Primary") }>
+	if (node.Local && (node.Role == "Replica" || node.SyncState == "conflict")) || clusterNodeManaged(node, localRole) {
+		<div class={ "cluster-node-actions", templ.KV("split", clusterNodeManaged(node, localRole)) }>
+			if node.Local && node.SyncState == "conflict" {
+				<form
+					hx-post={ "/ui/cluster/nodes/" + node.ID + "/promote" }
+					hx-target="#cluster-content"
+					hx-swap="outerHTML"
+					hx-sync="#cluster-content:replace"
+					if inPanel {
+						hx-replace-url="/cluster"
+					}
+					hx-confirm="The other primary will step down, and its data will be replaced by this node's."
+					data-confirm-title="Keep this node as primary?"
+					data-confirm-action="Keep as Primary"
+				><button class={ clusterNodeActionClass(inPanel, false) } type="submit">@Icon("crown")<span>Keep This Node as Primary</span></button></form>
+			}
 			if node.Local && node.Role == "Replica" {
 				<form
 					hx-post={ "/ui/cluster/nodes/" + node.ID + "/promote" }
@@ -590,7 +611,7 @@ templ clusterNodeActions(node ClusterNodeView, localRole string, inPanel bool) {
 					data-confirm-action="Promote"
 				><button class={ clusterNodeActionClass(inPanel, false) } type="submit">@Icon("arrow-right")<span>Promote This Replica</span></button></form>
 			}
-			if !node.Local && localRole == "Primary" {
+			if clusterNodeManaged(node, localRole) {
 				<form
 					hx-post={ "/ui/cluster/nodes/" + node.ID + "/remove" }
 					hx-target="#cluster-content"
@@ -622,6 +643,12 @@ templ clusterNodeActions(node ClusterNodeView, localRole string, inPanel bool) {
 			}
 		</div>
 	}
+}
+
+// clusterNodeManaged reports whether the primary may remove or promote node:
+// a replica of its own, but not a node that also claims the primary role.
+func clusterNodeManaged(node ClusterNodeView, localRole string) bool {
+	return !node.Local && localRole == "Primary" && node.SyncState != "conflict"
 }
 
 func clusterNodeActionClass(inPanel bool, remove bool) string {

@@ -259,6 +259,30 @@ Sable does not merge independent writes from two primaries. If both nodes were
 writable during a partition, stop and preserve both data directories before
 choosing the authoritative state.
 
+### When a former primary comes back
+
+Every promotion starts a new primary term. A primary asks the other members
+which primary they follow every 10 seconds. When a former primary, such as one
+restored from a backup, finds a newer term on any member, it steps down: it
+becomes a replica of the newer primary and takes that primary's data. Changes
+made on the former primary after it was replaced are discarded, however many
+there were.
+
+Don't remove the former primary from the promoted node before it comes back.
+A member that no longer lists it can't tell it to step down.
+
+### Two primaries in one term
+
+Two recovery promotions made at the same time, or made before Sable had
+primary terms, leave two primaries in one term. Sable can't tell which one
+holds the data you want, so it doesn't choose. Both Cluster pages show
+**Two primaries**, and both nodes show **Also primary**. Decide which node's
+data should win and choose **Keep This Node as Primary** on that node. It starts
+a new term, and the other primary steps down within a few seconds.
+
+Fencing needs both nodes on a release with primary terms. An older node
+refuses the probe and isn't told to step down.
+
 ## Remove, leave, or delete
 
 - **Remove Replica** runs on the primary. It revokes that member and removes it
@@ -328,7 +352,8 @@ database overrides, and fresh-host recovery.
 | Generation lag grows | Inspect the replica log for validation, disk, vault, or activation errors. The prior generation remains active until the whole candidate succeeds. |
 | Writes are refused | Confirm the local role. Cluster-scoped and RFC 2136 writes belong on the primary; follow the primary link from the Cluster page. |
 | DoH preset fails | Confirm `/dns-query` is enabled on the advertised HTTPS listener and that the advertised hostname matches the pinned member certificate. |
-| Former primary reappears after recovery | Keep it away from clients until it reaches the promoted node and reports the replica role at the current generation. |
+| Former primary reappears after recovery | It steps down once it reaches a member that follows the newer term. Keep it away from clients until it reports the replica role at the current generation. |
+| Two primaries | Both nodes were promoted in the same term. Choose **Keep This Node as Primary** on the node whose data should win. |
 
 For the persistence and trust model, see the [architecture](architecture.md).
 For configuration fields and replicated boundaries, see the

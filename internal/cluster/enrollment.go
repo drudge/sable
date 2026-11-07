@@ -71,6 +71,7 @@ type JoinConfiguration struct {
 	ClusterID      string         `json:"cluster_id"`
 	ClusterDomain  string         `json:"cluster_domain"`
 	Generation     uint64         `json:"generation"`
+	Term           uint64         `json:"term,omitempty"`
 	UpdatedAt      time.Time      `json:"updated_at"`
 	PrimaryID      string         `json:"primary_id"`
 	StatusKey      string         `json:"status_key"`
@@ -404,7 +405,7 @@ func validPrimaryHost(host string) bool {
 func joinConfiguration(source *manifest, stateSnapshot []byte) JoinConfiguration {
 	configuration := JoinConfiguration{
 		FormatVersion: source.FormatVersion, ClusterID: source.ClusterID, ClusterDomain: source.ClusterDomain,
-		Generation: source.Generation, UpdatedAt: source.UpdatedAt, PrimaryID: source.PrimaryID,
+		Generation: source.Generation, Term: source.Term, UpdatedAt: source.UpdatedAt, PrimaryID: source.PrimaryID,
 		StatusKey: source.StatusKey, StateDigest: source.StateDigest, StateSnapshot: stateSnapshot,
 		Members: make([]Member, 0, len(source.Nodes)),
 	}
@@ -422,7 +423,7 @@ func joinConfiguration(source *manifest, stateSnapshot []byte) JoinConfiguration
 func manifestFromJoinConfiguration(source JoinConfiguration) *manifest {
 	result := &manifest{
 		FormatVersion: source.FormatVersion, ClusterID: source.ClusterID, ClusterDomain: source.ClusterDomain,
-		Generation: source.Generation, UpdatedAt: source.UpdatedAt, PrimaryID: source.PrimaryID,
+		Generation: source.Generation, Term: source.Term, UpdatedAt: source.UpdatedAt, PrimaryID: source.PrimaryID,
 		StatusKey: source.StatusKey, StateDigest: source.StateDigest, Nodes: make([]member, 0, len(source.Members)),
 	}
 	for _, node := range source.Members {

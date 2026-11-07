@@ -440,6 +440,12 @@ func (server *Server) promoteClusterNode(writer http.ResponseWriter, request *ht
 		server.renderClusterMutation(writer, request, http.StatusUnprocessableEntity, "", err.Error())
 		return
 	}
+	if before.Conflict != nil && nodeID == before.NodeID {
+		server.logger.Warn("cluster primary kept over a conflicting primary", "conflicting_node_id", before.Conflict.NodeID, "client", requestClientIP(request))
+		server.recordControlPlaneAudit(request, "cluster.node.keep", fmt.Sprintf("kept primary role over %s", before.Conflict.Name))
+		server.renderClusterMutation(writer, request, http.StatusOK, "This node stays primary; "+before.Conflict.Name+" will step down within a few seconds", "")
+		return
+	}
 	if plannedHandoff {
 		server.logger.Info("cluster primary handoff initiated", "node_id", nodeID, "client", requestClientIP(request))
 		server.recordControlPlaneAudit(request, "cluster.node.handoff", fmt.Sprintf("handed primary role to replica %s", nodeID))
@@ -736,6 +742,9 @@ func populateClusterStateView(view *pages.ClusterPageView, state cluster.State) 
 	view.Initialized, view.NetworkReady = state.Initialized, state.NetworkReady
 	view.NodeID, view.ClusterID, view.ClusterDomain = state.NodeID, state.ClusterID, state.ClusterDomain
 	view.Generation, view.Mode, view.LocalRole = state.Generation, state.Mode, clusterRoleLabel(state.LocalRole)
+	if state.Conflict != nil {
+		view.ConflictNode = state.Conflict.Name
+	}
 	view.PrimaryID, view.PrimaryURL, view.ObservedAt = state.PrimaryID, state.PrimaryURL, state.ObservedAt
 	view.Connected, view.Synchronized = state.Connected, state.Synchronized
 	view.Nodes = make([]pages.ClusterNodeView, 0, len(state.Nodes))
