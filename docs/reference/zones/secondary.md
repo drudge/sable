@@ -14,7 +14,7 @@ The zone can exist before its first transfer, but is not ready with useful recor
 
 The initial transfer ingests AXFR data. Later SOA checks drive IXFR refresh, with AXFR fallback when incremental history is unavailable. SOA refresh, retry, and expiry values govern the lifecycle; NOTIFY prompts an earlier check after a change.
 
-A secondary can keep serving during a brief primary outage, but expiry places a limit on trusting a copy that cannot be refreshed. Monitor transfer status rather than assuming “it answered once” proves continuing health.
+A secondary can keep serving during a brief primary outage, but expiry places a limit on trusting a copy that cannot be refreshed. Expiry counts from the last refresh that worked, so restarting Sable does not extend it. Monitor transfer status rather than assuming “it answered once” proves continuing health.
 
 ## Ownership and security
 

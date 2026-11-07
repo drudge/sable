@@ -5,10 +5,12 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"maps"
 	"testing"
 	"time"
 
 	"github.com/drudge/sable/internal/dnsserver"
+	"github.com/drudge/sable/internal/store"
 	zonemodel "github.com/drudge/sable/internal/zone"
 )
 
@@ -379,5 +381,74 @@ func TestSecondaryForwarderRefreshNotifyExpiryAndPromotion(t *testing.T) {
 	refresher.step(context.Background(), now.Add(24*time.Second))
 	if service.calls != calls || service.expired[current.Name] || len(refresher.states) != 0 || configuration.snapshot.Zones[0].Type != "forwarder" {
 		t.Fatal("promoted forwarder continued synchronizing or remained expired")
+	}
+}
+
+type refreshTestMarks struct {
+	saved map[string]store.ZoneRefresh
+}
+
+func (marks *refreshTestMarks) LoadZoneRefreshes(context.Context) (map[string]store.ZoneRefresh, error) {
+	return maps.Clone(marks.saved), nil
+}
+
+func (marks *refreshTestMarks) SaveZoneRefreshes(_ context.Context, refreshes map[string]store.ZoneRefresh) error {
+	marks.saved = maps.Clone(refreshes)
+	return nil
+}
+
+// RFC 1035 section 4.3.5 times EXPIRE from the last refresh that worked, not
+// from when the process started, so a restart must not give a secondary whose
+// primaries are gone another full EXPIRE of serving its stale copy.
+func TestZoneRefresherExpiryOutlivesARestart(t *testing.T) {
+	t.Parallel()
+
+	zone := managedTestZone()
+	marks := &refreshTestMarks{}
+	started := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	newRefresher := func() (*zoneRefresher, *refreshTestDNS) {
+		configuration := &refreshTestConfiguration{snapshot: zonemodel.Snapshot{Zones: []zonemodel.Zone{zone}}}
+		dnsService := &refreshTestDNS{err: errors.New("primary unavailable"), expired: make(map[string]bool)}
+		refresher := newZoneRefresher(configuration, dnsService, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		refresher.marks = marks
+		return refresher, dnsService
+	}
+
+	first, _ := newRefresher()
+	first.step(context.Background(), started)
+	first.step(context.Background(), started.Add(10*time.Second))
+
+	restarted, dnsService := newRefresher()
+	restarted.step(context.Background(), started.Add(21*time.Second))
+	if !dnsService.expired[zone.Name] {
+		t.Fatal("restart gave the zone a fresh expire interval")
+	}
+	if want := started.Add(20 * time.Second); !restarted.states[zone.Name].expiresAt.Equal(want) {
+		t.Fatalf("expires at %v, want %v", restarted.states[zone.Name].expiresAt, want)
+	}
+}
+
+// A refresh that works moves the saved mark, so the next restart times
+// EXPIRE from it.
+func TestZoneRefresherSavesEachRefreshThatWorks(t *testing.T) {
+	t.Parallel()
+
+	zone := managedTestZone()
+	marks := &refreshTestMarks{}
+	configuration := &refreshTestConfiguration{snapshot: zonemodel.Snapshot{Zones: []zonemodel.Zone{zone}}}
+	dnsService := &refreshTestDNS{expired: make(map[string]bool)}
+	refresher := newZoneRefresher(configuration, dnsService, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	refresher.marks = marks
+	started := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	refresher.step(context.Background(), started)
+	refresher.step(context.Background(), started.Add(10*time.Second))
+	saved := marks.saved[zone.Name]
+	if saved.Serial != 1 || !saved.RefreshedAt.Equal(started.Add(10*time.Second)) {
+		t.Fatalf("saved mark = %+v", saved)
+	}
+	configuration.snapshot.Zones = nil
+	refresher.step(context.Background(), started.Add(11*time.Second))
+	if _, found := marks.saved[zone.Name]; found {
+		t.Fatal("a removed zone kept its saved mark")
 	}
 }
