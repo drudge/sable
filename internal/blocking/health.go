@@ -4,6 +4,8 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/drudge/sable/internal/jobstatus"
 )
 
 // Retry backoff for a block-list source that fails to download. The delay
@@ -189,15 +191,5 @@ func (tracker *healthTracker) earliestRetry(now time.Time) time.Time {
 }
 
 func retryDelay(consecutiveFailures int) time.Duration {
-	if consecutiveFailures <= 1 {
-		return retryBaseDelay
-	}
-	delay := retryBaseDelay
-	for attempt := 1; attempt < consecutiveFailures; attempt++ {
-		delay *= 2
-		if delay >= retryMaximumDelay {
-			return retryMaximumDelay
-		}
-	}
-	return delay
+	return jobstatus.Backoff(consecutiveFailures, retryBaseDelay, retryMaximumDelay)
 }
