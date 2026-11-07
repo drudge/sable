@@ -438,6 +438,35 @@ func TestSyncNowCoalescesWhilePublicationIsQueued(t *testing.T) {
 	}
 }
 
+// A Sync Now that arrives while an attempt is running, such as the one saving
+// new settings asks for, queues another attempt. The running attempt read its
+// settings before the save, so dropping the request would leave the new
+// records unpublished until the next interval.
+func TestSyncNowDuringAnAttemptQueuesAnother(t *testing.T) {
+	manager := newTestManager(testDynamicDNSSettings(), &testProvider{})
+	discovering, release := make(chan struct{}), make(chan struct{})
+	manager.discover = func(context.Context, string, string) (netip.Addr, error) {
+		close(discovering)
+		<-release
+		return netip.MustParseAddr("8.8.8.8"), nil
+	}
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		manager.runOnce(context.Background())
+	}()
+	<-discovering
+	manager.SyncNow()
+	close(release)
+	<-finished
+	if queued := len(manager.wake); queued != 1 {
+		t.Fatalf("queued publications = %d, want 1", queued)
+	}
+	if !manager.Status(context.Background()).Running {
+		t.Error("queued publication stopped reporting running when the earlier attempt finished")
+	}
+}
+
 func newTestManager(settings config.DynamicDNS, publisher *testProvider) *Manager {
 	manager := &Manager{
 		configuration: testConfiguration{settings: settings},
