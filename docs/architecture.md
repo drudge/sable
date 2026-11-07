@@ -60,7 +60,8 @@ Secondary zones bootstrap with AXFR through TCP or DNS-over-TLS, then request
 IXFR from their current serial and atomically apply validated deltas (or an AXFR
 fallback). A lifecycle worker schedules checks from SOA refresh/retry/expire
 timers, persists changed normalized records through the transactional zone
-catalog, and overlays expired zones with SERVFAIL until recovery. Stub zones use
+catalog, and overlays expired zones with SERVFAIL until recovery. Each node
+saves when every zone last refreshed, so the expire timer survives a restart. Stub zones use
 the same scheduler while replacing their synchronized SOA/NS/glue metadata and
 routing their namespace directly to the configured primary pool. Forwarder
 zones compile apex or delegated FWD records into the same longest-suffix routing

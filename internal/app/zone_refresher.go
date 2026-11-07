@@ -13,6 +13,7 @@ import (
 	"github.com/miekg/dns"
 
 	"github.com/drudge/sable/internal/dnsserver"
+	"github.com/drudge/sable/internal/store"
 	"github.com/drudge/sable/internal/zone"
 )
 
@@ -35,6 +36,13 @@ type zoneRefreshDNS interface {
 	RefreshZone(context.Context, string, string, []string, string, string, []dnsserver.ZoneRecord) ([]dnsserver.ZoneRecord, bool, error)
 	SetZoneExpired(string, bool)
 	Notifications() <-chan dnsserver.ZoneNotification
+}
+
+// zoneRefreshMarks saves when each managed zone last refreshed, so the expire
+// timer survives a restart.
+type zoneRefreshMarks interface {
+	LoadZoneRefreshes(context.Context) (map[string]store.ZoneRefresh, error)
+	SaveZoneRefreshes(context.Context, map[string]store.ZoneRefresh) error
 }
 
 type zoneRefreshState struct {
@@ -82,6 +90,10 @@ type zoneRefresher struct {
 	mu         sync.Mutex
 	states     map[string]zoneRefreshState
 	lastNotify map[string]time.Time
+	// marks keeps refreshed, the last refresh of each zone that worked, across
+	// restarts. Without it the expire timer starts again with the process.
+	marks     zoneRefreshMarks
+	refreshed map[string]store.ZoneRefresh
 }
 
 func newZoneRefresher(configuration zoneRefreshConfiguration, dnsService zoneRefreshDNS, logger *slog.Logger) *zoneRefresher {
@@ -159,11 +171,9 @@ func (refresher *zoneRefresher) step(ctx context.Context, now time.Time) {
 		}
 		state, tracked := refresher.states[current.Name]
 		if !tracked || state.serial != soa.Serial {
-			state = zoneRefreshState{
-				serial: soa.Serial, nextAttempt: now.Add(timers.refresh), expiresAt: now.Add(timers.expire),
-			}
+			state = refresher.resume(ctx, current.Name, soa.Serial, timers, now)
 			refresher.track(current.Name, state)
-			refresher.dns.SetZoneExpired(current.Name, false)
+			refresher.dns.SetZoneExpired(current.Name, !now.Before(state.expiresAt))
 			continue
 		}
 		if !now.Before(state.expiresAt) {
@@ -201,6 +211,7 @@ func (refresher *zoneRefresher) step(ctx context.Context, now time.Time) {
 			serial: soa.Serial, nextAttempt: now.Add(timers.refresh), expiresAt: now.Add(timers.expire),
 		}
 		refresher.track(current.Name, state)
+		refresher.remember(ctx, current.Name, soa.Serial, now)
 		refresher.dns.SetZoneExpired(current.Name, false)
 		refresher.logger.Debug("managed zone refreshed", "zone", current.Name, "serial", soa.Serial, "changed", changed, "next_refresh", state.nextAttempt)
 	}
@@ -211,6 +222,74 @@ func (refresher *zoneRefresher) step(ctx context.Context, now time.Time) {
 		refresher.dns.SetZoneExpired(name, false)
 		refresher.untrack(name)
 		delete(refresher.lastNotify, name)
+	}
+	refresher.forgetUnmanaged(ctx, managed)
+}
+
+// resume starts tracking a zone from its last refresh that worked, when the
+// saved mark still describes the content it holds, so RFC 1035 section 4.3.5's
+// refresh and expire timers keep running across a restart. Content the mark
+// does not describe, such as an operator's edit, starts the timers now.
+func (refresher *zoneRefresher) resume(ctx context.Context, name string, serial uint32, timers soaTimers, now time.Time) zoneRefreshState {
+	refresher.loadMarks(ctx)
+	since := now
+	if mark, found := refresher.refreshed[name]; found && mark.Serial == serial && !mark.RefreshedAt.After(now) {
+		since = mark.RefreshedAt
+	} else {
+		refresher.remember(ctx, name, serial, now)
+	}
+	return zoneRefreshState{serial: serial, nextAttempt: since.Add(timers.refresh), expiresAt: since.Add(timers.expire)}
+}
+
+// loadMarks reads the saved refreshes once. A store that cannot be read leaves
+// every zone timing from now, which is how Sable behaved before it saved them.
+func (refresher *zoneRefresher) loadMarks(ctx context.Context) {
+	if refresher.refreshed != nil {
+		return
+	}
+	refresher.refreshed = make(map[string]store.ZoneRefresh)
+	if refresher.marks == nil {
+		return
+	}
+	loaded, err := refresher.marks.LoadZoneRefreshes(ctx)
+	if err != nil {
+		refresher.logger.Warn("load managed zone refresh times", "error", err)
+		return
+	}
+	if loaded != nil {
+		refresher.refreshed = loaded
+	}
+}
+
+// remember records a refresh of name at serial that worked.
+func (refresher *zoneRefresher) remember(ctx context.Context, name string, serial uint32, at time.Time) {
+	refresher.loadMarks(ctx)
+	refresher.refreshed[name] = store.ZoneRefresh{Serial: serial, RefreshedAt: at}
+	refresher.saveMarks(ctx)
+}
+
+// forgetUnmanaged drops the marks of zones that are no longer refreshed from a
+// primary, including any removed while Sable was stopped.
+func (refresher *zoneRefresher) forgetUnmanaged(ctx context.Context, managed map[string]struct{}) {
+	refresher.loadMarks(ctx)
+	removed := false
+	for name := range refresher.refreshed {
+		if _, found := managed[name]; !found {
+			delete(refresher.refreshed, name)
+			removed = true
+		}
+	}
+	if removed {
+		refresher.saveMarks(ctx)
+	}
+}
+
+func (refresher *zoneRefresher) saveMarks(ctx context.Context) {
+	if refresher.marks == nil {
+		return
+	}
+	if err := refresher.marks.SaveZoneRefreshes(ctx, refresher.refreshed); err != nil {
+		refresher.logger.Warn("save managed zone refresh times", "error", err)
 	}
 }
 

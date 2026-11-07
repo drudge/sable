@@ -478,6 +478,7 @@ func (process *process) applyRecorderSettings(reloadContext context.Context, act
 // tracking under the zone refresh context.
 func (process *process) startZoneWorkers() {
 	process.zoneRefresher = newZoneRefresher(process.zoneManager, process.handler, process.logger)
+	process.zoneRefresher.marks = process.database
 	process.runWorker(func(context.Context) { process.zoneRefresher.Run(process.zoneRefreshContext) })
 	process.runWorker(func(context.Context) {
 		runDNSSECRefresher(process.zoneRefreshContext, process.zoneManager, process.dnssec, process.handler, process.logger)
