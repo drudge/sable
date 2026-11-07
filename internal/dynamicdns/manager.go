@@ -15,6 +15,7 @@ import (
 
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsprovider"
+	"github.com/drudge/sable/internal/jobstatus"
 )
 
 const (
@@ -54,8 +55,8 @@ type provider interface {
 
 // Status is the latest public-address discovery and publication state.
 type Status struct {
+	jobstatus.Attempts
 	Enabled               bool
-	Running               bool
 	CredentialsConfigured bool
 	Provider              string
 	IPv4                  string
@@ -63,15 +64,7 @@ type Status struct {
 	Records               int
 	Changed               int
 	Unchanged             int
-	LastAttempt           time.Time
-	LastSuccess           time.Time
 	LastPublished         time.Time
-	NextAttempt           time.Time
-	Duration              time.Duration
-	LastError             string
-	// ConsecutiveFailures counts the attempts in a row that failed. It paces
-	// retries, and lets an alert wait out one failed request but not three.
-	ConsecutiveFailures int
 	// PreviousIPv4 and PreviousIPv6 are the addresses a family had before its
 	// latest change, and IPv4ChangedAt and IPv6ChangedAt are when a run found
 	// the new one. They stay empty until an address changes, because the
@@ -187,7 +180,7 @@ func (manager *Manager) SyncNow() {
 		return
 	}
 	manager.mu.Lock()
-	manager.status.Running = true
+	manager.status.Queue()
 	manager.mu.Unlock()
 	select {
 	case manager.wake <- struct{}{}:
@@ -222,7 +215,7 @@ func (manager *Manager) due() bool {
 	}
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
-	return !manager.status.Running && (manager.status.NextAttempt.IsZero() || !manager.now().Before(manager.status.NextAttempt))
+	return manager.status.Due(manager.now())
 }
 
 func (manager *Manager) runOnce(ctx context.Context) {
@@ -475,8 +468,7 @@ func (manager *Manager) queued() bool {
 func (manager *Manager) beginAttempt(started time.Time) {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
-	manager.status.Running = true
-	manager.status.LastAttempt = started
+	manager.status.Begin(started)
 	manager.status.LastError = ""
 }
 
@@ -484,8 +476,7 @@ func (manager *Manager) finishAttempt(started time.Time, interval time.Duration,
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 	finished := manager.now()
-	manager.status.Running = manager.queued()
-	manager.status.Duration = finished.Sub(started)
+	manager.status.Finish(started, finished, manager.queued())
 	// A run that finds a different address than the last one known records
 	// the one it replaced and when, so the change can be told as news. The
 	// first address Sable ever finds replaces nothing.
@@ -507,29 +498,20 @@ func (manager *Manager) finishAttempt(started time.Time, interval time.Duration,
 		manager.status.LastPublished = finished
 	}
 	if err == nil {
-		manager.status.ConsecutiveFailures = 0
-		manager.status.LastSuccess = finished
-		manager.status.LastError = ""
-		manager.status.NextAttempt = started.Add(interval)
+		manager.status.Succeed(finished, started.Add(interval))
 		return
 	}
-	manager.status.ConsecutiveFailures++
-	manager.status.LastError = err.Error()
-	delay := retryDelay(manager.status.ConsecutiveFailures, interval)
+	delay := retryDelay(manager.status.ConsecutiveFailures+1, interval)
 	if result.retryAfter > delay {
 		delay = min(result.retryAfter, maximumRetry)
 	}
-	manager.status.NextAttempt = started.Add(delay)
+	manager.status.Fail(err, started.Add(delay))
 }
 
+// retryDelay backs off from the first failure but never waits longer than
+// the regular interval would.
 func retryDelay(failures int, interval time.Duration) time.Duration {
-	delay := minimumRetry
-	for attempt := 1; attempt < failures && delay < maximumRetry; attempt++ {
-		delay *= 2
-	}
-	if delay > maximumRetry {
-		delay = maximumRetry
-	}
+	delay := jobstatus.Backoff(failures, minimumRetry, maximumRetry)
 	if interval > 0 && delay > interval {
 		delay = interval
 	}

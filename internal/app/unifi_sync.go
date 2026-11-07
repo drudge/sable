@@ -112,7 +112,7 @@ func (syncer *unifiSyncer) SyncNow() {
 		return
 	}
 	syncer.mu.Lock()
-	syncer.status.Running = true
+	syncer.status.Queue()
 	syncer.mu.Unlock()
 	select {
 	case syncer.wake <- struct{}{}:
@@ -239,24 +239,19 @@ func (syncer *unifiSyncer) StoredCredentials(ctx context.Context) (unifi.Credent
 func (syncer *unifiSyncer) beginAttempt(started time.Time) {
 	syncer.mu.Lock()
 	defer syncer.mu.Unlock()
-	syncer.status.Running = true
-	syncer.status.LastAttempt = started
+	syncer.status.Begin(started)
 }
 
 func (syncer *unifiSyncer) finishAttempt(started time.Time, interval time.Duration, plan unifi.Plan, hosts int, err error) {
 	syncer.mu.Lock()
 	defer syncer.mu.Unlock()
-	syncer.status.Running = false
-	syncer.status.Duration = syncer.now().Sub(started)
-	syncer.status.NextAttempt = syncer.now().Add(interval)
+	finished := syncer.now()
+	syncer.status.Finish(started, finished, false)
 	if err != nil {
-		syncer.status.LastError = err.Error()
-		syncer.status.ConsecutiveFailures++
+		syncer.status.Fail(err, finished.Add(interval))
 		return
 	}
-	syncer.status.LastError = ""
-	syncer.status.ConsecutiveFailures = 0
-	syncer.status.LastSuccess = started
+	syncer.status.Succeed(started, finished.Add(interval))
 	syncer.status.Hosts = hosts
 	syncer.status.HostsByNetwork = plan.HostsByNetwork
 	syncer.status.ZonesCreated = len(plan.CreatedZones)

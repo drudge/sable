@@ -26,6 +26,7 @@ import (
 
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dnsprovider"
+	"github.com/drudge/sable/internal/jobstatus"
 )
 
 type Vault = dnsprovider.Vault
@@ -33,6 +34,8 @@ type Vault = dnsprovider.Vault
 type Credentials = dnsprovider.Credentials
 
 type Status struct {
+	// Attempts.Running is true while an issuance or renewal is under way.
+	jobstatus.Attempts
 	Mode                  string
 	Provider              string
 	CredentialsConfigured bool
@@ -40,17 +43,8 @@ type Status struct {
 	Issuer                string
 	NotBefore             time.Time
 	NotAfter              time.Time
-	LastAttempt           time.Time
-	LastSuccess           time.Time
-	LastError             string
-	// ConsecutiveFailures counts the issuances and renewals that have failed
-	// in a row. It clears once one works or the installed certificate turns
-	// out to need no renewal, so it tells a failure that keeps happening from
-	// one that happened once.
-	ConsecutiveFailures int
-	Renewing            bool
-	ProviderEndpoint    string
-	TSIGAlgorithm       string
+	ProviderEndpoint      string
+	TSIGAlgorithm         string
 
 	// The fields below describe the certificate that is actually installed,
 	// which is not always the certificate the settings ask for: a name added to
@@ -109,16 +103,16 @@ func (manager *Manager) Ensure(ctx context.Context, encrypted config.EncryptedDN
 		return false, nil
 	}
 	manager.mu.Lock()
-	if manager.status.Renewing {
+	if manager.status.Running {
 		manager.mu.Unlock()
 		return false, errors.New("certificate issuance is already in progress")
 	}
-	manager.status.Renewing = true
-	manager.status.LastAttempt = manager.now()
+	started := manager.now()
+	manager.status.Begin(started)
 	manager.mu.Unlock()
 	defer func() {
 		manager.mu.Lock()
-		manager.status.Renewing = false
+		manager.status.Finish(started, manager.now(), false)
 		manager.mu.Unlock()
 	}()
 
@@ -258,9 +252,11 @@ func (manager *Manager) recordCertificate(certificate *x509.Certificate, lastErr
 	manager.status.Issuer = certificate.Issuer.CommonName
 	manager.status.NotBefore = certificate.NotBefore
 	manager.status.NotAfter = certificate.NotAfter
+	// A certificate that needs no renewal also counts as a success, which is
+	// what clears a run of failures. There is no next attempt to schedule:
+	// the caller decides when to check again.
+	manager.status.Succeed(manager.now(), time.Time{})
 	manager.status.LastError = lastError
-	manager.status.ConsecutiveFailures = 0
-	manager.status.LastSuccess = manager.now()
 	manager.status.Subject = certificate.Subject.CommonName
 	manager.status.SerialNumber = formatSerialNumber(certificate.SerialNumber)
 	manager.status.Fingerprint = formatFingerprint(sha256.Sum256(certificate.Raw))
@@ -307,8 +303,7 @@ func formatFingerprint(sum [sha256.Size]byte) string {
 
 func (manager *Manager) recordError(err error) {
 	manager.mu.Lock()
-	manager.status.LastError = err.Error()
-	manager.status.ConsecutiveFailures++
+	manager.status.Fail(err, time.Time{})
 	manager.mu.Unlock()
 	manager.logger.Error("public TLS certificate operation failed", "error", err)
 }
