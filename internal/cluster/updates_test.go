@@ -426,7 +426,7 @@ func TestRolloutRecordsWhenAndWhereItEnded(t *testing.T) {
 	for _, test := range []struct {
 		name       string
 		end        func(t *testing.T, fixture *rolloutFixture)
-		phase      string
+		phase      RolloutPhase
 		failedNode string
 	}{
 		{
@@ -468,7 +468,7 @@ func TestRolloutRecordsWhenAndWhereItEnded(t *testing.T) {
 			end: func(t *testing.T, fixture *rolloutFixture) {
 				primary := fixture.nodes[0]
 				for range 15 {
-					if primary.RolloutStatus().Phase == rolloutUpdating {
+					if primary.RolloutStatus().Phase == RolloutUpdating {
 						break
 					}
 					fixture.tick(t)
@@ -561,7 +561,7 @@ func TestRolloutSupersededOnceEveryNodeMovesPast(t *testing.T) {
 	}
 	for _, test := range []struct {
 		name  string
-		phase string
+		phase RolloutPhase
 		nodes []Node
 		want  bool
 	}{
@@ -571,7 +571,7 @@ func TestRolloutSupersededOnceEveryNodeMovesPast(t *testing.T) {
 		{"stopped, cluster moved past it", RolloutStopped, nodes("1.2.0", "1.1.0"), true},
 		{"complete, still current", RolloutComplete, nodes("1.1.0", "1.1.0"), false},
 		{"complete, cluster moved past it", RolloutComplete, nodes("1.2.0", "1.2.0"), true},
-		{"running", rolloutUpdating, nodes("1.2.0", "1.2.0"), false},
+		{"running", RolloutUpdating, nodes("1.2.0", "1.2.0"), false},
 		{"development node", RolloutFailed, nodes("1.2.0", "dev"), false},
 	} {
 		t.Run(test.name, func(t *testing.T) {

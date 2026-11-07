@@ -849,7 +849,7 @@ func (server *Server) mcpRollout(state cluster.State, names map[string]string, n
 		return nil
 	}
 	view := &mcpRollout{
-		Version: rollout.Version, Phase: rollout.Phase, Active: rollout.Active(), Error: rollout.Error,
+		Version: rollout.Version, Phase: string(rollout.Phase), Active: rollout.Active(), Error: rollout.Error,
 		FailedNode: names[rollout.FailedNode], StartedAt: mcpTime(rollout.StartedAt), FinishedAt: mcpTime(rollout.FinishedAt),
 		Nodes: make([]mcpRolloutNode, 0, len(rollout.Nodes)),
 	}
@@ -857,7 +857,7 @@ func (server *Server) mcpRollout(state cluster.State, names map[string]string, n
 		view.FailedNode = rollout.FailedNode
 	}
 	for _, node := range rollout.Nodes {
-		view.Nodes = append(view.Nodes, mcpRolloutNode{Name: node.Name, Phase: node.Phase})
+		view.Nodes = append(view.Nodes, mcpRolloutNode{Name: node.Name, Phase: string(node.Phase)})
 	}
 	return view
 }

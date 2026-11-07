@@ -96,7 +96,7 @@ func TestCommandPaletteOffersRollingUpdates(t *testing.T) {
 		supported   bool
 		role        string
 		versions    []string
-		rollout     string
+		rollout     cluster.RolloutPhase
 		wantFocus   string
 		wantSummary string
 	}{
