@@ -98,7 +98,7 @@ func (check *scheduledUpdateCheck) due(preferences config.Updates) bool {
 		return false
 	}
 	status := check.updates.Status()
-	if status.Development || status.Busy() || status.Installed || status.ClusterUpdate {
+	if status.Development || status.Busy() || status.Installed() || status.ClusterUpdate {
 		return false
 	}
 	return !status.Checked() || status.IncludePreRelease != preferences.PreRelease ||
