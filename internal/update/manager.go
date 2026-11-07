@@ -58,9 +58,6 @@ type Status struct {
 	IncludePreRelease bool
 	// Available reports that a newer release can be installed.
 	Available bool
-	// Installed reports that the executable was replaced and Sable is running
-	// the previous build until it restarts.
-	Installed bool
 	// Blocked explains why this process cannot replace its own executable,
 	// and is empty when it can. A hardened service unit or a read-only
 	// container image leaves the check working and the installation not.
@@ -73,6 +70,13 @@ func (status Status) Busy() bool {
 	return status.Phase == PhaseChecking || status.Phase == PhaseInstalling
 }
 
+// Installed reports that the executable was replaced and Sable is running the
+// previous build until it restarts. PhaseInstalled is terminal: no check,
+// installation, or rollout starts again until the process restarts.
+func (status Status) Installed() bool {
+	return status.Phase == PhaseInstalled
+}
+
 // Checked reports whether a release check has completed at least once.
 func (status Status) Checked() bool {
 	return !status.CheckedAt.IsZero()
@@ -80,7 +84,7 @@ func (status Status) Checked() bool {
 
 // UpToDate reports whether a completed check found nothing newer to install.
 func (status Status) UpToDate() bool {
-	return !status.Development && status.Checked() && !status.Available && !status.Installed && status.Error == ""
+	return !status.Development && status.Checked() && !status.Available && !status.Installed() && status.Error == ""
 }
 
 // NewerRelease reports whether the newest release a check found is newer than
@@ -94,7 +98,8 @@ func (status Status) NewerRelease() bool {
 // Manager runs release checks and installations for the web console. One
 // operation runs at a time, and installations run in the background so the
 // console can poll their progress instead of holding a request open for the
-// whole download.
+// whole download. A cluster rollout reserves the manager, after which only
+// operations carrying its reservation may start; claimLocked is the one gate.
 type Manager struct {
 	options     Options
 	mutex       sync.Mutex
@@ -174,14 +179,14 @@ func (manager *Manager) CheckOnSchedule(ctx context.Context, includePreRelease b
 // fresh.
 func (manager *Manager) checkInBackground(ctx context.Context, includePreRelease bool, fresh time.Duration) (Status, error) {
 	manager.mutex.Lock()
-	if manager.status.Busy() || manager.status.Installed || manager.reservation != "" ||
+	if manager.claimLocked("") != nil ||
 		(manager.status.IncludePreRelease == includePreRelease && time.Since(manager.status.CheckedAt) < fresh) {
 		status := manager.status
 		status.ClusterUpdate = manager.reservation != ""
 		manager.mutex.Unlock()
 		return status, nil
 	}
-	if err := manager.beginLocked(PhaseChecking, includePreRelease); err != nil {
+	if err := manager.beginLocked(PhaseChecking, includePreRelease, ""); err != nil {
 		status := manager.status
 		manager.mutex.Unlock()
 		return status, err
@@ -209,8 +214,11 @@ func (manager *Manager) Reserve(id string) error {
 	if manager.reservation == id && id != "" {
 		return nil
 	}
-	if id == "" || manager.reservation != "" || manager.status.Busy() || manager.status.Installed {
+	if id == "" {
 		return ErrUpdateInProgress
+	}
+	if err := manager.claimLocked(""); err != nil {
+		return err
 	}
 	if err := Installable(manager.options.BinaryPath); err != nil {
 		return err
@@ -240,7 +248,7 @@ func (manager *Manager) InstallVersion(id, tag string) error {
 		return errors.New("cluster updates require a newer release")
 	}
 	includePreRelease := semver.Prerelease(normalizeTag(tag)) != ""
-	if err := manager.beginLocked(PhaseInstalling, includePreRelease); err != nil {
+	if err := manager.beginLocked(PhaseInstalling, includePreRelease, id); err != nil {
 		return err
 	}
 	manager.startInstall(tag, includePreRelease)
@@ -278,22 +286,29 @@ func (manager *Manager) startInstall(tag string, includePreRelease bool) {
 	}()
 }
 
-// begin claims the manager for one operation.
+// begin claims the manager for one local operation.
 func (manager *Manager) begin(phase Phase, includePreRelease bool) error {
 	manager.mutex.Lock()
 	defer manager.mutex.Unlock()
-	if manager.reservation != "" || manager.status.Installed {
-		return ErrUpdateInProgress
-	}
-	return manager.beginLocked(phase, includePreRelease)
+	return manager.beginLocked(phase, includePreRelease, "")
 }
 
-func (manager *Manager) beginLocked(phase Phase, includePreRelease bool) error {
+// claimLocked reports whether an operation on behalf of holder, a rollout's
+// reservation or "" for a local operation, may start: no other rollout holds
+// the manager, nothing is running, and no installed release awaits its restart.
+func (manager *Manager) claimLocked(holder string) error {
+	if manager.reservation != holder || manager.status.Busy() || manager.status.Installed() {
+		return ErrUpdateInProgress
+	}
+	return nil
+}
+
+func (manager *Manager) beginLocked(phase Phase, includePreRelease bool, holder string) error {
+	if err := manager.claimLocked(holder); err != nil {
+		return err
+	}
 	if manager.status.Development {
 		return ErrDevelopmentBuild
-	}
-	if manager.status.Busy() {
-		return ErrUpdateInProgress
 	}
 	manager.status = Status{
 		Phase:             phase,
@@ -332,10 +347,9 @@ func (manager *Manager) finish(result Result, err error) Status {
 	status.BinaryPath = result.BinaryPath
 	status.PreRelease = result.PreRelease
 	status.Available = !result.UpToDate
-	status.Installed = result.Applied
 	// Probe only once a release is worth installing, so an idle console does
 	// not touch the directory holding the executable on every page load.
-	if status.Available && !status.Installed {
+	if status.Available && !result.Applied {
 		status.Blocked = blockedReason(Installable(manager.options.BinaryPath))
 	}
 	switch {
