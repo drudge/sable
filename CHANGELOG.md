@@ -8,6 +8,32 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.8.0-beta.8] - 2026-11-07
+
+Sable 1.8.0-beta.8 keeps secondary zones from outliving their expiry across
+restarts, and makes sure saved Dynamic DNS settings are always published.
+
+### Upgrading from 1.8.0-beta.7
+
+Nothing new is needed. Each zone's expire timer starts counting from the
+upgrade, or from its next successful refresh, and from then on survives
+restarts.
+
+### Zones
+
+- A secondary zone, stub zone, or catalog whose primaries can't be reached
+  now stops answering once its SOA expire time has passed since the last
+  refresh that worked. Before, every restart started the expire time again,
+  so the zone could keep serving an old copy indefinitely. A zone that is
+  already past its expire time comes up expired after a restart.
+
+### Integrations
+
+- Saving Dynamic DNS settings while a sync is already running now publishes
+  the new records as soon as that sync finishes. Before, the save was dropped
+  and the records waited for the next scheduled sync. **Sync Now** behaves the
+  same way.
+
 ## [1.8.0-beta.7] - 2026-11-06
 
 Sable 1.8.0-beta.7 makes cluster recovery safe when a former primary comes
