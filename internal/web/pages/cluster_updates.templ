@@ -105,7 +105,7 @@ templ ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) {
 					}
 					if view.Rollout.ID != "" {
 						if view.Rollout.Phase != "complete" {
-							<strong class="cluster-update-status" role="status">{ rolloutPhaseLabel(view.Rollout.Phase) }</strong>
+							<strong class="cluster-update-status" role="status">{ rolloutPhaseLabel(string(view.Rollout.Phase)) }</strong>
 						}
 						if view.Rollout.Error != "" {
 							if view.Rollout.Phase == "stopped" {
@@ -209,19 +209,19 @@ func clusterUpdateDisable(source string) string {
 
 func rolloutNodePhase(rollout cluster.RolloutStatus, index int) string {
 	phase := rollout.Nodes[index].Phase
-	if phase == "complete" {
-		return phase
+	if phase == cluster.RolloutNodeComplete {
+		return string(phase)
 	}
-	if rollout.Phase == "failed" || rollout.Phase == "stopped" {
+	if rollout.Phase == cluster.RolloutFailed || rollout.Phase == cluster.RolloutStopped {
 		if index == rollout.Index {
-			return rollout.Phase
+			return string(rollout.Phase)
 		}
 		return "skipped"
 	}
-	if rollout.Phase == "verifying" {
-		return rollout.Phase
+	if rollout.Phase == cluster.RolloutVerifying {
+		return string(rollout.Phase)
 	}
-	return phase
+	return string(phase)
 }
 
 func rolloutNodeBusy(phase string) bool {

@@ -120,7 +120,7 @@ func TestRollingUpdateVersionShowsInstallTarget(t *testing.T) {
 // A rollout that failed says so in red. One an operator stopped is a
 // warning, not a failure, so it says so in amber.
 func TestRollingUpdateEndingIsRedOrAmber(t *testing.T) {
-	for phase, want := range map[string]string{
+	for phase, want := range map[cluster.RolloutPhase]string{
 		"failed":  `<div class="unifi-status error" role="alert">`,
 		"stopped": `<div class="unifi-status warning" role="status">`,
 	} {

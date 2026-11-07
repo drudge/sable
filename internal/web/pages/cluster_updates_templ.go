@@ -304,9 +304,9 @@ func ClusterUpdatePanel(view ClusterUpdateView, outOfBand bool) templ.Component 
 							return templ_7745c5c3_Err
 						}
 						var templ_7745c5c3_Var12 string
-						templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(rolloutPhaseLabel(view.Rollout.Phase))
+						templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(rolloutPhaseLabel(string(view.Rollout.Phase)))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 108, Col: 98}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster_updates.templ`, Line: 108, Col: 106}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 						if templ_7745c5c3_Err != nil {
@@ -701,19 +701,19 @@ func clusterUpdateDisable(source string) string {
 
 func rolloutNodePhase(rollout cluster.RolloutStatus, index int) string {
 	phase := rollout.Nodes[index].Phase
-	if phase == "complete" {
-		return phase
+	if phase == cluster.RolloutNodeComplete {
+		return string(phase)
 	}
-	if rollout.Phase == "failed" || rollout.Phase == "stopped" {
+	if rollout.Phase == cluster.RolloutFailed || rollout.Phase == cluster.RolloutStopped {
 		if index == rollout.Index {
-			return rollout.Phase
+			return string(rollout.Phase)
 		}
 		return "skipped"
 	}
-	if rollout.Phase == "verifying" {
-		return rollout.Phase
+	if rollout.Phase == cluster.RolloutVerifying {
+		return string(rollout.Phase)
 	}
-	return phase
+	return string(phase)
 }
 
 func rolloutNodeBusy(phase string) bool {
