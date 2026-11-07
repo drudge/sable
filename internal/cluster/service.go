@@ -27,9 +27,62 @@ const (
 
 	RolePrimary = "primary"
 	RoleReplica = "replica"
-	StateOnline = "online"
-	SyncCurrent = "current"
 )
+
+// NodeState is whether this node can hear another. It is worked out on every
+// Snapshot, never stored, and its values are part of the API.
+type NodeState string
+
+const (
+	// StateUnknown is a member this node has not heard from since it started.
+	StateUnknown NodeState = "unknown"
+	// StateOnline is this node, or a member whose last heartbeat is fresh.
+	StateOnline NodeState = "online"
+	// StateUnreachable is a member whose last heartbeat has gone stale.
+	StateUnreachable NodeState = "unreachable"
+)
+
+// SyncState is how far a node's applied state is known to trail the primary's.
+// Like NodeState it is worked out on every Snapshot and its values are part of
+// the API.
+type SyncState string
+
+const (
+	// SyncUnknown is a member that is not online, so nothing is known.
+	SyncUnknown SyncState = "unknown"
+	// SyncUnverified is this replica before the primary confirms its state.
+	SyncUnverified SyncState = "unverified"
+	// SyncCurrent is the primary, or a member that has applied every
+	// generation.
+	SyncCurrent SyncState = "current"
+	// SyncBehind is an online member with generations still to apply.
+	SyncBehind SyncState = "behind"
+	// SyncConflict marks a node that claims the primary role in the same
+	// term as this one.
+	SyncConflict SyncState = "conflict"
+)
+
+// classifyNode works out a node's state from what this node knows of it. The
+// local node is always online, and current only when it is the primary; a
+// replica stays unverified until the primary vouches for it. A member is
+// unknown until it is heard from, unreachable once its last heartbeat is
+// stale, and otherwise online and current or behind by its lag.
+func classifyNode(local bool, role string, heard, fresh bool, lag uint64) (NodeState, SyncState) {
+	switch {
+	case local && role == RolePrimary:
+		return StateOnline, SyncCurrent
+	case local:
+		return StateOnline, SyncUnverified
+	case !heard:
+		return StateUnknown, SyncUnknown
+	case !fresh:
+		return StateUnreachable, SyncUnknown
+	case lag == 0:
+		return StateOnline, SyncCurrent
+	default:
+		return StateOnline, SyncBehind
+	}
+}
 
 var (
 	ErrAlreadyInitialized = errors.New("cluster is already initialized")
@@ -70,7 +123,7 @@ type Node struct {
 	AdvertiseURL      string    `json:"advertise_url,omitempty"`
 	Addresses         []string  `json:"addresses"`
 	Role              string    `json:"role"`
-	State             string    `json:"state"`
+	State             NodeState `json:"state"`
 	Version           string    `json:"version"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpSince           time.Time `json:"up_since"`
@@ -79,7 +132,7 @@ type Node struct {
 	CurrentGeneration uint64    `json:"current_generation"`
 	AppliedGeneration uint64    `json:"applied_generation"`
 	Lag               uint64    `json:"lag"`
-	SyncState         string    `json:"sync_state"`
+	SyncState         SyncState `json:"sync_state"`
 }
 
 type State struct {
@@ -308,7 +361,7 @@ func (service *Service) Snapshot() State {
 		node := Node{
 			ID: stored.ID, Name: stored.Name, AdvertiseURL: stored.AdvertiseURL,
 			Addresses: append([]string(nil), stored.Addresses...), Role: stored.Role,
-			Version: stored.Version, CreatedAt: stored.CreatedAt, State: "unknown", SyncState: "unknown",
+			Version: stored.Version, CreatedAt: stored.CreatedAt, State: StateUnknown, SyncState: SyncUnknown,
 			CurrentGeneration: service.manifest.Generation,
 		}
 		if node.ID == service.nodeID {
@@ -316,19 +369,16 @@ func (service *Service) Snapshot() State {
 			node.AdvertiseURL = service.advertiseURL
 			node.Version = service.version
 			node.Addresses = effectiveDNSAddresses(node.Addresses, service.dnsListeners)
-			node.State = StateOnline
+			node.State, node.SyncState = classifyNode(true, node.Role, true, true, 0)
 			node.UpSince = service.startedAt
 			node.LastContact = now
 			node.AppliedGeneration = service.manifest.Generation
 			state.LocalRole = node.Role
 			state.Connected++
-			if node.Role == RolePrimary {
+			node.LastSync = service.lastSuccessfulSync
+			if node.SyncState == SyncCurrent {
 				node.LastSync = now
-				node.SyncState = SyncCurrent
 				state.Synchronized++
-			} else {
-				node.LastSync = service.lastSuccessfulSync
-				node.SyncState = "unverified"
 			}
 		}
 		state.Nodes = append(state.Nodes, node)

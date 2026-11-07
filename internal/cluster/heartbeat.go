@@ -202,7 +202,7 @@ func (service *Service) observeHeartbeatLocked(heartbeat Heartbeat, now time.Tim
 	observed.Alerts, observed.Lookups = nil, nil
 	service.telemetry[heartbeat.NodeID] = nodeTelemetry{heartbeat: observed, received: now}
 	if service.logger != nil && (!previouslyObserved || previous.heartbeat.AppliedGeneration != heartbeat.AppliedGeneration) {
-		syncState := "behind"
+		syncState := SyncBehind
 		if heartbeat.AppliedGeneration == service.manifest.Generation && heartbeat.StateDigest == service.manifest.StateDigest {
 			syncState = SyncCurrent
 		}
@@ -551,28 +551,25 @@ func (service *Service) applyRemoteTelemetry(state *State, now time.Time) {
 		if node.ID == service.nodeID {
 			continue
 		}
-		observed, found := service.telemetry[node.ID]
-		if !found || now.Sub(observed.received) > heartbeatFreshness {
-			if found {
-				node.State = "unreachable"
-				node.LastContact = observed.received
+		observed, heard := service.telemetry[node.ID]
+		fresh := heard && now.Sub(observed.received) <= heartbeatFreshness
+		if heard {
+			node.LastContact = observed.received
+		}
+		if fresh {
+			node.UpSince = observed.heartbeat.UpSince
+			node.AppliedGeneration = observed.heartbeat.AppliedGeneration
+			if state.Generation >= node.AppliedGeneration {
+				node.Lag = state.Generation - node.AppliedGeneration
 			}
-			continue
 		}
-		node.State = StateOnline
-		node.UpSince = observed.heartbeat.UpSince
-		node.LastContact = observed.received
-		node.AppliedGeneration = observed.heartbeat.AppliedGeneration
-		if state.Generation >= node.AppliedGeneration {
-			node.Lag = state.Generation - node.AppliedGeneration
+		node.State, node.SyncState = classifyNode(false, node.Role, heard, fresh, node.Lag)
+		if node.State == StateOnline {
+			state.Connected++
 		}
-		state.Connected++
-		if node.Lag == 0 {
-			node.SyncState = SyncCurrent
+		if node.SyncState == SyncCurrent {
 			node.LastSync = observed.received
 			state.Synchronized++
-		} else {
-			node.SyncState = "behind"
 		}
 	}
 }

@@ -16,12 +16,6 @@ import (
 )
 
 const (
-	StateAddPending = "add-pending"
-	StateValid      = "valid"
-	StateMissing    = "missing"
-	StateRevoked    = "revoked"
-	StateRemoved    = "removed"
-
 	DefaultRootKSK2017 = ". DS 20326 8 2 E06D44B80B8F1D39A95C0B0D7C65D08458E880409BBC683457104237C7F8EC8D"
 	DefaultRootKSK2024 = ". DS 38696 8 2 683D2D0ACB8C9B712A1948B27F741219298D0A450D612C483AF444A4C0FB2B16"
 )
@@ -32,7 +26,7 @@ type Anchor struct {
 	Owner         string
 	KeyID         string
 	DNSKEY        string
-	State         string
+	State         AnchorState
 	FirstSeen     time.Time
 	HoldDownUntil time.Time
 	LastSeen      time.Time
@@ -271,13 +265,14 @@ func (manager *Manager) observe(now time.Time, response *dns.Msg) (Snapshot, err
 	current.Status.OriginalTTLSeconds = ttl
 	current.Status.SignatureValiditySeconds = int64(validity.Seconds())
 	current.Status.NextRefresh = now.Add(manager.refreshInterval(time.Duration(ttl)*time.Second, validity))
-	countStates(&current)
+	CountStates(&current)
 	return current, nil
 }
 
 // advanceAnchors moves each known anchor through the RFC 5011 states for one
-// observation and drops add-pending anchors that can no longer become valid.
-// existing indexes current.Anchors by key ID.
+// observation and drops anchors that move to Start. existing indexes
+// current.Anchors by key ID. Every event is worked out from the states
+// before the observation, so the order anchors are visited doesn't matter.
 func (manager *Manager) advanceAnchors(
 	current *Snapshot,
 	now time.Time,
@@ -286,51 +281,23 @@ func (manager *Manager) advanceAnchors(
 	revocations map[string]struct{},
 	authenticated bool,
 ) {
-	for keyID := range revocations {
-		anchor := existing[keyID]
-		if anchor == nil || anchor.State == StateRevoked || anchor.State == StateRemoved {
-			continue
-		}
-		anchor.State = StateRevoked
-		anchor.RevokedAt = now
-		anchor.LastSeen = now
+	events := make(map[string]anchorEvent, len(existing))
+	for keyID, anchor := range existing {
+		events[keyID] = manager.anchorEvent(anchor, now, observed, existing, revocations, authenticated)
 	}
 	discard := make(map[string]struct{})
 	for keyID, anchor := range existing {
-		if _, revoked := revocations[keyID]; revoked {
+		event := events[keyID]
+		next := nextAnchorState(anchor.State, event)
+		if next == StateStart {
+			discard[keyID] = struct{}{}
 			continue
 		}
-		if !authenticated {
-			if anchor.State == StateAddPending && allSourcesRevoked(anchor.SourceKeyIDs, existing) {
-				discard[keyID] = struct{}{}
-			}
-			continue
+		value := ""
+		if event.seen() {
+			value = anchorValue(observed[keyID])
 		}
-		key, present := observed[keyID]
-		switch anchor.State {
-		case StateValid, StateMissing:
-			if present && key.Flags&revokeFlag == 0 {
-				anchor.State = StateValid
-				anchor.LastSeen = now
-				anchor.DNSKEY = anchorValue(key)
-			} else if !present {
-				anchor.State = StateMissing
-			}
-		case StateAddPending:
-			if !present || key.Flags&revokeFlag != 0 || allSourcesRevoked(anchor.SourceKeyIDs, existing) {
-				discard[keyID] = struct{}{}
-				continue
-			}
-			anchor.LastSeen = now
-			if !now.Before(anchor.HoldDownUntil) && authenticated {
-				anchor.State = StateValid
-				anchor.SourceKeyIDs = nil
-			}
-		case StateRevoked:
-			if !present && !anchor.RevokedAt.IsZero() && !now.Before(anchor.RevokedAt.Add(manager.opts.RemoveHoldDown)) {
-				anchor.State = StateRemoved
-			}
-		}
+		anchor.apply(next, event, value, now)
 	}
 	current.Anchors = slices.DeleteFunc(current.Anchors, func(anchor Anchor) bool {
 		_, remove := discard[anchor.KeyID]
@@ -338,8 +305,31 @@ func (manager *Manager) advanceAnchors(
 	})
 }
 
+// anchorEvent describes what this observation says about one anchor.
+func (manager *Manager) anchorEvent(
+	anchor *Anchor,
+	now time.Time,
+	observed map[string]*dns.DNSKEY,
+	existing map[string]*Anchor,
+	revocations map[string]struct{},
+	authenticated bool,
+) anchorEvent {
+	_, revoked := revocations[anchor.KeyID]
+	key, present := observed[anchor.KeyID]
+	return anchorEvent{
+		revoked:         revoked,
+		authenticated:   authenticated,
+		present:         present,
+		revokeBit:       present && key.Flags&revokeFlag != 0,
+		sourcesRevoked:  allSourcesRevoked(anchor.SourceKeyIDs, existing, revocations),
+		addHoldDownDone: !now.Before(anchor.HoldDownUntil),
+		removeHoldDownDone: !anchor.RevokedAt.IsZero() &&
+			!now.Before(anchor.RevokedAt.Add(manager.opts.RemoveHoldDown)),
+	}
+}
+
 // addAnchors starts tracking the observed keys that no anchor covered before
-// this observation. A key the bootstrap anchors already trust is valid at
+// this observation, moving each out of Start. A key the bootstrap anchors already trust is valid at
 // once; any other key waits out the add hold-down.
 func (manager *Manager) addAnchors(
 	current *Snapshot,
@@ -438,39 +428,28 @@ func (manager *Manager) publish() {
 func activeAnchorValues(snapshot Snapshot) []string {
 	values := make([]string, 0, len(snapshot.Anchors))
 	for _, anchor := range snapshot.Anchors {
-		if anchor.State == StateValid || anchor.State == StateMissing {
+		if anchor.State.Trusted() {
 			values = append(values, anchor.DNSKEY)
 		}
 	}
 	return values
 }
 
-func countStates(snapshot *Snapshot) {
-	snapshot.Status.Active, snapshot.Status.Pending, snapshot.Status.Missing, snapshot.Status.Revoked = 0, 0, 0, 0
-	for _, anchor := range snapshot.Anchors {
-		switch anchor.State {
-		case StateValid:
-			snapshot.Status.Active++
-		case StateMissing:
-			snapshot.Status.Active++
-			snapshot.Status.Missing++
-		case StateAddPending:
-			snapshot.Status.Pending++
-		case StateRevoked:
-			snapshot.Status.Revoked++
-		}
-	}
-}
-
-func allSourcesRevoked(sourceIDs []string, anchors map[string]*Anchor) bool {
+// allSourcesRevoked reports whether every source key is revoked, counting a
+// key this observation revokes. A source no anchor tracks counts as revoked.
+func allSourcesRevoked(sourceIDs []string, anchors map[string]*Anchor, revocations map[string]struct{}) bool {
 	if len(sourceIDs) == 0 {
 		return false
 	}
 	for _, sourceID := range sourceIDs {
 		anchor := anchors[sourceID]
-		if anchor != nil && anchor.State != StateRevoked && anchor.State != StateRemoved {
-			return false
+		if anchor == nil || anchor.State.Revoked() {
+			continue
 		}
+		if _, revoked := revocations[sourceID]; revoked && anchor.State.revocable() {
+			continue
+		}
+		return false
 	}
 	return true
 }
@@ -519,7 +498,7 @@ func verifyDNSKEYRRSet(keys []*dns.DNSKEY, signatures []*dns.RRSIG, trusted []*d
 func authenticatedRevocations(anchors []Anchor, keys []*dns.DNSKEY, signatures []*dns.RRSIG, now time.Time) map[string]struct{} {
 	known := make(map[string]struct{}, len(anchors))
 	for _, anchor := range anchors {
-		if anchor.State == StateValid || anchor.State == StateMissing || anchor.State == StateAddPending {
+		if anchor.State.revocable() {
 			known[anchor.KeyID] = struct{}{}
 		}
 	}
