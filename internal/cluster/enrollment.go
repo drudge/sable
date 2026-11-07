@@ -279,6 +279,10 @@ func (service *Service) Join(ctx context.Context, options JoinOptions) error {
 		service.trustAnchorPEM = append([]byte(nil), trustAnchor...)
 		service.httpClient = enrollmentClient
 	}
+	if err := service.forgetRevocationLocked(joined.ClusterID); err != nil {
+		service.joining = false
+		return err
+	}
 	if err := writeManifest(service.directory, joined); err != nil {
 		service.joining = false
 		return err

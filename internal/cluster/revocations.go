@@ -130,3 +130,22 @@ func (service *Service) heartbeatRevoked(heartbeat Heartbeat, signature string) 
 	}
 	return false
 }
+
+// forgetRevocationLocked drops the record of a destroyed cluster once this
+// node belongs to that cluster again. A member of a cluster must never
+// release its fellow members as though the cluster were gone, which is what
+// a stale record does after a handoff makes this node the primary. It
+// requires service.mu to be held by the caller, or the service to be
+// unshared, as in Open.
+func (service *Service) forgetRevocationLocked(clusterID string) error {
+	matches := func(stored revokedCluster) bool { return stored.ClusterID == clusterID }
+	if !slices.ContainsFunc(service.revocations, matches) {
+		return nil
+	}
+	candidate := slices.DeleteFunc(slices.Clone(service.revocations), matches)
+	if err := writeRevocations(service.directory, candidate); err != nil {
+		return err
+	}
+	service.revocations = candidate
+	return nil
+}

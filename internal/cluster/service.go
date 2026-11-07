@@ -266,6 +266,13 @@ func Open(options Options) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	if service.manifest != nil {
+		// A node that rejoined a cluster it once deleted, before joins
+		// forgot the record, still carries it.
+		if err := service.forgetRevocationLocked(service.manifest.ClusterID); err != nil {
+			return nil, err
+		}
+	}
 	if service.manifest != nil && service.manifest.StateDigest != "" {
 		if _, err := readStateSnapshot(service.directory, service.manifest.StateDigest); err != nil {
 			return nil, err
