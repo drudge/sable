@@ -179,17 +179,14 @@ func (manager *Manager) StoredCredentials(ctx context.Context, provider string) 
 	return manager.credentials.Get(ctx, provider)
 }
 
-// SyncNow queues an immediate reconciliation. Repeated requests coalesce while
-// a run is active or already queued.
+// SyncNow queues an immediate reconciliation. Repeated requests coalesce into
+// one queued run, and a request during a run queues one more, because the
+// running attempt may have read settings older than the change that asked.
 func (manager *Manager) SyncNow() {
 	if !manager.configuration.Current().Config.DynamicDNS.Runnable() {
 		return
 	}
 	manager.mu.Lock()
-	if manager.status.Running {
-		manager.mu.Unlock()
-		return
-	}
 	manager.status.Running = true
 	manager.mu.Unlock()
 	select {
@@ -232,7 +229,7 @@ func (manager *Manager) runOnce(ctx context.Context) {
 	settings := manager.configuration.Current().Config.DynamicDNS
 	if !settings.Runnable() || (manager.writable != nil && !manager.writable()) {
 		manager.mu.Lock()
-		manager.status.Running = false
+		manager.status.Running = manager.queued()
 		manager.mu.Unlock()
 		return
 	}
@@ -469,6 +466,12 @@ func validatePublicAddress(address netip.Addr, recordType string) error {
 	return nil
 }
 
+// queued reports whether another run is waiting, so the status keeps saying
+// running between an attempt and the one queued behind it.
+func (manager *Manager) queued() bool {
+	return len(manager.wake) > 0
+}
+
 func (manager *Manager) beginAttempt(started time.Time) {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
@@ -481,7 +484,7 @@ func (manager *Manager) finishAttempt(started time.Time, interval time.Duration,
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 	finished := manager.now()
-	manager.status.Running = false
+	manager.status.Running = manager.queued()
 	manager.status.Duration = finished.Sub(started)
 	// A run that finds a different address than the last one known records
 	// the one it replaced and when, so the change can be told as news. The
