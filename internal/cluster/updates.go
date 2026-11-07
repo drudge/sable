@@ -204,9 +204,16 @@ func (service *Service) RolloutStatus() RolloutStatus {
 	}
 	service.updates.mu.Lock()
 	defer service.updates.mu.Unlock()
-	status := service.updates.rollout
-	status.Nodes = slices.Clone(status.Nodes)
-	return status
+	return service.rolloutCopyLocked()
+}
+
+// rolloutCopyLocked returns the rollout with its own copy of Nodes, so a caller
+// can change node phases without touching the saved rollout before
+// saveRollout checks and persists the move.
+func (service *Service) rolloutCopyLocked() RolloutStatus {
+	rollout := service.updates.rollout
+	rollout.Nodes = slices.Clone(rollout.Nodes)
+	return rollout
 }
 
 // RollingUpdatesSupported uses the last reported capability so a node's restart
@@ -451,7 +458,7 @@ func (service *Service) advanceUpdates(ctx context.Context) {
 }
 
 func (service *Service) advanceRollout(state State) {
-	rollout := service.updates.rollout
+	rollout := service.rolloutCopyLocked()
 	if !rollout.Active() {
 		return
 	}

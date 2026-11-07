@@ -3,6 +3,9 @@ package cluster
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -119,8 +122,8 @@ func TestSaveRolloutRefusesIllegalMoves(t *testing.T) {
 		"new rollout already ended":  func(rollout *RolloutStatus) { rollout.ID, rollout.Phase = "other", RolloutComplete },
 		"new rollout with node done": func(rollout *RolloutStatus) { rollout.ID, rollout.Nodes[0].Phase = "other", RolloutNodeComplete },
 	} {
-		next := started
-		next.Nodes = slices.Clone(started.Nodes)
+		// Callers take the rollout this way and change it in place.
+		next := primary.rolloutCopyLocked()
 		change(&next)
 		if err := primary.saveRollout(next); err == nil {
 			t.Errorf("%s: saved", name)
@@ -165,5 +168,41 @@ func TestUnknownRolloutPhaseNeverAdvances(t *testing.T) {
 	}
 	if status := primary.RolloutStatus(); status.Phase != "rebooting" || status.Active() {
 		t.Fatalf("rollout = %+v", status)
+	}
+}
+
+func TestAdvanceRolloutLeavesSavedNodesAloneWhenTheSaveFails(t *testing.T) {
+	fixture := newRolloutFixture(t, 1)
+	primary := fixture.nodes[0]
+	if err := primary.StartRollout(context.Background(), "1.1.0"); err != nil {
+		t.Fatal(err)
+	}
+	for _, index := range []int{1, 0} {
+		for range 15 {
+			fixture.tick(t)
+		}
+		fixture.restart(t, index, "1.1.0")
+	}
+	before := primary.RolloutStatus()
+	if before.Phase != RolloutVerifying {
+		t.Fatalf("rollout phase = %s, want verifying", before.Phase)
+	}
+	// A non-empty directory where the rollout file goes makes the save fail.
+	path := filepath.Join(primary.directory, rolloutFileName)
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(path, "blocked"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for range 10 {
+		fixture.tick(t)
+	}
+	after := primary.RolloutStatus()
+	if after.Phase != RolloutFailed {
+		t.Fatalf("rollout phase = %s, want failed after the save failed", after.Phase)
+	}
+	if !reflect.DeepEqual(after.Nodes, before.Nodes) {
+		t.Fatalf("unsaved node phases leaked into the rollout:\n got %+v\nwant %+v", after.Nodes, before.Nodes)
 	}
 }
