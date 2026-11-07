@@ -8,6 +8,26 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.8.0-beta.9] - 2026-11-07
+
+Sable 1.8.0-beta.9 lets devices cache blocked answers, so a device that
+keeps retrying a blocked name stops flooding the server.
+
+### Upgrading from 1.8.0-beta.8
+
+Nothing new is needed.
+
+### Blocking
+
+- Blocked answers in **NX Domain** mode now carry an SOA record whose TTL is
+  the blocking TTL. Before, they had none, and a device can't cache a
+  negative answer without one, so a device that retries a blocked name
+  asked again straight away. A Roku retrying its blocked telemetry hosts
+  sent hundreds of thousands of lookups an hour this way. **Any Address**
+  and **Custom Address** modes do the same for the empty answer they give a
+  record type their block addresses don't cover, such as AAAA when only
+  an IPv4 address is set.
+
 ## [1.8.0-beta.8] - 2026-11-07
 
 Sable 1.8.0-beta.8 keeps secondary zones from outliving their expiry across
