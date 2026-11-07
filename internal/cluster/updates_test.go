@@ -47,7 +47,7 @@ func (updater *rolloutTestUpdater) InstallVersion(id, target string) error {
 		updater.status = update.Status{Phase: update.PhaseFailed, Error: "checksum mismatch"}
 		return nil
 	}
-	updater.status = update.Status{Phase: update.PhaseInstalled, Installed: true, LatestVersion: strings.TrimPrefix(target, "v")}
+	updater.status = update.Status{Phase: update.PhaseInstalled, LatestVersion: strings.TrimPrefix(target, "v")}
 	return nil
 }
 

@@ -99,7 +99,7 @@ func TestScheduledUpdateCheckAsksOnlyWhenDue(t *testing.T) {
 		{name: "a replica leaves checking to the lead", preferences: hourly, replica: true},
 		{name: "a development build never asks", preferences: hourly, status: update.Status{Development: true}},
 		{name: "a check already running is not doubled", preferences: hourly, status: update.Status{Phase: update.PhaseChecking}},
-		{name: "an installed release waits for its restart", preferences: hourly, status: update.Status{Installed: true, CheckedAt: now.Add(-48 * time.Hour)}},
+		{name: "an installed release waits for its restart", preferences: hourly, status: update.Status{Phase: update.PhaseInstalled, CheckedAt: now.Add(-48 * time.Hour)}},
 		{name: "a cluster rollout holds the updater", preferences: hourly, status: update.Status{ClusterUpdate: true}},
 		{
 			name:        "a switch to pre-releases asks on the new channel",

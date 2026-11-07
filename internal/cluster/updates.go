@@ -259,7 +259,7 @@ func (service *Service) localUpdateStatus() *NodeUpdateStatus {
 	service.updates.mu.Lock()
 	defer service.updates.mu.Unlock()
 	status := service.updates.local
-	if status.ID == "" && (service.updates.controller.Status().Busy() || service.updates.controller.Status().Installed) {
+	if status.ID == "" && (service.updates.controller.Status().Busy() || service.updates.controller.Status().Installed()) {
 		status.Blocked = "A local update is already in progress."
 	}
 	return &status
@@ -659,7 +659,7 @@ func (service *Service) installUpdate(command *UpdateCommand) {
 			local.Phase, local.Error = nodeFailed, status.Error
 			return
 		}
-		if status.Installed && sameRelease(status.LatestVersion, command.Version) {
+		if status.Installed() && sameRelease(status.LatestVersion, command.Version) {
 			local.Phase = nodeInstalled
 		}
 	}
@@ -674,7 +674,7 @@ func (service *Service) restartForUpdate(command *UpdateCommand, state State) {
 		return
 	}
 	status := updates.controller.Status()
-	if !status.Installed || !sameRelease(status.LatestVersion, command.Version) || !updates.controller.ServiceManaged() {
+	if !status.Installed() || !sameRelease(status.LatestVersion, command.Version) || !updates.controller.ServiceManaged() {
 		local.Phase, local.Error = nodeFailed, "The expected release is not installed or automatic restart is unavailable."
 		return
 	}

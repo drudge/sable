@@ -317,7 +317,7 @@ func TestUpdateAlertSourceReportsANewerReleaseUntilSableRunsIt(t *testing.T) {
 		{
 			name: "an installed release is news until the restart",
 			status: update.Status{
-				Phase: update.PhaseInstalled, CurrentVersion: "1.5.2", LatestVersion: "1.6.0", Available: true, Installed: true, CheckedAt: checkedAt,
+				Phase: update.PhaseInstalled, CurrentVersion: "1.5.2", LatestVersion: "1.6.0", Available: true, CheckedAt: checkedAt,
 			},
 			want: []alerts.Alert{installed},
 		},

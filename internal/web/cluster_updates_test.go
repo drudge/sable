@@ -209,7 +209,7 @@ func TestNotificationClusterChoiceRequiresCapabilityAndPermission(t *testing.T) 
 			case "busy":
 				updater.status.Phase = update.PhaseInstalling
 			case "installed":
-				updater.status.Installed = true
+				updater.status.Phase = update.PhaseInstalled
 			case "unchecked":
 				updater.status.CheckedAt = time.Time{}
 			case "rolling":
