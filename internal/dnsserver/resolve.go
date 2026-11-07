@@ -288,13 +288,13 @@ func (handler *Handler) resolveRequest(request *dns.Msg, name string, runtime *R
 		return resolution{response: runtime.blockedResponse(request), source: querylog.SourceBlocked,
 			decision: policy.decision("", querylog.ResolverBlocked)}
 	}
-	if response, found, prefetch := runtime.cache.GetWithPrefetch(request); found {
+	if response, found, claim := runtime.cache.GetWithPrefetch(request); found {
 		handler.cacheHits.Add(1)
-		if prefetch {
+		if claim.Held() {
 			if request.RecursionDesired {
-				handler.prefetch(request, runtime)
+				handler.prefetch(request, runtime, claim)
 			} else {
-				runtime.cache.CancelPrefetch(request)
+				claim.Release()
 			}
 		}
 		return resolution{response: response, source: querylog.SourceCache,
@@ -580,27 +580,30 @@ func (runtime *Runtime) cacheUpstreamAnswer(request, response *dns.Msg, validati
 	return runtime.cache.Set(request, response, runtime.upstreamDNSSEC(request))
 }
 
-func (handler *Handler) prefetch(request *dns.Msg, runtime *Runtime) {
+// prefetch refreshes an elected entry in the background. It owns claim: the
+// deferred Release gives it back on any early return, and once the refresh is
+// started the claim moves to it and is released when it finishes.
+func (handler *Handler) prefetch(request *dns.Msg, runtime *Runtime, claim PrefetchClaim) {
+	defer claim.Release()
 	if !handler.startBackground() {
-		runtime.cache.CancelPrefetch(request)
 		return
 	}
 	release, admitted := handler.admission.acquire("", runtime.maxConcurrent, runtime.maxConcurrentPerClient)
 	if !admitted {
 		handler.backgroundWG.Done()
-		runtime.cache.CancelPrefetch(request)
 		return
 	}
 	request = request.Copy()
-	go func() {
+	go func(refresh PrefetchClaim) {
 		defer handler.backgroundWG.Done()
 		defer release()
+		defer refresh.Release()
 		forwarders, _ := runtime.forwardersFor(request.Question[0].Name)
 		response, validation, err := handler.resolveUpstream(handler.backgroundContext, request, runtime, forwarders, runtime.timeout)
-		if err != nil || response == nil || !runtime.cacheUpstreamAnswer(request, response, validation) {
-			runtime.cache.CancelPrefetch(request)
+		if err == nil && response != nil {
+			runtime.cacheUpstreamAnswer(request, response, validation)
 		}
-	}()
+	}(claim.handOff())
 }
 
 func (handler *Handler) resolveUpstreamFailure(request *dns.Msg, runtime *Runtime) resolution {

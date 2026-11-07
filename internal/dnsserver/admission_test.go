@@ -158,9 +158,9 @@ func TestAdmissionReleasesFailedAndBackgroundWork(t *testing.T) {
 		<-hold
 		return admissionAnswer(query), nil
 	}
-	handler.prefetch(admissionQuery("refresh.example."), runtime)
+	handler.prefetch(admissionQuery("refresh.example."), runtime, PrefetchClaim{})
 	waitForAdmission(t, handler, 1)
-	handler.prefetch(admissionQuery("another-refresh.example."), runtime)
+	handler.prefetch(admissionQuery("another-refresh.example."), runtime, PrefetchClaim{})
 	if got := handler.resolveForClient(admissionQuery("foreground.example."), runtime, "192.0.2.2"); got.response.Rcode != dns.RcodeRefused {
 		t.Fatalf("prefetch bypassed global capacity: %v", got.response)
 	}
