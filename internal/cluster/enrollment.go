@@ -19,6 +19,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/drudge/sable/internal/version"
 )
 
 const (
@@ -180,6 +182,12 @@ func (service *Service) Enroll(ctx context.Context, request JoinRequest) (JoinCo
 		if existing.AdvertiseURL == request.AdvertiseURL {
 			return JoinConfiguration{}, errors.New("a node with this advertised URL is already a cluster member")
 		}
+	}
+	// Checked before the token is spent, so the same token works once the
+	// node is updated.
+	if version.Older(request.Version, service.version) {
+		return JoinConfiguration{}, fmt.Errorf("this node runs Sable %s, older than the primary's %s; update it to %s or later, then join again with the same token",
+			strings.TrimPrefix(request.Version, "v"), strings.TrimPrefix(service.version, "v"), strings.TrimPrefix(service.version, "v"))
 	}
 	if err := service.consumeEnrollmentTokenLocked(request.Token); err != nil {
 		return JoinConfiguration{}, err

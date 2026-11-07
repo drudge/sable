@@ -21,3 +21,24 @@ func TestDevelopmentBuildIdentification(t *testing.T) {
 		})
 	}
 }
+
+func TestOlderOrdersPublishedReleasesOnly(t *testing.T) {
+	for _, test := range []struct {
+		release, reference string
+		older              bool
+	}{
+		{"1.7.2", "1.8.0", true},
+		{"v1.8.0-beta.5", "1.8.0-beta.6", true},
+		{"1.8.0-beta.6", "1.8.0", true},
+		{"1.8.0", "1.8.0", false},
+		{"1.9.0", "1.8.0", false},
+		{"dev", "1.8.0", false},
+		{"", "1.8.0", false},
+		{"1.7.0", "dev", false},
+		{"1.7.0-dev.1", "1.8.0", false},
+	} {
+		if got := Older(test.release, test.reference); got != test.older {
+			t.Errorf("Older(%q, %q) = %v, want %v", test.release, test.reference, got, test.older)
+		}
+	}
+}
