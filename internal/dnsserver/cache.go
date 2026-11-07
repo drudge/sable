@@ -147,8 +147,14 @@ func (cache *ResponseCache) Capacity() int {
 	return cache.capacity
 }
 
+// Get returns a cached response without refreshing it. It still counts the
+// hit, but a caller with no way to refresh the entry must not hold the
+// election, so any election the hit wins is given straight back.
 func (cache *ResponseCache) Get(request *dns.Msg) (*dns.Msg, bool) {
-	response, found, _ := cache.GetWithPrefetch(request)
+	response, found, prefetch := cache.GetWithPrefetch(request)
+	if prefetch {
+		cache.CancelPrefetch(request)
+	}
 	return response, found
 }
 
