@@ -259,6 +259,40 @@ func TestEnrollmentCreatesReplicaAndTokenIsSingleUse(t *testing.T) {
 	}
 }
 
+func TestEnrollmentRefusesAnOlderNodeAndKeepsTheToken(t *testing.T) {
+	primary, err := Open(Options{DataDirectory: t.TempDir(), NodeName: "dns-1", AdvertiseURL: "https://dns-1.example:5380", Version: "1.8.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := primary.Initialize(context.Background(), "cluster.example", []string{"192.0.2.1"}); err != nil {
+		t.Fatal(err)
+	}
+	token, err := primary.CreateEnrollmentToken(context.Background(), 5*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replica, err := Open(Options{
+		DataDirectory: t.TempDir(), NodeName: "dns-2", AdvertiseURL: "https://dns-2.example:5380", Version: "1.7.2",
+		HTTPClient: &http.Client{Transport: serviceRoundTripper{primary: primary}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	join := JoinOptions{PrimaryURL: "https://dns-1.example:5380", Token: token.Token, Addresses: []string{"192.0.2.2"}}
+	err = replica.Join(context.Background(), join)
+	if err == nil || !strings.Contains(err.Error(), "runs Sable 1.7.2, older than the primary's 1.8.0; update it to 1.8.0 or later") {
+		t.Fatalf("older node join error = %v", err)
+	}
+	if replica.Snapshot().Initialized || len(primary.Snapshot().Nodes) != 1 {
+		t.Fatal("a refused join changed membership")
+	}
+	// After the update, the same token still works.
+	replica.version = "1.8.0"
+	if err := replica.Join(context.Background(), join); err != nil {
+		t.Fatalf("updated node join: %v", err)
+	}
+}
+
 func TestEnrollmentRejectsClaimingPrimaryNodeID(t *testing.T) {
 	directory := t.TempDir()
 	primary, err := Open(Options{DataDirectory: directory, NodeName: "dns-1", AdvertiseURL: "https://dns-1.example:5380"})

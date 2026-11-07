@@ -27,7 +27,7 @@ func Current() Info {
 // Development identifies unversioned builds and development or snapshot versions.
 // Published alpha, beta, and release-candidate versions remain eligible for updates.
 func (info Info) Development() bool {
-	release := "v" + strings.TrimPrefix(strings.TrimSpace(info.Release), "v")
+	release := canonical(info.Release)
 	if !semver.IsValid(release) {
 		return true
 	}
@@ -38,4 +38,18 @@ func (info Info) Development() bool {
 		}
 	}
 	return false
+}
+
+// Older reports whether release is an earlier published version than
+// reference. Development and unversioned builds can't be ordered, so neither
+// side counts as older when one of them is one.
+func Older(release, reference string) bool {
+	if (Info{Release: release}).Development() || (Info{Release: reference}).Development() {
+		return false
+	}
+	return semver.Compare(canonical(release), canonical(reference)) < 0
+}
+
+func canonical(release string) string {
+	return "v" + strings.TrimPrefix(strings.TrimSpace(release), "v")
 }
