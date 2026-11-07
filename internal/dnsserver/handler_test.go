@@ -2709,3 +2709,59 @@ func TestServeDNSLeavesAnswerFormattingToTheQueryLog(t *testing.T) {
 		t.Fatalf("resolved answer = %q, source = %v; want A 192.0.2.1 and no source", event.Answer, event.AnswerSource)
 	}
 }
+
+func TestBlockedNegativeAnswersCarrySOA(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name      string
+		blockType string
+		qtype     uint16
+		rcode     int
+	}{
+		{name: "nxdomain", blockType: "nxdomain", qtype: dns.TypeA, rcode: dns.RcodeNameError},
+		{name: "empty answer", blockType: "zero", qtype: dns.TypeMX, rcode: dns.RcodeSuccess},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			configuration := testRuntimeConfig()
+			configuration.Blocking = true
+			configuration.BlockedDomains = []string{"logs.example"}
+			configuration.BlockingType = test.blockType
+			configuration.BlockingTTL = 45
+			runtime, err := Compile(configuration)
+			if err != nil {
+				t.Fatalf("Compile() error = %v", err)
+			}
+			request := new(dns.Msg)
+			request.SetQuestion("scribe.logs.example.", test.qtype)
+			response := runtime.blockedResponse(request)
+			if response.Rcode != test.rcode || len(response.Answer) != 0 || len(response.Ns) != 1 {
+				t.Fatalf("response = %+v, want rcode %d, no answers, one SOA", response, test.rcode)
+			}
+			soa, ok := response.Ns[0].(*dns.SOA)
+			if !ok || soa.Hdr.Name != "scribe.logs.example." || soa.Hdr.Ttl != 45 || soa.Minttl != 45 {
+				t.Fatalf("authority = %#v, want SOA for the blocked name with TTL and minimum 45", response.Ns[0])
+			}
+		})
+	}
+}
+
+func TestBlockedAddressAnswerHasNoSOA(t *testing.T) {
+	t.Parallel()
+
+	configuration := testRuntimeConfig()
+	configuration.Blocking = true
+	configuration.BlockedDomains = []string{"logs.example"}
+	configuration.BlockingType = "zero"
+	runtime, err := Compile(configuration)
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+	request := new(dns.Msg)
+	request.SetQuestion("scribe.logs.example.", dns.TypeA)
+	response := runtime.blockedResponse(request)
+	if len(response.Answer) != 1 || len(response.Ns) != 0 {
+		t.Fatalf("response = %+v, want one address and no authority", response)
+	}
+}

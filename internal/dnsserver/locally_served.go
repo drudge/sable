@@ -107,17 +107,25 @@ func locallyServedResponse(request *dns.Msg, zone string) *dns.Msg {
 	response.SetRcode(request, dns.RcodeNameError)
 	response.Authoritative = true
 	response.RecursionAvailable = true
-	response.Ns = []dns.RR{&dns.SOA{
-		Hdr:     dns.RR_Header{Name: zone, Rrtype: dns.TypeSOA, Class: dns.ClassINET, Ttl: locallyServedNegativeTTL},
+	response.Ns = []dns.RR{syntheticSOA(zone, locallyServedNegativeTTL)}
+	return response
+}
+
+// syntheticSOA is the SOA Sable attaches to a negative answer it makes up
+// itself. RFC 2308 lets a client cache NXDOMAIN or an empty answer only when
+// the authority section carries an SOA, and caches it for the smaller of the
+// SOA's TTL and its minimum, so both are set to ttl.
+func syntheticSOA(zone string, ttl uint32) *dns.SOA {
+	return &dns.SOA{
+		Hdr:     dns.RR_Header{Name: zone, Rrtype: dns.TypeSOA, Class: dns.ClassINET, Ttl: ttl},
 		Ns:      "localhost.",
 		Mbox:    "nobody.invalid.",
 		Serial:  1,
 		Refresh: 3600,
 		Retry:   1200,
 		Expire:  604800,
-		Minttl:  locallyServedNegativeTTL,
-	}}
-	return response
+		Minttl:  ttl,
+	}
 }
 
 // locallyServedNegativeTTL is the SOA minimum RFC 6303 section 3 gives these
