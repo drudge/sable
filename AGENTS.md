@@ -72,15 +72,20 @@ A browser test must pass on a slow CI machine too. Wait for the request or state
 ## Code conventions
 
 These keep the codebase DRY and the hot path fast. Follow them in new code, and fix what you touch.
-- **One service per domain.** Each domain has one service that every surface uses: the console, the JSON API, and MCP. Zones and records go through `zoneService`, and blocking rules through `policyService`, in `internal/web`. A new surface is an adapter over the service, never a second copy of its rules.
+- **One service per domain.** Each domain has one service that every surface uses: the console, the JSON API, and MCP. Zones and records go through `zoneService`, and blocking rules through `policyService`, in `internal/web`. A new surface is an adapter over the service, never a second copy of its rules. The service owns normalization, authorization, the replica check, the SOA serial, the audit entry, and NOTIFY. Every audit entry goes through `server.audit`.
+- **Names and rules mean one thing everywhere.** Names match as lowercase FQDNs. A record's identity is its owner, type, and data compared the way DNS does (`sameRecord`); TTL isn't part of it. The block and allow lists are exclusive: adding a domain to one removes it from the other.
 - **Declare routes once,** in `routeTable` (see [Secrets and security](#secrets-and-security)).
-- **No hand-rolled body limits or error JSON.** A handler doesn't call `http.MaxBytesReader` or build its own error map. Use the route's `bodyLimit` and the helpers in `internal/web/respond.go`: `server.render` for a templ component (it logs a failed render), `apiError` for a JSON error, and `decodeJSON` for a JSON body. Add a helper rather than a third copy of a pattern.
+- **No hand-rolled body limits or error JSON.** A handler doesn't call `http.MaxBytesReader` or build its own error map. Use the route's `bodyLimit` and the helpers in `internal/web/respond.go`: `server.render` for a templ component (it logs a failed render), `apiError` for a JSON error, and `decodeJSON` for a JSON body. Add a helper rather than a third copy of a pattern. An error a client sees is written for that person; never echo `err.Error()` to a client.
+- **No N+1 queries.** A handler runs a fixed number of store queries, not one per zone or row. Page and export with a cursor on `id`, not `COUNT(*)` plus OFFSET.
 - **Transactions go through `withTx`.** In `internal/store`, wrap multi-statement writes in `store.withTx(ctx, "what", func(transaction *sql.Tx) error { ... })` from `tx.go`. It begins, rolls back on any error, and commits, so a function never calls `BeginTx`, `Rollback` or `Commit` itself.
 - **Store SQL goes through the store helpers.** Read and write `sable_metadata` with `getMeta`, `setMeta`, `setMetaIfAbsent`, `updateMeta` and `deleteMeta` in `meta.go`. Build a query from pieces with `newSQLBuilder()` in `dialect.go`: `Bind` returns each value's placeholder in order and `Values` binds a multi-row INSERT tuple. Check the schema with `tableHasColumn` or `tableColumn` rather than another `PRAGMA table_info` copy.
 - **Keep functions under about 80 lines.** Split a long function into named steps, as `Compile` in `internal/dnsserver/runtime_compile.go` does, rather than leaving one long body.
 - **Keep files to one concern.** When a file grows past roughly 1,000 lines or mixes jobs, split it by job. Moving code is its own PR with no behavior change.
 - **No `Msg.Copy` on the hot path** without a comment saying why the copy is needed.
 - **Benchmark hot-path changes.** Put `go tool mage bench` numbers from before and after in the PR.
+- **Release in a `defer`.** Unlock mutexes, close channels, and release waiters in a `defer`, so a panic can't strand them, as `inflightGroup` does.
+- **A bug fix comes with a test** that fails without the fix.
+- **Delete dead code** in the PR that leaves it unused. Don't keep an unused function or component around for later.
 
 ## The Vandelay demo
 
@@ -103,19 +108,21 @@ The console is server-rendered templ with vendored htmx 4 and small, dependency-
 
 - The Content Security Policy is `script-src 'self'` and `style-src 'self'`. That rules out inline `<script>`, `<style>`, `style=""` attributes, and `eval`. Behavior goes in `app.js` and styles in `app.css`. Script may still set `element.style`.
 - htmx can process a swapped fragment at any time, so every `app.js` helper must be safe to run more than once. Content can also arrive without an htmx swap, so watch the page for added elements rather than only listening for htmx events. A helper that sets up elements by selector goes in `swappedContentSetups`, which runs it on the page and on every fragment that arrives.
+- Use htmx 4 event names, such as `htmx:after:swap`. The htmx 2 camel-case names (`htmx:afterSwap`) never fire.
 - `internal/web/assets/assets_test.go` pins some exact CSS and JS text. When you change one of those rules on purpose, update the test with it.
 
 ### Design quality
 
 Every screen should look finished: polished, responsive, and consistent with the rest of the console. A new screen should look like it was always there.
 
-- **Follow the design system.** Isotope is the source of truth ([docs/ui.md](docs/ui.md)). Use its tokens in `app.css` (`--background`, `--card`, `--muted`, `--border`, `--ring`, and the rest) rather than hard-coded colors, along with the 4px spacing scale, the existing type sizes, and Lucide icons. Set DNS data such as names and addresses in monospace.
+- **Follow the design system.** Isotope is the source of truth ([docs/ui.md](docs/ui.md)). Use its tokens in `app.css` (`--background`, `--card`, `--muted`, `--border`, `--ring`, and the rest) rather than hard-coded colors, the status tokens (`--success`, `--warning`, `--danger`, `--info`) for state colors, the spacing tokens (`--space-1` and up) rather than raw margins and gaps, the existing type sizes, and Lucide icons. Set DNS data such as names and addresses in monospace.
 - **Reuse before you build.** Start from the closest existing screen and copy its structure, spacing, copy style, and states. Use the shared templ components before writing markup:
   - `SettingsCard`, `SettingsSaveButton`
   - `DetailDrawer`, `DetailDrawerContent`
   - `StatCard`, `RankedPanel`
   - `SearchField`, `Toast`, `UpdateIndicator`
   - `CopyButton`, `CopyLinkButton`, `ScrollFadeHint`, `Icon`
+  - `components.Field` for a labelled control with help text (it wires `aria-describedby`), `components.SwitchField` for a switch row, and `components.ChoiceCard` for a radio or checkbox with a title and description
   - `components.Dialog` with `components.DialogFooter`, and `components.ConfirmDialog` for a dialog that asks before one action
   - `components.Button` for a labeled button, or a link styled as one
   - `components.Card` with `components.CardHeader` for a card, its title, description, and header actions
@@ -147,6 +154,7 @@ Every screen should look finished: polished, responsive, and consistent with the
 ### Console conventions
 
 - **Help text:** one short sentence about one thing.
+- **Shapes:** buttons, segmented controls, sidebar nav items, and the account button are pills (`border-radius: 999px`). Icon-only buttons and avatars are circles. Form fields, cards, rows, the Settings tab bar, and decorative icon tiles stay rounded rectangles. A segmented tab bar that can wrap to two rows uses concentric rounded rectangles instead of pills (a `1rem` track around `.75rem` tabs).
 - **Dependent controls:** a control that only matters while a switch is on is hidden while it's off (use CSS `:has()`), not dimmed.
 - **Buttons:** one job per button, with Title Case labels such as **Copy Link** and **Show Again**. A status indicator links to where its setting lives rather than opening a small dialog of its own.
 - **Dialog and drawer headers** hold only the title and the close X. Actions go in the footer, or at the end of the section heading they belong to. An action that changes something gets a text label; copy and close may be icons alone.
@@ -173,6 +181,8 @@ The query path in `internal/dnsserver` runs for every lookup. `ServeDNS` leads t
 | `querylog_record.go` | Turning a finished query into a query log entry |
 | `zone_transfer.go` | AXFR, IXFR, NOTIFY, and secondary and stub zone refresh |
 
+- Every listener shares `acceptRequestHeader`, and `ServeDNS` recovers a panic into SERVFAIL. A new listener uses both, and a new goroutine that serves packets recovers too, as the DoQ streams do.
+- Every writer of the runtime holds `activationMu` and rebuilds from the latest runtime. Don't change shared state, such as the validator, before the swap.
 - Keep new work off that path. Do analysis in the background, on data that's already stored.
 - A change that has to touch the path must not add allocations. Show that with a benchmark (`go tool mage bench`).
 
@@ -186,6 +196,10 @@ The query path in `internal/dnsserver` runs for every lookup. `ServeDNS` leads t
 - A schema change is a new step at the end of `migrations` in `internal/store/migrate.go`. Never change, renumber, or remove a step that has shipped.
 - A step runs outside a transaction and is recorded only once it finishes, so it must be safe to run again. Backfill a large table in chunks of IDs, and build an index on a large PostgreSQL table with `createIndexConcurrently`.
 - Test a schema change against both SQLite and PostgreSQL (`SABLE_TEST_POSTGRES_DSN`).
+- Add an index for every column a query or prune filters on.
+- Delete in short transactions over chunks of IDs, off the query-log writer loop, so a big prune can't time out or block writes.
+- Escape user text in a `LIKE` pattern with `escapeLike` and an `ESCAPE` clause.
+- Check `rows.Err()` after every row loop.
 
 ## Insights
 
@@ -215,7 +229,7 @@ The query path in `internal/dnsserver` runs for every lookup. `ServeDNS` leads t
 
 - Commit as Nicholas Penree <nick@penree.com>, never as the container's `Claude` identity. Cloud sessions get this from `.claude/hooks/git-identity.sh` at start; if `git config user.email` isn't `nick@penree.com` before your first commit, run that script. Leave out `Co-Authored-By` and `Claude-Session` trailers, and the "Generated with Claude Code" line in PR descriptions.
 - Use one branch and one PR per feature or fix. Two changes in one PR get two commits; list them in the PR description.
-- A PR that changes the console includes screenshots from the Vandelay demo. For UI that already exists, show before (`main`) and after (your branch) of the same view. For new UI, show dark and light, and a phone where it matters.
+- A PR that changes the console includes screenshots from the Vandelay demo of every view the diff changes, not a sample: each card, dialog state, and tab it touches. For UI that already exists, show before (`main`) and after (your branch) of the same view at laptop and phone widths, in a before/after table with the phone shots in a `<details>` block. For new UI, show dark and light, and a phone where it matters. Look at every shot yourself before posting it.
   - Take them with `scripts/browser/screenshots.cjs`: `buildDemo`, `startDemo`, `capture`, and `stopDemo`. A shot's `open(page)` can open a dialog or drawer before the picture.
   - For before shots, build from a worktree of `origin/main`, including its demo tool. A branch's demo can write configuration keys that `main` rejects.
   - Put the images on the orphan `pr-screenshots` branch, under a folder named for the PR number. Link them with `raw.githubusercontent.com` URLs pinned to that commit. Never commit screenshots to a feature branch.
