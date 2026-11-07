@@ -863,19 +863,26 @@ window. While it's on, **Delay 30 Minutes** gives 30 more minutes before it
 blocks again and **End Now** stops it until the window would have ended. When
 it starts within a day, **Skip** passes over that window and **Delay 30
 Minutes** starts it 30 minutes late. **Resume** undoes any of these. Sable
-saves the change as `off_until`, a time before which the schedule stays off:
+saves the change as `off_until`, a time before which the schedule stays off,
+and `off_kind`, which says what has it off: `skipped`, `delayed` or `ended`
+(**End Now** outside a window has nothing to end, so it's saved as `skipped`).
+The row's badge says the same: Skipped, Delayed or Ended early.
 
 ```toml
 [[blocking.rule_sets.schedules]]
 name = "Bedtime"
 # ...
 off_until = 2026-10-10T07:00:00-04:00
+off_kind = "ended"
 ```
 
 Once `off_until` passes it means nothing, and the schedule runs on its days and
-times again; the next override in that rule set removes it. Overrides replicate
-to every node and show in the Change Center. The MCP tool `list_schedules`
-reports each schedule and when it next starts or ends, and `override_schedule`,
+times again; the next override in that rule set removes both. An `off_until`
+saved without `off_kind`, by an older release, still keeps the schedule off
+and shows as Paused. Overrides replicate to every node and show in the Change
+Center. The MCP tool `list_schedules` reports each schedule, its `state`
+(`outside`, `on`, `skipped`, `delayed`, `ended`, or `overridden` for an
+override of no saved kind) and when it next starts or ends, and `override_schedule`,
 off until added to `[mcp] tools`, does what the row's buttons do.
 
 The query log's explanation names the rule set a device used, and when a

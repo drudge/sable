@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -49,6 +50,45 @@ type Schedule struct {
 	// End Now from the console. Once it passes it means nothing, and the
 	// next change to the rule set's schedules drops it.
 	OffUntil time.Time `toml:"off_until,omitempty"`
+	// OffKind says which of those has it off: ScheduleSkipped,
+	// ScheduleDelayed or ScheduleEnded. A schedule written before Sable kept
+	// it has OffUntil alone.
+	OffKind ScheduleState `toml:"off_kind,omitempty"`
+}
+
+// ScheduleState is where a schedule stands at a moment: outside its window,
+// on, or kept off by one of the overrides.
+type ScheduleState string
+
+const (
+	// ScheduleOutside is a schedule outside its window, with no override.
+	ScheduleOutside ScheduleState = "outside"
+	// ScheduleOn is a schedule blocking now.
+	ScheduleOn ScheduleState = "on"
+	// ScheduleSkipped keeps the next window, or the rest of this one, off.
+	ScheduleSkipped ScheduleState = "skipped"
+	// ScheduleDelayed moves the window's start 30 minutes later.
+	ScheduleDelayed ScheduleState = "delayed"
+	// ScheduleEnded turned a window off early.
+	ScheduleEnded ScheduleState = "ended"
+	// ScheduleOverridden is kept off by an override Sable didn't record the
+	// kind of, written before it kept OffKind.
+	ScheduleOverridden ScheduleState = "overridden"
+)
+
+// scheduleOffKinds are the states an override can leave a schedule in.
+var scheduleOffKinds = []ScheduleState{ScheduleSkipped, ScheduleDelayed, ScheduleEnded}
+
+// State says where the schedule stands at now: an override still in force
+// wins over the window.
+func (schedule Schedule) State(window weekly.Window, now time.Time) ScheduleState {
+	if now.Before(schedule.OffUntil) {
+		return cmp.Or(schedule.OffKind, ScheduleOverridden)
+	}
+	if on, _, _ := window.At(now); on {
+		return ScheduleOn
+	}
+	return ScheduleOutside
 }
 
 // Window returns the schedule's weekly window, read in its time zone.
@@ -105,6 +145,9 @@ func normalizeSchedules(schedules []Schedule) {
 		schedule.Start, schedule.End = normalizeScheduleTime(schedule.Start), normalizeScheduleTime(schedule.End)
 		schedule.Days = normalizeScheduleDays(schedule.Days)
 		schedule.Apps = sortedUnique(schedule.Apps)
+		if schedule.OffUntil.IsZero() {
+			schedule.OffKind = ""
+		}
 	}
 }
 
@@ -190,6 +233,9 @@ func validateSchedules(parent string, schedules []Schedule) []error {
 				validationErrors = append(validationErrors, fmt.Errorf("%s.apps[%d] names no app called %q", field, appIndex, app))
 			}
 		}
+		if schedule.OffKind != "" && !slices.Contains(scheduleOffKinds, schedule.OffKind) {
+			validationErrors = append(validationErrors, fmt.Errorf("%s.off_kind %q must be skipped, delayed or ended", field, schedule.OffKind))
+		}
 	}
 	return validationErrors
 }
@@ -261,9 +307,12 @@ func (configuration *Config) DeleteSchedule(set, name string) error {
 }
 
 // SetScheduleOff keeps the schedule called name in the rule set called set
-// off until until, or clears that when until is zero. Other schedules in the
-// set whose OffUntil has passed by now drop it.
-func (configuration *Config) SetScheduleOff(set, name string, until, now time.Time) error {
+// off until until, as kind says, or clears both when until is zero. Other
+// schedules in the set whose OffUntil has passed by now drop theirs.
+func (configuration *Config) SetScheduleOff(set, name string, until time.Time, kind ScheduleState, now time.Time) error {
+	if !until.IsZero() && !slices.Contains(scheduleOffKinds, kind) {
+		return fmt.Errorf("a schedule can't be kept off as %q", kind)
+	}
 	index := slices.IndexFunc(configuration.Blocking.RuleSets, func(existing RuleSet) bool { return existing.Name == set })
 	if index < 0 {
 		return fmt.Errorf("no rule set is called %q", set)
@@ -276,10 +325,13 @@ func (configuration *Config) SetScheduleOff(set, name string, until, now time.Ti
 	}
 	for other := range schedules {
 		if !schedules[other].OffUntil.After(now) {
-			schedules[other].OffUntil = time.Time{}
+			schedules[other].OffUntil, schedules[other].OffKind = time.Time{}, ""
 		}
 	}
-	schedules[position].OffUntil = until
+	if until.IsZero() {
+		kind = ""
+	}
+	schedules[position].OffUntil, schedules[position].OffKind = until, kind
 	configuration.Blocking.RuleSets = sets
 	return nil
 }

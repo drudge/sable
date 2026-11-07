@@ -32,24 +32,33 @@ func ruleSetSchedules(set config.RuleSet, display pages.TimeDisplay, now time.Ti
 			views = append(views, view)
 			continue
 		}
-		on, _, until := window.At(now)
+		_, _, until := window.At(now)
 		start, _ := window.Next(now)
+		state := schedule.State(window, now)
+		on := state == config.ScheduleOn
 		zone := ""
 		if window.Location.String() != display.Zone() {
 			zone = " " + cmp.Or(start, until).In(window.Location).Format("MST")
 		}
 		view.When = scheduleDays(window.Days) + ", " + scheduleClock(window.Start, display) + " to " + scheduleClock(window.End, display) + zone
-		view.On, view.Paused = on, now.Before(schedule.OffUntil)
+		view.On, view.Paused = on, scheduleOffLabels[state]
 		switch {
 		case on:
 			view.Next = "Ends " + scheduleMoment(until.In(window.Location), now.In(window.Location), display) + zone
 		case !start.IsZero():
 			view.Next = "Starts " + scheduleMoment(start.In(window.Location), now.In(window.Location), display) + zone
 		}
-		view.Overrides = scheduleOverrides(on, view.Paused, start, now)
+		view.Overrides = scheduleOverrides(on, view.Paused != "", start, now)
 		views = append(views, view)
 	}
 	return views
+}
+
+// scheduleOffLabels name the states an override leaves a schedule in, the
+// way its row's badge says them.
+var scheduleOffLabels = map[config.ScheduleState]string{
+	config.ScheduleSkipped: "Skipped", config.ScheduleDelayed: "Delayed",
+	config.ScheduleEnded: "Ended early", config.ScheduleOverridden: "Paused",
 }
 
 // scheduleDays names a schedule's days the short way where there is one:

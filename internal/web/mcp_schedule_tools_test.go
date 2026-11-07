@@ -41,7 +41,7 @@ func TestMCPScheduleTools(t *testing.T) {
 		t.Fatalf("list_schedules failed: %s", failure)
 	}
 	if schedule := first(listed); schedule["rule_set"] != "Kids" || schedule["name"] != "Bedtime" || schedule["on"] != true ||
-		schedule["ends"] != end.Format(time.RFC3339) || schedule["paused_until"] != nil {
+		schedule["state"] != "on" || schedule["ends"] != end.Format(time.RFC3339) || schedule["paused_until"] != nil {
 		t.Fatalf("list_schedules = %v", schedule)
 	}
 	if listed, failure = call("sable_pat_blocking", "list_schedules", map[string]any{"rule_set": "Work"}); failure != "" || len(listed["schedules"].([]any)) != 0 {
@@ -55,8 +55,8 @@ func TestMCPScheduleTools(t *testing.T) {
 	if failure != "" || ended["message"] != "Kids's Bedtime schedule ended early" {
 		t.Fatalf("end = %v %q", ended, failure)
 	}
-	if schedule := ended["schedule"].(map[string]any); schedule["on"] != false || schedule["paused_until"] != end.Format(time.RFC3339) ||
-		schedule["next_start"] != start.Add(24*time.Hour).Format(time.RFC3339) {
+	if schedule := ended["schedule"].(map[string]any); schedule["on"] != false || schedule["state"] != "ended" ||
+		schedule["paused_until"] != end.Format(time.RFC3339) || schedule["next_start"] != start.Add(24*time.Hour).Format(time.RFC3339) {
 		t.Fatalf("ended schedule = %v", schedule)
 	}
 	if resumed, failure := call("sable_pat_blocking", "override_schedule", map[string]any{"rule_set": "Kids", "schedule": "Bedtime", "action": "resume"}); failure != "" ||

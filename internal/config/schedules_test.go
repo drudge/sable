@@ -151,29 +151,90 @@ func TestSetScheduleOff(t *testing.T) {
 	now := time.Date(2026, time.October, 12, 22, 0, 0, 0, time.UTC)
 	bedtime := Schedule{Name: "Bedtime", Days: []string{"mon"}, Start: "21:00", End: "07:00", TimeZone: "UTC", Block: ScheduleBlockEverything}
 	stale := bedtime
-	stale.Name, stale.OffUntil = "Homework", now.Add(-time.Hour)
+	stale.Name, stale.OffUntil, stale.OffKind = "Homework", now.Add(-time.Hour), ScheduleSkipped
 	configuration := Config{Blocking: Blocking{RuleSets: []RuleSet{{Name: "Kids", Schedules: []Schedule{bedtime, stale}}}}}
 	before := configuration.Blocking.RuleSets
 	until := now.Add(9 * time.Hour)
-	if err := configuration.SetScheduleOff("Kids", "Bedtime", until, now); err != nil {
+	if err := configuration.SetScheduleOff("Kids", "Bedtime", until, ScheduleEnded, now); err != nil {
 		t.Fatal(err)
 	}
 	schedules := configuration.Blocking.RuleSets[0].Schedules
-	if !schedules[0].OffUntil.Equal(until) || !schedules[1].OffUntil.IsZero() || !before[0].Schedules[1].OffUntil.Equal(stale.OffUntil) {
+	if !schedules[0].OffUntil.Equal(until) || schedules[0].OffKind != ScheduleEnded || !schedules[1].OffUntil.IsZero() || schedules[1].OffKind != "" || !before[0].Schedules[1].OffUntil.Equal(stale.OffUntil) {
 		t.Fatalf("schedules = %+v, before = %+v", schedules, before[0].Schedules)
 	}
 	if window, err := schedules[0].Window(); err != nil || !window.OffUntil.Equal(until) {
 		t.Fatalf("Window() = %+v, %v", window, err)
 	}
-	if err := configuration.SetScheduleOff("Kids", "Bedtime", time.Time{}, now); err != nil || !configuration.Blocking.RuleSets[0].Schedules[0].OffUntil.IsZero() {
+	for _, kind := range []ScheduleState{"", ScheduleOn, ScheduleOutside, ScheduleOverridden, "paused"} {
+		if err := configuration.SetScheduleOff("Kids", "Bedtime", until, kind, now); err == nil {
+			t.Fatalf("SetScheduleOff(%q) kept a schedule off in a state no override leaves it in", kind)
+		}
+	}
+	if err := configuration.SetScheduleOff("Kids", "Bedtime", time.Time{}, ScheduleSkipped, now); err != nil ||
+		!configuration.Blocking.RuleSets[0].Schedules[0].OffUntil.IsZero() || configuration.Blocking.RuleSets[0].Schedules[0].OffKind != "" {
 		t.Fatalf("SetScheduleOff(zero) = %v, schedules %+v", err, configuration.Blocking.RuleSets[0].Schedules)
 	}
 	for _, err := range []error{
-		configuration.SetScheduleOff("Guests", "Bedtime", until, now),
-		configuration.SetScheduleOff("Kids", "Nap", until, now),
+		configuration.SetScheduleOff("Guests", "Bedtime", until, ScheduleSkipped, now),
+		configuration.SetScheduleOff("Kids", "Nap", until, ScheduleSkipped, now),
 	} {
 		if err == nil {
 			t.Fatal("a change to a missing rule set or schedule went through")
 		}
+	}
+}
+
+func TestScheduleState(t *testing.T) {
+	t.Parallel()
+	// Mondays 21:00 to 07:00 UTC; October 12, 2026 is a Monday.
+	bedtime := Schedule{Name: "Bedtime", Days: []string{"mon"}, Start: "21:00", End: "07:00", TimeZone: "UTC", Block: ScheduleBlockEverything}
+	window, err := bedtime.Window()
+	if err != nil {
+		t.Fatal(err)
+	}
+	evening := time.Date(2026, time.October, 12, 18, 0, 0, 0, time.UTC)
+	night := time.Date(2026, time.October, 12, 23, 0, 0, 0, time.UTC)
+	morning := time.Date(2026, time.October, 13, 7, 0, 0, 0, time.UTC)
+	for _, test := range []struct {
+		name     string
+		offUntil time.Time
+		kind     ScheduleState
+		now      time.Time
+		want     ScheduleState
+	}{
+		{"before the window", time.Time{}, "", evening, ScheduleOutside},
+		{"in the window", time.Time{}, "", night, ScheduleOn},
+		{"skipped before it starts", morning, ScheduleSkipped, evening, ScheduleSkipped},
+		{"delayed in the window", night.Add(30 * time.Minute), ScheduleDelayed, night, ScheduleDelayed},
+		{"ended early", morning, ScheduleEnded, night, ScheduleEnded},
+		{"an override of no recorded kind", morning, "", night, ScheduleOverridden},
+		{"an override that has passed", night.Add(-time.Minute), ScheduleEnded, night, ScheduleOn},
+		{"an override that has passed outside the window", morning, ScheduleEnded, morning, ScheduleOutside},
+	} {
+		schedule := bedtime
+		schedule.OffUntil, schedule.OffKind = test.offUntil, test.kind
+		window.OffUntil = test.offUntil
+		if got := schedule.State(window, test.now); got != test.want {
+			t.Errorf("%s: State() = %q, want %q", test.name, got, test.want)
+		}
+	}
+}
+
+func TestScheduleOffKindValidatesAndClears(t *testing.T) {
+	t.Parallel()
+	bedtime := Schedule{Name: "Bedtime", Days: []string{"mon"}, Start: "21:00", End: "07:00", TimeZone: "UTC", Block: ScheduleBlockEverything,
+		OffUntil: time.Date(2026, time.October, 13, 7, 0, 0, 0, time.UTC), OffKind: "paused"}
+	if errs := validateSchedules("blocking.rule_sets[0]", []Schedule{bedtime}); len(errs) != 1 || !strings.Contains(errs[0].Error(), "off_kind") {
+		t.Fatalf("validateSchedules(off_kind paused) = %v", errs)
+	}
+	bedtime.OffKind = ScheduleDelayed
+	if errs := validateSchedules("blocking.rule_sets[0]", []Schedule{bedtime}); len(errs) != 0 {
+		t.Fatalf("validateSchedules(off_kind delayed) = %v", errs)
+	}
+	bedtime.OffUntil = time.Time{}
+	schedules := []Schedule{bedtime}
+	normalizeSchedules(schedules)
+	if schedules[0].OffKind != "" {
+		t.Fatalf("normalizeSchedules kept off_kind %q without off_until", schedules[0].OffKind)
 	}
 }

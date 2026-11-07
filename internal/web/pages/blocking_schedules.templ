@@ -19,8 +19,9 @@ type RuleSetSchedule struct {
 	// as "Ends 7:00 AM" or "Starts Sun 9:00 PM".
 	On   bool
 	Next string
-	// Paused says Skip, Delay or End Now has the schedule off for now.
-	Paused bool
+	// Paused names what has the schedule off for now, such as "Skipped" or
+	// "Ended early", and is empty when nothing does.
+	Paused string
 	// Overrides are the changes the row offers, such as End Now.
 	Overrides []ScheduleOverride
 }
@@ -85,11 +86,7 @@ templ ruleSetSchedules(view RuleSetDrawerView) {
 						<span class="rule-set-device-name">
 							<strong>
 								{ schedule.Name }
-								if schedule.On {
-									@components.Badge(components.BadgeProps{Label: "On", Tone: components.BadgeSuccess, Class: "rule-set-schedule-state"})
-								} else if schedule.Paused {
-									@components.Badge(components.BadgeProps{Label: "Paused", Class: "rule-set-schedule-state"})
-								}
+								@scheduleStateBadge(schedule, "rule-set-schedule-state")
 							</strong>
 							<small>{ schedule.When }</small>
 							<small>{ scheduleDetail(schedule) }</small>
@@ -115,6 +112,15 @@ templ ruleSetSchedules(view RuleSetDrawerView) {
 }
 
 // scheduleDetail says what a schedule blocks and when that next changes.
+// scheduleStateBadge says a schedule is on, or what has it off for now.
+templ scheduleStateBadge(schedule RuleSetSchedule, class string) {
+	if schedule.On {
+		@components.Badge(components.BadgeProps{Label: "On", Tone: components.BadgeSuccess, Class: class})
+	} else if schedule.Paused != "" {
+		@components.Badge(components.BadgeProps{Label: schedule.Paused, Class: class})
+	}
+}
+
 func scheduleDetail(schedule RuleSetSchedule) string {
 	if schedule.Next == "" {
 		return schedule.Blocks
