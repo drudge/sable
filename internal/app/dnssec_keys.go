@@ -23,7 +23,7 @@ type zoneSigningKey struct {
 	key        *dns.DNSKEY
 	privateKey crypto.Signer
 	role       string
-	state      string
+	state      dnssecstate.KeyState
 }
 
 func (signer *dnssecSigner) signingKeys(ctx context.Context, zone zone.Zone) ([]zoneSigningKey, error) {
@@ -58,7 +58,7 @@ func (signer *dnssecSigner) RequestRollover(ctx context.Context, zone zone.Zone,
 		return err
 	}
 	if slices.ContainsFunc(state.Keys, func(key dnssecstate.Key) bool {
-		return key.Role == role && (key.State == dnssecstate.StatePublished || key.State == dnssecstate.StateReady)
+		return key.Role == role && key.State.Pending()
 	}) {
 		return fmt.Errorf("a %s rollover is already pending", strings.ToUpper(role))
 	}
@@ -78,40 +78,8 @@ func (signer *dnssecSigner) keyLifecycleDue(ctx context.Context, zone zone.Zone)
 	if err != nil || changed {
 		return changed, err
 	}
-	now := signer.now().UTC()
-	for _, key := range state.Keys {
-		if key.State == dnssecstate.StatePublished && !now.Before(key.PublishedAt.Add(signer.rolloverDelay(zone))) {
-			return true, nil
-		}
-		if key.State == dnssecstate.StateReady && key.Role == dnssecstate.RoleZSK {
-			return true, nil
-		}
-		if key.State == dnssecstate.StateReady && key.Role == dnssecstate.RoleKSK {
-			keyTag, tagErr := managedKeyTag(key, zone.Name)
-			if tagErr != nil {
-				return false, tagErr
-			}
-			if zone.ParentDSKeyTag == keyTag {
-				return true, nil
-			}
-		}
-		if key.State == dnssecstate.StateRetiring && !key.RemoveAt.IsZero() && !now.Before(key.RemoveAt) {
-			return true, nil
-		}
-	}
-	if _, pending := pendingKey(state, dnssecstate.RoleZSK); !pending && activeKeyAge(state, dnssecstate.RoleZSK, now) >= rolloverStartAge(zone.ZSKLifetime.Duration, signer.rolloverDelay(zone)) {
-		return true, nil
-	}
-	activeKSK, active := activeKey(state, dnssecstate.RoleKSK)
-	if !active {
-		return false, nil
-	}
-	activeTag, err := managedKeyTag(activeKSK, zone.Name)
-	if err != nil {
-		return false, err
-	}
-	_, pending := pendingKey(state, dnssecstate.RoleKSK)
-	return !pending && zone.ParentDSKeyTag == activeTag && activeKeyAge(state, dnssecstate.RoleKSK, now) >= rolloverStartAge(zone.KSKLifetime.Duration, signer.rolloverDelay(zone)), nil
+	plan, err := nextTransitions(state.Keys, signer.keyRules(zone), signer.now().UTC())
+	return plan.changed, err
 }
 
 func rolloverStartAge(lifetime, prepublish time.Duration) time.Duration {
@@ -153,7 +121,7 @@ func (signer *dnssecSigner) KeyStatus(ctx context.Context, zone zone.Zone) (dnss
 		if left.Role != right.Role {
 			return strings.Compare(left.Role, right.Role)
 		}
-		return strings.Compare(left.State, right.State)
+		return strings.Compare(string(left.State), string(right.State))
 	})
 	status.NextAction = keyStatusNextAction(status)
 	return status, nil
@@ -240,65 +208,168 @@ func (signer *dnssecSigner) saveKeyState(ctx context.Context, zone zone.Zone, st
 	return nil
 }
 
+// advanceKeyState applies every key transition that is due and generates the
+// key that starts a new rollover. keyLifecycleDue asks the same question
+// through nextTransitions, so a change it reports is always one this makes.
 func (signer *dnssecSigner) advanceKeyState(state *dnssecstate.State, zone zone.Zone) (bool, error) {
 	now := signer.now().UTC()
-	changed := false
-	state.Keys = slices.DeleteFunc(state.Keys, func(key dnssecstate.Key) bool {
-		remove := key.State == dnssecstate.StateRetiring && !key.RemoveAt.IsZero() && !now.Before(key.RemoveAt)
-		changed = changed || remove
-		return remove
-	})
-	for index := range state.Keys {
-		key := &state.Keys[index]
-		if key.State == dnssecstate.StatePublished && !now.Before(key.PublishedAt.Add(signer.rolloverDelay(zone))) {
-			key.State = dnssecstate.StateReady
-			changed = true
-		}
+	plan, err := nextTransitions(state.Keys, signer.keyRules(zone), now)
+	if err != nil {
+		return false, err
 	}
-	for index := range state.Keys {
-		key := &state.Keys[index]
-		if key.Role == dnssecstate.RoleZSK && key.State == dnssecstate.StateReady {
-			retireRole(state, dnssecstate.RoleZSK, now.Add(signer.retirementDelay(zone)))
-			key.State, key.ActivatedAt = dnssecstate.StateActive, now
-			changed = true
-		}
-		if key.Role == dnssecstate.RoleKSK && key.State == dnssecstate.StateReady {
-			keyTag, err := managedKeyTag(*key, zone.Name)
-			if err != nil {
-				return false, err
-			}
-			if zone.ParentDSKeyTag == keyTag {
-				retireRole(state, dnssecstate.RoleKSK, now.Add(signer.retirementDelay(zone)))
-				key.State, key.ActivatedAt = dnssecstate.StateActive, now
-				changed = true
-			}
-		}
-	}
-	if _, found := pendingKey(*state, dnssecstate.RoleZSK); !found && activeKeyAge(*state, dnssecstate.RoleZSK, now) >= rolloverStartAge(zone.ZSKLifetime.Duration, signer.rolloverDelay(zone)) {
-		key, err := signer.generateManagedKey(zone, dnssecstate.RoleZSK, dnssecstate.StatePublished, now)
+	state.Keys = plan.keys
+	for _, role := range plan.generate {
+		key, err := signer.generateManagedKey(zone, role, dnssecstate.StatePublished, now)
 		if err != nil {
 			return false, err
 		}
 		state.Keys = append(state.Keys, key)
-		changed = true
 	}
-	activeKSK, found := activeKey(*state, dnssecstate.RoleKSK)
-	if found {
-		activeTag, err := managedKeyTag(activeKSK, zone.Name)
+	return plan.changed, nil
+}
+
+// keyRules is what the rollover schedule needs to know about one zone.
+type keyRules struct {
+	rolloverDelay   time.Duration
+	retirementDelay time.Duration
+	zskLifetime     time.Duration
+	kskLifetime     time.Duration
+	parentDSKeyTag  uint16
+	keyTag          func(dnssecstate.Key) (uint16, error)
+}
+
+func (signer *dnssecSigner) keyRules(zone zone.Zone) keyRules {
+	return keyRules{
+		rolloverDelay: signer.rolloverDelay(zone), retirementDelay: signer.retirementDelay(zone),
+		zskLifetime: zone.ZSKLifetime.Duration, kskLifetime: zone.KSKLifetime.Duration,
+		parentDSKeyTag: zone.ParentDSKeyTag,
+		keyTag:         func(key dnssecstate.Key) (uint16, error) { return managedKeyTag(key, zone.Name) },
+	}
+}
+
+// keyPlan is one pass of the rollover schedule: the keys after every
+// transition that is due, and the roles that need a new key generated to start
+// a rollover, ZSK first.
+type keyPlan struct {
+	keys     []dnssecstate.Key
+	generate []string
+	changed  bool
+}
+
+// nextTransitions works out which key transitions are due at now without
+// generating anything, so it is safe to call just to ask whether a re-sign is
+// due. In order:
+//   - a retiring key whose removal time has passed is removed;
+//   - a published key is ready once the rollover delay has passed;
+//   - a ready ZSK becomes active straight away, retiring the old one, so a ZSK
+//     passes through ready within this one pass (RFC 7583 section 3.3.1);
+//   - a ready KSK becomes active only once the parent DS names its key tag,
+//     retiring the old one (RFC 7583 section 3.3.2);
+//   - a role with no pending key whose active key is old enough starts a
+//     rollover. A KSK also waits for the parent DS to name the active key.
+func nextTransitions(keys []dnssecstate.Key, rules keyRules, now time.Time) (keyPlan, error) {
+	plan := keyPlan{keys: slices.Clone(keys)}
+	plan.keys = slices.DeleteFunc(plan.keys, func(key dnssecstate.Key) bool {
+		remove := key.State == dnssecstate.StateRetiring && !key.RemoveAt.IsZero() && !now.Before(key.RemoveAt)
+		plan.changed = plan.changed || remove
+		return remove
+	})
+	for index := range plan.keys {
+		key := &plan.keys[index]
+		if key.State == dnssecstate.StatePublished && !now.Before(key.PublishedAt.Add(rules.rolloverDelay)) {
+			if err := moveKey(key, dnssecstate.StateReady); err != nil {
+				return keyPlan{}, err
+			}
+			plan.changed = true
+		}
+	}
+	for index := range plan.keys {
+		activate, err := readyToActivate(plan.keys[index], rules)
 		if err != nil {
+			return keyPlan{}, err
+		}
+		if !activate {
+			continue
+		}
+		if err := activateKey(plan.keys, index, now, now.Add(rules.retirementDelay)); err != nil {
+			return keyPlan{}, err
+		}
+		plan.changed = true
+	}
+	state := dnssecstate.State{Keys: plan.keys}
+	for _, role := range []string{dnssecstate.RoleZSK, dnssecstate.RoleKSK} {
+		start, err := rolloverDue(state, role, rules, now)
+		if err != nil {
+			return keyPlan{}, err
+		}
+		if start {
+			plan.generate = append(plan.generate, role)
+			plan.changed = true
+		}
+	}
+	return plan, nil
+}
+
+func readyToActivate(key dnssecstate.Key, rules keyRules) (bool, error) {
+	if key.State != dnssecstate.StateReady {
+		return false, nil
+	}
+	if key.Role == dnssecstate.RoleZSK {
+		return true, nil
+	}
+	if key.Role != dnssecstate.RoleKSK {
+		return false, nil
+	}
+	keyTag, err := rules.keyTag(key)
+	return err == nil && rules.parentDSKeyTag == keyTag, err
+}
+
+// activateKey makes keys[index] the active key of its role and retires the
+// one it replaces.
+func activateKey(keys []dnssecstate.Key, index int, now, removeAt time.Time) error {
+	role := keys[index].Role
+	for other := range keys {
+		if keys[other].Role == role && keys[other].State == dnssecstate.StateActive {
+			if err := moveKey(&keys[other], dnssecstate.StateRetiring); err != nil {
+				return err
+			}
+			keys[other].RemoveAt = removeAt
+		}
+	}
+	if err := moveKey(&keys[index], dnssecstate.StateActive); err != nil {
+		return err
+	}
+	keys[index].ActivatedAt = now
+	return nil
+}
+
+func rolloverDue(state dnssecstate.State, role string, rules keyRules, now time.Time) (bool, error) {
+	lifetime := rules.zskLifetime
+	if role == dnssecstate.RoleKSK {
+		active, found := activeKey(state, role)
+		if !found {
+			return false, nil
+		}
+		keyTag, err := rules.keyTag(active)
+		if err != nil || rules.parentDSKeyTag != keyTag {
 			return false, err
 		}
-		_, pending := pendingKey(*state, dnssecstate.RoleKSK)
-		if !pending && zone.ParentDSKeyTag == activeTag && now.Sub(activeKSK.ActivatedAt) >= rolloverStartAge(zone.KSKLifetime.Duration, signer.rolloverDelay(zone)) {
-			key, generateErr := signer.generateManagedKey(zone, dnssecstate.RoleKSK, dnssecstate.StatePublished, now)
-			if generateErr != nil {
-				return false, generateErr
-			}
-			state.Keys = append(state.Keys, key)
-			changed = true
-		}
+		lifetime = rules.kskLifetime
 	}
-	return changed, nil
+	if _, pending := pendingKey(state, role); pending {
+		return false, nil
+	}
+	return activeKeyAge(state, role, now) >= rolloverStartAge(lifetime, rules.rolloverDelay), nil
+}
+
+// moveKey changes a key's state, refusing any move the lifecycle does not
+// allow.
+func moveKey(key *dnssecstate.Key, next dnssecstate.KeyState) error {
+	if !key.State.CanMoveTo(next) {
+		return fmt.Errorf("DNSSEC %s cannot move from %s to %s", strings.ToUpper(key.Role), key.State, next)
+	}
+	key.State = next
+	return nil
 }
 
 func validateKeyState(state dnssecstate.State, zone zone.Zone) error {
@@ -311,7 +382,7 @@ func validateKeyState(state dnssecstate.State, zone zone.Zone) error {
 		if managed.Role != dnssecstate.RoleKSK && managed.Role != dnssecstate.RoleZSK {
 			return fmt.Errorf("DNSSEC key state contains unsupported role %q", managed.Role)
 		}
-		if !isPublishedKeyState(managed.State) {
+		if !managed.State.Valid() {
 			return fmt.Errorf("DNSSEC key state contains unsupported state %q", managed.State)
 		}
 		if managed.CreatedAt.IsZero() || managed.PublishedAt.IsZero() {
@@ -323,7 +394,7 @@ func validateKeyState(state dnssecstate.State, zone zone.Zone) error {
 				return fmt.Errorf("active %s has no activation timestamp", strings.ToUpper(managed.Role))
 			}
 		}
-		if managed.State == dnssecstate.StatePublished || managed.State == dnssecstate.StateReady {
+		if managed.State.Pending() {
 			pending[managed.Role]++
 		}
 		if managed.State == dnssecstate.StateRetiring && managed.RemoveAt.IsZero() {
@@ -350,15 +421,6 @@ func validateKeyState(state dnssecstate.State, zone zone.Zone) error {
 	return nil
 }
 
-func retireRole(state *dnssecstate.State, role string, removeAt time.Time) {
-	for index := range state.Keys {
-		key := &state.Keys[index]
-		if key.Role == role && key.State == dnssecstate.StateActive {
-			key.State, key.RemoveAt = dnssecstate.StateRetiring, removeAt
-		}
-	}
-}
-
 func activeKey(state dnssecstate.State, role string) (dnssecstate.Key, bool) {
 	for _, key := range state.Keys {
 		if key.Role == role && key.State == dnssecstate.StateActive {
@@ -370,7 +432,7 @@ func activeKey(state dnssecstate.State, role string) (dnssecstate.Key, bool) {
 
 func pendingKey(state dnssecstate.State, role string) (dnssecstate.Key, bool) {
 	for _, key := range state.Keys {
-		if key.Role == role && (key.State == dnssecstate.StatePublished || key.State == dnssecstate.StateReady) {
+		if key.Role == role && key.State.Pending() {
 			return key, true
 		}
 	}
@@ -401,7 +463,7 @@ func maximumZoneTTL(zone zone.Zone) uint32 {
 	return maximum
 }
 
-func (signer *dnssecSigner) generateManagedKey(zone zone.Zone, role, state string, now time.Time) (dnssecstate.Key, error) {
+func (signer *dnssecSigner) generateManagedKey(zone zone.Zone, role string, state dnssecstate.KeyState, now time.Time) (dnssecstate.Key, error) {
 	algorithm, bits, err := dnssecAlgorithm(zone.DNSSECAlgorithm)
 	if err != nil {
 		return dnssecstate.Key{}, err

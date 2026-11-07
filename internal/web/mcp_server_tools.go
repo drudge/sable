@@ -718,9 +718,9 @@ func (server *Server) mcpGetClusterStatus(request *http.Request, arguments json.
 	for _, node := range state.Nodes {
 		names[node.ID] = node.Name
 		nodes = append(nodes, mcpClusterNode{
-			Name: node.Name, Role: node.Role, State: node.State, Version: node.Version,
+			Name: node.Name, Role: node.Role, State: string(node.State), Version: node.Version,
 			UpSince: mcpTime(node.UpSince), LastContact: mcpTime(node.LastContact), LastSync: mcpTime(node.LastSync),
-			AppliedGeneration: node.AppliedGeneration, Lag: node.Lag, SyncState: node.SyncState, Problems: problems[node.ID],
+			AppliedGeneration: node.AppliedGeneration, Lag: node.Lag, SyncState: string(node.SyncState), Problems: problems[node.ID],
 		})
 	}
 	result := map[string]any{
@@ -761,7 +761,7 @@ func (server *Server) mcpGetClusterStatus(request *http.Request, arguments json.
 func mcpClusterSummary(nodes []mcpClusterNode) string {
 	online, behind, troubled := 0, 0, 0
 	for _, node := range nodes {
-		if node.State == cluster.StateOnline {
+		if node.State == string(cluster.StateOnline) {
 			online++
 		}
 		if node.Lag > 0 {
@@ -849,7 +849,7 @@ func (server *Server) mcpRollout(state cluster.State, names map[string]string, n
 		return nil
 	}
 	view := &mcpRollout{
-		Version: rollout.Version, Phase: rollout.Phase, Active: rollout.Active(), Error: rollout.Error,
+		Version: rollout.Version, Phase: string(rollout.Phase), Active: rollout.Active(), Error: rollout.Error,
 		FailedNode: names[rollout.FailedNode], StartedAt: mcpTime(rollout.StartedAt), FinishedAt: mcpTime(rollout.FinishedAt),
 		Nodes: make([]mcpRolloutNode, 0, len(rollout.Nodes)),
 	}
@@ -857,7 +857,7 @@ func (server *Server) mcpRollout(state cluster.State, names map[string]string, n
 		view.FailedNode = rollout.FailedNode
 	}
 	for _, node := range rollout.Nodes {
-		view.Nodes = append(view.Nodes, mcpRolloutNode{Name: node.Name, Phase: node.Phase})
+		view.Nodes = append(view.Nodes, mcpRolloutNode{Name: node.Name, Phase: string(node.Phase)})
 	}
 	return view
 }
