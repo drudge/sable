@@ -25,32 +25,6 @@ const (
 	updateProtocolVersion = 1
 )
 
-// Persisted phases and wire actions are shared by both sides of a rollout.
-const (
-	rolloutPreparing = "preparing"
-	rolloutUpdating  = "updating"
-	rolloutVerifying = "verifying"
-	updateRestarting = "restarting"
-	updateComplete   = "complete"
-	updateFailed     = "failed"
-	rolloutStopped   = "stopped"
-	updateQueued     = "queued"
-	updatePrepared   = "prepared"
-	updateInstalling = "installing"
-	updateInstalled  = "installed"
-	actionPrepare    = "prepare"
-	actionInstall    = "install"
-	actionRestart    = "restart"
-	actionRelease    = "release"
-)
-
-// The phases a rollout ends in.
-const (
-	RolloutComplete = updateComplete
-	RolloutFailed   = updateFailed
-	RolloutStopped  = rolloutStopped
-)
-
 type UpdateController interface {
 	Status() update.Status
 	Installable() error
@@ -62,11 +36,11 @@ type UpdateController interface {
 
 // UpdateCommand travels only over the existing authenticated primary sync connection.
 type UpdateCommand struct {
-	ID        string `json:"id"`
-	ClusterID string `json:"cluster_id"`
-	PrimaryID string `json:"primary_id"`
-	Version   string `json:"version"`
-	Action    string `json:"action"`
+	ID        string       `json:"id"`
+	ClusterID string       `json:"cluster_id"`
+	PrimaryID string       `json:"primary_id"`
+	Version   string       `json:"version"`
+	Action    UpdateAction `json:"action"`
 }
 
 type NodeUpdateStatus struct {
@@ -77,14 +51,14 @@ type NodeUpdateStatus struct {
 	Blocked       string    `json:"blocked,omitempty"`
 	ID            string    `json:"id,omitempty"`
 	Version       string    `json:"version,omitempty"`
-	Phase         string    `json:"phase,omitempty"`
+	Phase         NodePhase `json:"phase,omitempty"`
 	Error         string    `json:"error,omitempty"`
 }
 
 type RolloutNode struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Phase string `json:"phase"`
+	ID    string           `json:"id"`
+	Name  string           `json:"name"`
+	Phase RolloutNodePhase `json:"phase"`
 }
 
 type RolloutStatus struct {
@@ -92,7 +66,7 @@ type RolloutStatus struct {
 	ClusterID string        `json:"cluster_id"`
 	PrimaryID string        `json:"primary_id"`
 	Version   string        `json:"version"`
-	Phase     string        `json:"phase"`
+	Phase     RolloutPhase  `json:"phase"`
 	Error     string        `json:"error,omitempty"`
 	Nodes     []RolloutNode `json:"nodes"`
 	Index     int           `json:"index"`
@@ -110,7 +84,7 @@ type RolloutStatus struct {
 }
 
 func (status RolloutStatus) Active() bool {
-	return status.Phase == rolloutPreparing || status.Phase == rolloutUpdating || status.Phase == updateRestarting || status.Phase == rolloutVerifying
+	return status.Phase.Active()
 }
 
 // Superseded reports that a rollout which has ended no longer describes the
@@ -131,7 +105,7 @@ func (status RolloutStatus) Superseded(nodes []Node) bool {
 		case -1:
 			return false
 		case 0:
-			if status.Phase == updateComplete {
+			if status.Phase == RolloutComplete {
 				return false
 			}
 		}
@@ -173,23 +147,23 @@ func (service *Service) SetUpdateController(controller UpdateController, restart
 			updates.local.Blocked = err.Error()
 		}
 		if sameRelease(service.version, updates.local.Version) {
-			updates.local.Phase, updates.local.Error = updateComplete, ""
+			updates.local.Phase, updates.local.Error = nodeComplete, ""
 		} else {
-			updates.local.Phase, updates.local.Error = updateFailed, fmt.Sprintf("Node restarted on %s before its update to %s completed. Review it before trying again.", formatRelease(service.version), formatRelease(updates.local.Version))
+			updates.local.Phase, updates.local.Error = nodeFailed, fmt.Sprintf("Node restarted on %s before its update to %s completed. Review it before trying again.", formatRelease(service.version), formatRelease(updates.local.Version))
 		}
 	}
 	if err := readUpdateState(service.directory, rolloutFileName, &updates.rollout); err != nil {
 		return err
 	}
 	if updates.rollout.Active() {
-		if len(updates.rollout.Nodes) == 0 || updates.rollout.Index < 0 || updates.rollout.Index >= len(updates.rollout.Nodes) && updates.rollout.Phase != rolloutVerifying {
+		if len(updates.rollout.Nodes) == 0 || updates.rollout.Index < 0 || updates.rollout.Index >= len(updates.rollout.Nodes) && updates.rollout.Phase != RolloutVerifying {
 			return errors.New("saved rollout has invalid node progress")
 		}
-		if updates.rollout.Phase == updateRestarting && sameRelease(service.version, updates.rollout.Version) {
-			updates.rollout.Phase = rolloutVerifying
+		if updates.rollout.Phase == RolloutRestarting && sameRelease(service.version, updates.rollout.Version) {
+			updates.rollout.Phase = RolloutVerifying
 			updates.rollout.Deadline = time.Now().Add(rolloutNodeTimeout)
 		} else {
-			updates.rollout.Phase, updates.rollout.Error = updateFailed, "The coordinator restarted. Review every node before starting another rollout."
+			updates.rollout.Phase, updates.rollout.Error = RolloutFailed, "The coordinator restarted. Review every node before starting another rollout."
 			updates.rollout.FinishedAt = time.Now()
 		}
 		if err := writeClusterJSON(service.directory, rolloutFileName, updates.rollout); err != nil {
@@ -230,9 +204,16 @@ func (service *Service) RolloutStatus() RolloutStatus {
 	}
 	service.updates.mu.Lock()
 	defer service.updates.mu.Unlock()
-	status := service.updates.rollout
-	status.Nodes = slices.Clone(status.Nodes)
-	return status
+	return service.rolloutCopyLocked()
+}
+
+// rolloutCopyLocked returns the rollout with its own copy of Nodes, so a caller
+// can change node phases without touching the saved rollout before
+// saveRollout checks and persists the move.
+func (service *Service) rolloutCopyLocked() RolloutStatus {
+	rollout := service.updates.rollout
+	rollout.Nodes = slices.Clone(rollout.Nodes)
+	return rollout
 }
 
 // RollingUpdatesSupported uses the last reported capability so a node's restart
@@ -324,7 +305,7 @@ func (service *Service) StartRollout(_ context.Context, target string) error {
 		return errors.New("choose a published release version")
 	}
 	reports := service.updateReports()
-	rollout := RolloutStatus{ClusterID: state.ClusterID, PrimaryID: state.PrimaryID, Version: target, Phase: rolloutPreparing, Deadline: time.Now().Add(rolloutPrepareTimeout), StartedAt: time.Now()}
+	rollout := RolloutStatus{ClusterID: state.ClusterID, PrimaryID: state.PrimaryID, Version: target, Phase: RolloutPreparing, Deadline: time.Now().Add(rolloutPrepareTimeout), StartedAt: time.Now()}
 	needsUpdate := false
 	for _, node := range state.Nodes {
 		if !rolloutNodeHealthy(node) {
@@ -346,14 +327,14 @@ func (service *Service) StartRollout(_ context.Context, target string) error {
 		}
 		needsUpdate = needsUpdate || !sameRelease(current, target)
 		if node.ID != state.PrimaryID {
-			rollout.Nodes = append(rollout.Nodes, RolloutNode{ID: node.ID, Name: node.Name, Phase: updateQueued})
+			rollout.Nodes = append(rollout.Nodes, RolloutNode{ID: node.ID, Name: node.Name, Phase: RolloutNodeQueued})
 		}
 	}
 	if !needsUpdate {
 		return errors.New("all nodes already run this release")
 	}
 	primary := state.Nodes[slices.IndexFunc(state.Nodes, func(node Node) bool { return node.ID == state.PrimaryID })]
-	rollout.Nodes = append(rollout.Nodes, RolloutNode{ID: primary.ID, Name: primary.Name, Phase: updateQueued})
+	rollout.Nodes = append(rollout.Nodes, RolloutNode{ID: primary.ID, Name: primary.Name, Phase: RolloutNodeQueued})
 	id, err := newID()
 	if err != nil {
 		return err
@@ -383,13 +364,16 @@ func (service *Service) StopRollout() error {
 	if !rollout.Active() {
 		return nil
 	}
-	rollout.Phase, rollout.Error = rolloutStopped, "Stopped by an operator. An installation or restart already in progress may finish; no further nodes will restart."
+	rollout.Phase, rollout.Error = RolloutStopped, "Stopped by an operator. An installation or restart already in progress may finish; no further nodes will restart."
 	return service.saveRollout(rollout)
 }
 
 // saveRollout is called with updates.mu held, and persists before issuing
 // commands. A rollout that stops running is stamped with when it did.
 func (service *Service) saveRollout(rollout RolloutStatus) error {
+	if err := checkRolloutMove(service.updates.rollout, rollout); err != nil {
+		return err
+	}
 	if !rollout.Active() && rollout.FinishedAt.IsZero() {
 		rollout.FinishedAt = time.Now()
 	}
@@ -397,7 +381,7 @@ func (service *Service) saveRollout(rollout RolloutStatus) error {
 		// Only a running rollout has progress to lose. Failing one that
 		// already ended would report a second, false ending.
 		if service.updates.rollout.Active() {
-			service.updates.rollout.Phase, service.updates.rollout.Error = updateFailed, "Cannot persist rollout progress: "+err.Error()
+			service.updates.rollout.Phase, service.updates.rollout.Error = RolloutFailed, "Cannot persist rollout progress: "+err.Error()
 			service.updates.rollout.FinishedAt = time.Now()
 		}
 		return err
@@ -426,10 +410,9 @@ func (service *Service) updateCommandLocked(nodeID string) *UpdateCommand {
 		command.Action = actionRelease
 		return command
 	}
-	if rollout.Phase == rolloutUpdating && rollout.Index < len(rollout.Nodes) && rollout.Nodes[rollout.Index].ID == nodeID {
-		command.Action = rollout.Nodes[rollout.Index].Phase
-		if command.Action == updateQueued {
-			command.Action = actionPrepare
+	if rollout.Phase == RolloutUpdating && rollout.Index < len(rollout.Nodes) && rollout.Nodes[rollout.Index].ID == nodeID {
+		if action, ok := rollout.Nodes[rollout.Index].Phase.Action(); ok {
+			command.Action = action
 		}
 	}
 	if command.Action == actionRestart {
@@ -450,7 +433,7 @@ func (service *Service) advanceUpdates(ctx context.Context) {
 	defer service.updates.mu.Unlock()
 	state := service.Snapshot()
 	if rollout := service.updates.rollout; rollout.Active() && (state.ClusterID != rollout.ClusterID || state.PrimaryID != rollout.PrimaryID) {
-		rollout.Phase, rollout.Error = updateFailed, "Cluster membership or primary changed during the rollout."
+		rollout.Phase, rollout.Error = RolloutFailed, "Cluster membership or primary changed during the rollout."
 		_ = service.saveRollout(rollout)
 	}
 	local := &service.updates.local
@@ -475,13 +458,13 @@ func (service *Service) advanceUpdates(ctx context.Context) {
 }
 
 func (service *Service) advanceRollout(state State) {
-	rollout := service.updates.rollout
+	rollout := service.rolloutCopyLocked()
 	if !rollout.Active() {
 		return
 	}
 	// fail ends the rollout, naming the node it stopped at when there is one.
 	fail := func(node, message string) {
-		rollout.Phase, rollout.Error, rollout.FailedNode = updateFailed, message, node
+		rollout.Phase, rollout.Error, rollout.FailedNode = RolloutFailed, message, node
 		_ = service.saveRollout(rollout)
 	}
 	if node, message, failed := rolloutInterrupted(rollout, state); failed {
@@ -497,15 +480,14 @@ func (service *Service) advanceRollout(state State) {
 		}
 	}
 	switch rollout.Phase {
-	case rolloutPreparing:
+	case RolloutPreparing:
 		if node, message, failed := service.advancePreparedRollout(rollout, state, reports); failed {
 			fail(node, message)
 		}
-	case rolloutVerifying:
-		service.advanceVerifiedRollout(rollout, state)
-	case updateRestarting:
-	default:
+	case RolloutUpdating:
 		service.advanceRolloutNode(rollout, state, reports)
+	case RolloutVerifying:
+		service.advanceVerifiedRollout(rollout, state)
 	}
 }
 
@@ -522,7 +504,7 @@ func rolloutInterrupted(rollout RolloutStatus, state State) (string, string, boo
 	}
 	if time.Now().After(rollout.Deadline) {
 		waiting := ""
-		if rollout.Phase == rolloutUpdating && rollout.Index < len(rollout.Nodes) {
+		if rollout.Phase == RolloutUpdating && rollout.Index < len(rollout.Nodes) {
 			waiting = rollout.Nodes[rollout.Index].Name
 		}
 		return waiting, "Timed out waiting for a node. Review its version, health, and synchronization before retrying.", true
@@ -538,11 +520,11 @@ func (service *Service) advancePreparedRollout(rollout RolloutStatus, state Stat
 		if !rolloutNodeHealthy(node) {
 			return node.Name, node.Name + " lost health or synchronization during preparation.", true
 		}
-		if report.ID != rollout.ID || report.Phase != updatePrepared {
+		if report.ID != rollout.ID || report.Phase != nodePrepared {
 			return "", "", false
 		}
 	}
-	rollout.Phase, rollout.Deadline = rolloutUpdating, time.Now().Add(rolloutNodeTimeout)
+	rollout.Phase, rollout.Deadline = RolloutUpdating, time.Now().Add(rolloutNodeTimeout)
 	_ = service.saveRollout(rollout)
 	return "", "", false
 }
@@ -555,9 +537,9 @@ func (service *Service) advanceVerifiedRollout(rollout RolloutStatus, state Stat
 			return
 		}
 	}
-	rollout.Phase = updateComplete
+	rollout.Phase = RolloutComplete
 	for i := range rollout.Nodes {
-		rollout.Nodes[i].Phase = updateComplete
+		rollout.Nodes[i].Phase = RolloutNodeComplete
 	}
 	_ = service.saveRollout(rollout)
 }
@@ -568,11 +550,11 @@ func (service *Service) advanceRolloutNode(rollout RolloutStatus, state State, r
 	active := &rollout.Nodes[rollout.Index]
 	node := state.Nodes[slices.IndexFunc(state.Nodes, func(node Node) bool { return node.ID == active.ID })]
 	if sameRelease(node.Version, rollout.Version) && rolloutNodeHealthy(node) {
-		active.Phase = updateComplete
+		active.Phase = RolloutNodeComplete
 		rollout.Index++
 		rollout.Deadline = time.Now().Add(rolloutNodeTimeout)
 		if rollout.Index == len(rollout.Nodes) {
-			rollout.Phase = rolloutVerifying
+			rollout.Phase = RolloutVerifying
 		}
 		_ = service.saveRollout(rollout)
 		return
@@ -587,11 +569,11 @@ func (service *Service) advanceRolloutNode(rollout RolloutStatus, state State, r
 	if report.ID != rollout.ID {
 		return
 	}
-	if active.Phase == updateQueued && report.Phase == updatePrepared {
-		active.Phase = actionInstall
+	if active.Phase == RolloutNodeQueued && report.Phase == nodePrepared {
+		active.Phase = RolloutNodeInstalling
 		_ = service.saveRollout(rollout)
-	} else if active.Phase == actionInstall && report.Phase == updateInstalled {
-		active.Phase = actionRestart
+	} else if active.Phase == RolloutNodeInstalling && report.Phase == nodeInstalled {
+		active.Phase = RolloutNodeRestarting
 		_ = service.saveRollout(rollout)
 	}
 }
@@ -653,12 +635,12 @@ func (service *Service) prepareUpdate(command *UpdateCommand) {
 	local.ID, local.Version = command.ID, command.Version
 	local.ClusterID, local.PrimaryID, local.LastCommandAt = command.ClusterID, command.PrimaryID, time.Now()
 	if err := updates.controller.Reserve(command.ID); err != nil {
-		local.Phase, local.Error = updateFailed, err.Error()
+		local.Phase, local.Error = nodeFailed, err.Error()
 		return
 	}
-	local.Phase = updatePrepared
+	local.Phase = nodePrepared
 	if err := writeClusterJSON(service.directory, nodeUpdateFileName, local); err != nil {
-		local.Phase, local.Error = updateFailed, err.Error()
+		local.Phase, local.Error = nodeFailed, err.Error()
 	}
 }
 
@@ -667,25 +649,25 @@ func (service *Service) prepareUpdate(command *UpdateCommand) {
 func (service *Service) installUpdate(command *UpdateCommand) {
 	updates := service.updates
 	local := &updates.local
-	if local.Phase == updatePrepared {
-		local.Phase = updateInstalling
+	if local.Phase.CanMoveTo(nodeInstalling) {
+		local.Phase = nodeInstalling
 		if err := writeClusterJSON(service.directory, nodeUpdateFileName, local); err != nil {
-			local.Phase, local.Error = updateFailed, err.Error()
+			local.Phase, local.Error = nodeFailed, err.Error()
 			return
 		}
 		if err := updates.controller.InstallVersion(command.ID, command.Version); err != nil {
-			local.Phase, local.Error = updateFailed, err.Error()
+			local.Phase, local.Error = nodeFailed, err.Error()
 			return
 		}
 	}
-	if local.Phase == updateInstalling {
+	if local.Phase.CanMoveTo(nodeInstalled) {
 		status := updates.controller.Status()
 		if status.Error != "" {
-			local.Phase, local.Error = updateFailed, status.Error
+			local.Phase, local.Error = nodeFailed, status.Error
 			return
 		}
 		if status.Installed() && sameRelease(status.LatestVersion, command.Version) {
-			local.Phase = updateInstalled
+			local.Phase = nodeInstalled
 		}
 	}
 }
@@ -695,22 +677,22 @@ func (service *Service) installUpdate(command *UpdateCommand) {
 func (service *Service) restartForUpdate(command *UpdateCommand, state State) {
 	updates := service.updates
 	local := &updates.local
-	if local.Phase != updateInstalled {
+	if !local.Phase.CanMoveTo(nodeRestarting) {
 		return
 	}
 	status := updates.controller.Status()
 	if !status.Installed() || !sameRelease(status.LatestVersion, command.Version) || !updates.controller.ServiceManaged() {
-		local.Phase, local.Error = updateFailed, "The expected release is not installed or automatic restart is unavailable."
+		local.Phase, local.Error = nodeFailed, "The expected release is not installed or automatic restart is unavailable."
 		return
 	}
-	local.Phase = updateRestarting
+	local.Phase = nodeRestarting
 	if err := writeClusterJSON(service.directory, nodeUpdateFileName, local); err != nil {
-		local.Phase, local.Error = updateFailed, err.Error()
+		local.Phase, local.Error = nodeFailed, err.Error()
 		return
 	}
 	if state.LocalRole == RolePrimary {
 		rollout := updates.rollout
-		rollout.Phase = updateRestarting
+		rollout.Phase = RolloutRestarting
 		if err := service.saveRollout(rollout); err != nil {
 			return
 		}
