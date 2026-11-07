@@ -723,6 +723,15 @@ url = "https://big.oisd.nl/"
 format = "auto"
 ```
 
+`response_type` sets the answer for a blocked name: `nxdomain` (the default),
+`zero` for 0.0.0.0 and ::, or `custom` with `custom_addresses`. `response_ttl`
+is the TTL, in seconds, of every blocked answer. An NXDOMAIN answer, and an
+empty answer for a type the block addresses don't cover (such as AAAA when only
+an IPv4 address is set), carries an SOA record in its authority section whose
+TTL and minimum are `response_ttl`, so devices cache the negative answer for
+that long instead of asking again straight away (RFC 2308 §3 and §5). With
+`allow_txt_report`, a TXT lookup of a blocked name answers "blocked by Sable".
+
 Relative list paths resolve from the directory containing `sable.toml`.
 Supported formats are `auto`, `domains`, `hosts`, and `adblock`. Auto mode
 accepts mixed domain, hosts-file, and Adblock host rules. An Adblock rule
