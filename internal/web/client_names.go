@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/netip"
 	"sync"
@@ -38,6 +39,12 @@ const (
 	// next DHCP sync runs.
 	reverseNameLifetime     = 30 * time.Minute
 	reverseNameMissLifetime = 5 * time.Minute
+	// reverseNameTimeoutLifetime is how long an address whose reverse zone
+	// never answered within reverseNameDeadline is left alone. Forgetting it
+	// at once had every render ask again and wait out reverseNameBudget: on
+	// a network whose IPv6 reverse zone doesn't answer, Settings and the
+	// dashboard took about a second on every third load.
+	reverseNameTimeoutLifetime = 2 * time.Minute
 	// reverseNameCacheCapacity bounds retained answers; expired entries are
 	// pruned before inserts and the soonest-expiring answer is evicted at cap.
 	reverseNameCacheCapacity = 4_096
@@ -60,6 +67,9 @@ type reverseNameCache struct {
 	logger   *slog.Logger
 	now      func() time.Time
 	workers  chan struct{}
+	// deadline bounds each batch of lookups; reverseNameDeadline unless a
+	// test shortens it.
+	deadline time.Duration
 }
 
 func newReverseNameCache(resolver reverseResolver, logger *slog.Logger) *reverseNameCache {
@@ -70,6 +80,7 @@ func newReverseNameCache(resolver reverseResolver, logger *slog.Logger) *reverse
 		logger:   logger,
 		now:      time.Now,
 		workers:  make(chan struct{}, reverseNameWorkers),
+		deadline: reverseNameDeadline,
 	}
 }
 
@@ -83,7 +94,7 @@ func (cache *reverseNameCache) names(addresses []string) map[string]string {
 	if len(pending) == 0 {
 		return known
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), reverseNameDeadline)
+	ctx, cancel := context.WithTimeout(context.Background(), cache.deadline)
 	cache.resolve(ctx, cancel, pending)
 	for _, address := range pending {
 		if name, found := cache.cached(address); found && name != "" {
@@ -103,7 +114,7 @@ func (cache *reverseNameCache) knownNames(addresses []string) map[string]string 
 	}
 	known, pending := cache.partition(addresses)
 	if len(pending) > 0 {
-		ctx, cancel := context.WithTimeout(context.Background(), reverseNameDeadline)
+		ctx, cancel := context.WithTimeout(context.Background(), cache.deadline)
 		go cache.resolve(ctx, cancel, pending)
 	}
 	return known
@@ -165,6 +176,10 @@ func (cache *reverseNameCache) store(address, name string) {
 	if name != "" {
 		lifetime = reverseNameLifetime
 	}
+	cache.storeFor(address, name, lifetime)
+}
+
+func (cache *reverseNameCache) storeFor(address, name string, lifetime time.Duration) {
 	cache.mutex.Lock()
 	defer cache.mutex.Unlock()
 	moment := cache.now()
@@ -225,6 +240,13 @@ func (cache *reverseNameCache) resolve(ctx context.Context, cancel context.Cance
 			}
 			name, err := cache.resolver.ReverseLookup(ctx, parsed)
 			if err != nil {
+				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+					// The lookup had its whole deadline and got no answer, so
+					// it is remembered as a miss for a while rather than
+					// asked again on the next render.
+					cache.storeFor(address, "", reverseNameTimeoutLifetime)
+					return
+				}
 				if ctx.Err() != nil {
 					cache.unclaim(address)
 					return
