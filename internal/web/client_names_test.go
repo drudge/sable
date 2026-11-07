@@ -367,3 +367,37 @@ func TestReverseNameCacheKnownNamesDoesNotWait(t *testing.T) {
 		t.Fatalf("reverse lookups = %d, want the one started in the background", calls)
 	}
 }
+
+// An address whose reverse zone never answers is remembered as a miss once
+// its lookup runs out of time. Forgetting it had every render claim it again
+// and wait out the render budget, so a busy page took about a second on
+// every load after the deadline passed.
+func TestReverseNameCacheRemembersTimeouts(t *testing.T) {
+	t.Parallel()
+
+	resolver := &stubReverseResolver{block: make(chan struct{}), blockAll: true}
+	t.Cleanup(func() { close(resolver.block) })
+	cache := newTestNameCache(resolver)
+	cache.deadline = 50 * time.Millisecond
+	cache.knownNames([]string{"2001:db8::dead"})
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, cached := cache.cached("2001:db8::dead"); cached {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("a lookup that ran out of time was never remembered")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	started := time.Now()
+	if names := cache.names([]string{"2001:db8::dead"}); len(names) != 0 {
+		t.Fatalf("names = %+v, want none", names)
+	}
+	if elapsed := time.Since(started); elapsed > reverseNameBudget/4 {
+		t.Fatalf("the next render waited %v on an address that already timed out", elapsed)
+	}
+	if calls := resolver.calls.Load(); calls != 1 {
+		t.Fatalf("reverse lookups = %d, want the timed-out address left alone", calls)
+	}
+}
