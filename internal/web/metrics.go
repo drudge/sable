@@ -8,6 +8,7 @@ import (
 	"time"
 
 	blockcompiler "github.com/drudge/sable/internal/blocking"
+	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/dnsserver"
 	"github.com/drudge/sable/internal/procstats"
 	"github.com/drudge/sable/internal/querylog"
@@ -76,37 +77,37 @@ type clusterPrometheusState struct {
 }
 
 func (server *Server) clusterPrometheusState() clusterPrometheusState {
-	var cluster clusterPrometheusState
+	var metrics clusterPrometheusState
 	if server.cluster == nil {
-		return cluster
+		return metrics
 	}
 	state := server.cluster.Snapshot()
 	if state.Initialized {
-		cluster.initialized = 1
+		metrics.initialized = 1
 	}
-	cluster.members = uint64(len(state.Nodes))
-	cluster.connected = uint64(state.Connected)
-	cluster.synchronized = uint64(state.Synchronized)
-	cluster.generation = state.Generation
+	metrics.members = uint64(len(state.Nodes))
+	metrics.connected = uint64(state.Connected)
+	metrics.synchronized = uint64(state.Synchronized)
+	metrics.generation = state.Generation
 	if state.PrimaryID == state.NodeID && state.PrimaryID != "" {
-		cluster.primary = 1
+		metrics.primary = 1
 	}
-	cluster.nodes = make([]clusterPrometheusNode, 0, len(state.Nodes))
+	metrics.nodes = make([]clusterPrometheusNode, 0, len(state.Nodes))
 	for _, node := range state.Nodes {
 		connected := uint64(0)
-		if node.State == "online" {
+		if node.State == cluster.StateOnline {
 			connected = 1
 		}
 		synchronized := uint64(0)
-		if node.SyncState == "current" {
+		if node.SyncState == cluster.SyncCurrent {
 			synchronized = 1
 		}
-		cluster.nodes = append(cluster.nodes, clusterPrometheusNode{
+		metrics.nodes = append(metrics.nodes, clusterPrometheusNode{
 			id: node.ID, name: node.Name, role: node.Role,
 			connected: connected, synchronized: synchronized, lag: node.Lag,
 		})
 	}
-	return cluster
+	return metrics
 }
 
 // prometheusMetrics lists the unlabeled counters and gauges in exposition order.
