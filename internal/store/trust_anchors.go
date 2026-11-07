@@ -96,7 +96,7 @@ WHERE owner = `+store.placeholder(1)+` ORDER BY key_id`, owner)
 	if err := rows.Err(); err != nil {
 		return trustanchor.Snapshot{}, fmt.Errorf("iterate DNSSEC trust anchors: %w", err)
 	}
-	countTrustAnchorStates(&snapshot)
+	trustanchor.CountStates(&snapshot)
 	return snapshot, nil
 }
 
@@ -164,20 +164,4 @@ func nullTime(value time.Time) any {
 		return nil
 	}
 	return value.UTC()
-}
-
-func countTrustAnchorStates(snapshot *trustanchor.Snapshot) {
-	for _, anchor := range snapshot.Anchors {
-		switch anchor.State {
-		case trustanchor.StateValid:
-			snapshot.Status.Active++
-		case trustanchor.StateMissing:
-			snapshot.Status.Active++
-			snapshot.Status.Missing++
-		case trustanchor.StateAddPending:
-			snapshot.Status.Pending++
-		case trustanchor.StateRevoked:
-			snapshot.Status.Revoked++
-		}
-	}
 }

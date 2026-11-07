@@ -759,7 +759,7 @@ func populateClusterStateView(view *pages.ClusterPageView, state cluster.State) 
 		view.Nodes = append(view.Nodes, pages.ClusterNodeView{
 			ID: node.ID, Name: node.Name, AdvertiseURL: node.AdvertiseURL,
 			Addresses: append([]string(nil), node.Addresses...), Role: clusterRoleLabel(node.Role),
-			State: node.State, Version: node.Version, UpSince: uptime, SyncState: node.SyncState,
+			State: string(node.State), Version: node.Version, UpSince: uptime, SyncState: string(node.SyncState),
 			CurrentGeneration: node.CurrentGeneration, AppliedGeneration: node.AppliedGeneration, Lag: node.Lag,
 			LastContact: clusterRelativeTime(node.LastContact, state.ObservedAt), LastSync: clusterRelativeTime(node.LastSync, state.ObservedAt),
 			LastContactAt: clusterTimestamp(node.LastContact, view.Console.TimeDisplay), LastSyncAt: clusterTimestamp(node.LastSync, view.Console.TimeDisplay),
