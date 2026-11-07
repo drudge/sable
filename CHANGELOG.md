@@ -8,6 +8,39 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.8.0-beta.7] - 2026-11-06
+
+Sable 1.8.0-beta.7 makes cluster recovery safe when a former primary comes
+back, such as one restored from a backup.
+
+### Upgrading from 1.8.0-beta.6
+
+Update every node in a cluster. A former primary is only told to step down
+when both nodes run this release or later, and the primary now refuses to
+enroll a node running an older release. Existing clusters start at primary
+term 0; the next promotion starts term 1.
+
+### Clustering
+
+- A former primary that comes back after a replica was promoted in its place
+  now steps down on its own. Every promotion starts a new primary term, and a
+  primary checks the other members every 10 seconds. When it finds a newer
+  term on any of them, it becomes a replica of the newer primary and takes its
+  data. Before, both nodes kept accepting changes, and each showed the other
+  as **Sync unknown**.
+- When two nodes are primary in the same term, as after two recovery
+  promotions at once or promotions made before terms existed, the **Cluster**
+  page shows **Two primaries** and marks both nodes **Also primary**.
+  **Keep This Node as Primary** on the node whose data should win makes the
+  other step down. The assistant's cluster status reports the conflict too.
+- Joining a cluster that this node once deleted no longer kicks the other
+  members out after a handoff makes it the primary. Nodes already in this
+  state heal when they restart on this release.
+- The primary refuses to enroll a node running an older release, and says
+  which version to update it to. The enrollment token stays valid, so the same
+  token works after the update. Before, an older node could fail halfway
+  through its first synchronization with a database error.
+
 ## [1.8.0-beta.6] - 2026-11-06
 
 Sable 1.8.0-beta.6 fixes the remaining pause when opening Settings, which
