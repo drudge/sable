@@ -8,6 +8,28 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.8.0-beta.6] - 2026-11-06
+
+Sable 1.8.0-beta.6 fixes the remaining pause when opening Settings, which
+also slowed the dashboard and Insights on networks whose reverse DNS zones
+don't answer.
+
+### Upgrading from 1.8.0-beta.5
+
+Nothing new is needed.
+
+### Console
+
+- About one load in three of **Settings**, the dashboard and Insights no
+  longer waits close to a second. When a device's reverse DNS (PTR) lookup got
+  no answer before its deadline, Sable forgot it had asked, so the next page
+  load asked again and waited for it. A lookup that runs out of time is now
+  remembered for two minutes, like a name that doesn't exist.
+- The domain-watch device list in Settings uses names already looked up
+  instead of waiting for new reverse lookups.
+- Settings sends a `Server-Timing` header that shows how long each part of the
+  page took to build, which the browser's network panel displays.
+
 ## [1.8.0-beta.5] - 2026-11-05
 
 Sable 1.8.0-beta.5 makes the Insights Devices tab open without waiting on
