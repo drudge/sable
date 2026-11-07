@@ -40,7 +40,7 @@ func (server *Server) automaticUpdateCheck(writer http.ResponseWriter, request *
 		writer.WriteHeader(http.StatusAccepted)
 		return
 	}
-	if err != nil || status.Busy() || status.Error != "" || !status.Available || status.Installed || status.ClusterUpdate {
+	if err != nil || status.Busy() || status.Error != "" || !status.Available || status.Installed() || status.ClusterUpdate {
 		writer.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -246,7 +246,7 @@ func (server *Server) updateView(request *http.Request, status update.Status) pa
 		Error:               status.Error,
 		IncludePreRelease:   status.IncludePreRelease,
 		PreferredPreRelease: server.config.Current().Config.Updates.PreRelease,
-		Installed:           status.Installed,
+		Installed:           status.Installed(),
 		LatestVersion:       status.LatestVersion,
 		Phase:               string(status.Phase),
 		PreRelease:          status.PreRelease,
@@ -277,7 +277,7 @@ func (server *Server) updateView(request *http.Request, status update.Status) pa
 		view.Blocked = "A rolling update controls this node. Follow its progress on Cluster."
 	}
 	if controller, ok := server.cluster.(clusterUpdateController); ok && view.CanApply && server.canManageClusterUpdate(request) {
-		view.CanUpdateCluster = status.Checked() && !status.Busy() && !status.Installed && !status.ClusterUpdate && status.Error == "" &&
+		view.CanUpdateCluster = status.Checked() && !status.Busy() && !status.Installed() && !status.ClusterUpdate && status.Error == "" &&
 			server.cluster.Snapshot().LocalRole == cluster.RolePrimary && controller.RollingUpdatesSupported() && !controller.RolloutStatus().Active()
 	}
 	view.CanRestart = view.CanApply && server.restart != nil

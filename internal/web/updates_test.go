@@ -137,7 +137,7 @@ func TestDevelopmentUpdatesAreDisabledInTheConsoleAndDirectRequests(t *testing.T
 		}
 	}
 	status := server.updates.Status()
-	if status.Busy() || status.Installed || status.Checked() || !status.Development {
+	if status.Busy() || status.Installed() || status.Checked() || !status.Development {
 		t.Fatalf("development request changed update state: %+v", status)
 	}
 }
@@ -285,7 +285,7 @@ func TestInstalledUpdateOffersAConfirmedRestart(t *testing.T) {
 		serviceManaged: true,
 		status: update.Status{
 			Phase: update.PhaseInstalled, CurrentVersion: "0.7.0", LatestVersion: "9.9.9",
-			Available: true, Installed: true, CheckedAt: time.Now(),
+			Available: true, CheckedAt: time.Now(),
 		},
 	})
 	server.SetRestartController(func() {})
@@ -472,7 +472,7 @@ func TestUpdateReaderCannotPersistTheReleaseChannel(t *testing.T) {
 
 func TestReplicaCanRestartAfterAnUpdate(t *testing.T) {
 	t.Parallel()
-	server := updateTestServer(t, &testUpdateController{status: update.Status{Phase: update.PhaseInstalled, Installed: true}})
+	server := updateTestServer(t, &testUpdateController{status: update.Status{Phase: update.PhaseInstalled}})
 	server.SetClusterController(testReplicaClusterController{})
 	restarts := 0
 	server.SetRestartController(func() { restarts++ })
@@ -537,7 +537,7 @@ func TestNotificationInstallTracksDownloadAndOffersRestart(t *testing.T) {
 	if controller.installs != 1 || !controller.preRelease {
 		t.Fatalf("installs = %d, pre-release = %v", controller.installs, controller.preRelease)
 	}
-	controller.status = update.Status{Phase: update.PhaseInstalled, Installed: true, CurrentVersion: "1.1.0", LatestVersion: "1.2.0-rc.1"}
+	controller.status = update.Status{Phase: update.PhaseInstalled, CurrentVersion: "1.1.0", LatestVersion: "1.2.0-rc.1"}
 	response = serveRequest(server, http.MethodGet, "/ui/updates?notification=true")
 	for _, expected := range []string{`id="update-notification"`, "Sable v1.2.0-rc.1 is installed", "data-sable-restart-button", `data-restart-url="/ui/updates/restart"`, `data-updated-version="v1.2.0-rc.1"`} {
 		if !strings.Contains(response.Body.String(), expected) {
@@ -679,7 +679,7 @@ func TestUpdateEndpointsRequireAppropriatePermissions(t *testing.T) {
 }
 
 func TestRollingUpdateReservationBlocksManualRestart(t *testing.T) {
-	server := updateTestServer(t, &testUpdateController{status: update.Status{ClusterUpdate: true, Installed: true}})
+	server := updateTestServer(t, &testUpdateController{status: update.Status{ClusterUpdate: true, Phase: update.PhaseInstalled}})
 	server.SetRestartController(func() { t.Fatal("manual restart bypassed rolling update") })
 	if response := serveUpdateForm(server, "/ui/updates/restart", nil); response.Code != http.StatusConflict {
 		t.Fatalf("restart = %d", response.Code)
