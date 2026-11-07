@@ -21,10 +21,6 @@ const (
 	// primaryClaimFreshness is how long another primary's claim counts as a
 	// conflict after it was last seen.
 	primaryClaimFreshness = 3 * peerProbeInterval
-
-	// SyncConflict marks a node that claims the primary role in the same
-	// term as this one.
-	SyncConflict = "conflict"
 )
 
 // PrimaryClaim is what a probing primary says about its own term.
