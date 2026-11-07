@@ -334,17 +334,10 @@ func unifiSettingsFromWizard(wizard pages.UniFiWizardView, networks []pages.UniF
 
 // Wizard.
 
-const (
-	unifiStepConnect  = "connect"
-	unifiStepNetworks = "networks"
-	unifiStepZones    = "zones"
-	unifiStepReview   = "review"
-)
-
 func (server *Server) newUniFiWizard(request *http.Request) pages.UniFiWizardView {
 	settings := server.config.Current().Config.UniFi
 	wizard := pages.UniFiWizardView{
-		Open: true, Step: unifiStepConnect,
+		Open: true, Step: pages.UniFiStepConnect,
 		ControllerURL: settings.ControllerURL, Site: settings.Site,
 		Interval: settings.Interval.String(), CAFile: settings.CAFile, Insecure: settings.Insecure,
 		SyncReservations: settings.SyncsReservations(), SyncActive: settings.SyncsActiveClients(),
@@ -384,17 +377,22 @@ func (server *Server) runUniFiWizard(writer http.ResponseWriter, request *http.R
 	// A completed step marker or the Back button asks to revisit an earlier
 	// step rather than advance, so that wins over the step being submitted.
 	if target := strings.TrimSpace(request.FormValue("wizard_target")); target != "" {
-		server.unifiWizardBack(writer, request, wizard, target)
+		step, ok := pages.UniFiWizardSteps.Back(request.FormValue("wizard_step"), target, wizard.SkipsStep)
+		if !ok {
+			server.renderWizard(writer, request, http.StatusBadRequest, wizard)
+			return
+		}
+		server.unifiWizardBack(writer, request, wizard, step)
 		return
 	}
 	switch request.FormValue("wizard_step") {
-	case unifiStepConnect:
+	case pages.UniFiStepConnect:
 		server.unifiWizardConnect(writer, request, wizard)
-	case unifiStepNetworks:
+	case pages.UniFiStepNetworks:
 		server.unifiWizardZones(writer, request, wizard)
-	case unifiStepZones:
+	case pages.UniFiStepZones:
 		server.unifiWizardReview(writer, request, wizard)
-	case unifiStepReview:
+	case pages.UniFiStepReview:
 		server.unifiWizardFinish(writer, request, wizard)
 	default:
 		server.renderWizard(writer, request, http.StatusBadRequest, wizard)
@@ -427,25 +425,20 @@ func (server *Server) unifiWizardFromRequest(request *http.Request) pages.UniFiW
 // entered so far. Discovery steps re-read the controller so the lists are never
 // stale.
 func (server *Server) unifiWizardBack(writer http.ResponseWriter, request *http.Request, wizard pages.UniFiWizardView, target string) {
-	// With no network selected there are no zones to map, so the zones step
-	// was skipped on the way forward and is skipped on the way back.
-	if target == unifiStepZones && len(wizard.Selected) == 0 {
-		target = unifiStepNetworks
-	}
 	switch target {
-	case unifiStepNetworks, unifiStepZones:
+	case pages.UniFiStepNetworks, pages.UniFiStepZones:
 		inventory, err := server.unifi.Inventory(request.Context(), unifiSettingsFromWizard(wizard, nil))
 		if err != nil {
-			wizard.Step, wizard.Error = unifiStepConnect, unifiConnectionMessage(err)
+			wizard.Step, wizard.Error = pages.UniFiStepConnect, unifiConnectionMessage(err)
 			server.renderWizard(writer, request, http.StatusBadGateway, wizard)
 			return
 		}
 		wizard.Networks = unifiWizardNetworks(inventory, server.config.Current().Config.UniFi, wizard)
-		if target == unifiStepNetworks {
-			wizard.Step = unifiStepNetworks
+		if target == pages.UniFiStepNetworks {
+			wizard.Step = pages.UniFiStepNetworks
 			break
 		}
-		wizard.Step = unifiStepZones
+		wizard.Step = pages.UniFiStepZones
 		wizard.ZoneOptions = server.primaryZoneNames()
 		// Zone choices already entered survive the trip back; a first visit
 		// falls back to whatever the networks step selected.
@@ -457,7 +450,7 @@ func (server *Server) unifiWizardBack(writer http.ResponseWriter, request *http.
 		}
 		server.applyUniFiPreviews(&wizard)
 	default:
-		wizard.Step = unifiStepConnect
+		wizard.Step = pages.UniFiStepConnect
 		if server.unifi != nil {
 			_, configured := server.unifi.StoredCredentials(request.Context())
 			wizard.CredentialsConfigured = configured
@@ -498,7 +491,7 @@ func unifiWizardFromForm(request *http.Request) pages.UniFiWizardView {
 }
 
 func (server *Server) unifiWizardConnect(writer http.ResponseWriter, request *http.Request, wizard pages.UniFiWizardView) {
-	wizard.Step = unifiStepConnect
+	wizard.Step = pages.UniFiStepConnect
 	if _, err := unifiWizardTimeout(wizard.Timeout); err != nil {
 		wizard.Error = err.Error()
 		server.renderWizard(writer, request, http.StatusUnprocessableEntity, wizard)
@@ -523,11 +516,11 @@ func (server *Server) unifiWizardConnect(writer http.ResponseWriter, request *ht
 		server.renderWizard(writer, request, http.StatusBadGateway, wizard)
 		return
 	}
-	wizard.Step = unifiStepNetworks
+	wizard.Step = pages.UniFiStepNetworks
 	wizard.Networks = unifiWizardNetworks(inventory, server.config.Current().Config.UniFi, wizard)
 	if len(wizard.Networks) == 0 {
 		wizard.Error = "The controller reported no networks for this site. Check the site name and try again."
-		wizard.Step = unifiStepConnect
+		wizard.Step = pages.UniFiStepConnect
 		server.renderWizard(writer, request, http.StatusUnprocessableEntity, wizard)
 		return
 	}
@@ -639,24 +632,24 @@ func unifiReverseZoneNames(subnets []netip.Prefix) []string {
 func (server *Server) unifiWizardZones(writer http.ResponseWriter, request *http.Request, wizard pages.UniFiWizardView) {
 	inventory, err := server.unifi.Inventory(request.Context(), unifiSettingsFromWizard(wizard, nil))
 	if err != nil {
-		wizard.Step, wizard.Error = unifiStepConnect, unifiConnectionMessage(err)
+		wizard.Step, wizard.Error = pages.UniFiStepConnect, unifiConnectionMessage(err)
 		server.renderWizard(writer, request, http.StatusBadGateway, wizard)
 		return
 	}
 	wizard.Networks = unifiWizardNetworks(inventory, server.config.Current().Config.UniFi, wizard)
-	if len(wizard.Selected) == 0 && wizard.FindDevices {
+	if len(wizard.Selected) == 0 && !wizard.FindDevices {
+		wizard.Step = pages.UniFiStepNetworks
+		wizard.Error = "Select at least one network to synchronize, or use UniFi only to find devices."
+		server.renderWizard(writer, request, http.StatusUnprocessableEntity, wizard)
+		return
+	}
+	if pages.UniFiWizardSteps.Next(pages.UniFiStepNetworks, wizard.SkipsStep) == pages.UniFiStepReview {
 		// Finding devices alone maps no zones, so it goes straight to review.
 		wizard.Networks = nil
 		server.renderUniFiReview(writer, request, wizard)
 		return
 	}
-	if len(wizard.Selected) == 0 {
-		wizard.Step = unifiStepNetworks
-		wizard.Error = "Select at least one network to synchronize, or use UniFi only to find devices."
-		server.renderWizard(writer, request, http.StatusUnprocessableEntity, wizard)
-		return
-	}
-	wizard.Step = unifiStepZones
+	wizard.Step = pages.UniFiStepZones
 	wizard.Networks = unifiSelectedNetworks(wizard)
 	wizard.ZoneOptions = server.primaryZoneNames()
 	server.applyUniFiPreviews(&wizard)
@@ -745,17 +738,17 @@ func (server *Server) renderUniFiReview(writer http.ResponseWriter, request *htt
 	server.applyUniFiPreviews(&wizard)
 	settings := unifiSettingsFromWizard(wizard, wizard.Networks)
 	if err := settings.Validate(); err != nil {
-		wizard.Step, wizard.Error = unifiStepZones, err.Error()
+		wizard.Step, wizard.Error = pages.UniFiStepZones, err.Error()
 		server.renderWizard(writer, request, http.StatusUnprocessableEntity, wizard)
 		return
 	}
 	plan, err := server.unifi.Preview(request.Context(), settings)
 	if err != nil {
-		wizard.Step, wizard.Error = unifiStepZones, unifiConnectionMessage(err)
+		wizard.Step, wizard.Error = pages.UniFiStepZones, unifiConnectionMessage(err)
 		server.renderWizard(writer, request, http.StatusBadGateway, wizard)
 		return
 	}
-	wizard.Step = unifiStepReview
+	wizard.Step = pages.UniFiStepReview
 	wizard.Plan = unifiPlanView(plan)
 	server.renderWizard(writer, request, http.StatusOK, wizard)
 }
@@ -810,7 +803,7 @@ func (server *Server) unifiWizardFinish(writer http.ResponseWriter, request *htt
 		candidate.UniFi = settings
 		return nil
 	}); err != nil {
-		wizard.Step, wizard.Error = unifiStepZones, err.Error()
+		wizard.Step, wizard.Error = pages.UniFiStepZones, err.Error()
 		wizard.ZoneOptions = server.primaryZoneNames()
 		server.renderWizard(writer, request, http.StatusUnprocessableEntity, wizard)
 		return

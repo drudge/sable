@@ -426,3 +426,26 @@ func TestWizardKeepsSavedClaimsWhileEditing(t *testing.T) {
 		t.Errorf("saved scopes = %v, want the configured ones", admin.saved.Scopes)
 	}
 }
+
+// wizard_target only ever names an earlier step. Before the shared step list,
+// any value became the step, so a crafted form could skip the provider check
+// or render a step the wizard does not have.
+func TestWizardBackRefusesAStepAheadOrUnknown(t *testing.T) {
+	admin := &fakeSSOAdmin{probe: SSOProbeResult{Issuer: "https://id.example.com"}}
+	server := newWizardServer(t, admin)
+	for _, target := range []string{pages.SSOStepReview, "elsewhere"} {
+		form := providerAnswers()
+		form.Set("wizard_step", pages.SSOStepProvider)
+		form.Set("wizard_target", target)
+		response := postWizard(t, server, form)
+		if response.Code != http.StatusBadRequest {
+			t.Errorf("target %q = %d, want 400", target, response.Code)
+		}
+		if !strings.Contains(response.Body.String(), `name="wizard_step" value="`+pages.SSOStepProvider+`"`) {
+			t.Errorf("target %q moved the wizard off the provider step", target)
+		}
+	}
+	if admin.saveCalls != 0 {
+		t.Fatal("a refused target reached the provider")
+	}
+}
