@@ -261,18 +261,20 @@ func (server *Server) runSSOWizard(writer http.ResponseWriter, request *http.Req
 	// Back wins over the step being submitted, so an operator can retreat
 	// without the current step's validation stopping them.
 	if target := strings.TrimSpace(request.FormValue("wizard_target")); target != "" {
-		wizard.Step = target
+		step, ok := pages.SSOWizardSteps.Back(request.FormValue("wizard_step"), target, nil)
+		if !ok {
+			server.renderSSOWizard(writer, request, http.StatusBadRequest, wizard)
+			return
+		}
+		wizard.Step = step
 		server.renderSSOWizard(writer, request, http.StatusOK, wizard)
 		return
 	}
-	switch request.FormValue("wizard_step") {
+	switch step := request.FormValue("wizard_step"); step {
 	case pages.SSOStepProvider:
 		server.ssoWizardProvider(writer, request, wizard)
-	case pages.SSOStepClaims:
-		wizard.Step = pages.SSOStepRoles
-		server.renderSSOWizard(writer, request, http.StatusOK, wizard)
-	case pages.SSOStepRoles:
-		wizard.Step = pages.SSOStepReview
+	case pages.SSOStepClaims, pages.SSOStepRoles:
+		wizard.Step = pages.SSOWizardSteps.Next(step, nil)
 		server.renderSSOWizard(writer, request, http.StatusOK, wizard)
 	case pages.SSOStepReview:
 		server.ssoWizardFinish(writer, request, wizard)

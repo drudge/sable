@@ -1183,14 +1183,14 @@ templ UniFiWizardDialog(view UniFiAppView) {
 }
 
 templ UniFiWizardProgress(step string) {
-	<div class="wizard-progress" aria-label={ fmt.Sprintf("Step %d of 4", unifiStepNumber(step)) }>
-		@UniFiWizardStepMarker(step, 1, "connect", "Connect")
+	<div class="wizard-progress" aria-label={ fmt.Sprintf("Step %d of 4", UniFiWizardSteps.Position(step)) }>
+		@UniFiWizardStepMarker(step, 1, UniFiStepConnect, "Connect")
 		<i></i>
-		@UniFiWizardStepMarker(step, 2, "networks", "Networks")
+		@UniFiWizardStepMarker(step, 2, UniFiStepNetworks, "Networks")
 		<i></i>
-		@UniFiWizardStepMarker(step, 3, "zones", "Zones")
+		@UniFiWizardStepMarker(step, 3, UniFiStepZones, "Zones")
 		<i></i>
-		@UniFiWizardStepMarker(step, 4, "review", "Review")
+		@UniFiWizardStepMarker(step, 4, UniFiStepReview, "Review")
 	</div>
 }
 
@@ -1198,12 +1198,12 @@ templ UniFiWizardProgress(step string) {
 // jump straight back to it. formnovalidate keeps a half-filled current step from
 // blocking the way back.
 templ UniFiWizardStepMarker(step string, position int, target, label string) {
-	if unifiStepNumber(step) > position {
-		<button class={ unifiStepClass(step, position) } type="submit" name="wizard_target" value={ target } formnovalidate title={ "Back to " + label }>
+	if UniFiWizardSteps.Position(step) > position {
+		<button class={ UniFiWizardSteps.Class(step, position) } type="submit" name="wizard_target" value={ target } formnovalidate title={ "Back to " + label }>
 			<span>&#10003;</span><small>{ label }</small>
 		</button>
 	} else {
-		<div class={ unifiStepClass(step, position) }><span>{ unifiStepMarker(step, position) }</span><small>{ label }</small></div>
+		<div class={ UniFiWizardSteps.Class(step, position) }><span>{ UniFiWizardSteps.Marker(step, position) }</span><small>{ label }</small></div>
 	}
 }
 
@@ -1420,8 +1420,8 @@ templ UniFiWizardFooter(wizard UniFiWizardView) {
 	<div class="dialog-footer wizard-footer">
 		@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Href: "/integrations"})
 		<div class="wizard-footer-advance">
-			if unifiPreviousStep(wizard.Step) != "" {
-				@components.Button(components.ButtonProps{Label: "Back", Icon: "arrow-left", Variant: components.ButtonOutline, Type: "submit", Attrs: templ.Attributes{"name": "wizard_target", "value": unifiPreviousStep(wizard.Step), "formnovalidate": true}})
+			if UniFiWizardSteps.Previous(wizard.Step, wizard.SkipsStep) != "" {
+				@components.Button(components.ButtonProps{Label: "Back", Icon: "arrow-left", Variant: components.ButtonOutline, Type: "submit", Attrs: templ.Attributes{"name": "wizard_target", "value": UniFiWizardSteps.Previous(wizard.Step, wizard.SkipsStep), "formnovalidate": true}})
 			}
 			if wizard.Step == "review" {
 				@components.Button(components.ButtonProps{Label: "Enable Synchronization", Icon: "check", Type: "submit"})
@@ -1432,37 +1432,6 @@ templ UniFiWizardFooter(wizard UniFiWizardView) {
 	</div>
 }
 
-func unifiStepNumber(step string) int {
-	switch step {
-	case "networks":
-		return 2
-	case "zones":
-		return 3
-	case "review":
-		return 4
-	default:
-		return 1
-	}
-}
-
-func unifiStepClass(step string, position int) string {
-	current := unifiStepNumber(step)
-	if current > position {
-		return "complete"
-	}
-	if current == position {
-		return "current"
-	}
-	return ""
-}
-
-func unifiStepMarker(step string, position int) string {
-	if unifiStepNumber(step) > position {
-		return "✓"
-	}
-	return strconv.Itoa(position)
-}
-
 func unifiNextLabel(step string) string {
 	switch step {
 	case "networks":
@@ -1471,19 +1440,6 @@ func unifiNextLabel(step string) string {
 		return "Review Changes"
 	default:
 		return "Connect"
-	}
-}
-
-func unifiPreviousStep(step string) string {
-	switch step {
-	case "networks":
-		return "connect"
-	case "zones":
-		return "networks"
-	case "review":
-		return "zones"
-	default:
-		return ""
 	}
 }
 
@@ -1568,7 +1524,6 @@ func dynamicDNSZoneHeading(view DynamicDNSZoneView) string {
 	}
 	return view.Zone
 }
-
 
 func dynamicDNSProviderLabel(provider string) string {
 	switch provider {
@@ -1769,8 +1724,6 @@ func ssoCheckSummary(check SSOCheckView) string {
 	return strings.Join(parts, ", ") + "."
 }
 
-
-
 templ SSOWizardDialog(wizard SSOWizardView) {
 	@components.Dialog(components.DialogProps{ID: "sso-setup-dialog", TitleID: "sso-setup-title", Title: "Set Up Single Sign-On", Description: ssoWizardSubtitle(wizard.Step), Class: "isotope-form-dialog unifi-wizard-dialog sso-wizard-dialog", Attrs: templ.Attributes{"data-dialog-auto-open": "true"}, CloseHref: "/integrations"}) {
 		<form hx-post="/ui/integrations/sso/wizard" hx-target="#integrations-content" hx-swap="outerHTML" hx-disable="find button[type='submit']">
@@ -1796,7 +1749,7 @@ templ SSOWizardDialog(wizard SSOWizardView) {
 }
 
 templ SSOWizardProgress(step string) {
-	<div class="wizard-progress" aria-label={ fmt.Sprintf("Step %d of 4", ssoStepIndex(step)) }>
+	<div class="wizard-progress" aria-label={ fmt.Sprintf("Step %d of 4", SSOWizardSteps.Position(step)) }>
 		@SSOWizardStepMarker(step, 1, SSOStepProvider, "Provider")
 		<i></i>
 		@SSOWizardStepMarker(step, 2, SSOStepClaims, "Claims")
@@ -1811,12 +1764,12 @@ templ SSOWizardProgress(step string) {
 // jump straight back to it. formnovalidate keeps a half-filled current step
 // from blocking the way back.
 templ SSOWizardStepMarker(step string, position int, target, label string) {
-	if ssoStepIndex(step) > position {
-		<button class={ ssoStepClass(step, position) } type="submit" name="wizard_target" value={ target } formnovalidate title={ "Back to " + label }>
+	if SSOWizardSteps.Position(step) > position {
+		<button class={ SSOWizardSteps.Class(step, position) } type="submit" name="wizard_target" value={ target } formnovalidate title={ "Back to " + label }>
 			<span>&#10003;</span><small>{ label }</small>
 		</button>
 	} else {
-		<div class={ ssoStepClass(step, position) }><span>{ ssoStepMarker(step, position) }</span><small>{ label }</small></div>
+		<div class={ SSOWizardSteps.Class(step, position) }><span>{ SSOWizardSteps.Marker(step, position) }</span><small>{ label }</small></div>
 	}
 }
 
@@ -1963,7 +1916,7 @@ templ SSOWizardFooter(wizard SSOWizardView) {
 		if wizard.Step == SSOStepProvider {
 			@components.Button(components.ButtonProps{Label: "Cancel", Variant: components.ButtonOutline, Href: "/integrations"})
 		} else {
-			@components.Button(components.ButtonProps{Label: "Back", Variant: components.ButtonOutline, Type: "submit", Attrs: templ.Attributes{"name": "wizard_target", "value": ssoPreviousStep(wizard.Step)}})
+			@components.Button(components.ButtonProps{Label: "Back", Variant: components.ButtonOutline, Type: "submit", Attrs: templ.Attributes{"name": "wizard_target", "value": SSOWizardSteps.Previous(wizard.Step, nil)}})
 		}
 		<button class="button" type="submit">
 			if wizard.Step == SSOStepReview {
@@ -2011,56 +1964,6 @@ templ SSOWizardCarriedRoles(wizard SSOWizardView) {
 	for _, mapping := range wizard.Mappings {
 		<input type="hidden" name="mapping_group" value={ mapping.Group }/>
 		<input type="hidden" name="mapping_role" value={ mapping.Role }/>
-	}
-}
-
-// The wizard's steps, named the same way the UniFi wizard names its own.
-const (
-	SSOStepProvider = "provider"
-	SSOStepClaims   = "claims"
-	SSOStepRoles    = "roles"
-	SSOStepReview   = "review"
-)
-
-func ssoStepIndex(step string) int {
-	switch step {
-	case SSOStepClaims:
-		return 2
-	case SSOStepRoles:
-		return 3
-	case SSOStepReview:
-		return 4
-	default:
-		return 1
-	}
-}
-
-func ssoStepClass(step string, position int) string {
-	current := ssoStepIndex(step)
-	if current > position {
-		return "complete"
-	}
-	if current == position {
-		return "current"
-	}
-	return ""
-}
-
-func ssoStepMarker(step string, position int) string {
-	if ssoStepIndex(step) > position {
-		return "\u2713"
-	}
-	return strconv.Itoa(position)
-}
-
-func ssoPreviousStep(step string) string {
-	switch step {
-	case SSOStepReview:
-		return SSOStepRoles
-	case SSOStepRoles:
-		return SSOStepClaims
-	default:
-		return SSOStepProvider
 	}
 }
 
