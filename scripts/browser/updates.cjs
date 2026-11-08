@@ -215,6 +215,16 @@ async function assertDismissAlignment(regions, viewport) {
     const scopeConfirmation = scopePage.locator('dialog.confirmation-dialog[open]');
     await scopeConfirmation.waitFor();
     assert.match(await scopeConfirmation.innerText(), /Install this release/);
+    // iPad Safari resolves a grid dialog's fit-content height like auto, which
+    // stretched a confirmation down the whole screen. With height auto it
+    // still sizes to its content and sits in the middle.
+    const confirmationBox = await scopeConfirmation.evaluate(element => {
+      element.style.height = 'auto';
+      const box = element.getBoundingClientRect();
+      return {top: box.top, bottom: innerHeight - box.bottom, height: box.height};
+    });
+    assert.ok(confirmationBox.height < 844 * 0.5, `confirmation fits its content: ${JSON.stringify(confirmationBox)}`);
+    assert.ok(Math.abs(confirmationBox.top - confirmationBox.bottom) < 2, `confirmation is vertically centered: ${JSON.stringify(confirmationBox)}`);
     await scopeConfirmation.getByRole('button', {name: 'Cancel', exact: true}).click();
     await scopeTrigger.click();
     await scopeTrigger.click();
