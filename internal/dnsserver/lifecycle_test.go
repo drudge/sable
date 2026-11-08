@@ -92,7 +92,7 @@ func TestHandlerShutdownCancelsAndJoinsPrefetch(t *testing.T) {
 	}
 	request := new(dns.Msg)
 	request.SetQuestion("prefetch.example.", dns.TypeA)
-	handler.prefetch(request, runtime)
+	handler.prefetch(request, runtime, PrefetchClaim{})
 	select {
 	case <-started:
 	case <-time.After(time.Second):
@@ -151,7 +151,7 @@ func TestHandlerShutdownDeadlineReportsUndrainedPrefetch(t *testing.T) {
 	}
 	request := new(dns.Msg)
 	request.SetQuestion("prefetch.example.", dns.TypeA)
-	handler.prefetch(request, runtime)
+	handler.prefetch(request, runtime, PrefetchClaim{})
 	select {
 	case <-started:
 	case <-time.After(time.Second):

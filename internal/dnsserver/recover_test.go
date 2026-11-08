@@ -139,7 +139,7 @@ func TestPrefetchWithCheckingDisabledKeepsSharedEntryWhenValidationIsOff(t *test
 
 			prefetch := cacheRequest("prefetch-cd.example.", 2)
 			prefetch.CheckingDisabled = tc.checkingDisabled
-			handler.prefetch(prefetch, runtime)
+			handler.prefetch(prefetch, runtime, PrefetchClaim{})
 			// Shutdown would cancel the prefetch, so wait for it to finish.
 			handler.backgroundWG.Wait()
 

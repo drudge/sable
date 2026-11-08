@@ -151,19 +151,18 @@ func (cache *ResponseCache) Capacity() int {
 // hit, but a caller with no way to refresh the entry must not hold the
 // election, so any election the hit wins is given straight back.
 func (cache *ResponseCache) Get(request *dns.Msg) (*dns.Msg, bool) {
-	response, found, prefetch := cache.GetWithPrefetch(request)
-	if prefetch {
-		cache.CancelPrefetch(request)
-	}
+	response, found, claim := cache.GetWithPrefetch(request)
+	claim.Release()
 	return response, found
 }
 
 // GetWithPrefetch returns a normal cache lookup and atomically elects at most
-// one caller to refresh a popular response approaching expiration.
-func (cache *ResponseCache) GetWithPrefetch(request *dns.Msg) (*dns.Msg, bool, bool) {
+// one caller to refresh a popular response approaching expiration. The elected
+// caller gets a held claim and must release it once the refresh is done.
+func (cache *ResponseCache) GetWithPrefetch(request *dns.Msg) (*dns.Msg, bool, PrefetchClaim) {
 	key, eligible := responseCacheKey(request)
 	if !eligible {
-		return nil, false, false
+		return nil, false, PrefetchClaim{}
 	}
 	shard := cache.shard(key)
 	now := cache.now()
@@ -172,14 +171,14 @@ func (cache *ResponseCache) GetWithPrefetch(request *dns.Msg) (*dns.Msg, bool, b
 	element, found := shard.entries[key]
 	if !found {
 		shard.mu.Unlock()
-		return nil, false, false
+		return nil, false, PrefetchClaim{}
 	}
 	entry := element.Value.(*cacheEntry)
 	if !entrySatisfies(entry, request) {
 		// The stored copy lacks the signatures this client asked for. Leave it in
 		// place for the clients it can still serve and resolve afresh.
 		shard.mu.Unlock()
-		return nil, false, false
+		return nil, false, PrefetchClaim{}
 	}
 	if !now.Before(entry.expiresAt) {
 		if cache.options.ServeStale && now.Before(entry.retryAfter) && now.Before(entry.staleUntil) {
@@ -188,17 +187,17 @@ func (cache *ResponseCache) GetWithPrefetch(request *dns.Msg) (*dns.Msg, bool, b
 			shard.mu.Unlock()
 			prepareCachedResponse(response, request)
 			setResponseTTLs(response, max(cache.options.StaleAnswerTTL, 1))
-			return response, true, false
+			return response, true, PrefetchClaim{}
 		}
 		if entryDead(entry, now) {
 			shard.remove(element)
 		}
 		shard.mu.Unlock()
-		return nil, false, false
+		return nil, false, PrefetchClaim{}
 	}
 	shard.recency.MoveToFront(element)
 	cache.recordHit(entry, now)
-	prefetch := cache.electPrefetch(entry, now)
+	claim := cache.electPrefetch(shard, entry, now)
 	storedResponse := entry.response
 	storedAt := entry.storedAt
 	shard.mu.Unlock()
@@ -206,7 +205,7 @@ func (cache *ResponseCache) GetWithPrefetch(request *dns.Msg) (*dns.Msg, bool, b
 	response := copyCachedResponse(storedResponse)
 	prepareCachedResponse(response, request)
 	decrementTTLs(response, uint32(now.Sub(storedAt)/time.Second))
-	return response, true, prefetch
+	return response, true, claim
 }
 
 // GetStale returns an expired response retained within the configured stale
@@ -281,19 +280,47 @@ func entryDead(entry *cacheEntry, now time.Time) bool {
 	return !now.Before(entry.expiresAt) && (entry.staleUntil.IsZero() || !now.Before(entry.staleUntil))
 }
 
-// CancelPrefetch releases the per-entry refresh election after an upstream
-// failure so a later eligible hit can retry.
-func (cache *ResponseCache) CancelPrefetch(request *dns.Msg) {
-	key, eligible := responseCacheKey(request)
-	if !eligible {
+// PrefetchClaim is the right to refresh one cache entry, which only one caller
+// holds at a time. Its holder releases it once the refresh is done, normally
+// with defer, so a refresh that fails or returns early leaves the entry free to
+// be elected again. A refresh that succeeds has already replaced the entry, so
+// releasing the old one changes nothing. The zero claim holds nothing.
+type PrefetchClaim struct {
+	shard *cacheShard
+	entry *cacheEntry
+}
+
+// Held reports whether the claim won an election and is still held.
+func (claim *PrefetchClaim) Held() bool {
+	return claim.entry != nil
+}
+
+// Release gives the entry back. It frees only the entry it elected, never one
+// that has since replaced it, and releasing twice or releasing an empty claim
+// does nothing.
+func (claim *PrefetchClaim) Release() {
+	if claim.entry == nil {
 		return
 	}
-	shard := cache.shard(key)
-	shard.mu.Lock()
-	if element := shard.entries[key]; element != nil {
-		element.Value.(*cacheEntry).refreshing = false
-	}
-	shard.mu.Unlock()
+	claim.shard.mu.Lock()
+	claim.entry.refreshing = false
+	claim.shard.mu.Unlock()
+	*claim = PrefetchClaim{}
+}
+
+// handOff passes the claim to a new holder and leaves this one empty, so a
+// Release already deferred on it does nothing.
+func (claim *PrefetchClaim) handOff() PrefetchClaim {
+	taken := *claim
+	*claim = PrefetchClaim{}
+	return taken
+}
+
+// PrefetchCandidate is a question that renews one elected entry, with the
+// claim its refresh must release.
+type PrefetchCandidate struct {
+	Request *dns.Msg
+	Claim   PrefetchClaim
 }
 
 func (cache *ResponseCache) prefetchConfigured() bool {
@@ -318,25 +345,25 @@ func (cache *ResponseCache) recordHit(entry *cacheEntry, now time.Time) {
 // electPrefetch claims an entry for refresh once it is popular enough and close
 // enough to expiry. Election is exclusive, so a client hit and the background
 // scan can never both refresh the same entry. The caller must hold the shard lock.
-func (cache *ResponseCache) electPrefetch(entry *cacheEntry, now time.Time) bool {
+func (cache *ResponseCache) electPrefetch(shard *cacheShard, entry *cacheEntry, now time.Time) PrefetchClaim {
 	if !cache.prefetchConfigured() || entry.refreshing {
-		return false
+		return PrefetchClaim{}
 	}
 	options := cache.options
 	if entry.expiresAt.Sub(entry.storedAt) < time.Duration(options.PrefetchMinTTL)*time.Second ||
 		entry.expiresAt.Sub(now) > time.Duration(options.PrefetchAtTTL)*time.Second {
-		return false
+		return PrefetchClaim{}
 	}
 	// A hit window that has already lapsed means nothing asked for this entry in
 	// the current sample, so it is not popular however many hits it once had.
 	if entry.hitWindow.IsZero() || now.Sub(entry.hitWindow) >= options.PrefetchSample {
-		return false
+		return PrefetchClaim{}
 	}
 	if uint64(entry.hits) < cache.requiredPrefetchHits() {
-		return false
+		return PrefetchClaim{}
 	}
 	entry.refreshing = true
-	return true
+	return PrefetchClaim{shard: shard, entry: entry}
 }
 
 func (cache *ResponseCache) requiredPrefetchHits() uint64 {
@@ -347,31 +374,35 @@ func (cache *ResponseCache) requiredPrefetchHits() uint64 {
 }
 
 // PrefetchCandidates elects popular entries nearing expiry and returns the
-// questions that renew them. Refreshing on a client hit only ever catches
+// questions that renew them, each with the claim its refresh must release. Refreshing on a client hit only ever catches
 // entries that happen to be queried inside the trigger window; a background
 // caller uses this to renew the rest before anybody has to wait on them.
-func (cache *ResponseCache) PrefetchCandidates(limit int) []*dns.Msg {
+func (cache *ResponseCache) PrefetchCandidates(limit int) []PrefetchCandidate {
 	if !cache.prefetchConfigured() || limit <= 0 {
 		return nil
 	}
 	now := cache.now()
-	var requests []*dns.Msg
+	var candidates []PrefetchCandidate
 	for index := range cache.shards {
 		shard := &cache.shards[index]
 		shard.mu.Lock()
-		for element := shard.recency.Front(); element != nil && len(requests) < limit; element = element.Next() {
+		for element := shard.recency.Front(); element != nil && len(candidates) < limit; element = element.Next() {
 			entry := element.Value.(*cacheEntry)
-			if entryDead(entry, now) || !cache.electPrefetch(entry, now) {
+			if entryDead(entry, now) {
 				continue
 			}
-			requests = append(requests, requestFromCacheKey(entry.key, entry.dnssecOK))
+			claim := cache.electPrefetch(shard, entry, now)
+			if !claim.Held() {
+				continue
+			}
+			candidates = append(candidates, PrefetchCandidate{Request: requestFromCacheKey(entry.key, entry.dnssecOK), Claim: claim})
 		}
 		shard.mu.Unlock()
-		if len(requests) >= limit {
+		if len(candidates) >= limit {
 			break
 		}
 	}
-	return requests
+	return candidates
 }
 
 // copyCachedResponse copies a stored response for one client, who gets its
