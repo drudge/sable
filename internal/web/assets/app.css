@@ -1070,7 +1070,13 @@ form.htmx-request > .search-field > .search-pending { display: block; }
   padding: var(--space-6);
   box-shadow: 0 20px 50px rgb(0 0 0 / 0.24);
 }
-.custom-server-dialog[open] { display: grid; gap: var(--space-4); animation: dialog-in 90ms cubic-bezier(.2, 0, 0, 1); }
+/* Safari before 27 sizes a fit-content grid dialog by stretching its rows to
+   the max-height (the browser's own, when the dialog sets none), and grows the
+   dialog with them: a short dialog filled the iPad screen with its title,
+   body, and buttons spread down it. Packing the rows at the start leaves no
+   free space to stretch, so the dialog keeps its content's height and its auto
+   margins, which native select popups need, still center it. */
+.custom-server-dialog[open] { display: grid; align-content: start; gap: var(--space-4); animation: dialog-in 90ms cubic-bezier(.2, 0, 0, 1); }
 dialog[open]::backdrop {
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
@@ -1093,12 +1099,6 @@ dialog[open]::backdrop {
 .dialog-footer { display: flex; justify-content: flex-end; gap: var(--space-2); }
 .dialog-footer .button:disabled { cursor: default; opacity: 0.5; }
 .confirmation-dialog { width: min(calc(100% - 2rem), 26rem); }
-/* iPad Safari stretches a grid dialog's fit-content height to the whole inset
-   box, so a short confirmation filled the screen with its title, text, and
-   buttons spread down it. A confirmation's height comes from its content
-   instead, centered by translating it. One with a native select keeps the auto
-   margins, since a select anchors its popup to the untranslated box. */
-.confirmation-dialog:not(:has(select)) { top: 50%; bottom: auto; height: auto; margin-block: 0; translate: 0 -50%; }
 .confirmation-dialog .dialog-header p { max-width: 34rem; }
 /* An icon sits in its own column, beside the title and the text under it. */
 .confirmation-dialog .dialog-header:has(.confirmation-icon) { grid-template-columns: auto minmax(0, 1fr); column-gap: .9rem; align-items: start; }

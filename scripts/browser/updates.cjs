@@ -17,6 +17,27 @@ async function assertDismissAlignment(regions, viewport) {
   });
 }
 
+// Safari before 27 grows a fit-content grid dialog to its max-height by
+// stretching its rows, spreading the title, body, and buttons down the
+// screen. Giving the dialog that height here shows whether its rows would
+// stretch: packed rows keep the heights and spacing they have at their
+// content's height.
+async function assertDialogRowsPacked(dialog, label) {
+  const spacing = await dialog.evaluate(element => {
+    const gaps = () => {
+      const rows = [...element.children].filter(child => getComputedStyle(child).position !== 'absolute').map(child => child.getBoundingClientRect());
+      return rows.map((row, index) => ({height: Math.round(row.height), gap: index ? Math.round(row.top - rows[index - 1].bottom) : 0}));
+    };
+    const natural = gaps();
+    element.style.height = `${innerHeight - 32}px`;
+    const tall = gaps();
+    element.style.height = '';
+    return {natural, tall};
+  });
+  assert.ok(spacing.natural.length > 1, `${label} has rows to measure`);
+  assert.deepEqual(spacing.tall, spacing.natural, `${label} rows stay packed when Safari makes it taller`);
+}
+
 (async () => {
   const browser = await chromium.launch({headless: true, ...(process.env.SABLE_TEST_BROWSER ? {executablePath: process.env.SABLE_TEST_BROWSER} : {})});
   try {
@@ -33,6 +54,7 @@ async function assertDismissAlignment(regions, viewport) {
     const notesDialog = page.locator('#notification-release-notes-dialog');
     await notesDialog.waitFor({state: 'visible'});
     assert.match(await notesDialog.innerText(), /Rolling updates/);
+    await assertDialogRowsPacked(notesDialog, 'release notes dialog');
     assert.equal(await notesDialog.locator("h3").innerText(), "Improvements", "release notes render Markdown headings");
     const releaseLink = await notesDialog.getByRole('link', {name: 'View release'}).boundingBox();
     const done = await notesDialog.getByRole('button', {name: 'Done', exact: true}).boundingBox();
@@ -215,16 +237,7 @@ async function assertDismissAlignment(regions, viewport) {
     const scopeConfirmation = scopePage.locator('dialog.confirmation-dialog[open]');
     await scopeConfirmation.waitFor();
     assert.match(await scopeConfirmation.innerText(), /Install this release/);
-    // iPad Safari resolves a grid dialog's fit-content height like auto, which
-    // stretched a confirmation down the whole screen. With height auto it
-    // still sizes to its content and sits in the middle.
-    const confirmationBox = await scopeConfirmation.evaluate(element => {
-      element.style.height = 'auto';
-      const box = element.getBoundingClientRect();
-      return {top: box.top, bottom: innerHeight - box.bottom, height: box.height};
-    });
-    assert.ok(confirmationBox.height < 844 * 0.5, `confirmation fits its content: ${JSON.stringify(confirmationBox)}`);
-    assert.ok(Math.abs(confirmationBox.top - confirmationBox.bottom) < 2, `confirmation is vertically centered: ${JSON.stringify(confirmationBox)}`);
+    await assertDialogRowsPacked(scopeConfirmation, 'install confirmation');
     await scopeConfirmation.getByRole('button', {name: 'Cancel', exact: true}).click();
     await scopeTrigger.click();
     await scopeTrigger.click();
