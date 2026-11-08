@@ -51,11 +51,12 @@ Before every push, run `go tool mage verify` and `gofmt -l .`. `gofmt -l .` must
 
 Never edit a `*_templ.go` file by hand. Change the `.templ` file, regenerate, and commit both.
 
-CI runs four checks on every PR:
+CI runs five checks on every PR:
 - **Quality:** formatting, `go mod tidy`, `mage verify`, and `govulncheck`
 - **Race detector**
 - **Browser regression**
 - **Release artifacts**
+- **Scripted and randomized faults:** `mage clusterFaults`. A failing randomized run logs `SABLE_CLUSTERFAULT_SEED` and `SABLE_CLUSTERFAULT_STEPS` to replay it. The same workflow runs `mage clusterSoak` nightly.
 
 ### Browser tests
 
