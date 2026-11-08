@@ -176,6 +176,13 @@ Restore the **primary** first. Its zones, policy, authorization, and runtime
 configuration are the state the cluster replicates, so a restored primary
 brings the rest back into line on their next synchronization.
 
+A restore brings back zone content, not SOA serials. Each restored zone that
+Sable issues serials for, and that the node already held, comes back under
+the next serial after the one the node was serving. Replicas and external
+secondaries only transfer a zone whose serial has gone up (RFC 1034 §4.3.5),
+so this is what moves them off the displaced content. Secondary, stub, and
+consumer catalog zones keep the serial their upstream gave them.
+
 Restoring onto a **replica** is rarely what you want. A replica applies whatever
 the primary publishes, so a restore there is overwritten on the next sync. The
 console disables the restore button on a replica for that reason. To rebuild a
