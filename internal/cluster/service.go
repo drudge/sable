@@ -250,11 +250,12 @@ type Service struct {
 	// attachedNetworks reads this node's IPv6 networks and takes the lead's.
 	attachedNetworks AttachedNetworks
 	// primaryClaims is the latest claim to lead seen from each other node,
-	// in a probe it sent or a probe answer. probeSeen guards those probes
-	// against replay, and probeNow asks for a probe round at once.
+	// in a probe it sent or a probe answer, and probeNow asks for a probe
+	// round at once.
 	primaryClaims map[string]primaryClaim
-	probeSeen     map[string]time.Time
 	probeNow      chan struct{}
+	// replays refuses a heartbeat or probe that was already received.
+	replays replayGuard
 }
 
 func Open(options Options) (*Service, error) {
@@ -303,7 +304,7 @@ func Open(options Options) (*Service, error) {
 		telemetry: make(map[string]nodeTelemetry), httpClient: baseHTTPClient,
 		baseHTTPClient: baseHTTPClient, memberClients: make(map[string]*http.Client), replicator: options.Replicator,
 		logger: options.Logger, reportedAlerts: make(map[string]reportedAlerts), reportedLookups: make(map[string]reportedLookups),
-		primaryClaims: make(map[string]primaryClaim), probeSeen: make(map[string]time.Time), probeNow: make(chan struct{}, 1),
+		primaryClaims: make(map[string]primaryClaim), probeNow: make(chan struct{}, 1), replays: make(replayGuard),
 	}
 	if service.nodeName == "" {
 		service.nodeName = nodeID[:8]

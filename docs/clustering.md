@@ -19,7 +19,8 @@ Prepare every node with:
 - an HTTPS certificate whose names cover that advertised URL;
 - one or more DNS service addresses that clients and operators can recognize;
 - synchronized system time. Cluster heartbeats outside a 30-second clock window
-  are rejected.
+  are rejected. A clock that steps back or forward inside that window doesn't
+  interrupt synchronization.
 - the primary's Sable version or a newer one. The primary refuses to enroll an
   older node and asks you to update it first; the enrollment token stays
   valid.
