@@ -316,24 +316,23 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 	updateStatus := service.localUpdateStatus()
 	service.mu.Lock()
 	service.pendingUpdate = nil
-	service.mu.Unlock()
-	service.mu.RLock()
 	if service.manifest == nil {
-		service.mu.RUnlock()
+		service.mu.Unlock()
 		return nil
 	}
 	if service.manifest.PrimaryID == service.nodeID {
-		service.mu.RUnlock()
+		service.mu.Unlock()
 		return service.refreshPrimaryState(ctx)
 	}
-	primaryURL := memberAdvertiseURL(service.manifest, service.manifest.PrimaryID)
-	primary, found := manifestMember(service.manifest, service.manifest.PrimaryID)
+	targetID := service.takeSyncTargetLocked()
+	primaryURL := memberAdvertiseURL(service.manifest, targetID)
+	primary, found := manifestMember(service.manifest, targetID)
 	if service.updatePrimaryID != primary.ID {
 		updateStatus = nil
 	}
 	heartbeat, alertRevision, lookupRevision := service.primaryHeartbeatLocked(updateStatus, primary, found)
 	statusKey := service.manifest.StatusKey
-	service.mu.RUnlock()
+	service.mu.Unlock()
 	if primaryURL == "" {
 		return errors.New("cluster primary has no advertised URL")
 	}
