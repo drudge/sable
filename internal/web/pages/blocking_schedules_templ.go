@@ -378,7 +378,6 @@ func ruleSetSchedules(view RuleSetDrawerView) templ.Component {
 	})
 }
 
-// scheduleDetail says what a schedule blocks and when that next changes.
 // scheduleStateBadge says a schedule is on, or what has it off for now.
 func scheduleStateBadge(schedule RuleSetSchedule, class string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
@@ -412,6 +411,7 @@ func scheduleStateBadge(schedule RuleSetSchedule, class string) templ.Component 
 	})
 }
 
+// scheduleDetail says what a schedule blocks and when that next changes.
 func scheduleDetail(schedule RuleSetSchedule) string {
 	if schedule.Next == "" {
 		return schedule.Blocks

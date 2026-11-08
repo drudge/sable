@@ -241,12 +241,18 @@ func (service ruleSetService) scheduleOffUntil(name, scheduleName, action string
 	}
 	on, _, _ := window.At(now)
 	start, end := window.Next(now)
+	// End Now ends the window it is in, even while another override already
+	// keeps it off, as long as it keeps no more than the rest of that window
+	// off.
+	bare := window
+	bare.OffUntil = time.Time{}
+	inWindow, _, windowEnd := bare.At(now)
 	if start.IsZero() && action != scheduleResume {
 		return time.Time{}, "", refuse(http.StatusConflict, "%s's %s schedule has no days to skip or delay.", name, scheduleName)
 	}
 	switch action {
 	case scheduleEnd:
-		if on {
+		if inWindow && end.Equal(windowEnd) {
 			return end, config.ScheduleEnded, nil
 		}
 		return end, config.ScheduleSkipped, nil

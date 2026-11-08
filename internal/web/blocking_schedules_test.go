@@ -182,6 +182,28 @@ func TestRuleSetSchedulesDescribeThemselves(t *testing.T) {
 	}
 }
 
+// End Now pressed while a Delay already keeps the window off ends that
+// window: the saved kind follows the window, not the override before it.
+func TestRuleSetPanelEndsAWindowThatIsDelayed(t *testing.T) {
+	t.Parallel()
+	server, configuration := newRuleSetTestServer(t)
+	now := time.Now().UTC()
+	start, end := now.Add(-time.Hour).Truncate(time.Minute), now.Add(2*time.Hour).Truncate(time.Minute)
+	serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/schedules", url.Values{
+		"name": {"Kids"}, "schedule": {"Bedtime"}, "day": {"sun", "mon", "tue", "wed", "thu", "fri", "sat"},
+		"start": {start.Format("15:04")}, "end": {end.Format("15:04")}, "block": {"everything"},
+	})
+	override := func(action string) *httptest.ResponseRecorder {
+		return serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/schedules/override", url.Values{"name": {"Kids"}, "schedule": {"Bedtime"}, "action": {action}})
+	}
+	override("delay")
+	ended := override("end")
+	schedule := configuration.Current().Config.Blocking.RuleSets[0].Schedules[0]
+	if ended.Code != http.StatusOK || !schedule.OffUntil.Equal(end) || schedule.OffKind != config.ScheduleEnded || !strings.Contains(ended.Body.String(), ">Ended early<") {
+		t.Fatalf("end while delayed = %d, off until %s (%s), want %s (ended)", ended.Code, schedule.OffUntil, schedule.OffKind, end)
+	}
+}
+
 func TestRuleSetPanelSkipsDelaysAndEndsSchedules(t *testing.T) {
 	t.Parallel()
 	server, configuration := newRuleSetTestServer(t)

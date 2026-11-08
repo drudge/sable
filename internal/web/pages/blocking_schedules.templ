@@ -111,7 +111,6 @@ templ ruleSetSchedules(view RuleSetDrawerView) {
 	</section>
 }
 
-// scheduleDetail says what a schedule blocks and when that next changes.
 // scheduleStateBadge says a schedule is on, or what has it off for now.
 templ scheduleStateBadge(schedule RuleSetSchedule, class string) {
 	if schedule.On {
@@ -121,6 +120,7 @@ templ scheduleStateBadge(schedule RuleSetSchedule, class string) {
 	}
 }
 
+// scheduleDetail says what a schedule blocks and when that next changes.
 func scheduleDetail(schedule RuleSetSchedule) string {
 	if schedule.Next == "" {
 		return schedule.Blocks
