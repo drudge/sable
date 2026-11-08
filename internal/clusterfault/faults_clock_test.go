@@ -8,6 +8,7 @@ import (
 
 	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/clustertest"
+	"github.com/drudge/sable/internal/faultinject"
 )
 
 const (
@@ -32,10 +33,10 @@ func TestReplicaClockSkewRecovers(t *testing.T) {
 			faultCluster := startCluster(t, 3)
 			checks, records := newInvariants(), &ledger{}
 			replica := faultCluster.members[1]
-			replica.setFaults(t, faults{ClockOffset: offset})
+			replica.setFaults(t, faultinject.Faults{ClockOffset: offset})
 			waitDropped(t, faultCluster)
 			writeAndObserve(t, faultCluster, checks, records, 3)
-			replica.setFaults(t, faults{})
+			replica.setFaults(t, faultinject.Faults{})
 			checks.converged(t, faultCluster, records)
 		})
 	}
@@ -48,7 +49,7 @@ func TestPrimaryClockSkewRecovers(t *testing.T) {
 		t.Run(offset.String(), func(t *testing.T) {
 			faultCluster := startCluster(t, 3)
 			checks, records := newInvariants(), &ledger{}
-			faultCluster.members[0].setFaults(t, faults{ClockOffset: offset})
+			faultCluster.members[0].setFaults(t, faultinject.Faults{ClockOffset: offset})
 			if offset > 0 {
 				// A primary set back can't be seen dropping replicas: the
 				// offset moves its monotonic clock too, so heartbeats it
@@ -56,7 +57,7 @@ func TestPrimaryClockSkewRecovers(t *testing.T) {
 				waitDropped(t, faultCluster)
 			}
 			writeAndObserve(t, faultCluster, checks, records, 3)
-			faultCluster.members[0].setFaults(t, faults{})
+			faultCluster.members[0].setFaults(t, faultinject.Faults{})
 			checks.converged(t, faultCluster, records)
 		})
 	}
@@ -82,10 +83,10 @@ func stepClockBack(t *testing.T, index int) {
 	faultCluster := startCluster(t, 3)
 	checks, records := newInvariants(), &ledger{}
 	node := faultCluster.members[index]
-	node.setFaults(t, faults{ClockOffset: fastClock})
+	node.setFaults(t, faultinject.Faults{ClockOffset: fastClock})
 	writeAndObserve(t, faultCluster, checks, records, 2)
 	checks.converged(t, faultCluster, records)
-	node.setFaults(t, faults{})
+	node.setFaults(t, faultinject.Faults{})
 	writeAndObserve(t, faultCluster, checks, records, 2)
 	requireConvergedWithin(t, faultCluster, records, resumeWithin)
 	checks.converged(t, faultCluster, records)

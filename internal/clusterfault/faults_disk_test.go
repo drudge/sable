@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/clustertest"
+	"github.com/drudge/sable/internal/faultinject"
 )
 
 // holdFor is how long a held-back member must stay behind: several
@@ -19,10 +20,10 @@ func TestReplicaDiskFullRecovers(t *testing.T) {
 	cluster := startCluster(t, 3)
 	checks, records := newInvariants(), &ledger{}
 	replica := cluster.members[1]
-	replica.setFaults(t, faults{DiskFull: true})
+	replica.setFaults(t, faultinject.Faults{DiskFull: true})
 	writeAndObserve(t, cluster, checks, records, 3)
 	requireHeldBack(t, cluster, replica)
-	replica.setFaults(t, faults{})
+	replica.setFaults(t, faultinject.Faults{})
 	checks.converged(t, cluster, records)
 }
 
@@ -34,14 +35,14 @@ func TestPrimaryDiskFullRecovers(t *testing.T) {
 	checks, records := newInvariants(), &ledger{}
 	writeAndObserve(t, cluster, checks, records, 2)
 	primary := cluster.members[0]
-	primary.setFaults(t, faults{DiskFull: true})
+	primary.setFaults(t, faultinject.Faults{DiskFull: true})
 	for range 3 {
 		if records.write(primary) {
 			t.Errorf("primary acknowledged ledger write %d with a full disk", records.attempted)
 		}
 		checks.observe(t, cluster)
 	}
-	primary.setFaults(t, faults{})
+	primary.setFaults(t, faultinject.Faults{})
 	writeAndObserve(t, cluster, checks, records, 2)
 	checks.converged(t, cluster, records)
 }

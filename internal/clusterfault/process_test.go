@@ -3,7 +3,6 @@
 package clusterfault
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/clustertest"
+	"github.com/drudge/sable/internal/faultinject"
 )
 
 // faultBinary is the Sable binary every member runs: built once per test run
@@ -46,30 +46,13 @@ func runWithFaultBinary(m *testing.M) int {
 	return m.Run()
 }
 
-// faults is what a member's control file asks for, in the JSON shape the
-// faultinject package documents.
-type faults struct {
-	ClockOffset time.Duration
-	DiskFull    bool
-}
-
 func (node *member) controlFile() string { return filepath.Join(node.directory, "faults.json") }
 
 // setFaults replaces the member's faults and waits until the node has had
 // time to read them.
-func (node *member) setFaults(t *testing.T, wanted faults) {
+func (node *member) setFaults(t *testing.T, wanted faultinject.Faults) {
 	t.Helper()
-	contents, err := json.Marshal(map[string]any{
-		"clock_offset": wanted.ClockOffset.String(), "disk_full": wanted.DiskFull,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	temporary := node.controlFile() + ".tmp"
-	if err := os.WriteFile(temporary, contents, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(temporary, node.controlFile()); err != nil {
+	if err := faultinject.WriteControlFile(node.controlFile(), wanted); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(faultRefresh)
