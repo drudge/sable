@@ -2,7 +2,10 @@
 
 package faultinject
 
-import "time"
+import (
+	"net/http"
+	"time"
+)
 
 // Enabled reports whether this binary was built with the faultinject tag.
 const Enabled = false
@@ -15,3 +18,7 @@ func CheckWrite(string) error { return nil }
 
 // SQLDriver returns name unchanged.
 func SQLDriver(name string) string { return name }
+
+// HTTPClient returns client unchanged; only a faultinject build can cut a
+// node's connections.
+func HTTPClient(client *http.Client) *http.Client { return client }
