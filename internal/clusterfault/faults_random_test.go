@@ -46,7 +46,7 @@ var randomSteps = []randomStep{
 	{name: "replica disk full", run: (*randomRun).fillReplicaDisk},
 	{name: "primary disk full", run: (*randomRun).fillPrimaryDisk},
 	{name: "replica partition", run: (*randomRun).partitionReplica},
-	{name: "primary failover", issue: "drudge/sable#588", run: (*randomRun).failOver},
+	{name: "primary failover", run: (*randomRun).failOver},
 }
 
 // TestRandomizedFaults starts a 3 to 5 node cluster and injects a seeded run
@@ -65,6 +65,7 @@ func TestRandomizedFaults(t *testing.T) {
 	})
 	run := &randomRun{t: t, random: random, faults: startCluster(t, size), checks: newInvariants(), records: &ledger{}}
 	run.writes()
+	run.checks.converged(t, run.faults, run.records)
 	choices := enabledSteps()
 	for index := range steps {
 		step := choices[random.IntN(len(choices))]
