@@ -262,6 +262,16 @@ Sable does not merge independent writes from two primaries. If both nodes were
 writable during a partition, stop and preserve both data directories before
 choosing the authoritative state.
 
+### Changes made just before the primary failed
+
+A recovery promotion can lose about the last second of changes. The primary
+confirms a change once it has saved it, before any replica has it, and
+replicas pull new changes about once a second. Changes the primary confirmed
+in that window before it failed are lost when you promote a replica, and the
+former primary discards its copy when it comes back and steps down. Changes a
+replica already had are kept. If a change made just before the failure is
+missing on the promoted primary, make it again there.
+
 ### When a former primary comes back
 
 Every promotion starts a new primary term. A primary asks the other members
