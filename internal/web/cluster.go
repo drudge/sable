@@ -659,27 +659,15 @@ func (server *Server) renderClusterUIFailure(writer http.ResponseWriter, request
 }
 
 func (server *Server) clusterView(request *http.Request, message, errorMessage string) pages.ClusterPageView {
-	view := pages.ClusterPageView{Update: server.clusterUpdateView(request), Console: server.consoleView(request), Message: message, Error: errorMessage, OnboardingMode: clusterWorkflow(request), OnboardingStep: 1}
-	if request != nil {
-		switch request.URL.Query().Get("configure") {
-		case "node":
-			view.ConfigureNode = true
-		case "https":
-			view.ConfigureNode = true
-			view.OnboardingStep = 2
-		}
-	}
+	view := pages.ClusterPageView{Update: server.clusterUpdateView(request), Console: server.consoleView(request), Message: message, Error: errorMessage, OnboardingMode: clusterWorkflow(request)}
 	if server.cluster == nil {
+		view.ConfigureNode, view.OnboardingStep = clusterOnboardingStepFor(request, nil).view()
 		view.Error = firstNonEmpty(errorMessage, "Cluster service is unavailable")
 		return view
 	}
 	state := server.cluster.Snapshot()
+	view.ConfigureNode, view.OnboardingStep = clusterOnboardingStepFor(request, &state).view()
 	desired := server.config.Current().Config.Cluster
-	// Every new setup reviews the saved settings. Only an explicit continuation
-	// after saving/restarting (or a failed join) resumes the final step.
-	if !state.Initialized && (request == nil || (request.URL.Query().Get("resume") != "ready" && request.URL.Path != "/ui/cluster/join")) {
-		view.ConfigureNode = true
-	}
 	active := server.cluster.LocalConfiguration()
 	baseDirectory := "."
 	if located, ok := server.config.(interface{ BaseDirectory() string }); ok {
@@ -712,10 +700,6 @@ func (server *Server) clusterView(request *http.Request, message, errorMessage s
 		view.ACMECredentialsConfigured = server.certificates.Status(request.Context(), configuration.EncryptedDNS).CredentialsConfigured
 	}
 	if view.OnboardingMode != "" && request.Form != nil {
-		if request.FormValue("wizard_step") == "https" {
-			view.ConfigureNode = true
-			view.OnboardingStep = 2
-		}
 		view.NodeName = firstNonEmpty(strings.TrimSpace(request.FormValue("node_name")), view.NodeName)
 		view.AdvertiseURL = firstNonEmpty(strings.TrimSpace(request.FormValue("advertise_url")), view.AdvertiseURL)
 		view.DataDirectory = firstNonEmpty(strings.TrimSpace(request.FormValue("data_dir")), view.DataDirectory)
@@ -805,6 +789,56 @@ func clusterCertificateSource(configuration config.Config, baseDirectory string)
 		return "import"
 	}
 	return "external"
+}
+
+// clusterOnboardingStep is the onboarding dialog's step. Configuring the node's
+// identity comes first, then HTTPS, then the final create-or-join step.
+type clusterOnboardingStep int
+
+const (
+	clusterOnboardingFinal clusterOnboardingStep = iota
+	clusterOnboardingNode
+	clusterOnboardingHTTPS
+)
+
+// clusterOnboardingStepFor works out the onboarding step from everything that
+// can carry it: the configure query parameter, the wizard_step a submitted
+// HTTPS form posts, and whether this node has initialised. state is nil when
+// the cluster service is unavailable, so only the query counts.
+func clusterOnboardingStepFor(request *http.Request, state *cluster.State) clusterOnboardingStep {
+	step := clusterOnboardingFinal
+	if request != nil {
+		switch request.URL.Query().Get("configure") {
+		case "node":
+			step = clusterOnboardingNode
+		case "https":
+			return clusterOnboardingHTTPS
+		}
+	}
+	if state == nil {
+		return step
+	}
+	if request != nil && request.Form != nil && clusterWorkflow(request) != "" && request.FormValue("wizard_step") == "https" {
+		return clusterOnboardingHTTPS
+	}
+	// Every new setup reviews the saved settings. Only an explicit continuation
+	// after saving/restarting (or a failed join) resumes the final step.
+	if !state.Initialized && (request == nil || (request.URL.Query().Get("resume") != "ready" && request.URL.Path != "/ui/cluster/join")) {
+		return clusterOnboardingNode
+	}
+	return step
+}
+
+// view maps the step onto the page's ConfigureNode and OnboardingStep fields.
+func (step clusterOnboardingStep) view() (configureNode bool, onboardingStep int) {
+	switch step {
+	case clusterOnboardingHTTPS:
+		return true, 2
+	case clusterOnboardingNode:
+		return true, 1
+	default:
+		return false, 1
+	}
 }
 
 func clusterWorkflow(request *http.Request) string {

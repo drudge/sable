@@ -1207,3 +1207,24 @@ func TestUniFiStatusRendersSyncTimeInTheBrowserZone(t *testing.T) {
 		t.Errorf("status panel did not render the sync time as eastern time")
 	}
 }
+
+// A step marker or Back button only ever names an earlier step, so a crafted
+// wizard_target cannot jump past the connection check or name a step the
+// wizard does not have.
+func TestUniFiWizardRefusesATargetAheadOrUnknown(t *testing.T) {
+	controller := &testUniFiController{inventory: testUniFiInventory(), plan: unifi.Plan{Hosts: 1}}
+	server, configuration := newIntegrationsTestServer(t, controller)
+	for _, target := range []string{"review", "elsewhere"} {
+		form := url.Values{
+			"wizard_step": {"connect"}, "wizard_target": {target}, "controller_url": {"https://192.168.1.1"},
+			"site": {"default"}, "auth_mode": {"api-key"},
+		}
+		response := postIntegrations(server, "/ui/integrations/unifi/wizard", form)
+		if response.Code != http.StatusBadRequest {
+			t.Errorf("target %q = %d, want 400", target, response.Code)
+		}
+	}
+	if len(configuration.snapshot.Config.UniFi.Networks) != 0 {
+		t.Fatal("a refused target persisted configuration")
+	}
+}
