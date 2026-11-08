@@ -44,6 +44,8 @@ Use the mage targets. They set `GOEXPERIMENT=jsonv2`, so set it yourself when yo
 | `go tool mage bench` | Runs the DNS, storage, and blocking benchmarks |
 | `go tool mage devDemo` | Runs the Vandelay demo with hot reload; open http://localhost:5381 |
 | `go tool mage dev` | Runs one server from your own `sable.toml` with hot reload; open http://localhost:5381 |
+| `go tool mage clusterFaults` | Runs the fault-injection harness on real 3 to 5 node clusters |
+| `go tool mage clusterSoak` | Repeats long randomized fault runs; `SABLE_CLUSTERFAULT_RUNS` and `SABLE_CLUSTERFAULT_STEPS` size it |
 
 Before every push, run `go tool mage verify` and `gofmt -l .`. `gofmt -l .` must print nothing. `verify` doesn't check formatting, but CI does.
 
