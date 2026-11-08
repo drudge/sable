@@ -2,6 +2,7 @@ package clustertest
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -22,12 +23,19 @@ import (
 
 // Node is a running Sable node, in-process or a child binary.
 type Node struct {
-	cancel  context.CancelFunc
-	process *os.Process
-	done    chan error
-	logs    *synchronizedBuffer
-	stop    sync.Once
+	cancel context.CancelFunc
+	done   chan error
+	logs   *synchronizedBuffer
+	stop   sync.Once
+
+	mu       sync.Mutex
+	process  *os.Process // the child process running now
+	stopping bool        // set once the node is told to stop
 }
+
+// restartExitCode is Sable's controlled restart: the installed service starts
+// the process again, which then runs the binary an update put in place.
+const restartExitCode = 75
 
 type synchronizedBuffer struct {
 	mu     sync.Mutex
@@ -104,20 +112,89 @@ func StartNode(t *testing.T, configurationPath string, client *http.Client, http
 func StartBinaryNode(t *testing.T, binaryPath string, environment []string, configurationPath string, client *http.Client, httpsAddress string) *Node {
 	t.Helper()
 	node := &Node{done: make(chan error, 1), logs: &synchronizedBuffer{}}
+	node.cancel = node.interrupt
+	command, err := node.launch(binaryPath, environment, configurationPath)
+	if err != nil {
+		t.Fatalf("start Sable integration binary: %v", err)
+	}
+	go func() { node.done <- command.Wait() }()
+	waitStarted(t, node, client, httpsAddress)
+	return node
+}
+
+// StartSupervisedBinaryNode runs binaryPath like StartBinaryNode and, like
+// Sable's installed service, starts it again each time it exits with code
+// 75, so a node can install an update and restart into it. restarted, if
+// set, is called after each restart.
+func StartSupervisedBinaryNode(t *testing.T, binaryPath string, environment []string, configurationPath string, client *http.Client, httpsAddress string, restarted func()) *Node {
+	t.Helper()
+	node := &Node{done: make(chan error, 1), logs: &synchronizedBuffer{}}
+	node.cancel = node.interrupt
+	command, err := node.launch(binaryPath, environment, configurationPath)
+	if err != nil {
+		t.Fatalf("start Sable integration binary: %v", err)
+	}
+	go func() {
+		node.done <- node.supervise(command, func() (*exec.Cmd, error) {
+			return node.launch(binaryPath, environment, configurationPath)
+		}, restarted)
+	}()
+	waitStarted(t, node, client, httpsAddress)
+	return node
+}
+
+// launch starts one child process unless the node is stopping, in which case
+// it returns a nil command.
+func (node *Node) launch(binaryPath string, environment []string, configurationPath string) (*exec.Cmd, error) {
+	node.mu.Lock()
+	defer node.mu.Unlock()
+	if node.stopping {
+		return nil, nil
+	}
 	command := exec.Command(binaryPath, "serve", "--config", configurationPath)
 	command.Env = append(os.Environ(), environment...)
 	command.Stdout = node.logs
 	command.Stderr = node.logs
 	if err := command.Start(); err != nil {
-		t.Fatalf("start Sable integration binary: %v", err)
+		return nil, err
 	}
 	node.process = command.Process
-	node.cancel = func() {
-		_ = command.Process.Signal(os.Interrupt)
+	return command, nil
+}
+
+// supervise waits on command and relaunches it after each controlled
+// restart, returning how the last process ended.
+func (node *Node) supervise(command *exec.Cmd, relaunch func() (*exec.Cmd, error), restarted func()) error {
+	for {
+		err := command.Wait()
+		var exited *exec.ExitError
+		if !errors.As(err, &exited) || exited.ExitCode() != restartExitCode {
+			return err
+		}
+		next, err := relaunch()
+		if err != nil || next == nil {
+			return err
+		}
+		command = next
+		if restarted != nil {
+			restarted()
+		}
 	}
-	go func() { node.done <- command.Wait() }()
-	waitStarted(t, node, client, httpsAddress)
-	return node
+}
+
+// interrupt tells the running child process to shut down and keeps a
+// supervised node from starting another.
+func (node *Node) interrupt() {
+	node.mu.Lock()
+	defer node.mu.Unlock()
+	node.stopping = true
+	_ = node.process.Signal(os.Interrupt)
+}
+
+func (node *Node) currentProcess() *os.Process {
+	node.mu.Lock()
+	defer node.mu.Unlock()
+	return node.process
 }
 
 func waitStarted(t *testing.T, node *Node, client *http.Client, httpsAddress string) {
@@ -137,11 +214,15 @@ func waitStarted(t *testing.T, node *Node, client *http.Client, httpsAddress str
 // shut down cleanly, and waits for the process to exit.
 func KillNode(t *testing.T, node *Node) {
 	t.Helper()
-	if node.process == nil {
+	if node.currentProcess() == nil {
 		t.Fatal("only a child-process node can be killed")
 	}
 	node.stop.Do(func() {
-		if err := node.process.Kill(); err != nil {
+		node.mu.Lock()
+		node.stopping = true
+		process := node.process
+		node.mu.Unlock()
+		if err := process.Kill(); err != nil {
 			t.Errorf("kill Sable integration node: %v", err)
 		}
 		select {
