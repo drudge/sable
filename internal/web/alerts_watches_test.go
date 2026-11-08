@@ -269,18 +269,33 @@ func TestSettingsReportsServerTiming(t *testing.T) {
 
 // A reverse zone that never answers must not hold up Settings: the watch
 // picker takes names already looked up rather than waiting for new ones.
+// Lookups block until cleanup, and both their deadline and a waiting render's
+// budget are an hour, so a Settings page that came back at all did not wait.
+// The test checks that rather than a wall-clock bound, which under -race
+// measured how busy the runner was.
 func TestSettingsDoesNotWaitForReverseLookups(t *testing.T) {
 	t.Parallel()
 	server := newAlertsTestServer(t)
 	resolver := &stubReverseResolver{block: make(chan struct{}), blockAll: true}
 	t.Cleanup(func() { close(resolver.block) })
-	server.Server.reverseNames = newTestNameCache(resolver)
-	started := time.Now()
-	server.get(t, "everything", "/settings?tab=alerts", false)
-	if elapsed := time.Since(started); elapsed >= reverseNameBudget/2 {
-		t.Fatalf("Settings took %v with reverse lookups hanging, want it not to wait for them", elapsed)
+	names := newTestNameCache(resolver)
+	names.deadline, names.budget = time.Hour, time.Hour
+	server.Server.reverseNames = names
+	rendered := make(chan struct{})
+	go func() {
+		defer close(rendered)
+		server.get(t, "everything", "/settings?tab=alerts", false)
+	}()
+	select {
+	case <-rendered:
+	case <-time.After(30 * time.Second):
+		t.Fatal("Settings waited for reverse lookups that never answer")
 	}
-	if resolver.calls.Load() == 0 {
-		t.Fatal("no reverse lookups were started for the unnamed clients")
+	// The picker starts lookups in the background, so they may begin just
+	// after the page is written.
+	for deadline := time.Now().Add(10 * time.Second); resolver.calls.Load() == 0; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("no reverse lookups were started for the unnamed clients")
+		}
 	}
 }
