@@ -1093,6 +1093,12 @@ dialog[open]::backdrop {
 .dialog-footer { display: flex; justify-content: flex-end; gap: var(--space-2); }
 .dialog-footer .button:disabled { cursor: default; opacity: 0.5; }
 .confirmation-dialog { width: min(calc(100% - 2rem), 26rem); }
+/* iPad Safari stretches a grid dialog's fit-content height to the whole inset
+   box, so a short confirmation filled the screen with its title, text, and
+   buttons spread down it. A confirmation's height comes from its content
+   instead, centered by translating it. One with a native select keeps the auto
+   margins, since a select anchors its popup to the untranslated box. */
+.confirmation-dialog:not(:has(select)) { top: 50%; bottom: auto; height: auto; margin-block: 0; translate: 0 -50%; }
 .confirmation-dialog .dialog-header p { max-width: 34rem; }
 /* An icon sits in its own column, beside the title and the text under it. */
 .confirmation-dialog .dialog-header:has(.confirmation-icon) { grid-template-columns: auto minmax(0, 1fr); column-gap: .9rem; align-items: start; }
