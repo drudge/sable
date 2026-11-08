@@ -485,7 +485,9 @@ func applyRestoredSections(ctx context.Context, archive backup.Archive, requeste
 		if err != nil {
 			return err
 		}
-		if _, err := database.ReplaceZones(ctx, current, zone.Clone(archive.Zones)); err != nil {
+		restored := zone.Clone(archive.Zones)
+		advanceRestoredSerials(restored, current, time.Now())
+		if _, err := database.ReplaceZones(ctx, current, restored); err != nil {
 			return fmt.Errorf("restore zones: %w", err)
 		}
 		result.Zones = len(archive.Zones)

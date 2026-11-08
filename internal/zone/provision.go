@@ -82,6 +82,42 @@ func AdvanceSerialBy(zone *Zone, count uint32) {
 	rewriteSerial(zone, func(current uint32) uint32 { return current + count })
 }
 
+// AdvanceSerialPast moves the apex SOA serial to the next serial after both
+// its own and floor, whichever is greater in RFC 1982 serial arithmetic. It
+// lets older content come back without republishing a serial that was
+// already served for newer content (RFC 1034 §4.3.5).
+func AdvanceSerialPast(zone *Zone, floor uint32, now time.Time) {
+	rewriteSerial(zone, func(current uint32) uint32 {
+		if serialAfter(floor, current) {
+			current = floor
+		}
+		return NextSerial(current, now)
+	})
+}
+
+// Serial returns the apex SOA serial, and false when the zone has no
+// parsable apex SOA.
+func Serial(zone Zone) (uint32, bool) {
+	for _, record := range zone.Records {
+		if record.Name != "@" || record.Type != "SOA" {
+			continue
+		}
+		fields := strings.Fields(record.Value)
+		if len(fields) != 7 {
+			return 0, false
+		}
+		serial, err := strconv.ParseUint(fields[2], 10, 32)
+		return uint32(serial), err == nil
+	}
+	return 0, false
+}
+
+// serialAfter reports whether a is greater than b in RFC 1982 serial
+// arithmetic (§3.2).
+func serialAfter(a, b uint32) bool {
+	return a != b && int32(a-b) > 0
+}
+
 // OwnsSerial reports whether Sable issues the zone's SOA serial itself. A
 // zone transferred from a remote primary carries that primary's serial.
 func OwnsSerial(current Zone) bool {
