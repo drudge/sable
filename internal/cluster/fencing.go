@@ -3,7 +3,6 @@ package cluster
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -189,10 +188,6 @@ func (service *Service) stepDown(ctx context.Context, target member, configurati
 // records the sender's identity or reports: those would publish a new
 // generation on the strength of a node that may itself be stale.
 func (service *Service) answerPrimaryProbeLocked(heartbeat Heartbeat, now time.Time) (SyncConfiguration, error) {
-	if previous, seen := service.probeSeen[heartbeat.NodeID]; seen && !heartbeat.SentAt.After(previous) {
-		return SyncConfiguration{}, errors.New("synchronization heartbeat is stale or replayed")
-	}
-	service.probeSeen[heartbeat.NodeID] = heartbeat.SentAt
 	service.primaryClaims[heartbeat.NodeID] = primaryClaim{term: heartbeat.Primary.Term, generation: heartbeat.AppliedGeneration, received: now}
 	if service.manifest.PrimaryID == service.nodeID && heartbeat.Primary.Term > service.manifest.Term {
 		// A newer primary exists. Ask it for its manifest now rather than at
