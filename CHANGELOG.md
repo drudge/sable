@@ -8,6 +8,22 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.8.1-beta.3] - 2026-11-07
+
+Sable 1.8.1-beta.3 keeps every console dialog compact on iPad Safari.
+
+### Upgrading from 1.8.1-beta.2
+
+Nothing new is needed.
+
+### Console
+
+- Every dialog, such as the **Release notes** for an update on About, now
+  sizes to its content on iPad Safari, the way confirmations did in
+  1.8.1-beta.2. Before, it stretched down the whole screen with its title,
+  body and buttons spread far apart. Long content still scrolls inside the
+  dialog.
+
 ## [1.8.1-beta.2] - 2026-11-07
 
 Sable 1.8.1-beta.2 keeps confirmation dialogs compact on iPad Safari.
