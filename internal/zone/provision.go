@@ -72,6 +72,27 @@ func ResponsibleName(value string) (string, error) {
 // AdvanceSerial bumps the apex SOA serial. It is a no-op when the zone has no
 // parsable apex SOA, which validation reports separately.
 func AdvanceSerial(zone *Zone, now time.Time) {
+	rewriteSerial(zone, func(current uint32) uint32 { return NextSerial(current, now) })
+}
+
+// AdvanceSerialBy moves the apex SOA serial forward by count in RFC 1982
+// serial arithmetic, wrapping past 2^32-1. Count must stay below 2^31 for the
+// result to compare greater than the old serial.
+func AdvanceSerialBy(zone *Zone, count uint32) {
+	rewriteSerial(zone, func(current uint32) uint32 { return current + count })
+}
+
+// OwnsSerial reports whether Sable issues the zone's SOA serial itself. A
+// zone transferred from a remote primary carries that primary's serial.
+func OwnsSerial(current Zone) bool {
+	switch current.Type {
+	case "secondary", TypeSecondaryForwarder, "stub":
+		return false
+	}
+	return !IsConsumerCatalog(current)
+}
+
+func rewriteSerial(zone *Zone, next func(uint32) uint32) {
 	for index := range zone.Records {
 		record := &zone.Records[index]
 		if record.Name != "@" || record.Type != "SOA" {
@@ -82,7 +103,7 @@ func AdvanceSerial(zone *Zone, now time.Time) {
 			return
 		}
 		current, _ := strconv.ParseUint(fields[2], 10, 32)
-		fields[2] = strconv.FormatUint(uint64(NextSerial(uint32(current), now)), 10)
+		fields[2] = strconv.FormatUint(uint64(next(uint32(current))), 10)
 		record.Value = strings.Join(fields, " ")
 		return
 	}

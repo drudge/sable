@@ -21,6 +21,7 @@ import (
 
 	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
+	"github.com/drudge/sable/internal/updatefeed"
 )
 
 // Both binaries contain the current source. These labels exercise a stable
@@ -136,18 +137,9 @@ func checkUpdateDemoPorts(basePort int) error {
 
 func buildUpdateDemoBinary(ctx context.Context, workspace, release string) (string, error) {
 	binary := filepath.Join(workspace, "build", release, "sable")
-	if err := os.MkdirAll(filepath.Dir(binary), 0o755); err != nil {
-		return "", err
-	}
-	flags := "-s -w -X github.com/drudge/sable/internal/version.Release=" + release +
-		" -X github.com/drudge/sable/internal/version.Commit=local-update-demo" +
-		" -X github.com/drudge/sable/internal/version.BuiltAt=" + time.Now().UTC().Format(time.RFC3339)
-	command := exec.CommandContext(ctx, "go", "build", "-tags", "updatedemo", "-trimpath", "-ldflags", flags, "-o", binary, "./cmd/sable")
-	command.Stdout, command.Stderr = os.Stdout, os.Stderr
-	if err := command.Run(); err != nil {
-		return "", fmt.Errorf("build demo %s: %w", release, err)
-	}
-	return binary, nil
+	return binary, updatefeed.Build(ctx, updatefeed.BuildOptions{
+		Output: binary, Release: release, Commit: "local-update-demo", Tags: "updatedemo", Log: os.Stdout,
+	})
 }
 
 func buildUpdateDemoNodes(ctx context.Context, workspace string, basePort int) ([]*node, error) {

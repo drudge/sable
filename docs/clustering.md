@@ -284,6 +284,13 @@ becomes a replica of the newer primary and takes that primary's data. Changes
 made on the former primary after it was replaced are discarded, however many
 there were.
 
+A recovery promotion moves the SOA serial of every zone Sable publishes
+forward by 100, and secondaries see the jump on their next refresh. The
+former primary may have handed out serials for changes the promoted node never
+received; the jump keeps those serials from being reused for different
+content, and keeps the former primary's serials from going backward when it
+steps down. Zones transferred from another primary keep that primary's serial.
+
 Don't remove the former primary from the promoted node before it comes back.
 A member that no longer lists it can't tell it to step down.
 
