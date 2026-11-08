@@ -35,7 +35,6 @@ func TestPrimaryKillPromoteAndRestartFencesTheOldPrimary(t *testing.T) {
 // the replication window and brings it back after a recovery promotion. The
 // former primary must never serve an older SOA serial than it already served.
 func TestRecoveryPromotionKeepsSOASerialsMonotonic(t *testing.T) {
-	knownBug(t, "drudge/sable#581")
 	faults, checks, _ := crashPrimaryInsideReplicationWindow(t)
 	checks.observe(t, faults)
 }
