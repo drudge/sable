@@ -153,7 +153,11 @@ func TestRuleSetSchedulesDescribeThemselves(t *testing.T) {
 		t.Errorf("Homework starting in two days offers %v", got)
 	}
 	set.Schedules[0].OffUntil = time.Date(2026, time.October, 13, 7, 0, 0, 0, newYork)
-	if got := ruleSetSchedules(set, eastern, monday)[0]; got.On || !got.Paused || got.Next != "Starts Tue 9:00 PM" || !slices.Equal(overrides(got), []string{"resume"}) {
+	if got := ruleSetSchedules(set, eastern, monday)[0]; got.On || got.Paused != "Paused" || got.Next != "Starts Tue 9:00 PM" || !slices.Equal(overrides(got), []string{"resume"}) {
+		t.Errorf("Bedtime kept off by an override of no recorded kind = %+v", got)
+	}
+	set.Schedules[0].OffKind = config.ScheduleEnded
+	if got := ruleSetSchedules(set, eastern, monday)[0]; got.Paused != "Ended early" || !slices.Equal(overrides(got), []string{"resume"}) {
 		t.Errorf("Bedtime ended early = %+v", got)
 	}
 
@@ -178,6 +182,28 @@ func TestRuleSetSchedulesDescribeThemselves(t *testing.T) {
 	}
 }
 
+// End Now pressed while a Delay already keeps the window off ends that
+// window: the saved kind follows the window, not the override before it.
+func TestRuleSetPanelEndsAWindowThatIsDelayed(t *testing.T) {
+	t.Parallel()
+	server, configuration := newRuleSetTestServer(t)
+	now := time.Now().UTC()
+	start, end := now.Add(-time.Hour).Truncate(time.Minute), now.Add(2*time.Hour).Truncate(time.Minute)
+	serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/schedules", url.Values{
+		"name": {"Kids"}, "schedule": {"Bedtime"}, "day": {"sun", "mon", "tue", "wed", "thu", "fri", "sat"},
+		"start": {start.Format("15:04")}, "end": {end.Format("15:04")}, "block": {"everything"},
+	})
+	override := func(action string) *httptest.ResponseRecorder {
+		return serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/schedules/override", url.Values{"name": {"Kids"}, "schedule": {"Bedtime"}, "action": {action}})
+	}
+	override("delay")
+	ended := override("end")
+	schedule := configuration.Current().Config.Blocking.RuleSets[0].Schedules[0]
+	if ended.Code != http.StatusOK || !schedule.OffUntil.Equal(end) || schedule.OffKind != config.ScheduleEnded || !strings.Contains(ended.Body.String(), ">Ended early<") {
+		t.Fatalf("end while delayed = %d, off until %s (%s), want %s (ended)", ended.Code, schedule.OffUntil, schedule.OffKind, end)
+	}
+}
+
 func TestRuleSetPanelSkipsDelaysAndEndsSchedules(t *testing.T) {
 	t.Parallel()
 	server, configuration := newRuleSetTestServer(t)
@@ -191,26 +217,36 @@ func TestRuleSetPanelSkipsDelaysAndEndsSchedules(t *testing.T) {
 		t.Fatalf("panel with a schedule on = %d %s", saved.Code, saved.Body.String())
 	}
 	offUntil := func() time.Time { return configuration.Current().Config.Blocking.RuleSets[0].Schedules[0].OffUntil }
+	offKind := func() config.ScheduleState {
+		return configuration.Current().Config.Blocking.RuleSets[0].Schedules[0].OffKind
+	}
 	override := func(action string) *httptest.ResponseRecorder {
 		return serveRuleSetRequest(server, http.MethodPost, "/ui/blocking/rule-sets/schedules/override", url.Values{"name": {"Kids"}, "schedule": {"Bedtime"}, "action": {action}})
 	}
 
 	ended := override("end")
-	if ended.Code != http.StatusOK || !strings.Contains(ended.Body.String(), "Bedtime schedule ended early") || !offUntil().Equal(end) ||
-		!strings.Contains(ended.Body.String(), ">Paused<") || !strings.Contains(ended.Body.String(), `id="rule-set-schedule-resume-0"`) {
+	if ended.Code != http.StatusOK || !strings.Contains(ended.Body.String(), "Bedtime schedule ended early") || !offUntil().Equal(end) || offKind() != config.ScheduleEnded ||
+		!strings.Contains(ended.Body.String(), ">Ended early<") || !strings.Contains(ended.Body.String(), `id="rule-set-schedule-resume-0"`) {
 		t.Fatalf("end = %d, off until %s, want %s\n%s", ended.Code, offUntil(), end, ended.Body.String())
 	}
-	if resumed := override("resume"); resumed.Code != http.StatusOK || !strings.Contains(resumed.Body.String(), "Bedtime schedule resumed") || !offUntil().IsZero() {
+	if resumed := override("resume"); resumed.Code != http.StatusOK || !strings.Contains(resumed.Body.String(), "Bedtime schedule resumed") || !offUntil().IsZero() || offKind() != "" {
 		t.Fatalf("resume = %d, off until %s", resumed.Code, offUntil())
 	}
 	if delayed := override("delay"); delayed.Code != http.StatusOK || !strings.Contains(delayed.Body.String(), "delayed 30 minutes") ||
-		offUntil().Before(now.Add(scheduleDelayStep)) || offUntil().After(time.Now().Add(scheduleDelayStep)) {
+		offKind() != config.ScheduleDelayed || !strings.Contains(delayed.Body.String(), ">Delayed<") || offUntil().Before(now.Add(scheduleDelayStep)) || offUntil().After(time.Now().Add(scheduleDelayStep)) {
 		t.Fatalf("delay = %d, off until %s", delayed.Code, offUntil())
 	}
-	// Once the window ends early, Skip passes over the next one.
+	// Once the window ends early, Skip passes over the next one, and so does
+	// End Now, which has nothing left to end.
 	override("end")
-	if skipped := override("skip"); skipped.Code != http.StatusOK || !offUntil().Equal(end.Add(24*time.Hour)) {
-		t.Fatalf("skip = %d, off until %s, want %s", skipped.Code, offUntil(), end.Add(24*time.Hour))
+	if skipped := override("skip"); skipped.Code != http.StatusOK || !offUntil().Equal(end.Add(24*time.Hour)) ||
+		offKind() != config.ScheduleSkipped || !strings.Contains(skipped.Body.String(), ">Skipped<") {
+		t.Fatalf("skip = %d, off until %s (%s), want %s", skipped.Code, offUntil(), offKind(), end.Add(24*time.Hour))
+	}
+	override("resume")
+	override("end")
+	if again := override("end"); again.Code != http.StatusOK || !offUntil().Equal(end.Add(24*time.Hour)) || offKind() != config.ScheduleSkipped {
+		t.Fatalf("end outside a window = %d, off until %s (%s)", again.Code, offUntil(), offKind())
 	}
 
 	if response := override("nap"); response.Code != http.StatusBadRequest {

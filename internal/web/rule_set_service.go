@@ -189,7 +189,7 @@ func (service ruleSetService) DeleteSchedule(ctx context.Context, who actor, nam
 // until: zero once resumed. The console's row buttons and MCP's
 // override_schedule both use it.
 func (service ruleSetService) OverrideSchedule(ctx context.Context, who actor, name, schedule, action string, now time.Time) (string, error) {
-	until, err := service.scheduleOffUntil(name, schedule, action, now)
+	until, kind, err := service.scheduleOffUntil(name, schedule, action, now)
 	if err != nil {
 		return "", err
 	}
@@ -198,7 +198,7 @@ func (service ruleSetService) OverrideSchedule(ctx context.Context, who actor, n
 	}[action]
 	action = "blocking.rule_set.schedule." + action
 	err = service.update(ctx, who, action, func(configuration *config.Config) error {
-		if err := configuration.SetScheduleOff(name, schedule, until, now); err != nil {
+		if err := configuration.SetScheduleOff(name, schedule, until, kind, now); err != nil {
 			return refuse(http.StatusNotFound, "%s", sentence(err.Error()))
 		}
 		return nil
@@ -221,38 +221,51 @@ const (
 // scheduleDelayStep is how much Delay 30 Minutes moves a schedule.
 const scheduleDelayStep = 30 * time.Minute
 
-// scheduleOffUntil works out how long action keeps a schedule off: to the
-// end of the window it is in or starts next for Skip and End Now, 30 minutes
-// past now or the next start for Delay, and no longer for Resume.
-func (service ruleSetService) scheduleOffUntil(name, scheduleName, action string, now time.Time) (time.Time, error) {
+// scheduleOffUntil works out how long action keeps a schedule off and what
+// state that leaves it in: to the end of the window it is in or starts next
+// for Skip and End Now, 30 minutes past now or the next start for Delay, and
+// no longer for Resume. End Now outside a window has nothing to end, so it
+// skips the next one, as Skip would.
+func (service ruleSetService) scheduleOffUntil(name, scheduleName, action string, now time.Time) (time.Time, config.ScheduleState, error) {
 	set, found := service.server.ruleSet(name)
 	if !found {
-		return time.Time{}, refuse(http.StatusNotFound, "There is no rule set called %s.", name)
+		return time.Time{}, "", refuse(http.StatusNotFound, "There is no rule set called %s.", name)
 	}
 	index := slices.IndexFunc(set.Schedules, func(existing config.Schedule) bool { return existing.Name == scheduleName })
 	if index < 0 {
-		return time.Time{}, refuse(http.StatusNotFound, "%s has no schedule called %s. It may have been deleted.", name, scheduleName)
+		return time.Time{}, "", refuse(http.StatusNotFound, "%s has no schedule called %s. It may have been deleted.", name, scheduleName)
 	}
 	window, err := set.Schedules[index].Window()
 	if err != nil {
-		return time.Time{}, refuse(http.StatusConflict, "%s's %s schedule has a time zone Sable doesn't know.", name, scheduleName)
+		return time.Time{}, "", refuse(http.StatusConflict, "%s's %s schedule has a time zone Sable doesn't know.", name, scheduleName)
 	}
 	on, _, _ := window.At(now)
 	start, end := window.Next(now)
+	// End Now ends the window it is in, even while another override already
+	// keeps it off, as long as it keeps no more than the rest of that window
+	// off.
+	bare := window
+	bare.OffUntil = time.Time{}
+	inWindow, _, windowEnd := bare.At(now)
 	if start.IsZero() && action != scheduleResume {
-		return time.Time{}, refuse(http.StatusConflict, "%s's %s schedule has no days to skip or delay.", name, scheduleName)
+		return time.Time{}, "", refuse(http.StatusConflict, "%s's %s schedule has no days to skip or delay.", name, scheduleName)
 	}
 	switch action {
-	case scheduleSkip, scheduleEnd:
-		return end, nil
+	case scheduleEnd:
+		if inWindow && end.Equal(windowEnd) {
+			return end, config.ScheduleEnded, nil
+		}
+		return end, config.ScheduleSkipped, nil
+	case scheduleSkip:
+		return end, config.ScheduleSkipped, nil
 	case scheduleDelay:
 		if on {
-			return now.Add(scheduleDelayStep), nil
+			return now.Add(scheduleDelayStep), config.ScheduleDelayed, nil
 		}
-		return start.Add(scheduleDelayStep), nil
+		return start.Add(scheduleDelayStep), config.ScheduleDelayed, nil
 	case scheduleResume:
-		return time.Time{}, nil
+		return time.Time{}, "", nil
 	default:
-		return time.Time{}, refuse(http.StatusBadRequest, "Sable doesn't know how to %s a schedule.", action)
+		return time.Time{}, "", refuse(http.StatusBadRequest, "Sable doesn't know how to %s a schedule.", action)
 	}
 }

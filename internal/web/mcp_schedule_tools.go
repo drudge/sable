@@ -14,8 +14,9 @@ var mcpScheduleTools = []mcpTool{
 		Name:  "list_schedules",
 		Title: "List rule set schedules",
 		Description: "List each rule set's schedules: the days and times each one blocks everything or some apps for " +
-			"the rule set's devices, whether it is on now, and when it next starts or ends. paused_until says a " +
-			"schedule was skipped, delayed, or ended early and stays off until then.",
+			"the rule set's devices, whether it is on now, and when it next starts or ends. state is outside, on, " +
+			"skipped, delayed, ended (ended early), or overridden (kept off by an override from before Sable " +
+			"recorded which); paused_until says when the override stops keeping it off.",
 		InputSchema: mcpObjectSchema(map[string]any{
 			"rule_set": mcpString("Optional rule set name, to list only its schedules."),
 		}, nil),
@@ -47,18 +48,19 @@ var mcpScheduleTools = []mcpTool{
 }
 
 type mcpSchedule struct {
-	RuleSet  string     `json:"rule_set"`
-	Name     string     `json:"name"`
-	Days     []string   `json:"days"`
-	Start    string     `json:"start"`
-	End      string     `json:"end"`
-	TimeZone string     `json:"time_zone"`
-	Block    string     `json:"block"`
-	Apps     []string   `json:"apps,omitempty"`
-	On       bool       `json:"on"`
-	Paused   *time.Time `json:"paused_until,omitempty"`
-	Starts   *time.Time `json:"next_start,omitempty"`
-	Ends     *time.Time `json:"ends,omitempty"`
+	RuleSet  string               `json:"rule_set"`
+	Name     string               `json:"name"`
+	Days     []string             `json:"days"`
+	Start    string               `json:"start"`
+	End      string               `json:"end"`
+	TimeZone string               `json:"time_zone"`
+	Block    string               `json:"block"`
+	Apps     []string             `json:"apps,omitempty"`
+	On       bool                 `json:"on"`
+	State    config.ScheduleState `json:"state,omitempty"`
+	Paused   *time.Time           `json:"paused_until,omitempty"`
+	Starts   *time.Time           `json:"next_start,omitempty"`
+	Ends     *time.Time           `json:"ends,omitempty"`
 }
 
 func (server *Server) mcpListSchedules(request *http.Request, arguments json.RawMessage) (any, error) {
@@ -101,7 +103,7 @@ func mcpScheduleAt(ruleSet string, schedule config.Schedule, now time.Time) mcpS
 	}
 	on, _, until := window.At(now)
 	start, end := window.Next(now)
-	view.On = on
+	view.On, view.State = on, schedule.State(window, now)
 	if on {
 		view.Ends = scheduleTime(until, window)
 	} else if !start.IsZero() {
