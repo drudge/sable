@@ -39,7 +39,6 @@ func TestPrimaryRestoreFromBackupBringsTheClusterBack(t *testing.T) {
 // every secondary, and the next write reuses a serial already served for
 // other content.
 func TestPrimaryRestoreKeepsSOASerialsMonotonic(t *testing.T) {
-	knownBug(t, "drudge/sable#590")
 	faults, checks, records, _ := restorePrimaryFromBackup(t)
 	writeAndObserve(t, faults, checks, records, 2)
 	checks.converged(t, faults, records)

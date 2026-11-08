@@ -35,15 +35,15 @@ func TestPrimaryKillPromoteAndRestartFencesTheOldPrimary(t *testing.T) {
 // the replication window and brings it back after a recovery promotion. The
 // former primary must never serve an older SOA serial than it already served.
 func TestRecoveryPromotionKeepsSOASerialsMonotonic(t *testing.T) {
-	knownBug(t, "drudge/sable#581")
 	faults, checks, _ := crashPrimaryInsideReplicationWindow(t)
 	checks.observe(t, faults)
 }
 
 // TestRecoveryPromotionLosesOnlyTheReplicationWindow holds what
-// docs/clustering.md promises (#582): writes a replica had before the primary
-// crashed survive a recovery promotion, and writes acknowledged inside the
-// replication window survive on every node or are gone from every node.
+// docs/clustering.md promises (#582): writes the promoted replica had before
+// the primary crashed survive a recovery promotion, and writes acknowledged
+// inside the replication window survive on every node or are gone from every
+// node.
 func TestRecoveryPromotionLosesOnlyTheReplicationWindow(t *testing.T) {
 	faults, _, records := crashPrimaryInsideReplicationWindow(t)
 	// The former primary served the lost writes' serials before it crashed;

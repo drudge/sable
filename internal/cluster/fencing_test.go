@@ -217,3 +217,75 @@ func ifRole(primary bool) string {
 	}
 	return RoleReplica
 }
+
+// joinFencingReplica enrolls another replica with the primary of a
+// fencingCluster and returns it once it has synchronized.
+func joinFencingReplica(t *testing.T, primary *Service, name string) (*Service, *memoryStateReplicator) {
+	t.Helper()
+	router := primary.httpClient.Transport.(hostRoundTripper)
+	token, err := primary.CreateEnrollmentToken(context.Background(), 5*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := &memoryStateReplicator{}
+	host := name + ".example:5380"
+	replica, err := Open(Options{DataDirectory: t.TempDir(), NodeName: name, AdvertiseURL: "https://" + host, HTTPClient: primary.httpClient, Replicator: state})
+	if err != nil {
+		t.Fatal(err)
+	}
+	router[host] = replica
+	if err := replica.Join(context.Background(), JoinOptions{PrimaryURL: "https://dns-1.example:5380", Token: token.Token, Addresses: []string{"192.0.2.3"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := replica.syncFromPrimary(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	return replica, state
+}
+
+// probeFrom sends target a signed primary probe from sender claiming term.
+func probeFrom(t *testing.T, sender, target *Service, term uint64) {
+	t.Helper()
+	heartbeat := Heartbeat{NodeID: sender.nodeID, AppliedGeneration: sender.Snapshot().Generation, UpSince: time.Now(), SentAt: time.Now(), Primary: &PrimaryClaim{Term: term}}
+	if _, err := target.Synchronize(context.Background(), heartbeat, heartbeatSignature(target.manifest.StatusKey, heartbeat)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestReplicaFollowsRecoveryPromotionWithoutFormerPrimary is #588: with the
+// former primary gone, a replica follows the member that probes it with a
+// newer term, and a probe in its own term changes nothing.
+func TestReplicaFollowsRecoveryPromotionWithoutFormerPrimary(t *testing.T) {
+	former, _, promoted, promotedState := fencingCluster(t)
+	other, otherState := joinFencingReplica(t, former, "dns-3")
+	if err := promoted.syncFromPrimary(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	delete(former.httpClient.Transport.(hostRoundTripper), "dns-1.example:5380")
+	probeFrom(t, promoted, other, other.Snapshot().Term)
+	if err := other.syncFromPrimary(context.Background()); err == nil {
+		t.Fatal("a probe in the replica's own term redirected it")
+	}
+
+	if err := promoted.Promote(context.Background(), promoted.nodeID); err != nil {
+		t.Fatal(err)
+	}
+	changeState(t, promoted, promotedState, `{"zones":["promoted.test"]}`)
+	if err := other.syncFromPrimary(context.Background()); err == nil {
+		t.Fatal("replica synchronized with a primary that is gone")
+	}
+	promoted.probePeersOnce(context.Background())
+	if err := other.syncFromPrimary(context.Background()); err != nil {
+		t.Fatalf("replica did not synchronize from the promoted primary: %v", err)
+	}
+	want := promoted.Snapshot()
+	if state := other.Snapshot(); state.PrimaryID != promoted.nodeID || state.Term != want.Term || state.Generation != want.Generation {
+		t.Fatalf("replica did not follow the promoted primary: %#v", state)
+	}
+	if got := string(otherState.current()); got != `{"zones":["promoted.test"]}` {
+		t.Fatalf("replica kept the former primary's state: %q", got)
+	}
+	if err := other.syncFromPrimary(context.Background()); err != nil {
+		t.Fatalf("replica keeps following the promoted primary: %v", err)
+	}
+}

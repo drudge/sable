@@ -567,6 +567,10 @@ func (runtime *Runtime) cacheUpstreamAnswer(request, response *dns.Msg, validati
 	response.Id = request.Id
 	response.Question = append(response.Question[:0], request.Question...)
 	response.CheckingDisabled = request.CheckingDisabled
+	if validation != validationBogus && runtime.localNameError(request, response) {
+		// The NODATA is this node's own answer, not the upstream's signed one.
+		validation = validationIndeterminate
+	}
 	response.AuthenticatedData = validation == validationSecure
 	// CD is a diagnostic escape hatch, not permission to poison the shared
 	// cache with data that failed validation for every other client. With local
