@@ -8,6 +8,21 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.8.1-beta.2] - 2026-11-07
+
+Sable 1.8.1-beta.2 keeps confirmation dialogs compact on iPad Safari.
+
+### Upgrading from 1.8.1-beta.1
+
+Nothing new is needed.
+
+### Console
+
+- A confirmation, such as **Install this release?** on About or **Sign out
+  session?** in Administration, now sizes to its content on iPad Safari.
+  Before, it stretched down the whole screen with its title, text and
+  buttons spread far apart.
+
 ## [1.8.1-beta.1] - 2026-11-07
 
 Sable 1.8.1-beta.1 says which override keeps a blocking schedule off, keeps
