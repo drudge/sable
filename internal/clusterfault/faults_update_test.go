@@ -54,7 +54,6 @@ func TestRollingUpdateRestartsEachMemberOncePrimaryLast(t *testing.T) {
 // DHCP-driven cluster. The rollout must finish and no acknowledged write may
 // be lost.
 func TestRollingUpdateUnderWritesLosesNothing(t *testing.T) {
-	knownBug(t, "drudge/sable#594")
 	faults, checks, records := rollingUpdate(t, time.Second)
 	checks.converged(t, faults, records)
 }

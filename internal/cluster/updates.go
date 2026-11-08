@@ -120,6 +120,8 @@ type clusterUpdates struct {
 	restart    func()
 	local      NodeUpdateStatus
 	rollout    RolloutStatus
+	// generations is when the primary reached its recent generations.
+	generations generationHistory
 }
 
 // SetUpdateController restores progress before monitoring starts. Interrupted
@@ -309,7 +311,7 @@ func (service *Service) StartRollout(_ context.Context, target string) error {
 	rollout := RolloutStatus{ClusterID: state.ClusterID, PrimaryID: state.PrimaryID, Version: target, Phase: RolloutPreparing, Deadline: service.clock().Add(rolloutPrepareTimeout), StartedAt: service.clock()}
 	needsUpdate := false
 	for _, node := range state.Nodes {
-		if !rolloutNodeHealthy(node) {
+		if !service.rolloutNodeReadyLocked(state, node) {
 			return fmt.Errorf("%s must be online and fully synchronized", node.Name)
 		}
 		report := reports[node.ID]
@@ -349,10 +351,6 @@ func (service *Service) StartRollout(_ context.Context, target string) error {
 		return err
 	}
 	return nil
-}
-
-func rolloutNodeHealthy(node Node) bool {
-	return node.State == StateOnline && node.SyncState == SyncCurrent && node.AppliedGeneration == node.CurrentGeneration
 }
 
 func (service *Service) StopRollout() error {
@@ -418,7 +416,7 @@ func (service *Service) updateCommandLocked(nodeID string) *UpdateCommand {
 	}
 	if command.Action == actionRestart {
 		for _, peer := range state.Nodes {
-			if peer.ID != nodeID && !rolloutNodeHealthy(peer) {
+			if peer.ID != nodeID && !service.rolloutNodeReadyLocked(state, peer) {
 				return nil
 			}
 		}
@@ -446,6 +444,7 @@ func (service *Service) advanceUpdates(ctx context.Context) {
 		}
 	}
 	if state.LocalRole == RolePrimary {
+		service.updates.generations.record(service.clock(), state.Generation)
 		service.advanceRollout(state)
 		service.applyUpdateCommand(service.updateCommandLocked(service.nodeID))
 	} else {
@@ -514,14 +513,18 @@ func rolloutInterrupted(rollout RolloutStatus, state State) (string, string, boo
 }
 
 // advancePreparedRollout starts updating once every node has prepared, and
-// reports a node that lost health while the others prepared.
+// reports a node that went offline or stopped following the primary while
+// the others prepared. A node a generation or two behind only waits, as it
+// does while updating: replicas pull about once a second, so under steady
+// writes one is usually behind, and the rollout deadline bounds the wait.
 func (service *Service) advancePreparedRollout(rollout RolloutStatus, state State, reports map[string]NodeUpdateStatus) (string, string, bool) {
 	for _, node := range state.Nodes {
-		report := reports[node.ID]
-		if !rolloutNodeHealthy(node) {
+		if !rolloutNodeFollowing(node) {
 			return node.Name, node.Name + " lost health or synchronization during preparation.", true
 		}
-		if report.ID != rollout.ID || report.Phase != nodePrepared {
+	}
+	for _, node := range state.Nodes {
+		if report := reports[node.ID]; report.ID != rollout.ID || report.Phase != nodePrepared {
 			return "", "", false
 		}
 	}
@@ -534,7 +537,7 @@ func (service *Service) advancePreparedRollout(rollout RolloutStatus, state Stat
 // release and is healthy.
 func (service *Service) advanceVerifiedRollout(rollout RolloutStatus, state State) {
 	for _, node := range state.Nodes {
-		if !sameRelease(node.Version, rollout.Version) || !rolloutNodeHealthy(node) {
+		if !sameRelease(node.Version, rollout.Version) || !service.rolloutNodeReadyLocked(state, node) {
 			return
 		}
 	}
@@ -550,7 +553,7 @@ func (service *Service) advanceVerifiedRollout(rollout RolloutStatus, state Stat
 func (service *Service) advanceRolloutNode(rollout RolloutStatus, state State, reports map[string]NodeUpdateStatus) {
 	active := &rollout.Nodes[rollout.Index]
 	node := state.Nodes[slices.IndexFunc(state.Nodes, func(node Node) bool { return node.ID == active.ID })]
-	if sameRelease(node.Version, rollout.Version) && rolloutNodeHealthy(node) {
+	if sameRelease(node.Version, rollout.Version) && service.rolloutNodeReadyLocked(state, node) {
 		active.Phase = RolloutNodeComplete
 		rollout.Index++
 		rollout.Deadline = service.clock().Add(rolloutNodeTimeout)
@@ -560,9 +563,10 @@ func (service *Service) advanceRolloutNode(rollout RolloutStatus, state State, r
 		_ = service.saveRollout(rollout)
 		return
 	}
-	// Never authorize another restart while any other node is unavailable or behind.
+	// Never authorize another restart while any other node is unavailable or
+	// not keeping up.
 	for _, peer := range state.Nodes {
-		if peer.ID != active.ID && !rolloutNodeHealthy(peer) {
+		if peer.ID != active.ID && !service.rolloutNodeReadyLocked(state, peer) {
 			return
 		}
 	}

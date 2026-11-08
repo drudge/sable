@@ -342,6 +342,59 @@ func TestRolloutWaitsForExactVersionAndFreshSynchronization(t *testing.T) {
 	}
 }
 
+// A replica a generation behind once every node has prepared is routine
+// under steady writes, since replicas pull about once a second (#594). The
+// rollout carries on to updating, which waits on lag before each restart;
+// only a replica that goes unreachable fails it.
+func TestPreparationWaitsForAReplicaThatIsOnlyBehind(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		disturb    func(primary *Service, observed *nodeTelemetry)
+		phase      RolloutPhase
+		failedNode string
+	}{
+		{
+			name: "a generation behind", phase: RolloutUpdating,
+			disturb: func(primary *Service, observed *nodeTelemetry) {
+				observed.heartbeat.AppliedGeneration = primary.manifest.Generation - 1
+			},
+		},
+		{
+			name: "unreachable", phase: RolloutFailed, failedNode: "dns-2",
+			disturb: func(_ *Service, observed *nodeTelemetry) {
+				observed.received = time.Now().Add(-time.Minute)
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newRolloutFixture(t, 1)
+			primary, replica := fixture.nodes[0], fixture.nodes[1]
+			if err := primary.StartRollout(context.Background(), "1.1.0"); err != nil {
+				t.Fatal(err)
+			}
+			// Both nodes take the prepare command, and the replica reports it.
+			fixture.tick(t)
+			_ = replica.syncFromPrimary(context.Background())
+			observed := primary.telemetry[replica.nodeID]
+			test.disturb(primary, &observed)
+			primary.telemetry[replica.nodeID] = observed
+			primary.advanceUpdates(context.Background())
+			if status := primary.RolloutStatus(); status.Phase != test.phase || status.FailedNode != test.failedNode {
+				t.Fatalf("rollout = %+v, want phase %q stopped at %q", status, test.phase, test.failedNode)
+			}
+			if test.phase != RolloutUpdating {
+				return
+			}
+			for range 15 {
+				fixture.tick(t)
+			}
+			if !slices.Equal(fixture.restarts, []string{replica.nodeID}) {
+				t.Fatalf("restarts = %v, want the replica restarted once it caught up", fixture.restarts)
+			}
+		})
+	}
+}
+
 func TestRestartCommandIsWithheldWhenAnotherNodeLosesHealth(t *testing.T) {
 	fixture := newRolloutFixture(t, 2)
 	primary := fixture.nodes[0]
