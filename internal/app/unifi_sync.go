@@ -246,7 +246,7 @@ func (syncer *unifiSyncer) finishAttempt(started time.Time, interval time.Durati
 	syncer.mu.Lock()
 	defer syncer.mu.Unlock()
 	finished := syncer.now()
-	syncer.status.Finish(started, finished, false)
+	syncer.status.Finish(started, finished, len(syncer.wake) > 0)
 	if err != nil {
 		syncer.status.Fail(err, finished.Add(interval))
 		return
