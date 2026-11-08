@@ -8,6 +8,56 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.8.1-beta.4] - 2026-11-08
+
+Sable 1.8.1-beta.4 keeps a cluster consistent through a recovery promotion,
+a backup restore and a rolling update under load, keeps replicas in sync
+when a clock steps back, and answers NODATA instead of NXDOMAIN for the
+other types of a name a Forwarder zone overrides.
+
+### Upgrading from 1.8.1-beta.3
+
+- Update every node in a cluster. A replica on 1.8.1-beta.3 won't follow a
+  newer node's recovery promotion until it is updated too.
+- Nothing else is needed.
+
+### Clustering
+
+- After a recovery promotion, the other replicas now follow the promoted
+  node within about 10 seconds. Before, they kept polling the failed primary
+  and served stale data until it came back.
+- A recovery promotion now moves the SOA serial of every zone Sable issues
+  serials for forward by 100. Before, the promoted node could reissue
+  serials the failed primary had already handed out for other changes, and
+  the former primary's serials went backward when it rejoined, so
+  secondaries could keep the wrong content (RFC 1982).
+- **Clustering** docs now say plainly that a recovery promotion keeps only
+  the changes the promoted replica already had. Changes the primary
+  confirmed in the last second or so before it failed, or that reached only
+  another replica, are lost.
+- A node whose clock steps back now keeps synchronizing. Before, it fell out
+  of sync for about as long as the step, up to 30 seconds.
+- A rolling update now proceeds while records are being changed. Before, a
+  replica a moment behind the primary failed preparation, and the update and
+  verify steps waited for zero lag that never came under steady writes.
+
+### Backup and restore
+
+- Restoring a backup now gives each zone Sable issues serials for the next
+  serial after the one it was serving, instead of the backup's older serial.
+  Before, secondaries kept the newer content the restore displaced, and the
+  next change reused a serial already served for other content. Transferred
+  zones keep their upstream's serial.
+
+### DNS
+
+- When a Forwarder zone holds records for a name, other types for that name
+  now get NODATA with the zone's SOA (RFC 2308) instead of the upstream's
+  NXDOMAIN. Before, an A-only override made every AAAA lookup fail, so
+  nslookup reported the name missing right after printing its address.
+- A host override's NODATA, such as AAAA for an IPv4-only override, now
+  carries an SOA so clients can cache it.
+
 ## [1.8.1-beta.3] - 2026-11-07
 
 Sable 1.8.1-beta.3 keeps every console dialog compact on iPad Safari.
