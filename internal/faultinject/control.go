@@ -3,9 +3,7 @@
 package faultinject
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -17,17 +15,6 @@ const Enabled = true
 // RefreshInterval is how long a read of the control file is trusted before
 // the next Now or CheckWrite reads it again.
 var RefreshInterval = 250 * time.Millisecond
-
-// Faults is what the control file asks for.
-type Faults struct {
-	ClockOffset time.Duration
-	DiskFull    bool
-}
-
-type controlFile struct {
-	ClockOffset string `json:"clock_offset"`
-	DiskFull    bool   `json:"disk_full"`
-}
 
 var control = struct {
 	sync.Mutex
@@ -69,17 +56,7 @@ func readControlFile(path string) (Faults, error) {
 	if err != nil {
 		return Faults{}, err
 	}
-	var file controlFile
-	if err := json.Unmarshal(contents, &file); err != nil {
-		return Faults{}, fmt.Errorf("parse fault control file: %w", err)
-	}
-	faults := Faults{DiskFull: file.DiskFull}
-	if file.ClockOffset != "" {
-		if faults.ClockOffset, err = time.ParseDuration(file.ClockOffset); err != nil {
-			return Faults{}, fmt.Errorf("parse clock_offset: %w", err)
-		}
-	}
-	return faults, nil
+	return decodeControlFile(contents)
 }
 
 // Now returns the current time moved by the clock offset. The offset moves
