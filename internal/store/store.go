@@ -20,6 +20,7 @@ import (
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
 
+	"github.com/drudge/sable/internal/faultinject"
 	"github.com/drudge/sable/internal/querylog"
 )
 
@@ -770,7 +771,7 @@ func sqliteBusy(err error) bool {
 func databaseDriverName(driver string) (string, error) {
 	switch driver {
 	case "sqlite":
-		return "sqlite", nil
+		return faultinject.SQLDriver("sqlite"), nil
 	case "postgres":
 		return "pgx", nil
 	default:

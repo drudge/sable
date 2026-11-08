@@ -135,7 +135,7 @@ func (service *Service) gatherLocalAlerts(ctx context.Context) {
 	ticker := time.NewTicker(alertReportInterval)
 	defer ticker.Stop()
 	for {
-		service.gatherLocalAlertsOnce(ctx, time.Now())
+		service.gatherLocalAlertsOnce(ctx, service.clock())
 		select {
 		case <-ctx.Done():
 			return

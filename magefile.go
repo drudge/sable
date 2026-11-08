@@ -162,6 +162,48 @@ func Test(ctx context.Context) error {
 	return run(ctx, nil, "go", "test", "./...")
 }
 
+// faultInjectPackages are the packages with faultinject-tagged hooks or tests.
+var faultInjectPackages = []string{"./internal/faultinject", "./internal/cluster", "./internal/store"}
+
+// FaultInjectTest builds Sable with the faultinject tag and runs the tests and
+// vet for the clock-skew and disk-full hooks that only that build contains.
+func FaultInjectTest(ctx context.Context) error {
+	if err := checkDefaultBuildOmitsFaultInjection(ctx); err != nil {
+		return err
+	}
+	if err := run(ctx, nil, "go", "build", "-tags=faultinject", "-o", os.DevNull, "./cmd/sable"); err != nil {
+		return err
+	}
+	if err := run(ctx, nil, "go", append([]string{"test", "-tags=faultinject"}, faultInjectPackages...)...); err != nil {
+		return err
+	}
+	return run(ctx, nil, "go", append([]string{"vet", "-tags=faultinject"}, faultInjectPackages...)...)
+}
+
+// checkDefaultBuildOmitsFaultInjection builds Sable without the faultinject
+// tag and fails if any faultinject symbol made it into the binary.
+func checkDefaultBuildOmitsFaultInjection(ctx context.Context) error {
+	directory, err := os.MkdirTemp("", "sable-faultinject-check-")
+	if err != nil {
+		return fmt.Errorf("create build directory: %w", err)
+	}
+	defer os.RemoveAll(directory)
+	binaryPath := filepath.Join(directory, "sable")
+	if err := run(ctx, nil, "go", "build", "-o", binaryPath, "./cmd/sable"); err != nil {
+		return err
+	}
+	symbols, err := output(ctx, "go", "tool", "nm", binaryPath)
+	if err != nil {
+		return err
+	}
+	for _, line := range strings.Split(symbols, "\n") {
+		if strings.Contains(line, "sable/internal/faultinject.") {
+			return fmt.Errorf("a build without the faultinject tag contains %s", strings.TrimSpace(line))
+		}
+	}
+	return nil
+}
+
 // ClusterTest runs two complete Sable nodes and verifies replica enrollment,
 // status telemetry, state synchronization, and a planned primary handoff.
 func ClusterTest(ctx context.Context) error {
@@ -264,7 +306,8 @@ func Vet(ctx context.Context) error {
 	return run(ctx, nil, "go", "vet", "./...")
 }
 
-// Verify checks generated source, Mage helpers, application tests, and static analysis.
+// Verify checks generated source, Mage helpers, application tests, the
+// faultinject build, and static analysis.
 func Verify(ctx context.Context) error {
 	if err := CheckGenerated(ctx); err != nil {
 		return err
@@ -273,6 +316,9 @@ func Verify(ctx context.Context) error {
 		return err
 	}
 	if err := Test(ctx); err != nil {
+		return err
+	}
+	if err := FaultInjectTest(ctx); err != nil {
 		return err
 	}
 	return Vet(ctx)

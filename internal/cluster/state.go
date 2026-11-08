@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/drudge/sable/internal/faultinject"
 )
 
 const (
@@ -195,6 +197,9 @@ func stateSnapshotPath(directory, digest string) string {
 func writeStateSnapshot(directory, digest string, contents []byte) error {
 	if !validStateDigest(digest) || stateDigest(contents) != digest {
 		return errors.New("refuse to persist cluster state with an invalid digest")
+	}
+	if err := faultinject.CheckWrite("write cluster state snapshot"); err != nil {
+		return err
 	}
 	path := stateSnapshotPath(directory, digest)
 	if existing, err := os.ReadFile(path); err == nil {

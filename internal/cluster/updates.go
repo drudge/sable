@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/drudge/sable/internal/faultinject"
 	"github.com/drudge/sable/internal/update"
 	"github.com/drudge/sable/internal/version"
 	"golang.org/x/mod/semver"
@@ -161,10 +162,10 @@ func (service *Service) SetUpdateController(controller UpdateController, restart
 		}
 		if updates.rollout.Phase == RolloutRestarting && sameRelease(service.version, updates.rollout.Version) {
 			updates.rollout.Phase = RolloutVerifying
-			updates.rollout.Deadline = time.Now().Add(rolloutNodeTimeout)
+			updates.rollout.Deadline = service.clock().Add(rolloutNodeTimeout)
 		} else {
 			updates.rollout.Phase, updates.rollout.Error = RolloutFailed, "The coordinator restarted. Review every node before starting another rollout."
-			updates.rollout.FinishedAt = time.Now()
+			updates.rollout.FinishedAt = service.clock()
 		}
 		if err := writeClusterJSON(service.directory, rolloutFileName, updates.rollout); err != nil {
 			return err
@@ -305,7 +306,7 @@ func (service *Service) StartRollout(_ context.Context, target string) error {
 		return errors.New("choose a published release version")
 	}
 	reports := service.updateReports()
-	rollout := RolloutStatus{ClusterID: state.ClusterID, PrimaryID: state.PrimaryID, Version: target, Phase: RolloutPreparing, Deadline: time.Now().Add(rolloutPrepareTimeout), StartedAt: time.Now()}
+	rollout := RolloutStatus{ClusterID: state.ClusterID, PrimaryID: state.PrimaryID, Version: target, Phase: RolloutPreparing, Deadline: service.clock().Add(rolloutPrepareTimeout), StartedAt: service.clock()}
 	needsUpdate := false
 	for _, node := range state.Nodes {
 		if !rolloutNodeHealthy(node) {
@@ -375,14 +376,14 @@ func (service *Service) saveRollout(rollout RolloutStatus) error {
 		return err
 	}
 	if !rollout.Active() && rollout.FinishedAt.IsZero() {
-		rollout.FinishedAt = time.Now()
+		rollout.FinishedAt = service.clock()
 	}
 	if err := writeClusterJSON(service.directory, rolloutFileName, rollout); err != nil {
 		// Only a running rollout has progress to lose. Failing one that
 		// already ended would report a second, false ending.
 		if service.updates.rollout.Active() {
 			service.updates.rollout.Phase, service.updates.rollout.Error = RolloutFailed, "Cannot persist rollout progress: "+err.Error()
-			service.updates.rollout.FinishedAt = time.Now()
+			service.updates.rollout.FinishedAt = service.clock()
 		}
 		return err
 	}
@@ -502,7 +503,7 @@ func rolloutInterrupted(rollout RolloutStatus, state State) (string, string, boo
 			return "", "Cluster membership changed during the rollout.", true
 		}
 	}
-	if time.Now().After(rollout.Deadline) {
+	if faultinject.Now().After(rollout.Deadline) {
 		waiting := ""
 		if rollout.Phase == RolloutUpdating && rollout.Index < len(rollout.Nodes) {
 			waiting = rollout.Nodes[rollout.Index].Name
@@ -524,7 +525,7 @@ func (service *Service) advancePreparedRollout(rollout RolloutStatus, state Stat
 			return "", "", false
 		}
 	}
-	rollout.Phase, rollout.Deadline = RolloutUpdating, time.Now().Add(rolloutNodeTimeout)
+	rollout.Phase, rollout.Deadline = RolloutUpdating, service.clock().Add(rolloutNodeTimeout)
 	_ = service.saveRollout(rollout)
 	return "", "", false
 }
@@ -552,7 +553,7 @@ func (service *Service) advanceRolloutNode(rollout RolloutStatus, state State, r
 	if sameRelease(node.Version, rollout.Version) && rolloutNodeHealthy(node) {
 		active.Phase = RolloutNodeComplete
 		rollout.Index++
-		rollout.Deadline = time.Now().Add(rolloutNodeTimeout)
+		rollout.Deadline = service.clock().Add(rolloutNodeTimeout)
 		if rollout.Index == len(rollout.Nodes) {
 			rollout.Phase = RolloutVerifying
 		}
@@ -603,7 +604,7 @@ func (service *Service) applyUpdateCommand(command *UpdateCommand) {
 	if local.Version != command.Version || local.Error != "" {
 		return
 	}
-	local.LastCommandAt = time.Now()
+	local.LastCommandAt = service.clock()
 	switch command.Action {
 	case actionInstall:
 		service.installUpdate(command)
@@ -633,7 +634,7 @@ func (service *Service) prepareUpdate(command *UpdateCommand) {
 	updates := service.updates
 	local := &updates.local
 	local.ID, local.Version = command.ID, command.Version
-	local.ClusterID, local.PrimaryID, local.LastCommandAt = command.ClusterID, command.PrimaryID, time.Now()
+	local.ClusterID, local.PrimaryID, local.LastCommandAt = command.ClusterID, command.PrimaryID, service.clock()
 	if err := updates.controller.Reserve(command.ID); err != nil {
 		local.Phase, local.Error = nodeFailed, err.Error()
 		return
