@@ -12,6 +12,7 @@ import (
 	"github.com/drudge/sable/internal/certificates"
 	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/clustertest"
+	"github.com/drudge/sable/internal/faultinject"
 )
 
 // ledgerZone is the primary zone every acknowledged write lands in.
@@ -77,7 +78,8 @@ func newMember(t *testing.T, name string) *member {
 
 func (node *member) start(t *testing.T) {
 	t.Helper()
-	node.node = clustertest.StartNode(t, node.configuration, node.client, node.ports.HTTPS)
+	node.node = clustertest.StartBinaryNode(t, faultBinary, []string{faultinject.ControlEnv + "=" + node.controlFile()},
+		node.configuration, node.client, node.ports.HTTPS)
 }
 
 func (node *member) stop(t *testing.T) {
