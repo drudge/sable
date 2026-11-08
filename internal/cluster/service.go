@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/drudge/sable/internal/dnsname"
+	"github.com/drudge/sable/internal/faultinject"
 )
 
 const (
@@ -261,7 +262,7 @@ func Open(options Options) (*Service, error) {
 		return nil, errors.New("cluster data directory is required")
 	}
 	if options.StartedAt.IsZero() {
-		options.StartedAt = time.Now()
+		options.StartedAt = faultinject.Now()
 	}
 	if err := os.MkdirAll(options.DataDirectory, 0o700); err != nil {
 		return nil, fmt.Errorf("create cluster data directory: %w", err)
@@ -334,12 +335,12 @@ func Open(options Options) (*Service, error) {
 	return service, nil
 }
 
-func (service *Service) clock() time.Time { return time.Now() }
+func (service *Service) clock() time.Time { return faultinject.Now() }
 
 func (service *Service) Snapshot() State {
 	service.mu.RLock()
 	defer service.mu.RUnlock()
-	now := time.Now()
+	now := service.clock()
 	state := State{
 		NodeID: service.nodeID, NetworkReady: strings.HasPrefix(service.advertiseURL, "https://"),
 		Mode: "not-configured", ObservedAt: now, Nodes: []Node{},
@@ -792,6 +793,9 @@ func writeManifest(directory string, value *manifest) error {
 }
 
 func writeClusterJSON(directory, name string, value any) error {
+	if err := faultinject.CheckWrite("write " + name); err != nil {
+		return err
+	}
 	contents, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode cluster manifest: %w", err)

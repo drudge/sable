@@ -134,7 +134,7 @@ func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, si
 	if err := service.validateSynchronizationHeartbeatLocked(heartbeat, signature); err != nil {
 		return SyncConfiguration{}, err
 	}
-	now := time.Now()
+	now := service.clock()
 	if heartbeat.Primary != nil {
 		return service.answerPrimaryProbeLocked(heartbeat, now)
 	}
@@ -249,7 +249,7 @@ func (service *Service) validateSynchronizationHeartbeat(heartbeat Heartbeat, si
 }
 
 func (service *Service) validateSynchronizationHeartbeatLocked(heartbeat Heartbeat, signature string) error {
-	now := time.Now()
+	now := service.clock()
 	if heartbeat.SentAt.Before(now.Add(-heartbeatClockSkew)) || heartbeat.SentAt.After(now.Add(heartbeatClockSkew)) {
 		return errors.New("synchronization timestamp is outside the accepted clock window")
 	}
@@ -391,7 +391,7 @@ func (service *Service) primaryHeartbeatLocked(updateStatus *NodeUpdateStatus, p
 		Addresses:         effectiveDNSAddresses(service.manifest.Nodes[slices.IndexFunc(service.manifest.Nodes, func(node member) bool { return node.ID == service.nodeID })].Addresses, service.dnsListeners),
 		AppliedGeneration: service.manifest.Generation,
 		StateDigest:       service.manifest.StateDigest,
-		UpSince:           service.startedAt, SentAt: time.Now(),
+		UpSince:           service.startedAt, SentAt: service.clock(),
 	}
 	var alertRevision, lookupRevision uint64
 	if found && service.alertPrimaryID == primary.ID {
@@ -471,14 +471,14 @@ func (service *Service) adoptSyncConfiguration(ctx context.Context, primary memb
 		}
 	}
 	firstSuccessfulSync := service.lastSuccessfulSync.IsZero()
-	service.lastSuccessfulSync = time.Now()
+	service.lastSuccessfulSync = service.clock()
 	service.acceptPrimaryProtocolsLocked(primary.ID, configuration)
 	service.telemetry[candidate.PrimaryID] = nodeTelemetry{
 		heartbeat: Heartbeat{
 			NodeID: candidate.PrimaryID, AppliedGeneration: candidate.Generation,
-			UpSince: time.Time{}, SentAt: time.Now(),
+			UpSince: time.Time{}, SentAt: service.clock(),
 		},
-		received: time.Now(),
+		received: service.clock(),
 	}
 	if service.logger != nil {
 		switch {

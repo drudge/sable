@@ -131,12 +131,12 @@ func (service *Service) CreateEnrollmentToken(_ context.Context, ttl time.Durati
 		return EnrollmentToken{}, fmt.Errorf("generate enrollment token: %w", err)
 	}
 	token := base64.RawURLEncoding.EncodeToString(secret)
-	expiresAt := time.Now().Add(ttl)
+	expiresAt := service.clock().Add(ttl)
 	stored, err := service.loadEnrollmentTokensLocked()
 	if err != nil {
 		return EnrollmentToken{}, err
 	}
-	stored = append(activeEnrollmentTokens(stored, time.Now()), storedEnrollmentToken{Digest: enrollmentDigest(token), ExpiresAt: expiresAt})
+	stored = append(activeEnrollmentTokens(stored, service.clock()), storedEnrollmentToken{Digest: enrollmentDigest(token), ExpiresAt: expiresAt})
 	if err := service.writeEnrollmentTokensLocked(stored); err != nil {
 		return EnrollmentToken{}, err
 	}
@@ -192,7 +192,7 @@ func (service *Service) Enroll(ctx context.Context, request JoinRequest) (JoinCo
 	if err := service.consumeEnrollmentTokenLocked(request.Token); err != nil {
 		return JoinConfiguration{}, err
 	}
-	now := time.Now()
+	now := service.clock()
 	candidate := cloneManifest(service.manifest)
 	candidate.Generation++
 	candidate.UpdatedAt = now
@@ -296,7 +296,7 @@ func (service *Service) Join(ctx context.Context, options JoinOptions) error {
 		return err
 	}
 	service.manifest = joined
-	service.lastSuccessfulSync = time.Now()
+	service.lastSuccessfulSync = service.clock()
 	service.joining = false
 	return nil
 }
@@ -480,7 +480,7 @@ func (service *Service) consumeEnrollmentTokenLocked(token string) error {
 	}
 	digest := enrollmentDigest(strings.TrimSpace(token))
 	found := false
-	now := time.Now()
+	now := service.clock()
 	tokens = slices.DeleteFunc(tokens, func(stored storedEnrollmentToken) bool {
 		match := stored.Digest == digest && stored.ExpiresAt.After(now)
 		found = found || match

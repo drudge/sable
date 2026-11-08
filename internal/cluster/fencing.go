@@ -142,7 +142,7 @@ func (service *Service) considerPeerManifest(ctx context.Context, target member,
 		// Only a member's claim about itself counts. A lagging replica may
 		// still name a primary from earlier in a term that predates terms.
 		if candidate.PrimaryID == target.ID {
-			service.primaryClaims[target.ID] = primaryClaim{term: candidate.Term, generation: candidate.Generation, received: time.Now()}
+			service.primaryClaims[target.ID] = primaryClaim{term: candidate.Term, generation: candidate.Generation, received: service.clock()}
 		}
 		service.mu.Unlock()
 		return false

@@ -93,7 +93,7 @@ func (service *Service) gatherClientIdentities(ctx context.Context) {
 	ticker := time.NewTicker(identityShareInterval)
 	defer ticker.Stop()
 	for {
-		service.gatherClientIdentitiesOnce(ctx, time.Now())
+		service.gatherClientIdentitiesOnce(ctx, service.clock())
 		select {
 		case <-ctx.Done():
 			return

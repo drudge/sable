@@ -128,7 +128,7 @@ func (service *Service) gatherLocalLookups(ctx context.Context) {
 	ticker := time.NewTicker(lookupGatherTick)
 	defer ticker.Stop()
 	for {
-		service.gatherLocalLookupsOnce(ctx, time.Now())
+		service.gatherLocalLookupsOnce(ctx, service.clock())
 		select {
 		case <-ctx.Done():
 			return
