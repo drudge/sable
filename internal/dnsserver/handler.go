@@ -246,6 +246,16 @@ type localHostRecords struct {
 	ipv6 []dns.RR
 }
 
+// ttl is the override's configured TTL, which every one of its records shares.
+func (records localHostRecords) ttl() uint32 {
+	for _, family := range [][]dns.RR{records.ipv4, records.ipv6} {
+		if len(family) != 0 {
+			return family[0].Header().Ttl
+		}
+	}
+	return 0
+}
+
 type BlockListStats struct {
 	Name     string `json:"name"`
 	Path     string `json:"path"`
