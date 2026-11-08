@@ -683,3 +683,38 @@ func TestUniFiSyncFindsDevicesWithoutPublishing(t *testing.T) {
 		t.Fatalf("with Insights off the sync recorded stations %+v and identities %v", read, identities)
 	}
 }
+
+type blockingReader struct {
+	reading, release chan struct{}
+}
+
+func (reader blockingReader) Inventory(context.Context) (unifi.Inventory, error) {
+	close(reader.reading)
+	<-reader.release
+	return testInventory(), nil
+}
+
+// A Sync Now clicked while an attempt runs queues another. The status must
+// keep saying running across the gap, or the console flickers to idle before
+// the queued attempt starts.
+func TestUniFiSyncNowDuringAnAttemptKeepsRunning(t *testing.T) {
+	settings := testSettings(mapping("net-lan", "Default", "clients.example.net"))
+	syncer := newTestSyncer(t, settings, &stubZoneEditor{}, &stubReader{})
+	reader := blockingReader{reading: make(chan struct{}), release: make(chan struct{})}
+	syncer.newReader = func(unifi.Options) (unifiInventoryReader, error) { return reader, nil }
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		syncer.runOnce(t.Context())
+	}()
+	<-reader.reading
+	syncer.SyncNow()
+	close(reader.release)
+	<-finished
+	if queued := len(syncer.wake); queued != 1 {
+		t.Fatalf("queued syncs = %d, want 1", queued)
+	}
+	if !syncer.Status().Running {
+		t.Error("queued sync stopped reporting running when the earlier attempt finished")
+	}
+}
