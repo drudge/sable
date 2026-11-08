@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"syscall"
 	"testing"
 	"time"
@@ -49,7 +50,7 @@ func TestCurrentKeepsLastGoodFaultsWhenTheFileBreaks(t *testing.T) {
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	if Current() != (Faults{}) {
+	if !reflect.DeepEqual(Current(), Faults{}) {
 		t.Fatalf("Current() = %+v after the file was removed, want no faults", Current())
 	}
 }
@@ -57,7 +58,7 @@ func TestCurrentKeepsLastGoodFaultsWhenTheFileBreaks(t *testing.T) {
 func TestNoControlFileMeansNoFaults(t *testing.T) {
 	UseFaults(t, Faults{})
 	SetControlFile(filepath.Join(t.TempDir(), "missing.json"))
-	if Current() != (Faults{}) {
+	if !reflect.DeepEqual(Current(), Faults{}) {
 		t.Fatalf("Current() = %+v, want no faults", Current())
 	}
 	if err := CheckWrite("write"); err != nil {

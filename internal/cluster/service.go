@@ -289,6 +289,7 @@ func Open(options Options) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	baseHTTPClient = faultinject.HTTPClient(baseHTTPClient)
 	service := &Service{
 		directory: options.DataDirectory, nodeID: nodeID,
 		nodeName: strings.TrimSpace(options.NodeName), configuredName: strings.TrimSpace(options.NodeName),

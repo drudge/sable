@@ -3,7 +3,6 @@
 package faultinject
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,11 +17,7 @@ func UseFaults(t testing.TB, faults Faults) func(Faults) {
 	path := filepath.Join(t.TempDir(), "faults.json")
 	write := func(faults Faults) {
 		t.Helper()
-		contents, err := json.Marshal(controlFile{ClockOffset: faults.ClockOffset.String(), DiskFull: faults.DiskFull})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, contents, 0o600); err != nil {
+		if err := WriteControlFile(path, faults); err != nil {
 			t.Fatal(err)
 		}
 	}
