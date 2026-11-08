@@ -19,7 +19,7 @@ type BuildOptions struct {
 	Log     io.Writer // receives the go build output
 }
 
-// Build builds ./cmd/sable from the current directory as options describe.
+// Build builds cmd/sable as options describe, from anywhere in the module.
 func Build(ctx context.Context, options BuildOptions) error {
 	if err := os.MkdirAll(filepath.Dir(options.Output), 0o755); err != nil {
 		return err
@@ -27,7 +27,7 @@ func Build(ctx context.Context, options BuildOptions) error {
 	flags := "-s -w -X github.com/drudge/sable/internal/version.Release=" + options.Release +
 		" -X github.com/drudge/sable/internal/version.Commit=" + options.Commit +
 		" -X github.com/drudge/sable/internal/version.BuiltAt=" + time.Now().UTC().Format(time.RFC3339)
-	command := exec.CommandContext(ctx, "go", "build", "-tags", options.Tags, "-trimpath", "-ldflags", flags, "-o", options.Output, "./cmd/sable")
+	command := exec.CommandContext(ctx, "go", "build", "-tags", options.Tags, "-trimpath", "-ldflags", flags, "-o", options.Output, "github.com/drudge/sable/cmd/sable")
 	command.Stdout, command.Stderr = options.Log, options.Log
 	if err := command.Run(); err != nil {
 		return fmt.Errorf("build %s: %w", options.Release, err)

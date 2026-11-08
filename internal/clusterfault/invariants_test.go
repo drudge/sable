@@ -43,15 +43,24 @@ func (checks *invariants) observe(t *testing.T, faults *faultCluster) {
 		if state.LocalRole == cluster.RolePrimary {
 			checks.checkPrimary(t, state)
 		}
-		serial, ok := ledgerSerial(node)
-		if !ok {
-			continue
-		}
-		if last, seen := checks.serials[node.name]; seen && serialLess(serial, last) {
-			t.Errorf("%s SOA serial went backward: %d after %d", node.name, serial, last)
-		}
-		checks.serials[node.name] = serial
+		checks.observeSerial(t, node)
 	}
+}
+
+// observeSerial checks that the ledger SOA serial node serves, if it serves
+// one, is not older than the last one seen on it. It needs no cluster API,
+// so it also works while a node restarts.
+func (checks *invariants) observeSerial(t *testing.T, node *member) bool {
+	t.Helper()
+	serial, ok := ledgerSerial(node)
+	if !ok {
+		return false
+	}
+	if last, seen := checks.serials[node.name]; seen && serialLess(serial, last) {
+		t.Errorf("%s SOA serial went backward: %d after %d", node.name, serial, last)
+	}
+	checks.serials[node.name] = serial
+	return true
 }
 
 func (checks *invariants) checkPrimary(t *testing.T, state cluster.State) {

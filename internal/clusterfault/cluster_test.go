@@ -12,6 +12,7 @@ import (
 	"github.com/drudge/sable/internal/certificates"
 	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/clustertest"
+	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/faultinject"
 )
 
@@ -28,6 +29,9 @@ type member struct {
 	client        *http.Client
 	node          *clustertest.Node
 	id            string
+	binary        string   // the Sable binary the member runs
+	environment   []string // added to the member's process environment
+	restarted     func()   // when set, the member restarts on exit 75 and calls it
 }
 
 // faultCluster is a primary and its replicas, started as real processes.
@@ -40,12 +44,19 @@ type faultCluster struct {
 // ledger zone, joins the rest, and waits until every node is synchronized.
 func startCluster(t *testing.T, size int) *faultCluster {
 	t.Helper()
+	return startClusterWith(t, size, nil)
+}
+
+// startClusterWith starts a cluster like startCluster, letting prepare adjust
+// each member and its configuration before it first starts.
+func startClusterWith(t *testing.T, size int, prepare func(*member, *config.Config)) *faultCluster {
+	t.Helper()
 	if size < 3 || size > 5 {
 		t.Fatalf("fault clusters have 3 to 5 nodes, not %d", size)
 	}
 	faults := &faultCluster{t: t}
 	for index := range size {
-		faults.members = append(faults.members, newMember(t, fmt.Sprintf("node%d", index+1)))
+		faults.members = append(faults.members, newMember(t, fmt.Sprintf("node%d", index+1), prepare))
 	}
 	primary := faults.members[0]
 	primary.start(t)
@@ -63,23 +74,32 @@ func startCluster(t *testing.T, size int) *faultCluster {
 	return faults
 }
 
-func newMember(t *testing.T, name string) *member {
+func newMember(t *testing.T, name string, prepare func(*member, *config.Config)) *member {
 	t.Helper()
 	directory := t.TempDir()
 	ports := clustertest.AllocatePorts(t)
 	certificate := clustertest.GenerateClusterCertificate(t, directory, name)
 	configuration := clustertest.NodeConfiguration(directory, ports, name, certificate)
-	return &member{
-		name: name, directory: directory, ports: ports, certificate: certificate,
-		configuration: clustertest.WriteConfiguration(t, directory, configuration),
-		client:        clustertest.TrustedHTTPClient(t, filepath.Join(directory, certificate.CAFile)),
+	node := &member{
+		name: name, directory: directory, ports: ports, certificate: certificate, binary: faultBinary,
+		client: clustertest.TrustedHTTPClient(t, filepath.Join(directory, certificate.CAFile)),
 	}
+	if prepare != nil {
+		prepare(node, &configuration)
+	}
+	node.configuration = clustertest.WriteConfiguration(t, directory, configuration)
+	return node
 }
 
 func (node *member) start(t *testing.T) {
 	t.Helper()
-	node.node = clustertest.StartBinaryNode(t, faultBinary, []string{faultinject.ControlEnv + "=" + node.controlFile()},
-		node.configuration, node.client, node.ports.HTTPS)
+	environment := append([]string{faultinject.ControlEnv + "=" + node.controlFile()}, node.environment...)
+	if node.restarted != nil {
+		node.node = clustertest.StartSupervisedBinaryNode(t, node.binary, environment,
+			node.configuration, node.client, node.ports.HTTPS, node.restarted)
+		return
+	}
+	node.node = clustertest.StartBinaryNode(t, node.binary, environment, node.configuration, node.client, node.ports.HTTPS)
 }
 
 func (node *member) stop(t *testing.T) {
