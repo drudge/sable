@@ -1,0 +1,102 @@
+name: Cluster faults
+
+# Short pass: every scripted fault scenario plus one short seeded randomized
+# run, on each pull request and push to main. Nightly soak: long randomized
+# runs, each logging SABLE_CLUSTERFAULT_SEED and SABLE_CLUSTERFAULT_STEPS so a
+# failure replays locally with `go tool mage clusterFaults`.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Soak runs (SABLE_CLUSTERFAULT_RUNS)
+        default: '12'
+      steps:
+        description: Faults per soak run (SABLE_CLUSTERFAULT_STEPS)
+        default: '30'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cluster-faults-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  short:
+    name: Short pass
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Restore Go cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-cluster-faults-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-cluster-faults-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum') }}-
+            go-cluster-faults-${{ runner.os }}-
+
+      - name: Run scripted and short randomized faults
+        run: go tool mage clusterFaults
+
+      - name: Save Go cache
+        if: github.event_name == 'push'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-cluster-faults-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ github.sha }}
+
+  soak:
+    name: Nightly soak
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 250
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Restore Go cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-cluster-faults-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-cluster-faults-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum') }}-
+            go-cluster-faults-${{ runner.os }}-
+
+      - name: Run randomized fault soak
+        env:
+          SABLE_CLUSTERFAULT_RUNS: ${{ inputs.runs || '12' }}
+          SABLE_CLUSTERFAULT_STEPS: ${{ inputs.steps || '30' }}
+        run: go tool mage clusterSoak
