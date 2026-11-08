@@ -119,6 +119,21 @@ func missingWrite(node *member, records *ledger) bool {
 	return false
 }
 
+// sameWindowEverywhere checks that each write inside the replication window
+// is on every running node or on none of them.
+func (checks *invariants) sameWindowEverywhere(t *testing.T, faults *faultCluster, records *ledger) {
+	t.Helper()
+	running := faults.running()
+	for _, entry := range records.window {
+		first := resolveA(running[0], entry.name+"."+ledgerZone)
+		for _, node := range running[1:] {
+			if got := resolveA(node, entry.name+"."+ledgerZone); got != first {
+				t.Errorf("window write %s differs: %s answered %q, %s answered %q", entry.name, running[0].name, first, node.name, got)
+			}
+		}
+	}
+}
+
 func (checks *invariants) checkLedger(t *testing.T, node *member, records *ledger) {
 	t.Helper()
 	for _, entry := range records.acknowledged {
