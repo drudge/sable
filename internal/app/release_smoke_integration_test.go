@@ -22,6 +22,7 @@ import (
 
 	"github.com/miekg/dns"
 
+	"github.com/drudge/sable/internal/clustertest"
 	webassets "github.com/drudge/sable/internal/web/assets"
 )
 
@@ -54,15 +55,15 @@ func TestReleaseBinarySmoke(t *testing.T) {
 	}
 
 	directory := t.TempDir()
-	ports := allocateIntegrationNodePorts(t)
-	dotAddress := allocateTCPAddress(t)
-	dohAddress := allocateTCPAddress(t)
-	dnsIPv6Address := allocateIPv6TCPAddress(t)
-	dotIPv6Address := allocateIPv6TCPAddress(t)
-	dohIPv6Address := allocateIPv6TCPAddress(t)
+	ports := clustertest.AllocatePorts(t)
+	dotAddress := clustertest.AllocateTCPAddress(t)
+	dohAddress := clustertest.AllocateTCPAddress(t)
+	dnsIPv6Address := clustertest.AllocateIPv6TCPAddress(t)
+	dotIPv6Address := clustertest.AllocateIPv6TCPAddress(t)
+	dohIPv6Address := clustertest.AllocateIPv6TCPAddress(t)
 	upstream := startReleaseSmokeUpstream(t)
-	certificate := generateReplicaCertificate(t, directory)
-	configuration := integrationNodeConfiguration(directory, ports, "release-smoke", certificate)
+	certificate := clustertest.GenerateReplicaCertificate(t, directory)
+	configuration := clustertest.NodeConfiguration(directory, ports, "release-smoke", certificate)
 	configuration.Server.DNSListen = append(configuration.Server.DNSListen, dnsIPv6Address)
 	configuration.EncryptedDNS.DoTListen = []string{dotAddress, dotIPv6Address}
 	configuration.EncryptedDNS.DoHListen = []string{dohAddress, dohIPv6Address}
@@ -71,43 +72,43 @@ func TestReleaseBinarySmoke(t *testing.T) {
 	configuration.Blocking.Enabled = true
 	configuration.QueryLog.Enabled = true
 	configuration.QueryLog.FlushInterval.Duration = 25 * time.Millisecond
-	configurationPath := writeIntegrationConfiguration(t, directory, configuration)
-	client := trustedHTTPClient(t, filepath.Join(directory, certificate.CertificateFile))
+	configurationPath := clustertest.WriteConfiguration(t, directory, configuration)
+	client := clustertest.TrustedHTTPClient(t, filepath.Join(directory, certificate.CertificateFile))
 
 	assertReleaseBinaryCommand(t, binaryPath, "version", "Sable ")
 	assertReleaseBinaryCommand(t, binaryPath, "config", "check", "--config", configurationPath, "configuration valid:")
 
-	first := startIntegrationNode(t, configurationPath, client, ports.https)
-	verifyEmbeddedReleaseConsole(t, client, ports.https)
-	createReleaseSmokeZone(t, client, ports.https)
-	verifyReleaseSmokeZoneManagement(t, client, ports.https, ports.dns)
-	verifyReleaseSmokeTransports(t, client, ports.dns, dotAddress, dohAddress)
+	first := clustertest.StartNode(t, configurationPath, client, ports.HTTPS)
+	verifyEmbeddedReleaseConsole(t, client, ports.HTTPS)
+	createReleaseSmokeZone(t, client, ports.HTTPS)
+	verifyReleaseSmokeZoneManagement(t, client, ports.HTTPS, ports.DNS)
+	verifyReleaseSmokeTransports(t, client, ports.DNS, dotAddress, dohAddress)
 	verifyReleaseSmokeIPv6(t, client, dnsIPv6Address, dotIPv6Address, dohIPv6Address)
-	assertReleaseBinaryCommand(t, binaryPath, "query", "--server", ports.dns, "www."+releaseSmokeZone, "A", "192.0.2.20")
+	assertReleaseBinaryCommand(t, binaryPath, "query", "--server", ports.DNS, "www."+releaseSmokeZone, "A", "192.0.2.20")
 	assertReleaseBinaryCommand(t, binaryPath, "query", "--server", dnsIPv6Address, "www."+releaseSmokeZone, "AAAA", releaseSmokeIPv6Address)
 
-	addBlockedDomain(t, client, ports.https, configurationPath, releaseSmokeBlocked)
-	waitForBlockedDNSResponse(t, first, ports.dns, releaseSmokeBlocked)
+	clustertest.AddBlockedDomain(t, client, ports.HTTPS, configurationPath, releaseSmokeBlocked)
+	clustertest.WaitForBlockedDNSResponse(t, first, ports.DNS, releaseSmokeBlocked)
 
-	assertDNSA(t, ports.dns, "udp", releaseSmokeCacheName, "198.51.100.44", nil)
-	assertDNSA(t, ports.dns, "udp", releaseSmokeCacheName, "198.51.100.44", nil)
+	assertDNSA(t, ports.DNS, "udp", releaseSmokeCacheName, "198.51.100.44", nil)
+	assertDNSA(t, ports.DNS, "udp", releaseSmokeCacheName, "198.51.100.44", nil)
 	if got := upstream.queries.Load(); got != 1 {
 		t.Fatalf("upstream queries after cached lookup = %d, want 1", got)
 	}
-	waitForQueryLogEntry(t, first, client, ports.https, releaseSmokeCacheName)
+	waitForQueryLogEntry(t, first, client, ports.HTTPS, releaseSmokeCacheName)
 
 	// Close the release-smoke client's reusable TLS connections before stopping
 	// the server. This removes the transport/server connection-state race from
 	// the test's deliberately short shutdown window so the DNS cache snapshot
 	// below the web shutdown is still persisted.
 	client.CloseIdleConnections()
-	stopIntegrationNode(t, first)
+	clustertest.StopNode(t, first)
 	upstream.stop(t)
 
-	second := startIntegrationNode(t, configurationPath, client, ports.https)
-	assertDNSA(t, ports.dns, "udp", releaseSmokeCacheName, "198.51.100.44", nil)
-	assertDNSA(t, ports.dns, "udp", "www."+releaseSmokeZone, "192.0.2.20", nil)
-	waitForBlockedDNSResponse(t, second, ports.dns, releaseSmokeBlocked)
+	second := clustertest.StartNode(t, configurationPath, client, ports.HTTPS)
+	assertDNSA(t, ports.DNS, "udp", releaseSmokeCacheName, "198.51.100.44", nil)
+	assertDNSA(t, ports.DNS, "udp", "www."+releaseSmokeZone, "192.0.2.20", nil)
+	clustertest.WaitForBlockedDNSResponse(t, second, ports.DNS, releaseSmokeBlocked)
 }
 
 func verifyEmbeddedReleaseConsole(t *testing.T, client *http.Client, httpsAddress string) {
@@ -395,9 +396,9 @@ func assertDoHA(t *testing.T, client *http.Client, address, name, want string) {
 	t.Fatalf("query %s over DoH answers = %v, want A %s", name, answer.Answer, want)
 }
 
-func waitForQueryLogEntry(t *testing.T, node *runningIntegrationNode, client *http.Client, httpsAddress, name string) {
+func waitForQueryLogEntry(t *testing.T, node *clustertest.Node, client *http.Client, httpsAddress, name string) {
 	t.Helper()
-	waitForCondition(t, node, func() bool {
+	clustertest.WaitForCondition(t, node, func() bool {
 		return strings.Contains(releaseSmokeGET(t, client, "https://"+httpsAddress+"/api/v1/query-log?limit=100"), name)
 	})
 }

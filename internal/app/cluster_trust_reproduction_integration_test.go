@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/drudge/sable/internal/cluster"
+	"github.com/drudge/sable/internal/clustertest"
 	"github.com/drudge/sable/internal/config"
 )
 
@@ -21,12 +22,12 @@ func TestTwoNodeClusterPrivateCATrustEnrollment(t *testing.T) {
 		name := mode
 		t.Run(name, func(t *testing.T) {
 			primaryDirectory, replicaDirectory := t.TempDir(), t.TempDir()
-			primaryPorts, replicaPorts := allocateIntegrationNodePorts(t), allocateIntegrationNodePorts(t)
-			primaryCertificate := generatePrimaryCertificate(t, primaryDirectory)
+			primaryPorts, replicaPorts := clustertest.AllocatePorts(t), clustertest.AllocatePorts(t)
+			primaryCertificate := clustertest.GeneratePrimaryCertificate(t, primaryDirectory)
 			if mode == "installer_self_signed" {
-				primaryCertificate = generateReplicaCertificate(t, primaryDirectory)
+				primaryCertificate = clustertest.GenerateReplicaCertificate(t, primaryDirectory)
 			}
-			primaryConfiguration := integrationNodeConfiguration(primaryDirectory, primaryPorts, "primary", primaryCertificate)
+			primaryConfiguration := clustertest.NodeConfiguration(primaryDirectory, primaryPorts, "primary", primaryCertificate)
 			if !configured {
 				primaryConfiguration.Cluster.TrustAnchorFile = ""
 			}
@@ -34,10 +35,10 @@ func TestTwoNodeClusterPrivateCATrustEnrollment(t *testing.T) {
 			if mode == "installer_self_signed" {
 				primaryTrust = primaryCertificate.CertificateFile
 			}
-			primaryClient := trustedHTTPClient(t, filepath.Join(primaryDirectory, primaryTrust))
-			primary := startIntegrationNode(t, writeIntegrationConfiguration(t, primaryDirectory, primaryConfiguration), primaryClient, primaryPorts.https)
-			initializePrimary(t, primaryClient, primaryPorts.https)
-			enrollment := createEnrollmentToken(t, primaryClient, primaryPorts.https)
+			primaryClient := clustertest.TrustedHTTPClient(t, filepath.Join(primaryDirectory, primaryTrust))
+			primary := clustertest.StartNode(t, clustertest.WriteConfiguration(t, primaryDirectory, primaryConfiguration), primaryClient, primaryPorts.HTTPS)
+			clustertest.InitializePrimary(t, primaryClient, primaryPorts.HTTPS)
+			enrollment := clustertest.CreateEnrollmentToken(t, primaryClient, primaryPorts.HTTPS)
 			bundled := strings.HasPrefix(enrollment.Token, "sable-enroll-v1.")
 			if bundled != configured || (!configured && len(enrollment.Token) != 43) {
 				t.Fatalf("unexpected token format: bundled=%v, length=%d", bundled, len(enrollment.Token))
@@ -47,7 +48,7 @@ func TestTwoNodeClusterPrivateCATrustEnrollment(t *testing.T) {
 			if mode == "regenerated_private_ca" {
 				// Recreate the empty cluster through the real UI endpoints,
 				// retaining the original certificate paths and running process.
-				response, err := primaryClient.PostForm("https://"+primaryPorts.https+"/ui/cluster/delete", nil)
+				response, err := primaryClient.PostForm("https://"+primaryPorts.HTTPS+"/ui/cluster/delete", nil)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -55,10 +56,10 @@ func TestTwoNodeClusterPrivateCATrustEnrollment(t *testing.T) {
 				if response.StatusCode != http.StatusOK {
 					t.Fatalf("delete cluster: %d", response.StatusCode)
 				}
-				response, err = primaryClient.PostForm("https://"+primaryPorts.https+"/ui/cluster/onboarding", url.Values{
+				response, err = primaryClient.PostForm("https://"+primaryPorts.HTTPS+"/ui/cluster/onboarding", url.Values{
 					"workflow": {"primary"}, "certificate_source": {"generated"},
 					"data_dir": {primaryConfiguration.Cluster.DataDirectory}, "node_name": {"primary"},
-					"advertise_url": {"https://" + primaryPorts.https}, "generated_https_listen": {primaryPorts.https},
+					"advertise_url": {"https://" + primaryPorts.HTTPS}, "generated_https_listen": {primaryPorts.HTTPS},
 					"replace_cluster_ca": {"confirmed"}, "generated_valid_days": {"1"}, "generated_storage_dir": {"data/cluster/pki"},
 				})
 				if err != nil {
@@ -73,42 +74,42 @@ func TestTwoNodeClusterPrivateCATrustEnrollment(t *testing.T) {
 					t.Fatalf("regeneration did not require restart: %d %s", response.StatusCode, body)
 				}
 				primaryClient.CloseIdleConnections()
-				stopIntegrationNode(t, primary)
+				clustertest.StopNode(t, primary)
 				reloaded, err := config.Load(filepath.Join(primaryDirectory, "sable.toml"))
 				if err != nil {
 					t.Fatal(err)
 				}
-				primaryClient = trustedHTTPClient(t, reloaded.ClusterTrustAnchorPath(primaryDirectory))
-				primary = startIntegrationNode(t, filepath.Join(primaryDirectory, "sable.toml"), primaryClient, primaryPorts.https)
-				initializePrimary(t, primaryClient, primaryPorts.https)
-				enrollment = createEnrollmentToken(t, primaryClient, primaryPorts.https)
+				primaryClient = clustertest.TrustedHTTPClient(t, reloaded.ClusterTrustAnchorPath(primaryDirectory))
+				primary = clustertest.StartNode(t, filepath.Join(primaryDirectory, "sable.toml"), primaryClient, primaryPorts.HTTPS)
+				clustertest.InitializePrimary(t, primaryClient, primaryPorts.HTTPS)
+				enrollment = clustertest.CreateEnrollmentToken(t, primaryClient, primaryPorts.HTTPS)
 				t.Log("Explicitly replaced HTTPS while preserving prior files, required restart, and issued fresh token")
 			}
 
-			replicaCertificate := generateClusterCertificate(t, replicaDirectory, "replica")
+			replicaCertificate := clustertest.GenerateClusterCertificate(t, replicaDirectory, "replica")
 			if mode == "installer_self_signed" {
-				replicaCertificate = generateReplicaCertificate(t, replicaDirectory)
+				replicaCertificate = clustertest.GenerateReplicaCertificate(t, replicaDirectory)
 			}
-			replicaConfiguration := integrationNodeConfiguration(replicaDirectory, replicaPorts, "replica", replicaCertificate)
+			replicaConfiguration := clustertest.NodeConfiguration(replicaDirectory, replicaPorts, "replica", replicaCertificate)
 			replicaTrust := replicaCertificate.CAFile
 			if mode == "installer_self_signed" {
 				replicaTrust = replicaCertificate.CertificateFile
 			}
-			replicaClient := trustedHTTPClient(t, filepath.Join(replicaDirectory, replicaTrust))
-			replica := startIntegrationNode(t, writeIntegrationConfiguration(t, replicaDirectory, replicaConfiguration), replicaClient, replicaPorts.https)
+			replicaClient := clustertest.TrustedHTTPClient(t, filepath.Join(replicaDirectory, replicaTrust))
+			replica := clustertest.StartNode(t, clustertest.WriteConfiguration(t, replicaDirectory, replicaConfiguration), replicaClient, replicaPorts.HTTPS)
 			if configured {
-				joinReplica(t, replicaClient, replicaPorts.https, primaryPorts.https, enrollment.Token)
-				waitForClusterState(t, primary, primaryClient, primaryPorts.https, func(state cluster.State) bool {
+				clustertest.JoinReplica(t, replicaClient, replicaPorts.HTTPS, primaryPorts.HTTPS, enrollment.Token)
+				clustertest.WaitForClusterState(t, primary, primaryClient, primaryPorts.HTTPS, func(state cluster.State) bool {
 					return state.Connected == 2 && state.Synchronized == 2
 				})
-				waitForClusterState(t, replica, replicaClient, replicaPorts.https, func(state cluster.State) bool {
+				clustertest.WaitForClusterState(t, replica, replicaClient, replicaPorts.HTTPS, func(state cluster.State) bool {
 					return state.LocalRole == cluster.RoleReplica && state.Synchronized == 2
 				})
 				t.Log("Both nodes connected and synchronized")
 				return
 			}
-			response, err := replicaClient.PostForm("https://"+replicaPorts.https+"/ui/cluster/join", url.Values{
-				"primary_url": {"https://" + primaryPorts.https}, "token": {enrollment.Token}, "addresses": {"127.0.0.1"},
+			response, err := replicaClient.PostForm("https://"+replicaPorts.HTTPS+"/ui/cluster/join", url.Values{
+				"primary_url": {"https://" + primaryPorts.HTTPS}, "token": {enrollment.Token}, "addresses": {"127.0.0.1"},
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -126,7 +127,7 @@ func TestTwoNodeClusterPrivateCATrustEnrollment(t *testing.T) {
 			if response.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(string(body), "contact cluster primary: Post") || !strings.Contains(string(body), failure) {
 				t.Fatalf("expected unknown authority failure, got %d: %s", response.StatusCode, body)
 			}
-			if fetchClusterState(t, replicaClient, replicaPorts.https).Initialized {
+			if clustertest.FetchClusterState(t, replicaClient, replicaPorts.HTTPS).Initialized {
 				t.Fatal("failed enrollment initialized the replica")
 			}
 			t.Logf("Reproduced HTTP %d: %s", response.StatusCode, failure)
