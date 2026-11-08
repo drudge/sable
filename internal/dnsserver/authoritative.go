@@ -262,6 +262,35 @@ func (zone *authoritativeZone) forwardsQuestion(name string, qtype uint16, now t
 	return zone.forwards(name)
 }
 
+// localNameError turns an upstream NXDOMAIN into NODATA when the question's
+// name exists in a Forwarder zone's own records. Such a zone answers the types
+// it holds and forwards the rest, and an upstream that has never heard of a
+// local-only name answers those with NXDOMAIN. Passing that on would tell the
+// client the name it just resolved does not exist, so an A-only override would
+// fail every AAAA lookup. RFC 2308 section 2.2 calls for NOERROR with the
+// zone's SOA instead. It reports whether it rewrote the response.
+func (runtime *Runtime) localNameError(request, response *dns.Msg) bool {
+	if response.Rcode != dns.RcodeNameError || len(response.Answer) != 0 || len(request.Question) != 1 {
+		return false
+	}
+	name := questionName(request)
+	zone := runtime.authoritativeZoneFor(name)
+	if zone == nil || !zonemodel.IsForwarderType(zone.kind) {
+		return false
+	}
+	now := time.Now()
+	records, _, exists := zone.recordsAt(name, now)
+	// An owner whose only record is the FWD routing it holds nothing to
+	// answer, so whether that name exists is the upstream's call.
+	if !exists || !hasActiveRecords(records, now) && len(zone.forwarders[name]) != 0 {
+		return false
+	}
+	response.Rcode = dns.RcodeSuccess
+	response.AuthenticatedData = false
+	response.Ns = cloneRecords(zone.soa, "", now)
+	return true
+}
+
 func (zone *authoritativeZone) forwards(name string) bool {
 	for current := name; current != ""; {
 		if len(zone.forwarders[current]) != 0 {
@@ -392,6 +421,11 @@ func (runtime *Runtime) localResponseFor(request *dns.Msg, name string) (*dns.Ms
 	case dns.TypeANY:
 		response.Answer = append(response.Answer, records.ipv4...)
 		response.Answer = append(response.Answer, records.ipv6...)
+	}
+	if len(response.Answer) == 0 {
+		// The name exists but holds nothing of this type. A NODATA answer
+		// needs an SOA for the client to cache it (RFC 2308 section 5).
+		response.Ns = []dns.RR{syntheticSOA(question.Name, records.ttl())}
 	}
 	return response, true
 }
