@@ -43,6 +43,13 @@ type primaryClaim struct {
 	received   time.Time
 }
 
+// newerPrimary is a member that probed this replica with a newer term than
+// the replica's manifest holds.
+type newerPrimary struct {
+	nodeID string
+	term   uint64
+}
+
 // manifestOlder reports whether candidate is older than active: from an
 // earlier primary term, or from the same term at a lower generation.
 func manifestOlder(candidate, active *manifest) bool {
@@ -189,15 +196,35 @@ func (service *Service) stepDown(ctx context.Context, target member, configurati
 // generation on the strength of a node that may itself be stale.
 func (service *Service) answerPrimaryProbeLocked(heartbeat Heartbeat, now time.Time) (SyncConfiguration, error) {
 	service.primaryClaims[heartbeat.NodeID] = primaryClaim{term: heartbeat.Primary.Term, generation: heartbeat.AppliedGeneration, received: now}
-	if service.manifest.PrimaryID == service.nodeID && heartbeat.Primary.Term > service.manifest.Term {
+	switch {
+	case heartbeat.Primary.Term <= service.manifest.Term:
+	case service.manifest.PrimaryID == service.nodeID:
 		// A newer primary exists. Ask it for its manifest now rather than at
 		// the next round.
 		select {
 		case service.probeNow <- struct{}{}:
 		default:
 		}
+	default:
+		// A replica whose primary was replaced while it was gone would keep
+		// asking that primary forever. Its next synchronization goes to the
+		// sender instead, which hands over its manifest only if it really is
+		// newer, just as a stale primary steps down.
+		service.newerPrimary = newerPrimary{nodeID: heartbeat.NodeID, term: heartbeat.Primary.Term}
 	}
 	return service.syncConfigurationLocked(heartbeat.NodeID, heartbeat.StateDigest, now, false)
+}
+
+// takeSyncTargetLocked returns the member this replica synchronizes from
+// next: a member that probed with a newer term, or else the manifest's
+// primary. The newer member gets one attempt; its next probe brings it back.
+func (service *Service) takeSyncTargetLocked() string {
+	newer := service.newerPrimary
+	service.newerPrimary = newerPrimary{}
+	if newer.nodeID != "" && newer.term > service.manifest.Term {
+		return newer.nodeID
+	}
+	return service.manifest.PrimaryID
 }
 
 // primaryConflictLocked returns the node that most recently claimed the

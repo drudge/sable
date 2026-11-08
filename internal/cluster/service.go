@@ -254,6 +254,9 @@ type Service struct {
 	// round at once.
 	primaryClaims map[string]primaryClaim
 	probeNow      chan struct{}
+	// newerPrimary is the member this replica synchronizes from next because
+	// it probed with a newer term (#588).
+	newerPrimary newerPrimary
 	// replays refuses a heartbeat or probe that was already received.
 	replays replayGuard
 }
