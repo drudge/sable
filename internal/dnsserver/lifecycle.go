@@ -45,8 +45,8 @@ func (handler *Handler) maintainCache() {
 			}
 		case <-refresh.C:
 			runtime := handler.runtime.Load()
-			for _, request := range runtime.cache.PrefetchCandidates(maximumPrefetchBatch) {
-				handler.prefetch(request, runtime)
+			for _, candidate := range runtime.cache.PrefetchCandidates(maximumPrefetchBatch) {
+				handler.prefetch(candidate.Request, runtime, candidate.Claim)
 			}
 		}
 	}

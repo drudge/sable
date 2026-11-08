@@ -265,18 +265,19 @@ func TestResponseCacheElectsSinglePopularPrefetch(t *testing.T) {
 	cache.Set(request, positiveResponse(request, 60), true)
 	clock = clock.Add(51 * time.Second)
 
-	if _, found, prefetch := cache.GetWithPrefetch(request); !found || prefetch {
-		t.Fatalf("first hit found = %v, prefetch = %v; want found without election", found, prefetch)
+	if _, found, claim := cache.GetWithPrefetch(request); !found || claim.Held() {
+		t.Fatalf("first hit found = %v, held = %v; want found without election", found, claim.Held())
 	}
-	if _, found, prefetch := cache.GetWithPrefetch(request); !found || !prefetch {
-		t.Fatalf("second hit found = %v, prefetch = %v; want one election", found, prefetch)
+	_, found, claim := cache.GetWithPrefetch(request)
+	if !found || !claim.Held() {
+		t.Fatalf("second hit found = %v, held = %v; want one election", found, claim.Held())
 	}
-	if _, _, prefetch := cache.GetWithPrefetch(request); prefetch {
+	if _, _, duplicate := cache.GetWithPrefetch(request); duplicate.Held() {
 		t.Fatal("third hit elected duplicate refresh")
 	}
-	cache.CancelPrefetch(request)
-	if _, _, prefetch := cache.GetWithPrefetch(request); !prefetch {
-		t.Fatal("hit after CancelPrefetch() did not re-elect refresh")
+	claim.Release()
+	if _, _, again := cache.GetWithPrefetch(request); !again.Held() {
+		t.Fatal("hit after Release() did not re-elect refresh")
 	}
 }
 
@@ -301,8 +302,8 @@ func TestResponseCacheGetLeavesPrefetchElectable(t *testing.T) {
 	if _, found := cache.Get(request); !found {
 		t.Fatal("second Get() missed")
 	}
-	if _, found, prefetch := cache.GetWithPrefetch(request); !found || !prefetch {
-		t.Fatalf("client hit after Get() found = %v, prefetch = %v; want the election", found, prefetch)
+	if _, found, claim := cache.GetWithPrefetch(request); !found || !claim.Held() {
+		t.Fatalf("client hit after Get() found = %v, held = %v; want the election", found, claim.Held())
 	}
 	if candidates := cache.PrefetchCandidates(10); len(candidates) != 0 {
 		t.Fatalf("PrefetchCandidates() = %d after the client hit won, want the election exclusive", len(candidates))
@@ -717,7 +718,7 @@ func TestPrefetchCandidatesRenewsPopularEntryWithoutAClientHit(t *testing.T) {
 	if len(candidates) != 1 {
 		t.Fatalf("PrefetchCandidates() = %d entries, want the popular one elected", len(candidates))
 	}
-	if got := candidates[0].Question[0].Name; got != "popular.example." {
+	if got := candidates[0].Request.Question[0].Name; got != "popular.example." {
 		t.Fatalf("candidate question = %q, want popular.example.", got)
 	}
 	if again := cache.PrefetchCandidates(10); len(again) != 0 {
