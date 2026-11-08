@@ -68,8 +68,11 @@ type reverseNameCache struct {
 	now      func() time.Time
 	workers  chan struct{}
 	// deadline bounds each batch of lookups; reverseNameDeadline unless a
-	// test shortens it.
+	// test changes it.
 	deadline time.Duration
+	// budget is how long a waiting render gives its lookups;
+	// reverseNameBudget unless a test changes it.
+	budget time.Duration
 }
 
 func newReverseNameCache(resolver reverseResolver, logger *slog.Logger) *reverseNameCache {
@@ -81,6 +84,7 @@ func newReverseNameCache(resolver reverseResolver, logger *slog.Logger) *reverse
 		now:      time.Now,
 		workers:  make(chan struct{}, reverseNameWorkers),
 		deadline: reverseNameDeadline,
+		budget:   reverseNameBudget,
 	}
 }
 
@@ -265,7 +269,7 @@ func (cache *reverseNameCache) resolve(ctx context.Context, cancel context.Cance
 		close(finished)
 	}()
 
-	timer := time.NewTimer(reverseNameBudget)
+	timer := time.NewTimer(cache.budget)
 	defer timer.Stop()
 	select {
 	case <-finished:
