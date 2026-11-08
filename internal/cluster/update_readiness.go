@@ -10,6 +10,13 @@ import "time"
 // long ago is not keeping up.
 const rolloutLagAllowance = heartbeatFreshness
 
+// primaryRestartLagAllowance bounds how far peers may trail before the
+// primary itself restarts. If the primary does not come back, a recovery
+// promotion keeps only what a replica had applied, and the documented loss
+// window is about the last second, so peers must hold everything the primary
+// published two sync intervals ago.
+const primaryRestartLagAllowance = 2 * syncInterval
+
 // generationSample is the primary's generation as of a moment.
 type generationSample struct {
 	at         time.Time
@@ -38,11 +45,11 @@ func (history *generationHistory) record(now time.Time, generation uint64) {
 	history.samples = history.samples[keep:]
 }
 
-// settled returns the newest generation the primary had reached
-// rolloutLagAllowance before now. With no sample that old it returns current,
-// so a node must have applied everything.
-func (history *generationHistory) settled(now time.Time, current uint64) uint64 {
-	cutoff, settled := now.Add(-rolloutLagAllowance), current
+// settled returns the newest generation the primary had reached allowance
+// before now, for an allowance up to rolloutLagAllowance. With no sample that
+// old it returns current, so a node must have applied everything.
+func (history *generationHistory) settled(now time.Time, current uint64, allowance time.Duration) uint64 {
+	cutoff, settled := now.Add(-allowance), current
 	for _, sample := range history.samples {
 		if sample.at.After(cutoff) {
 			break
@@ -62,6 +69,27 @@ func rolloutNodeFollowing(node Node) bool {
 // it has applied every generation the primary published at least
 // rolloutLagAllowance ago. The caller holds service.updates.mu.
 func (service *Service) rolloutNodeReadyLocked(state State, node Node) bool {
-	settled := service.updates.generations.settled(service.clock(), state.Generation)
+	return service.rolloutNodeWithinLocked(state, node, rolloutLagAllowance)
+}
+
+// rolloutPeersReadyLocked reports whether every node other than the one
+// about to restart is keeping up, holding peers to the tighter
+// primaryRestartLagAllowance when that node is the primary. The caller holds
+// service.updates.mu.
+func (service *Service) rolloutPeersReadyLocked(state State, restarting string) bool {
+	allowance := rolloutLagAllowance
+	if restarting == state.PrimaryID {
+		allowance = primaryRestartLagAllowance
+	}
+	for _, peer := range state.Nodes {
+		if peer.ID != restarting && !service.rolloutNodeWithinLocked(state, peer, allowance) {
+			return false
+		}
+	}
+	return true
+}
+
+func (service *Service) rolloutNodeWithinLocked(state State, node Node, allowance time.Duration) bool {
+	settled := service.updates.generations.settled(service.clock(), state.Generation, allowance)
 	return rolloutNodeFollowing(node) && node.AppliedGeneration >= settled
 }

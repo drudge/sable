@@ -414,12 +414,8 @@ func (service *Service) updateCommandLocked(nodeID string) *UpdateCommand {
 			command.Action = action
 		}
 	}
-	if command.Action == actionRestart {
-		for _, peer := range state.Nodes {
-			if peer.ID != nodeID && !service.rolloutNodeReadyLocked(state, peer) {
-				return nil
-			}
-		}
+	if command.Action == actionRestart && !service.rolloutPeersReadyLocked(state, nodeID) {
+		return nil
 	}
 	return command
 }
@@ -565,10 +561,8 @@ func (service *Service) advanceRolloutNode(rollout RolloutStatus, state State, r
 	}
 	// Never authorize another restart while any other node is unavailable or
 	// not keeping up.
-	for _, peer := range state.Nodes {
-		if peer.ID != active.ID && !service.rolloutNodeReadyLocked(state, peer) {
-			return
-		}
+	if !service.rolloutPeersReadyLocked(state, active.ID) {
+		return
 	}
 	report := reports[active.ID]
 	if report.ID != rollout.ID {
