@@ -8,6 +8,54 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.8.1-beta.1] - 2026-11-07
+
+Sable 1.8.1-beta.1 says which override keeps a blocking schedule off, keeps
+UniFi's Sync Now from flickering, keeps prefetched cache entries refreshing,
+and checks every step of updates, DNSSEC key rollovers, trust anchors and the
+setup wizards against one list of the moves each may make.
+
+### Upgrading from 1.8.0
+
+- Update every node in a cluster. Older nodes ignore the new schedule
+  override field, but a configuration file or backup saved while a Skip,
+  Delay or End Now is in force won't load on 1.8.0 until the override passes
+  or is resumed.
+- Nothing else is needed. Saved update, key and trust anchor states are
+  unchanged.
+
+### Blocking
+
+- A rule set schedule held off by **Skip**, **Delay 30 Minutes** or **End
+  Now** now says which: the rule set panel and the device drawer show
+  Skipped, Delayed or Ended early instead of Paused. MCP `list_schedules`
+  adds a `state` field (`outside`, `on`, `skipped`, `delayed`, `ended`, or
+  `overridden` for an override saved by an older release); `paused_until` is
+  unchanged.
+
+### Caching
+
+- A cached answer elected for prefetch by an internal lookup, such as a
+  client name or ANAME lookup, is refreshed again later. Before, the entry
+  stayed marked as refreshing with nothing refreshing it, so it went cold
+  and the next client waited on the upstream.
+
+### Integrations
+
+- Clicking UniFi **Sync Now** while a sync is running keeps the status at
+  running until the queued sync finishes. Before, it flickered back to idle
+  between the two runs, as Dynamic DNS did before 1.8.0.
+
+### Updates, DNSSEC and clusters
+
+- Cluster rolling updates, single-node updates, DNSSEC key rollovers
+  (RFC 7583) and RFC 5011 trust anchors each move through an explicit table
+  of states, and a move outside it is refused with an error instead of
+  being saved.
+- The SSO and UniFi setup wizards refuse a jump to an unknown step or one
+  ahead of the current step. Before, a crafted form could skip SSO's issuer
+  check.
+
 ## [1.8.0] - 2026-11-07
 
 Sable 1.8.0 forwards to DNS over HTTPS upstreams and turns the forwarder
