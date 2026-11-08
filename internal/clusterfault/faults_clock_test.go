@@ -71,7 +71,6 @@ func TestPrimaryClockStepBackKeepsSynchronizing(t *testing.T) {
 
 // TestReplicaClockStepBackKeepsSynchronizing is the same step on a replica.
 func TestReplicaClockStepBackKeepsSynchronizing(t *testing.T) {
-	knownBug(t, "drudge/sable#580")
 	stepClockBack(t, 1)
 }
 
