@@ -44,16 +44,19 @@ Use the mage targets. They set `GOEXPERIMENT=jsonv2`, so set it yourself when yo
 | `go tool mage bench` | Runs the DNS, storage, and blocking benchmarks |
 | `go tool mage devDemo` | Runs the Vandelay demo with hot reload; open http://localhost:5381 |
 | `go tool mage dev` | Runs one server from your own `sable.toml` with hot reload; open http://localhost:5381 |
+| `go tool mage clusterFaults` | Runs the fault-injection harness on real 3 to 5 node clusters |
+| `go tool mage clusterSoak` | Repeats long randomized fault runs; `SABLE_CLUSTERFAULT_RUNS` and `SABLE_CLUSTERFAULT_STEPS` size it |
 
 Before every push, run `go tool mage verify` and `gofmt -l .`. `gofmt -l .` must print nothing. `verify` doesn't check formatting, but CI does.
 
 Never edit a `*_templ.go` file by hand. Change the `.templ` file, regenerate, and commit both.
 
-CI runs four checks on every PR:
+CI runs five checks on every PR:
 - **Quality:** formatting, `go mod tidy`, `mage verify`, and `govulncheck`
 - **Race detector**
 - **Browser regression**
 - **Release artifacts**
+- **Scripted and randomized faults:** `mage clusterFaults`. A failing randomized run logs `SABLE_CLUSTERFAULT_SEED` and `SABLE_CLUSTERFAULT_STEPS` to replay it. The same workflow runs `mage clusterSoak` nightly.
 
 ### Browser tests
 

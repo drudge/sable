@@ -210,6 +210,23 @@ func ClusterTest(ctx context.Context) error {
 	return run(ctx, nil, "go", "test", "-tags=integration", "-run", "^TestTwoNodeClusterReplicaEnrollmentAndSynchronization$", "-v", "./internal/app")
 }
 
+// ClusterFaults runs the fault-injection harness against real 3 to 5 node
+// clusters: every scripted scenario plus one short seeded randomized run.
+func ClusterFaults(ctx context.Context) error {
+	return run(ctx, nil, "go", "test", "-count=1", "-tags=integration", "-timeout=30m", "-v", "./internal/clusterfault")
+}
+
+// ClusterSoak repeats long randomized fault runs, each with a fresh seed it
+// logs for replay. SABLE_CLUSTERFAULT_RUNS sets how many runs (default 12) and
+// SABLE_CLUSTERFAULT_STEPS how many faults each injects (default 30).
+func ClusterSoak(ctx context.Context) error {
+	runs := environmentOr("SABLE_CLUSTERFAULT_RUNS", "12")
+	steps := environmentOr("SABLE_CLUSTERFAULT_STEPS", "30")
+	return run(ctx, []string{"SABLE_CLUSTERFAULT_STEPS=" + steps},
+		"go", "test", "-count="+runs, "-tags=integration", "-timeout=4h",
+		"-run", "^TestRandomizedFaults$", "-v", "./internal/clusterfault")
+}
+
 // ReleaseSmoke builds the production-style single binary and exercises it as a
 // standalone DNS server and as both members of a two-node cluster.
 func ReleaseSmoke(ctx context.Context) error {
