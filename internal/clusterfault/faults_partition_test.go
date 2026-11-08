@@ -43,7 +43,6 @@ func TestIsolatedPrimaryIsReplacedAndFencedOnHeal(t *testing.T) {
 // majority, and takes writes on both sides. On heal the minority must follow
 // the majority's newer term and keep none of its own writes.
 func TestMinorityPartitionStepsDownOnHeal(t *testing.T) {
-	knownBug(t, "drudge/sable#588")
 	faults := startCluster(t, 5)
 	checks, records := newInvariants(), &ledger{}
 	writeAndObserve(t, faults, checks, records, 2)
@@ -70,7 +69,6 @@ func TestMinorityPartitionStepsDownOnHeal(t *testing.T) {
 // promotes a replica for recovery: the other replica must follow it without
 // the former primary ever coming back.
 func TestRecoveryPromotionRedirectsReplicas(t *testing.T) {
-	knownBug(t, "drudge/sable#588")
 	faults := startCluster(t, 3)
 	checks, records := newInvariants(), &ledger{}
 	writeAndObserve(t, faults, checks, records, 2)
