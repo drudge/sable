@@ -22,10 +22,11 @@ import (
 
 // Node is a running Sable node, in-process or a child binary.
 type Node struct {
-	cancel context.CancelFunc
-	done   chan error
-	logs   *synchronizedBuffer
-	stop   sync.Once
+	cancel  context.CancelFunc
+	process *os.Process
+	done    chan error
+	logs    *synchronizedBuffer
+	stop    sync.Once
 }
 
 type synchronizedBuffer struct {
@@ -80,29 +81,47 @@ func WriteConfiguration(t *testing.T, directory string, configuration config.Con
 	return path
 }
 
-// StartNode starts a node and waits until its health endpoint answers.
+// StartNode starts a node and waits until its health endpoint answers. It
+// runs the binary named by SABLE_INTEGRATION_BINARY when that is set, and
+// runs the node in-process otherwise.
 func StartNode(t *testing.T, configurationPath string, client *http.Client, httpsAddress string) *Node {
 	t.Helper()
-	logs := &synchronizedBuffer{}
-	node := &Node{done: make(chan error, 1), logs: logs}
 	if binaryPath := strings.TrimSpace(os.Getenv("SABLE_INTEGRATION_BINARY")); binaryPath != "" {
-		command := exec.Command(binaryPath, "serve", "--config", configurationPath)
-		command.Stdout = logs
-		command.Stderr = logs
-		if err := command.Start(); err != nil {
-			t.Fatalf("start Sable integration binary: %v", err)
-		}
-		node.cancel = func() {
-			_ = command.Process.Signal(os.Interrupt)
-		}
-		go func() { node.done <- command.Wait() }()
-	} else {
-		ctx, cancel := context.WithCancel(context.Background())
-		node.cancel = cancel
-		go func() {
-			node.done <- app.Run(ctx, configurationPath, Logger(logs))
-		}()
+		return StartBinaryNode(t, binaryPath, nil, configurationPath, client, httpsAddress)
 	}
+	node := &Node{done: make(chan error, 1), logs: &synchronizedBuffer{}}
+	ctx, cancel := context.WithCancel(context.Background())
+	node.cancel = cancel
+	go func() {
+		node.done <- app.Run(ctx, configurationPath, Logger(node.logs))
+	}()
+	waitStarted(t, node, client, httpsAddress)
+	return node
+}
+
+// StartBinaryNode runs binaryPath as a child process with environment added
+// to the test's own, and waits until its health endpoint answers.
+func StartBinaryNode(t *testing.T, binaryPath string, environment []string, configurationPath string, client *http.Client, httpsAddress string) *Node {
+	t.Helper()
+	node := &Node{done: make(chan error, 1), logs: &synchronizedBuffer{}}
+	command := exec.Command(binaryPath, "serve", "--config", configurationPath)
+	command.Env = append(os.Environ(), environment...)
+	command.Stdout = node.logs
+	command.Stderr = node.logs
+	if err := command.Start(); err != nil {
+		t.Fatalf("start Sable integration binary: %v", err)
+	}
+	node.process = command.Process
+	node.cancel = func() {
+		_ = command.Process.Signal(os.Interrupt)
+	}
+	go func() { node.done <- command.Wait() }()
+	waitStarted(t, node, client, httpsAddress)
+	return node
+}
+
+func waitStarted(t *testing.T, node *Node, client *http.Client, httpsAddress string) {
+	t.Helper()
 	t.Cleanup(func() { StopNode(t, node) })
 	WaitForCondition(t, node, func() bool {
 		response, err := client.Get("https://" + httpsAddress + "/api/v1/health")
@@ -112,7 +131,25 @@ func StartNode(t *testing.T, configurationPath string, client *http.Client, http
 		defer response.Body.Close()
 		return response.StatusCode == http.StatusOK
 	})
-	return node
+}
+
+// KillNode ends a child-process node with SIGKILL, so it gets no chance to
+// shut down cleanly, and waits for the process to exit.
+func KillNode(t *testing.T, node *Node) {
+	t.Helper()
+	if node.process == nil {
+		t.Fatal("only a child-process node can be killed")
+	}
+	node.stop.Do(func() {
+		if err := node.process.Kill(); err != nil {
+			t.Errorf("kill Sable integration node: %v", err)
+		}
+		select {
+		case <-node.done:
+		case <-time.After(Timeout):
+			t.Errorf("killed Sable integration node did not exit\n%s", node.logs.String())
+		}
+	})
 }
 
 // StopNode stops the node once and reports a failed shutdown.
