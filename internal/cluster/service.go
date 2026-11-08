@@ -492,13 +492,37 @@ func (service *Service) Initialize(ctx context.Context, domain string, addresses
 // only itself for manual disaster recovery when the primary is unavailable.
 // A primary that conflicts with another primary in its term may promote
 // itself again to keep the role, which makes the other one step down.
-func (service *Service) Promote(_ context.Context, nodeID string) error {
+//
+// Before a recovery promotion, a replicator that implements RecoveryPreparer
+// adjusts the replica's state, so the first state it publishes as primary
+// already accounts for changes the failed primary may have made unseen.
+func (service *Service) Promote(ctx context.Context, nodeID string) error {
+	nodeID = strings.TrimSpace(nodeID)
+	if service.recoveryPromotion(nodeID) {
+		if preparer, ok := service.replicator.(RecoveryPreparer); ok {
+			if err := preparer.PrepareRecovery(ctx); err != nil {
+				return fmt.Errorf("prepare recovery promotion: %w", err)
+			}
+		}
+	}
+	return service.promote(nodeID)
+}
+
+// recoveryPromotion reports whether promoting nodeID is this replica taking
+// over for its primary rather than a planned handoff or a kept primary.
+func (service *Service) recoveryPromotion(nodeID string) bool {
+	service.mu.RLock()
+	defer service.mu.RUnlock()
+	return service.manifest != nil && nodeID == service.nodeID &&
+		service.manifest.PrimaryID != service.nodeID && manifestContainsNode(service.manifest, nodeID)
+}
+
+func (service *Service) promote(nodeID string) error {
 	service.mu.Lock()
 	defer service.mu.Unlock()
 	if service.manifest == nil {
 		return ErrNotInitialized
 	}
-	nodeID = strings.TrimSpace(nodeID)
 	if !manifestContainsNode(service.manifest, nodeID) {
 		return errors.New("cluster node was not found")
 	}

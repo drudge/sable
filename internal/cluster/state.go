@@ -32,6 +32,14 @@ type StateReplicator interface {
 	Apply(context.Context, []byte) error
 }
 
+// RecoveryPreparer is implemented by a StateReplicator whose state needs
+// adjusting before a replica takes over for an unavailable primary. The
+// primary may have made changes no replica received, and anything it handed
+// out for them, such as SOA serials, must not be issued again.
+type RecoveryPreparer interface {
+	PrepareRecovery(context.Context) error
+}
+
 func (service *Service) refreshPrimaryState(ctx context.Context) error {
 	primary, err := service.primaryCaptureAllowed()
 	if err != nil {
