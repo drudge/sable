@@ -228,12 +228,23 @@ func newTestDispatcher(t *testing.T, destinations []config.AlertDestination, sou
 		Config:  func() config.Config { return configuration },
 		Secrets: secrets,
 		Sent:    sent,
+		Client:  testClient(t),
 	}
 	dispatcher.Add(sources...)
 	return dispatcher, sent, &configuration
 }
 
 var errTestSource = errors.New("source failed")
+
+// testClient sends on a transport of its own. Every httptest server that
+// closes calls CloseIdleConnections on http.DefaultTransport, which can break
+// a post another parallel test has in flight there.
+func testClient(t *testing.T) *http.Client {
+	t.Helper()
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	t.Cleanup(transport.CloseIdleConnections)
+	return &http.Client{Transport: transport}
+}
 
 // pushService is a browser's push service: it records each push and can be
 // told the subscription is gone.

@@ -27,7 +27,7 @@ func post(t *testing.T, destination config.AlertDestination, alert Alert) (strin
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Post(context.Background(), nil, destination, built)
+	return Post(context.Background(), testClient(t), destination, built)
 }
 
 func TestNtfyReceiptsProveTheMessageWasPublished(t *testing.T) {
