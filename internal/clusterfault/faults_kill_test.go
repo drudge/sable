@@ -40,22 +40,32 @@ func TestRecoveryPromotionKeepsSOASerialsMonotonic(t *testing.T) {
 	checks.observe(t, faults)
 }
 
-// TestRecoveryPromotionKeepsAcknowledgedWrites crashes the primary inside
-// the replication window; the writes it acknowledged must survive.
-func TestRecoveryPromotionKeepsAcknowledgedWrites(t *testing.T) {
-	knownBug(t, "drudge/sable#582")
-	faults, checks, records := crashPrimaryInsideReplicationWindow(t)
+// TestRecoveryPromotionLosesOnlyTheReplicationWindow holds what
+// docs/clustering.md promises (#582): writes a replica had before the primary
+// crashed survive a recovery promotion, and writes acknowledged inside the
+// replication window survive on every node or are gone from every node.
+func TestRecoveryPromotionLosesOnlyTheReplicationWindow(t *testing.T) {
+	faults, _, records := crashPrimaryInsideReplicationWindow(t)
+	// The former primary served the lost writes' serials before it crashed;
+	// holding its serials across the crash is #581's test, so check the
+	// recovered cluster on its own here.
+	checks := newInvariants()
 	checks.converged(t, faults, records)
+	checks.sameWindowEverywhere(t, faults, records)
 }
 
-// crashPrimaryInsideReplicationWindow kills the primary right after it
-// acknowledges writes, before a replica pulls them, promotes a replica, and
-// waits for the restarted former primary to step down.
+// crashPrimaryInsideReplicationWindow makes writes the replicas pull, then
+// kills the primary right after it acknowledges more, before a replica pulls
+// them. It promotes a replica and waits for the restarted former primary to
+// step down. The ledger marks the last writes as inside the window.
 func crashPrimaryInsideReplicationWindow(t *testing.T) (*faultCluster, *invariants, *ledger) {
 	t.Helper()
 	faults := startCluster(t, 3)
 	checks, records := newInvariants(), &ledger{}
 	writeAndObserve(t, faults, checks, records, 3)
+	checks.converged(t, faults, records)
+	writeAndObserve(t, faults, checks, records, 3)
+	records.insideWindow(3)
 	old, successor := faults.members[0], faults.members[1]
 	term := old.state(t).Term
 	old.kill(t)

@@ -135,6 +135,7 @@ func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, si
 		return SyncConfiguration{}, err
 	}
 	now := service.clock()
+	service.replays.record(heartbeat.NodeID, signature, heartbeat.SentAt, now)
 	if heartbeat.Primary != nil {
 		return service.answerPrimaryProbeLocked(heartbeat, now)
 	}
@@ -144,9 +145,7 @@ func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, si
 			return SyncConfiguration{}, err
 		}
 	}
-	if err := service.observeHeartbeatLocked(heartbeat, now, localIsPrimary); err != nil {
-		return SyncConfiguration{}, err
-	}
+	service.observeHeartbeatLocked(heartbeat, now, localIsPrimary)
 	return service.syncConfigurationLocked(heartbeat.NodeID, heartbeat.StateDigest, now, localIsPrimary)
 }
 
@@ -187,11 +186,8 @@ func (service *Service) recordMemberIdentityLocked(heartbeat Heartbeat, now time
 
 // observeHeartbeatLocked records a member's heartbeat, along with the alerts
 // and lookups it reported when this node is the primary.
-func (service *Service) observeHeartbeatLocked(heartbeat Heartbeat, now time.Time, localIsPrimary bool) error {
+func (service *Service) observeHeartbeatLocked(heartbeat Heartbeat, now time.Time, localIsPrimary bool) {
 	previous, previouslyObserved := service.telemetry[heartbeat.NodeID]
-	if previouslyObserved && !heartbeat.SentAt.After(previous.heartbeat.SentAt) {
-		return errors.New("synchronization heartbeat is stale or replayed")
-	}
 	if heartbeat.Alerts != nil && localIsPrimary {
 		service.recordReportedAlerts(heartbeat.NodeID, heartbeat.Alerts, now)
 	}
@@ -214,7 +210,6 @@ func (service *Service) observeHeartbeatLocked(heartbeat Heartbeat, now time.Tim
 			"sync_state", syncState,
 		)
 	}
-	return nil
 }
 
 // syncConfigurationLocked builds the configuration a member receives, with the
@@ -268,7 +263,7 @@ func (service *Service) validateSynchronizationHeartbeatLocked(heartbeat Heartbe
 	if !slices.ContainsFunc(service.manifest.Nodes, func(node member) bool { return node.ID == heartbeat.NodeID }) {
 		return ErrNodeRemoved
 	}
-	if previous, observed := service.telemetry[heartbeat.NodeID]; observed && !heartbeat.SentAt.After(previous.heartbeat.SentAt) {
+	if service.replays.seen(heartbeat.NodeID, signature) {
 		return errors.New("synchronization heartbeat is stale or replayed")
 	}
 	return nil

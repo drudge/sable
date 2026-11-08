@@ -20,6 +20,17 @@ type write struct {
 type ledger struct {
 	acknowledged []write
 	attempted    int
+	// window holds acknowledged writes no replica had when the primary
+	// crashed. A recovery promotion may lose them (docs/clustering.md), so
+	// they are held to all-or-nothing instead of always surviving.
+	window []write
+}
+
+// insideWindow moves the last count acknowledged writes into the window.
+func (records *ledger) insideWindow(count int) {
+	split := len(records.acknowledged) - count
+	records.window = append(records.window, records.acknowledged[split:]...)
+	records.acknowledged = records.acknowledged[:split]
 }
 
 // write adds the next ledger record through node and records it only when
