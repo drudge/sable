@@ -770,6 +770,24 @@ func TestUniFiStatusPanelReportsFailure(t *testing.T) {
 	}
 }
 
+// What a background sync skipped stays visible after setup, not only in the
+// wizard's preview.
+func TestUniFiStatusPanelListsSkippedEntries(t *testing.T) {
+	t.Parallel()
+	controller := &testUniFiController{status: unifi.Status{
+		Hosts: 4, Skipped: []string{"zone clients.example.test is a secondary zone and cannot hold synchronized records"},
+	}}
+	server, _ := newIntegrationsTestServer(t, controller)
+
+	body := serveRequest(server, http.MethodGet, "/ui/integrations/unifi/status").Body.String()
+
+	for _, expected := range []string{"1 entry produced no record", "clients.example.test is a secondary zone"} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("status panel does not contain %q", expected)
+		}
+	}
+}
+
 // A record the synchronizer owns is read-only here: the next sync would revert
 // an edit made from the zone editor.
 func TestZoneEditorRefusesSynchronizedRecords(t *testing.T) {

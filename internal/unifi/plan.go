@@ -17,6 +17,10 @@ type Status struct {
 	Added          int
 	Updated        int
 	Removed        int
+	// Skipped is the last successful run's explanation for each host or
+	// network that produced no record, so the console can show it after setup
+	// as well as in the wizard's preview.
+	Skipped []string
 }
 
 // Plan is the difference one synchronization would make. The setup wizard

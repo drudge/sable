@@ -24,6 +24,10 @@ If several networks share one zone, keep `{{network}}` in every mapping's templa
 
 Enable reverse DNS when appropriate. Sable derives the reverse zone from the network subnet and can provision missing Primary zones for the forward and reverse records.
 
+A mapped zone can be a Primary zone or a Forwarder zone. A Forwarder zone answers the synced hosts itself and forwards every other name, so you can put client names under a domain that is served elsewhere. A secondary or stub zone is a copy of another server's data, so Sable skips it.
+
+Sable never publishes over a name you already answer with your own A, AAAA, CNAME, or FWD record. It skips that host and says so. A host skipped in its forward zone also gets no PTR record, so every PTR points to a name that resolves (RFC 1912 §2.1).
+
 ![UniFi integration showing per-network zone mappings, TTLs, reverse DNS, and synchronization totals](../assets/guide-screenshots/unifi.webp "Review each network's zone and Reverse setting, then compare the last synchronization counts with the changes you expected.")
 
 ## 3. Synchronize and verify
@@ -34,7 +38,7 @@ Records display a UniFi source badge and are read-only in the editor. Change the
 
 ## Keep it healthy
 
-Check last successful synchronization, skipped devices, and connection errors. With [alerts](../configuration.md#alerts) set up, three failed syncs in a row send an alert with the last error. On a promoted cluster node, the replicated configuration and credentials let synchronization resume; any local CA-file path must also exist there.
+Check last successful synchronization, skipped entries, and connection errors. The status panel lists what the last sync skipped and why. With [alerts](../configuration.md#alerts) set up, three failed syncs in a row send an alert with the last error. On a promoted cluster node, the replicated configuration and credentials let synchronization resume; any local CA-file path must also exist there.
 
 If many names unexpectedly change, pause the integration while reviewing the controller data and mapping. Do not bulk-delete hand-authored records as a cleanup shortcut. Use a backup or Change Center when restoring DNS data, then correct the upstream cause before resuming.
 
