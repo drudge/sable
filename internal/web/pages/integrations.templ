@@ -272,6 +272,7 @@ type UniFiStatusView struct {
 	Added        int
 	Updated      int
 	Removed      int
+	Skipped      []string
 }
 
 type UniFiWizardView struct {
@@ -1102,6 +1103,7 @@ templ UniFiStatusPanel(view UniFiAppView) {
 			@components.Fact(components.FactProps{Label: "Updated", Value: fmt.Sprint(view.Status.Updated)})
 			@components.Fact(components.FactProps{Label: "Removed", Value: fmt.Sprint(view.Status.Removed)})
 		}
+		@UniFiSkippedList(view.Status.Skipped)
 		if view.Status.Running {
 			<div class="cluster-sync-indeterminate integration-progress" role="progressbar" aria-label="Synchronizing with the UniFi controller"></div>
 		}
@@ -1362,14 +1364,20 @@ templ unifiReviewPlan(wizard UniFiWizardView) {
 	@UniFiPlanRecords("Records to update", wizard.Plan.Updated)
 	@UniFiPlanRecords("Records to remove", wizard.Plan.Removed)
 	@UniFiPlanRecords("Everything this mapping publishes", wizard.Plan.Publishing)
-	if len(wizard.Plan.Skipped) > 0 {
-		<details class="unifi-skipped"><summary>{ fmt.Sprintf("%d entries produced no record", len(wizard.Plan.Skipped)) }</summary><ul>
-			for _, entry := range wizard.Plan.Skipped {
+	@UniFiSkippedList(wizard.Plan.Skipped)
+	<div class="cluster-dialog-note">@Icon("info")<p><strong>Records Sable publishes are marked as UniFi-owned</strong><span>Synchronization only ever changes records it owns, so anything you add by hand in these zones is left alone.</span></p></div>
+}
+
+// UniFiSkippedList explains each host or network that produced no record, in
+// the wizard's preview and on the status panel after every sync.
+templ UniFiSkippedList(entries []string) {
+	if len(entries) > 0 {
+		<details class="unifi-skipped"><summary>{ countLabel(uint64(len(entries)), "entry", "entries") } produced no record</summary><ul>
+			for _, entry := range entries {
 				<li>{ entry }</li>
 			}
 		</ul></details>
 	}
-	<div class="cluster-dialog-note">@Icon("info")<p><strong>Records Sable publishes are marked as UniFi-owned</strong><span>Synchronization only ever changes records it owns, so anything you add by hand in these zones is left alone.</span></p></div>
 }
 
 templ UniFiPlanRecords(title string, records []UniFiPlanRecordView) {

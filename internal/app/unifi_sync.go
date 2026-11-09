@@ -258,6 +258,10 @@ func (syncer *unifiSyncer) finishAttempt(started time.Time, interval time.Durati
 	syncer.status.Added = len(plan.Added)
 	syncer.status.Updated = len(plan.Updated)
 	syncer.status.Removed = len(plan.Removed)
+	if !slices.Equal(syncer.status.Skipped, plan.Skipped) && len(plan.Skipped) > 0 {
+		syncer.logger.Warn("UniFi synchronization skipped entries", "count", len(plan.Skipped), "entries", plan.Skipped)
+	}
+	syncer.status.Skipped = plan.Skipped
 }
 
 // synchronize reads the controller and reconciles the mapped zones. In preview
@@ -310,7 +314,7 @@ func (syncer *unifiSyncer) synchronize(ctx context.Context, settings config.UniF
 	if preview {
 		zones := syncer.zones.Current().Zones
 		plan := planUniFiZones(&zones, desired, syncer.now())
-		plan.Skipped = skipped
+		plan.Skipped = append(skipped, plan.Skipped...)
 		plan.HostsByNetwork = inventory.HostCounts()
 		plan.Hosts = mappedUniFiHosts(settings, plan.HostsByNetwork)
 		return plan, plan.Hosts, nil
@@ -323,7 +327,7 @@ func (syncer *unifiSyncer) synchronize(ctx context.Context, settings config.UniF
 	if err != nil {
 		return unifi.Plan{}, 0, err
 	}
-	plan.Skipped = skipped
+	plan.Skipped = append(skipped, plan.Skipped...)
 	plan.HostsByNetwork = inventory.HostCounts()
 	plan.Hosts = mappedUniFiHosts(settings, plan.HostsByNetwork)
 	return plan, plan.Hosts, nil
@@ -532,60 +536,148 @@ func dedupeUniFiRecords(records []zone.Record) []zone.Record {
 // planUniFiZones applies the desired record sets to the zone list and reports
 // what changed. Records the synchronizer does not own are never touched, so a
 // hand-authored record in a mapped zone survives every sync.
+//
+// Forward zones go first so the reverse zones publish a PTR only for a name
+// that really got its address. A PTR whose name does not resolve fails the
+// forward-confirmed check RFC 1912 §2.1 asks for, so a host skipped in its
+// forward zone is skipped in its reverse zone too.
 func planUniFiZones(zones *[]zone.Zone, desired map[string]*desiredZone, now time.Time) unifi.Plan {
 	var plan unifi.Plan
-	names := make([]string, 0, len(desired))
-	for name := range desired {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
+	forwardNames, reverseNames := splitUniFiZoneNames(desired)
+	published := make(map[string]bool)
+	for _, name := range forwardNames {
 		entry := desired[name]
-		index := slices.IndexFunc(*zones, func(candidate zone.Zone) bool { return candidate.Name == name })
-		if index < 0 {
-			created, err := zone.NewPrimary(name, entry.ttl, "", "", now)
-			if err != nil {
-				plan.Skipped = append(plan.Skipped, fmt.Sprintf("zone %s could not be created: %v", name, err))
-				continue
-			}
-			*zones = append(*zones, created)
-			index = len(*zones) - 1
-			plan.CreatedZones = append(plan.CreatedZones, name)
-		}
-		target := &(*zones)[index]
-		// Only primary zones hold locally authored records. A mapping pointed
-		// at a secondary or forwarder zone is a configuration mistake, not a
-		// reason to corrupt a synchronized copy.
-		if target.Type != "primary" {
-			plan.Skipped = append(plan.Skipped, fmt.Sprintf("zone %s is a %s zone and cannot hold synchronized records", name, target.Type))
+		target := writableUniFiZone(zones, entry, true, now, &plan)
+		if target == nil {
 			continue
 		}
-		for _, record := range entry.records {
-			plan.Publishing = append(plan.Publishing, planRecord(name, record))
+		records := unclaimedUniFiRecords(*target, entry.records, now, &plan)
+		for _, record := range records {
+			if fqdn, err := zone.RecordFQDN(name, record.Name); err == nil {
+				published[fqdn] = true
+			}
 		}
-		if applyUniFiRecords(target, entry.records, &plan) {
-			zone.AdvanceSerial(target, now)
+		publishUniFiRecords(target, records, now, &plan)
+	}
+	for _, name := range reverseNames {
+		entry := desired[name]
+		records := publishedPTRs(entry.records, published)
+		// A reverse zone left with nothing to publish because its hosts were
+		// skipped is not worth creating, but an existing one still needs its
+		// stale records retired.
+		create := len(records) > 0 || len(entry.records) == 0
+		if target := writableUniFiZone(zones, entry, create, now, &plan); target != nil {
+			publishUniFiRecords(target, records, now, &plan)
 		}
 	}
-	// Reverse zones are derived from the addresses in use, and delegated IPv6
-	// prefixes come and go with the upstream, so a prefix that disappears would
-	// otherwise strand its synchronized PTR records forever. A reverse zone the
-	// mapping no longer produces has its synchronized records retired; the zone
-	// itself stays behind because the operator may have added records of their
-	// own.
+	retireUniFiReverseZones(zones, desired, now, &plan)
+	return plan
+}
+
+// splitUniFiZoneNames sorts the desired zones into forward and reverse names,
+// each in order.
+func splitUniFiZoneNames(desired map[string]*desiredZone) (forward, reverse []string) {
+	for name := range desired {
+		if isReverseZoneName(name) {
+			reverse = append(reverse, name)
+		} else {
+			forward = append(forward, name)
+		}
+	}
+	sort.Strings(forward)
+	sort.Strings(reverse)
+	return forward, reverse
+}
+
+// writableUniFiZone finds the zone a desired record set goes into, creating it
+// as a primary zone when it does not exist and create allows it. It returns
+// nil, with the reason in plan.Skipped, when the zone cannot take records.
+func writableUniFiZone(zones *[]zone.Zone, entry *desiredZone, create bool, now time.Time, plan *unifi.Plan) *zone.Zone {
+	index := slices.IndexFunc(*zones, func(candidate zone.Zone) bool { return candidate.Name == entry.name })
+	if index < 0 {
+		if !create {
+			return nil
+		}
+		created, err := zone.NewPrimary(entry.name, entry.ttl, "", "", now)
+		if err != nil {
+			plan.Skipped = append(plan.Skipped, fmt.Sprintf("zone %s could not be created: %v", entry.name, err))
+			return nil
+		}
+		*zones = append(*zones, created)
+		index = len(*zones) - 1
+		plan.CreatedZones = append(plan.CreatedZones, entry.name)
+	}
+	target := &(*zones)[index]
+	// Primary and Forwarder zones hold locally authored records; a Forwarder
+	// zone answers them itself and forwards every other name. A secondary or
+	// stub zone is a copy of another server's data, so writing into it would
+	// corrupt that copy.
+	if !zone.AcceptsDynamicUpdates(target.Type) {
+		plan.Skipped = append(plan.Skipped, fmt.Sprintf("zone %s is a %s zone and cannot hold synchronized records", entry.name, target.Type))
+		return nil
+	}
+	return target
+}
+
+// unclaimedUniFiRecords drops each desired record whose name the operator
+// already answers with a record of their own, and says why in plan.Skipped.
+func unclaimedUniFiRecords(target zone.Zone, records []zone.Record, now time.Time, plan *unifi.Plan) []zone.Record {
+	claims := zone.AddressClaims(target, now)
+	if len(claims) == 0 {
+		return records
+	}
+	kept := make([]zone.Record, 0, len(records))
+	for _, record := range records {
+		fqdn, err := zone.RecordFQDN(target.Name, record.Name)
+		if claimed, found := claims[fqdn]; err == nil && found {
+			plan.Skipped = append(plan.Skipped, fmt.Sprintf("%s already has a hand-authored %s record", fqdn, claimed))
+			continue
+		}
+		kept = append(kept, record)
+	}
+	return kept
+}
+
+// publishedPTRs keeps the PTR records whose target name was published.
+func publishedPTRs(records []zone.Record, published map[string]bool) []zone.Record {
+	kept := make([]zone.Record, 0, len(records))
+	for _, record := range records {
+		if published[strings.TrimSuffix(strings.ToLower(record.Value), ".")] {
+			kept = append(kept, record)
+		}
+	}
+	return kept
+}
+
+// publishUniFiRecords lists a zone's records in the plan and applies them.
+func publishUniFiRecords(target *zone.Zone, records []zone.Record, now time.Time, plan *unifi.Plan) {
+	for _, record := range records {
+		plan.Publishing = append(plan.Publishing, planRecord(target.Name, record))
+	}
+	if applyUniFiRecords(target, records, plan) {
+		zone.AdvanceSerial(target, now)
+	}
+}
+
+// retireUniFiReverseZones clears synchronized records from reverse zones the
+// mapping no longer produces. Reverse zones are derived from the addresses in
+// use, and delegated IPv6 prefixes come and go with the upstream, so a prefix
+// that disappears would otherwise strand its synchronized PTR records forever.
+// The zone itself stays behind because the operator may have added records of
+// their own.
+func retireUniFiReverseZones(zones *[]zone.Zone, desired map[string]*desiredZone, now time.Time, plan *unifi.Plan) {
 	for index := range *zones {
 		target := &(*zones)[index]
-		if target.Type != "primary" || !isReverseZoneName(target.Name) {
+		if !zone.AcceptsDynamicUpdates(target.Type) || !isReverseZoneName(target.Name) {
 			continue
 		}
 		if _, wanted := desired[target.Name]; wanted {
 			continue
 		}
-		if applyUniFiRecords(target, nil, &plan) {
+		if applyUniFiRecords(target, nil, plan) {
 			zone.AdvanceSerial(target, now)
 		}
 	}
-	return plan
 }
 
 // isReverseZoneName reports whether a zone holds reverse mappings.
