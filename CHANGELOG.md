@@ -8,6 +8,36 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.8.1-beta.6] - 2026-11-09
+
+Sable 1.8.1-beta.6 lets UniFi Host Sync publish into Forwarder zones and
+shows every host and zone the sync skipped, with the reason.
+
+### Upgrading from 1.8.1-beta.5
+
+- A UniFi host whose name you already answer with your own A, AAAA, CNAME
+  or FWD record is now skipped instead of joining or overriding that record.
+  After the first sync, check the skipped entries on the UniFi status panel.
+- Nothing else is needed.
+
+### Integrations
+
+- UniFi Host Sync now publishes into a mapped Forwarder zone, which answers
+  the synced hosts itself and forwards every other name. Before, a Forwarder
+  zone was refused as if it were a secondary copy, its hosts got PTR records
+  for names with no address, and the reason never reached the console.
+  Secondary, secondary forwarder and stub zones are still skipped.
+- A PTR record is now published only for a host whose forward name got its
+  address, so every PTR points to a name that resolves (RFC 1912 section 2.1).
+- The UniFi status panel now lists what the last sync skipped and why, and
+  the sync logs skips when they change. Before, per-host skips overwrote the
+  zone-level ones.
+- The UniFi wizard now suggests Forwarder zones alongside Primary zones.
+
+### Dependencies
+
+- Updated pgx to 5.12.0, quic-go to 0.65.0 and modernc.org/sqlite to 1.61.1.
+
 ## [1.8.1-beta.5] - 2026-11-09
 
 Sable 1.8.1-beta.5 is the same software as 1.8.1-beta.4. It is a new beta
