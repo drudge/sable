@@ -8,6 +8,120 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.8.1] - 2026-11-09
+
+Sable 1.8.1 keeps a cluster consistent through a recovery promotion, a
+backup restore and a rolling update under load. It lets UniFi Host Sync
+publish into Forwarder zones and tells secondaries about its changes right
+away. It answers NODATA instead of NXDOMAIN for the other types of a name a
+Forwarder zone overrides, and keeps console dialogs compact on iPad Safari.
+
+### Upgrading from 1.8.0
+
+- Update every node in a cluster. A replica on 1.8.0 won't follow a newer
+  node's recovery promotion until it is updated too. Older nodes ignore the
+  new schedule override field, but a configuration file or backup saved
+  while a Skip, Delay or End Now is in force won't load on 1.8.0 until the
+  override passes or is resumed.
+- A UniFi host whose name you already answer with your own A, AAAA, CNAME
+  or FWD record is now skipped instead of joining or overriding that record.
+  After the first sync, check the skipped entries on the UniFi status panel.
+- Nothing else is needed. Saved update, key and trust anchor states are
+  unchanged.
+
+### Clustering
+
+- After a recovery promotion, the other replicas now follow the promoted
+  node within about 10 seconds. Before, they kept polling the failed primary
+  and served stale data until it came back.
+- A recovery promotion now moves the SOA serial of every zone Sable issues
+  serials for forward by 100. Before, the promoted node could reissue
+  serials the failed primary had already handed out for other changes, and
+  the former primary's serials went backward when it rejoined, so
+  secondaries could keep the wrong content (RFC 1982).
+- **Clustering** docs now say plainly that a recovery promotion keeps only
+  the changes the promoted replica already had. Changes the primary
+  confirmed in the last second or so before it failed, or that reached only
+  another replica, are lost.
+- A node whose clock steps back now keeps synchronizing. Before, it fell out
+  of sync for about as long as the step, up to 30 seconds.
+- A rolling update now proceeds while records are being changed. Before, a
+  replica a moment behind the primary failed preparation, and the update and
+  verify steps waited for zero lag that never came under steady writes.
+
+### Backup and restore
+
+- Restoring a backup now gives each zone Sable issues serials for the next
+  serial after the one it was serving, instead of the backup's older serial.
+  Before, secondaries kept the newer content the restore displaced, and the
+  next change reused a serial already served for other content. Transferred
+  zones keep their upstream's serial.
+
+### DNS
+
+- When a Forwarder zone holds records for a name, other types for that name
+  now get NODATA with the zone's SOA (RFC 2308) instead of the upstream's
+  NXDOMAIN. Before, an A-only override made every AAAA lookup fail, so
+  nslookup reported the name missing right after printing its address.
+- A host override's NODATA, such as AAAA for an IPv4-only override, now
+  carries an SOA so clients can cache it.
+
+### Caching
+
+- A cached answer elected for prefetch by an internal lookup, such as a
+  client name or ANAME lookup, is refreshed again later. Before, the entry
+  stayed marked as refreshing with nothing refreshing it, so it went cold
+  and the next client waited on the upstream.
+
+### Blocking
+
+- A rule set schedule held off by **Skip**, **Delay 30 Minutes** or **End
+  Now** now says which: the rule set panel and the device drawer show
+  Skipped, Delayed or Ended early instead of Paused. MCP `list_schedules`
+  adds a `state` field (`outside`, `on`, `skipped`, `delayed`, `ended`, or
+  `overridden` for an override saved by an older release); `paused_until` is
+  unchanged.
+
+### Integrations
+
+- UniFi Host Sync now publishes into a mapped Forwarder zone, which answers
+  the synced hosts itself and forwards every other name. Before, a Forwarder
+  zone was refused as if it were a secondary copy, its hosts got PTR records
+  for names with no address, and the reason never reached the console.
+  Secondary, secondary forwarder and stub zones are still skipped.
+- When UniFi Host Sync or **Remove** changes a zone, Sable now sends NOTIFY
+  to the zone's NOTIFY targets (RFC 1996). Before, secondaries only picked up
+  the change on their SOA refresh timer, up to an hour later by default.
+- A PTR record is now published only for a host whose forward name got its
+  address, so every PTR points to a name that resolves (RFC 1912 section 2.1).
+- The UniFi status panel now lists what the last sync skipped and why, and
+  the sync logs skips when they change.
+- The UniFi wizard now suggests Forwarder zones alongside Primary zones.
+- Clicking UniFi **Sync Now** while a sync is running keeps the status at
+  running until the queued sync finishes. Before, it flickered back to idle
+  between the two runs.
+
+### Updates, DNSSEC and setup
+
+- Cluster rolling updates, single-node updates, DNSSEC key rollovers
+  (RFC 7583) and RFC 5011 trust anchors each move through an explicit table
+  of states, and a move outside it is refused with an error instead of
+  being saved.
+- The SSO and UniFi setup wizards refuse a jump to an unknown step or one
+  ahead of the current step. Before, a crafted form could skip SSO's issuer
+  check.
+
+### Console
+
+- Every dialog, such as **Install this release?** on About or the
+  **Release notes** for an update, now sizes to its content on iPad Safari.
+  Before, it stretched down the whole screen with its title, body and
+  buttons spread far apart. Long content still scrolls inside the dialog.
+
+### Dependencies
+
+- Updated pgx to 5.12.0, quic-go to 0.65.0 and modernc.org/sqlite to 1.61.1.
+
 ## [1.8.1-beta.6] - 2026-11-09
 
 Sable 1.8.1-beta.6 lets UniFi Host Sync publish into Forwarder zones and
