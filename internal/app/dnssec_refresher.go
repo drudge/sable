@@ -16,15 +16,11 @@ type dnssecRefreshManager interface {
 	UpdateZones(context.Context, func(*[]zone.Zone) error) error
 }
 
-type dnssecRefreshNotifier interface {
-	NotifyZone(context.Context, string, []string) []error
-}
-
 func runDNSSECRefresher(
 	ctx context.Context,
 	manager dnssecRefreshManager,
 	signer *dnssecSigner,
-	notifier dnssecRefreshNotifier,
+	notifier zoneNotifier,
 	logger *slog.Logger,
 ) {
 	ticker := time.NewTicker(dnssecRefreshCheckInterval)
@@ -43,7 +39,7 @@ func refreshDNSSECZones(
 	ctx context.Context,
 	manager dnssecRefreshManager,
 	signer *dnssecSigner,
-	notifier dnssecRefreshNotifier,
+	notifier zoneNotifier,
 	logger *slog.Logger,
 ) {
 	zones, err := signer.ZonesNeedingRefresh(ctx, manager.Current().Zones)

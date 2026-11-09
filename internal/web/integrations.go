@@ -262,8 +262,9 @@ func (server *Server) removeSourcedRecords(request *http.Request, source string)
 		return 0, errors.New("zones are read-only")
 	}
 	removed := 0
+	var changed []string
 	err := editor.UpdateZones(request.Context(), func(zones *[]zone.Zone) error {
-		removed = 0
+		removed, changed = 0, nil
 		now := time.Now()
 		for index := range *zones {
 			target := &(*zones)[index]
@@ -280,11 +281,17 @@ func (server *Server) removeSourcedRecords(request *http.Request, source string)
 			}
 			target.Records = kept
 			zone.AdvanceSerial(target, now)
+			changed = append(changed, target.Name)
 		}
 		return nil
 	})
 	if err != nil {
 		return 0, err
+	}
+	// Secondaries would otherwise keep serving the deleted records until
+	// their SOA refresh timer runs (RFC 1996 §4.7).
+	for _, name := range changed {
+		server.notifyZoneChange(request.Context(), name)
 	}
 	return removed, nil
 }

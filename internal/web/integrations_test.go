@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -999,6 +1000,17 @@ func TestUniFiWizardReviewShowsPublishedRecordsWhenInSync(t *testing.T) {
 	}
 }
 
+// notifyingTestStats records the NOTIFY rounds the console asks for.
+type notifyingTestStats struct {
+	testStats
+	notified []string
+}
+
+func (stats *notifyingTestStats) NotifyZone(_ context.Context, name string, targets []string) []error {
+	stats.notified = append(stats.notified, name+" "+strings.Join(targets, ","))
+	return nil
+}
+
 // Removing the integration has to leave nothing behind: no configuration, no
 // stored credentials, and none of the records it published.
 func TestUniFiRemoveResetsEverything(t *testing.T) {
@@ -1025,10 +1037,19 @@ func TestUniFiRemoveResetsEverything(t *testing.T) {
 		},
 	}}}
 
+	configuration.zoneSnapshot.Zones[0].Notify = []string{"192.0.2.53:53"}
+	notifying := &notifyingTestStats{testStats: testStats{snapshot: dnsserver.Stats{StartedAt: time.Now()}}}
+	server.stats = notifying
+
 	response := postIntegrations(server, "/ui/integrations/unifi/remove", url.Values{})
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("remove = %d %s", response.Code, response.Body.String())
+	}
+	// Secondaries must hear about the deletion rather than wait for their
+	// SOA refresh timer (RFC 1996 §4.7).
+	if want := []string{"clients.example.test 192.0.2.53:53"}; !slices.Equal(notifying.notified, want) {
+		t.Errorf("NOTIFY rounds = %v, want %v", notifying.notified, want)
 	}
 	if !strings.Contains(response.Body.String(), "1 published records were deleted") {
 		t.Errorf("remove did not report what it deleted: %s", response.Body.String())
