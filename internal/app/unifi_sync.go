@@ -66,6 +66,11 @@ type unifiSyncer struct {
 	// their traffic, so Insights can find devices that never use Sable. Nil
 	// skips it.
 	reading func(context.Context, unifi.Inventory, time.Time) error
+	// notifier tells a changed zone's secondaries to fetch it, so they need
+	// not wait for their SOA refresh timer. Nil skips it.
+	notifier zoneNotifier
+	// notifying tracks NOTIFY rounds still running after a sync returns.
+	notifying sync.WaitGroup
 
 	wake chan struct{}
 
@@ -319,11 +324,7 @@ func (syncer *unifiSyncer) synchronize(ctx context.Context, settings config.UniF
 		plan.Hosts = mappedUniFiHosts(settings, plan.HostsByNetwork)
 		return plan, plan.Hosts, nil
 	}
-	var plan unifi.Plan
-	err = syncer.zones.UpdateZones(ctx, func(zones *[]zone.Zone) error {
-		plan = planUniFiZones(zones, desired, syncer.now())
-		return nil
-	})
+	plan, err := syncer.applyUniFiPlan(ctx, desired)
 	if err != nil {
 		return unifi.Plan{}, 0, err
 	}
@@ -331,6 +332,29 @@ func (syncer *unifiSyncer) synchronize(ctx context.Context, settings config.UniF
 	plan.HostsByNetwork = inventory.HostCounts()
 	plan.Hosts = mappedUniFiHosts(settings, plan.HostsByNetwork)
 	return plan, plan.Hosts, nil
+}
+
+// applyUniFiPlan writes the desired records, then notifies the secondaries of
+// every zone whose serial advanced (RFC 1996 §4.7). NOTIFY runs off the sync
+// goroutine, so a slow or unreachable secondary cannot hold up the next sync.
+func (syncer *unifiSyncer) applyUniFiPlan(ctx context.Context, desired map[string]*desiredZone) (unifi.Plan, error) {
+	var plan unifi.Plan
+	var changed []string
+	err := syncer.zones.UpdateZones(ctx, func(zones *[]zone.Zone) error {
+		before := zoneSerials(*zones)
+		plan = planUniFiZones(zones, desired, syncer.now())
+		changed = advancedZones(before, *zones)
+		return nil
+	})
+	if err != nil || syncer.notifier == nil || len(changed) == 0 {
+		return plan, err
+	}
+	zones := syncer.zones.Current().Zones
+	notifyCtx := context.WithoutCancel(ctx)
+	syncer.notifying.Go(func() {
+		notifyZones(notifyCtx, syncer.notifier, zones, changed, syncer.logger, "UniFi sync")
+	})
+	return plan, nil
 }
 
 // mappedUniFiHosts totals the hosts on the networks the operator mapped. The
