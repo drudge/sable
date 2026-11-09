@@ -149,7 +149,7 @@ func unifiStatusView(status unifi.Status, display pages.TimeDisplay) pages.UniFi
 	view := pages.UniFiStatusView{
 		Running: status.Running, LastError: status.LastError, Hosts: status.Hosts,
 		Added: status.Added, Updated: status.Updated, Removed: status.Removed,
-		ZonesCreated: status.ZonesCreated,
+		ZonesCreated: status.ZonesCreated, Skipped: status.Skipped,
 	}
 	if !status.LastSuccess.IsZero() {
 		view.LastSuccess = pages.FormatShortDateTime(status.LastSuccess, display, true)
@@ -439,7 +439,7 @@ func (server *Server) unifiWizardBack(writer http.ResponseWriter, request *http.
 			break
 		}
 		wizard.Step = pages.UniFiStepZones
-		wizard.ZoneOptions = server.primaryZoneNames()
+		wizard.ZoneOptions = server.writableZoneNames()
 		// Zone choices already entered survive the trip back; a first visit
 		// falls back to whatever the networks step selected.
 		if unifiFormNetworkCount(request) > 0 {
@@ -651,7 +651,7 @@ func (server *Server) unifiWizardZones(writer http.ResponseWriter, request *http
 	}
 	wizard.Step = pages.UniFiStepZones
 	wizard.Networks = unifiSelectedNetworks(wizard)
-	wizard.ZoneOptions = server.primaryZoneNames()
+	wizard.ZoneOptions = server.writableZoneNames()
 	server.applyUniFiPreviews(&wizard)
 	server.renderWizard(writer, request, http.StatusOK, wizard)
 }
@@ -667,11 +667,13 @@ func unifiSelectedNetworks(wizard pages.UniFiWizardView) []pages.UniFiWizardNetw
 	return selected
 }
 
-func (server *Server) primaryZoneNames() []string {
+// writableZoneNames lists the zones UniFi sync can publish into: Primary and
+// Forwarder zones, which hold locally authored records.
+func (server *Server) writableZoneNames() []string {
 	zones := server.zones.Current().Zones
 	names := make([]string, 0, len(zones))
 	for _, current := range zones {
-		if current.Type == "primary" {
+		if zone.AcceptsDynamicUpdates(current.Type) {
 			names = append(names, current.Name)
 		}
 	}
@@ -734,7 +736,7 @@ func (server *Server) unifiWizardReview(writer http.ResponseWriter, request *htt
 
 // renderUniFiReview previews the mapping the wizard collected.
 func (server *Server) renderUniFiReview(writer http.ResponseWriter, request *http.Request, wizard pages.UniFiWizardView) {
-	wizard.ZoneOptions = server.primaryZoneNames()
+	wizard.ZoneOptions = server.writableZoneNames()
 	server.applyUniFiPreviews(&wizard)
 	settings := unifiSettingsFromWizard(wizard, wizard.Networks)
 	if err := settings.Validate(); err != nil {
@@ -804,7 +806,7 @@ func (server *Server) unifiWizardFinish(writer http.ResponseWriter, request *htt
 		return nil
 	}); err != nil {
 		wizard.Step, wizard.Error = pages.UniFiStepZones, err.Error()
-		wizard.ZoneOptions = server.primaryZoneNames()
+		wizard.ZoneOptions = server.writableZoneNames()
 		server.renderWizard(writer, request, http.StatusUnprocessableEntity, wizard)
 		return
 	}
