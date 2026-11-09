@@ -8,6 +8,15 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.8.1-beta.5] - 2026-11-09
+
+Sable 1.8.1-beta.5 is the same software as 1.8.1-beta.4. It is a new beta
+for testing after the cluster fault harness's nightly soak passed.
+
+### Upgrading from 1.8.1-beta.4
+
+- Nothing is needed.
+
 ## [1.8.1-beta.4] - 2026-11-08
 
 Sable 1.8.1-beta.4 keeps a cluster consistent through a recovery promotion,
