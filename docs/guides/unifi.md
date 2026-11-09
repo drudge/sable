@@ -26,6 +26,8 @@ Enable reverse DNS when appropriate. Sable derives the reverse zone from the net
 
 A mapped zone can be a Primary zone or a Forwarder zone. A Forwarder zone answers the synced hosts itself and forwards every other name, so you can put client names under a domain that is served elsewhere. A secondary or stub zone is a copy of another server's data, so Sable skips it.
 
+When a sync or **Remove** changes a zone, Sable advances its SOA serial and sends NOTIFY to the zone's NOTIFY targets, so secondaries pick up the change without waiting for their refresh timer (RFC 1996).
+
 Sable never publishes over a name you already answer with your own A, AAAA, CNAME, or FWD record. It skips that host and says so. A host skipped in its forward zone also gets no PTR record, so every PTR points to a name that resolves (RFC 1912 §2.1).
 
 ![UniFi integration showing per-network zone mappings, TTLs, reverse DNS, and synchronization totals](../assets/guide-screenshots/unifi.webp "Review each network's zone and Reverse setting, then compare the last synchronization counts with the changes you expected.")
