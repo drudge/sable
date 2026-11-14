@@ -24,13 +24,16 @@ type udpDHCPConn struct {
 
 // listenDHCP opens the server socket. Port 67 is below 1024, so the process
 // needs CAP_NET_BIND_SERVICE, as it does for DNS on port 53.
+//
+// The socket is bound without SO_REUSEADDR on purpose. Linux lets UDP sockets
+// that all set it share a port and hands each of them every broadcast, and
+// dnsmasq and ISC dhcpd set it. With it, Sable would bind beside another DHCP
+// server on this host and both would answer each DISCOVER. Without it the
+// bind fails with EADDRINUSE, which dhcpService logs and retries.
 func listenDHCP(ctx context.Context, port int) (*udpDHCPConn, error) {
 	config := net.ListenConfig{Control: func(_, _ string, raw syscall.RawConn) error {
 		var optionErr error
 		err := raw.Control(func(fd uintptr) {
-			if optionErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); optionErr != nil {
-				return
-			}
 			optionErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_BROADCAST, 1)
 		})
 		if err != nil {

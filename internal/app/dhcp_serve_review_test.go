@@ -174,7 +174,7 @@ func TestReviewSocketRunClosesTheSocketWhenReadFails(t *testing.T) {
 		t.Fatal("run returned nil for a failed read")
 	}
 	if !conn.closed.Load() {
-		t.Errorf("run returned %q and left the socket open: with SO_REUSEADDR a restarted listener binds beside it", err)
+		t.Errorf("run returned %q and left the socket open: it holds the port and a restarted listener can't bind", err)
 	}
 }
 
