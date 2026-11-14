@@ -25,7 +25,7 @@ These guides cover Sable 1.8.2. [Download the release](https://github.com/drudge
 
 - [Migrate from Technitium](guides/technitium-migration.md) into a new instance or cluster using zone files or DNS transfers.
 
-Console screenshots are captured from Sable 1.8.1 using the disposable Vandelay demo deployment.
+Console screenshots are captured from Sable 1.8.2 using the disposable Vandelay demo deployment.
 
 ## Make DNS work for your network
 
