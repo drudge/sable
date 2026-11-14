@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -65,13 +66,32 @@ func launchContainer(arguments []string) error {
 
 // explainContainerBind says why a listener couldn't bind a port below 1024
 // in the container. A web update can't fix it, since the launcher that raises
-// the capability is part of the image.
+// the capability is part of the image. Other permission errors, like an
+// unreadable config or a root-owned /data volume, pass through unchanged so
+// the hint doesn't point at the wrong fix.
 func explainContainerBind(err error) error {
-	if !errors.Is(err, syscall.EACCES) {
+	if !isPrivilegedBindDenied(err) {
 		return err
 	}
 	return fmt.Errorf("%w\nsable: ports below 1024 need NET_BIND_SERVICE: add it with cap_add if the container drops it,"+
 		" or pull a newer image if this one predates its file capability", err)
+}
+
+// isPrivilegedBindDenied reports whether err is a listen that bind(2) refused
+// with EACCES on a port from 1 to 1023, the ports NET_BIND_SERVICE covers.
+func isPrivilegedBindDenied(err error) bool {
+	var opErr *net.OpError
+	var sysErr *os.SyscallError
+	if !errors.As(err, &opErr) || opErr.Op != "listen" || opErr.Addr == nil ||
+		!errors.As(opErr.Err, &sysErr) || sysErr.Syscall != "bind" || !errors.Is(sysErr.Err, syscall.EACCES) {
+		return false
+	}
+	_, portText, splitErr := net.SplitHostPort(opErr.Addr.String())
+	if splitErr != nil {
+		return false
+	}
+	port, convErr := strconv.Atoi(portText)
+	return convErr == nil && port > 0 && port < 1024
 }
 
 func containerWebUpdatesEnabled(value string) (bool, error) {

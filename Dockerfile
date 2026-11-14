@@ -2,8 +2,10 @@
 # platform for every target. The capability is permitted, not effective: with
 # the effective bit a container run with cap_drop ALL couldn't start. The
 # launcher raises it (cmd/sable/container_capabilities_linux.go). The binary is
-# owned by nonroot here because a chown after setcap clears the capability.
-FROM --platform=$BUILDPLATFORM alpine:3.22 AS capabilities
+# owned by nonroot here because a chown after setcap clears the capability. The
+# base is pinned by digest because this stage writes the capability every
+# release image depends on.
+FROM --platform=$BUILDPLATFORM alpine:3.22@sha256:49340b346798875b5592e5d420241f2f9cfba5f47e62ebb1446a1b34734e898f AS capabilities
 ARG TARGETPLATFORM
 RUN apk add --no-cache libcap-setcap
 COPY ${TARGETPLATFORM}/sable /sable
