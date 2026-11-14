@@ -8,6 +8,22 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.8.2] - 2026-11-14
+
+Sable 1.8.2 is built with Go 1.27.4, which fixes a crash in the console and
+DNS over HTTPS listeners.
+
+### Upgrading from 1.8.1
+
+- Nothing is needed. Settings, zones and saved states are unchanged, and
+  1.8.2 can run alongside 1.8.1 in a cluster while you update each node.
+
+### Security
+
+- Built with Go 1.27.4, which fixes GO-2026-6859. A request body larger
+  than the size limit could panic the web console or the DNS over HTTPS
+  listener instead of being turned away.
+
 ## [1.8.1] - 2026-11-09
 
 Sable 1.8.1 keeps a cluster consistent through a recovery promotion, a
