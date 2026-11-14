@@ -22,6 +22,7 @@ type reviewSocketStore struct {
 	mutex  sync.Mutex
 	rows   map[netip.Addr]dhcp.Lease
 	refuse int
+	panics int
 }
 
 func (store *reviewSocketStore) save(_ context.Context, leases []dhcp.Lease) error {
@@ -30,6 +31,10 @@ func (store *reviewSocketStore) save(_ context.Context, leases []dhcp.Lease) err
 	if store.refuse > 0 {
 		store.refuse--
 		return errors.New("database is locked")
+	}
+	if store.panics > 0 {
+		store.panics--
+		panic("driver bug")
 	}
 	for _, lease := range leases {
 		store.rows[lease.Address] = lease
@@ -53,6 +58,20 @@ func (store *reviewSocketStore) load(context.Context) ([]dhcp.Lease, error) {
 // The old lease, released in memory, is still active in the store, and a
 // restart loads it back (F8, D19, through a different door).
 func TestReviewSocketRefusedSaveThenRetransmitKeepsStoreAndEngineEqual(t *testing.T) {
+	reviewSocketMoveAfterFault(t, func(store *reviewSocketStore) { store.refuse = 1 })
+}
+
+// F22. The same move, but the save panics instead of failing. The recover
+// loses the request; D25 still has to reload the engine before the retransmit.
+func TestReviewSocketPanicAfterEngineChangeReloadsFromStore(t *testing.T) {
+	reviewSocketMoveAfterFault(t, func(store *reviewSocketStore) { store.panics = 1 })
+}
+
+// reviewSocketMoveAfterFault moves a host to its new reservation, faults the
+// first save of the REQUEST, lets the client retransmit, and checks the store
+// and the engine agree on every lease.
+func reviewSocketMoveAfterFault(t *testing.T, arm func(*reviewSocketStore)) {
+	t.Helper()
 	enabled := true
 	scope := config.DHCPScope{
 		ID: "lan", Name: "LAN", Subnet: "10.0.7.0/24", Enabled: &enabled,
@@ -110,9 +129,9 @@ func TestReviewSocketRefusedSaveThenRetransmitKeepsStoreAndEngineEqual(t *testin
 		t.Fatalf("setup: offered %s, want the reservation", sent[0].reply.YIAddr)
 	}
 	store.mutex.Lock()
-	store.refuse = 1
+	arm(store)
 	store.mutex.Unlock()
-	harness.exchange(t, dhcpTestRequest(sent[0].reply)) // refused: no ACK
+	harness.exchange(t, dhcpTestRequest(sent[0].reply)) // faulted: no ACK
 	harness.waitIdle(t, 2)
 	harness.exchange(t, dhcpTestRequest(sent[0].reply)) // the retransmit
 	harness.waitWrite(t)

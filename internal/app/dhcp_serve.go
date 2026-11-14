@@ -122,11 +122,14 @@ func (server *dhcpServer) serve(ctx context.Context) {
 
 // handleSafely answers one request. A panic loses that request only: the
 // client retransmits, and the server keeps serving the rest of the network.
+// The engine may have changed its view before the panic, so the next request
+// reloads it from the store first, as after a failed save (D25).
 func (server *dhcpServer) handleSafely(ctx context.Context, request dhcpRequest) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			server.stats.Panics.Add(1)
-			server.logger.Error("DHCP request panicked", "panic", recovered)
+			server.stale = true
+			server.logger.Error("DHCP request panicked; reloading leases before the next answer", "panic", recovered)
 		}
 	}()
 	server.handle(ctx, request)
