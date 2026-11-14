@@ -651,6 +651,111 @@ Three failed syncs in a row send a problem [alert](#alerts) of the
 `integrations` type, with the last error and the time of the last good sync.
 It clears once a sync works.
 
+## DHCP server
+
+> The DHCP server is still being built. Sable reads and checks the `[dhcp]`
+> section below, but it doesn't answer DHCP requests yet.
+
+Sable can hand out IPv4 addresses (DHCPv4, RFC 2131) and register each lease's
+name in a zone it serves. It's off by default, and the whole section stays out
+of `sable.toml` until you add a scope.
+
+```toml
+[dhcp]
+enabled = true
+
+[[dhcp.scopes]]
+id = "lan"                      # stable; leases refer to it
+name = "LAN"
+subnet = "10.0.7.0/24"
+enabled = true
+lease = "24h"
+router = "10.0.7.1"
+dns = []                        # empty: every cluster node's address on this subnet
+domain = "lan.example.com"
+search = []
+ntp = []
+routes = [{ to = "10.9.0.0/16", via = "10.0.7.2" }]
+register_names = true
+reverse = true
+ttl = "5m"
+ipv6_only_preferred = "0s"      # off; "30m" answers option 108
+reserved_only = false
+ignore_client_id = false
+block_random_macs = false
+offer_delay = "0s"
+conflict_probe = "500ms"
+
+[dhcp.scopes.boot]
+next_server = "10.0.7.5"
+server_name = ""
+file = "pxelinux.0"
+
+[[dhcp.scopes.ranges]]
+start = "10.0.7.100"
+end = "10.0.7.179"
+node = "<node id>"              # left out when not clustered
+
+[[dhcp.scopes.reservations]]
+mac = "aa:bb:cc:dd:ee:ff"
+address = "10.0.7.20"
+name = "nas"
+comment = "rack 1"
+
+[[dhcp.scopes.options]]
+code = 44
+value = ["10.0.7.5"]
+```
+
+A scope is a subnet, not an interface. A node serves it on whichever interface
+has an address in it, and for relayed requests whose gateway address falls in
+it.
+
+| Key | Default | What it does |
+|---|---|---|
+| `id` | required | A stable identifier: lowercase letters, digits, and hyphens. Leases refer to it, so `name` can change freely. |
+| `subnet` | required | An IPv4 prefix from `/8` to `/30`. Scopes can't overlap. |
+| `enabled` | `true` | Turns one scope off without removing it. |
+| `lease` | `24h` | Lease time, option 51. `2m` to `365d`. |
+| `router` | none | Default gateway, option 3. Inside the subnet and outside every range. |
+| `dns` | every node | DNS servers, option 6. Empty hands out each cluster node's address on the subnet. |
+| `domain` | none | Domain name, option 15, and the zone lease names register in. The client never picks the zone. |
+| `search` | none | Domain search list, option 119 (RFC 3397). |
+| `ntp` | none | NTP servers, option 42. |
+| `routes` | none | Classless static routes, option 121 (RFC 3442). Each `via` is inside the subnet. |
+| `register_names` | `true` | Publishes an A record for each named lease. |
+| `reverse` | `true` | Publishes a PTR record for each named lease. |
+| `ttl` | `5m` | TTL of those records. `10s` to `24h`. |
+| `ipv6_only_preferred` | off | Answers option 108 (RFC 8925) with this wait. At least `5m`. |
+| `reserved_only` | `false` | Answers reserved devices only. Needs at least one reservation. |
+| `ignore_client_id` | `false` | Keys leases on the MAC address only, for devices that change their client identifier between boots. |
+| `block_random_macs` | `false` | Gives no dynamic lease to a locally administered (randomized) MAC address. |
+| `offer_delay` | `0s` | Holds offers back, up to `2s`, so Sable can stand behind another DHCP server. |
+| `conflict_probe` | `500ms` | How long to wait for a reply when checking that an address is free before offering it. `0s` turns probing off. Up to `2s`. |
+
+`boot` sets what PXE clients need: `next_server` (siaddr and option 150),
+`server_name` (option 66, up to 63 bytes), and `file` (option 67, up to 127
+bytes).
+
+**Ranges** are inclusive pools of dynamic addresses inside the subnet, never
+the network or broadcast address, and they can't overlap. An exclusion is the
+gap between two ranges. In a cluster each range names the node that serves it;
+every `node` must be a current member.
+
+**Reservations** give one MAC address a fixed address inside the subnet. A scope
+allows one reservation per MAC address, per address, and per name. `name` is a
+single DNS label; a named reservation always publishes its records.
+
+**Other options** go in `options`, one per code. RFC 2132 options with a known
+type take `value`, a list of strings in that type: addresses, a number, a
+string, or `true` and `false`. Any other code takes `hex` instead. Codes that a
+scope field or the server itself sets can't be set here: 1, 3, 6, 15, 42, 50 to
+55, 57 to 59, 61, 66, 67, 81, 82, 108, 119, 121, and 150.
+
+The `[dhcp]` section replicates from a cluster's primary to every node. While
+it's empty it's left out of the replicated configuration, so a node from before
+DHCP keeps working. Upgrade every node before you add a scope.
+
 ## Integrations: MCP server
 
 Sable's MCP server at `/mcp` lets AI assistants read and change records, look

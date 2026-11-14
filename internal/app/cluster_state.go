@@ -147,6 +147,11 @@ type clusterRuntimeConfiguration struct {
 	// that predates the switch sends none, which leaves this node's own as it
 	// is.
 	InsightsEnabled *bool `toml:"insights_enabled,omitempty"`
+	// DHCP scopes follow the primary. The section is left out while nothing
+	// is configured, so a member that predates DHCP can still decode the
+	// snapshot. Unlike MCP, a missing section means none: the primary owns
+	// scopes, and one that sends none has none.
+	DHCP *config.DHCP `toml:"dhcp,omitempty"`
 	// Devices follow the primary, since a device's rule set decides how every
 	// node blocks for it. A primary that predates them sends none, which
 	// leaves this node's own as they are.
@@ -259,6 +264,7 @@ func (replicator *clusterStateReplicator) Capture(ctx context.Context) ([]byte, 
 		DynamicDNS:       active.DynamicDNS,
 		OIDC:             replicatedOIDC(active.OIDC),
 		PasskeysDisabled: active.Security.PasskeysDisabled,
+		DHCP:             replicatedDHCP(active.DHCP),
 	}
 	if replicator.dnsProviderCredentials != nil {
 		for _, provider := range active.DynamicDNS.ProviderNames() {
@@ -483,6 +489,15 @@ func replicatedConfigurationEqual(left, right clusterRuntimeConfiguration) bool 
 	return bytes.Equal(leftContents, rightContents)
 }
 
+// replicatedDHCP is nil while nothing is configured, so the section stays out
+// of a snapshot that an older member must decode.
+func replicatedDHCP(settings config.DHCP) *config.DHCP {
+	if settings.IsZero() {
+		return nil
+	}
+	return &settings
+}
+
 func replicatedRuntimeConfiguration(source config.Config) clusterRuntimeConfiguration {
 	findings := source.Insights.Findings
 	mcp := source.MCP
@@ -500,6 +515,7 @@ func replicatedRuntimeConfiguration(source config.Config) clusterRuntimeConfigur
 		InsightFindings:  &findings,
 		MCP:              &mcp,
 		InsightsEnabled:  &insightsEnabled,
+		DHCP:             replicatedDHCP(source.DHCP),
 		Devices:          &clusterDevices{Clients: slices.Clone(source.Clients)},
 	}
 }
@@ -535,6 +551,10 @@ func applyReplicatedRuntimeConfiguration(candidate *config.Config, source cluste
 	}
 	if source.InsightsEnabled != nil {
 		candidate.Insights.Enabled = *source.InsightsEnabled
+	}
+	candidate.DHCP = config.DHCP{}
+	if source.DHCP != nil {
+		candidate.DHCP = *source.DHCP
 	}
 	if source.Devices != nil {
 		// Through TOML no devices arrive as an empty list; keep nil so an
