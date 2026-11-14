@@ -138,6 +138,7 @@ type Config struct {
 	EncryptedDNS EncryptedDNS `toml:"encrypted_dns"`
 	DynamicDNS   DynamicDNS   `toml:"dynamic_dns"`
 	UniFi        UniFi        `toml:"unifi"`
+	DHCP         DHCP         `toml:"dhcp,omitempty"`
 	OIDC         OIDC         `toml:"oidc"`
 	MCP          MCP          `toml:"mcp"`
 	Security     Security     `toml:"security"`
@@ -752,6 +753,7 @@ func (configuration Config) Validate() error {
 	validationErrors = append(validationErrors, configuration.DynamicDNS.validate()...)
 	validationErrors = append(validationErrors, configuration.MCP.validate()...)
 	validationErrors = append(validationErrors, configuration.UniFi.validate()...)
+	validationErrors = append(validationErrors, configuration.DHCP.validate()...)
 	validationErrors = append(validationErrors, configuration.OIDC.validate()...)
 	for _, problem := range configuration.Insights.Findings.Problems() {
 		validationErrors = append(validationErrors, problem)
@@ -1444,6 +1446,7 @@ func (configuration *Config) normalize() {
 	configuration.MCP.Group = strings.TrimSpace(configuration.MCP.Group)
 	configuration.normalizeDynamicDNS()
 	configuration.normalizeUniFi()
+	configuration.DHCP.normalize()
 	configuration.normalizeInsights()
 	configuration.Security.SecretKeyFile = strings.TrimSpace(configuration.Security.SecretKeyFile)
 	configuration.Cluster.DataDirectory = strings.TrimSpace(configuration.Cluster.DataDirectory)
