@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dhcp"
 	"github.com/drudge/sable/internal/store"
@@ -27,13 +28,14 @@ type dhcpLeaseStore interface {
 // dhcpService runs the DHCPv4 server for the process and moves it to each
 // new [dhcp] configuration. Its counters outlive restarts of the server.
 type dhcpService struct {
-	leases    dhcpLeaseStore
-	node      func() string
-	clustered func() bool
-	listen    func(context.Context, int) (dhcpConn, error)
-	link      func(int) (dhcp.Meta, error)
-	probe     dhcpProbe
-	port      int
+	leases dhcpLeaseStore
+	node   func() string
+	// role is this node's cluster role: empty when it isn't in a cluster.
+	role   func() string
+	listen func(context.Context, int) (dhcpConn, error)
+	link   func(int) (dhcp.Meta, error)
+	probe  dhcpProbe
+	port   int
 	// retry is the first wait before binding again after a failure.
 	retry  time.Duration
 	logger *slog.Logger
@@ -53,18 +55,21 @@ type dhcpRunning struct {
 // dhcpRetryMax caps the wait between attempts to bring the server back.
 const dhcpRetryMax = 30 * time.Second
 
-func newDHCPService(leases dhcpLeaseStore, node func() string, clustered func() bool, logger *slog.Logger) *dhcpService {
+func newDHCPService(leases dhcpLeaseStore, node func() string, role func() string, logger *slog.Logger) *dhcpService {
 	logger = logger.With("component", "dhcp")
 	return &dhcpService{
-		leases: leases, node: node, clustered: clustered,
+		leases: leases, node: node, role: role,
 		listen: func(ctx context.Context, port int) (dhcpConn, error) { return listenDHCP(ctx, port) },
 		link:   dhcpLink, probe: newDHCPProber(logger).probe, port: dhcpServerPort, retry: time.Second, logger: logger,
 	}
 }
 
-// Check refuses a configuration the service can't run.
+// Check refuses a configuration the service can't run. A replica takes
+// [dhcp] from its primary and only holds it, so refusing it there would stop
+// every later synchronization (F29); the refusal belongs to the node whose
+// sable.toml is edited.
 func (service *dhcpService) Check(settings config.DHCP) error {
-	if settings.Enabled && service.clustered() {
+	if settings.Enabled && service.role() != "" && service.role() != cluster.RoleReplica {
 		return errDHCPOnCluster
 	}
 	return nil
@@ -85,7 +90,9 @@ func (service *dhcpService) Apply(ctx context.Context, runtime context.Context, 
 		return err
 	}
 	var server *dhcpServer
-	if settings.Enabled {
+	if settings.Enabled && service.role() != "" {
+		service.logger.Info("DHCP settings kept from the primary; a cluster doesn't serve DHCP yet")
+	} else if settings.Enabled {
 		prepared, err := service.prepare(settings)
 		if err != nil {
 			return err
@@ -239,7 +246,12 @@ func (process *process) startDHCP() {
 	clusterService := process.clusterService
 	process.dhcp = newDHCPService(process.database,
 		func() string { return clusterService.Snapshot().NodeID },
-		func() bool { return clusterService.Snapshot().Initialized },
+		func() string {
+			if state := clusterService.Snapshot(); state.Initialized {
+				return state.LocalRole
+			}
+			return ""
+		},
 		process.logger)
 	if err := process.dhcp.Apply(process.runtimeContext, process.runtimeContext, process.current().DHCP); err != nil {
 		process.logger.Error("DHCP server not started", "error", err)

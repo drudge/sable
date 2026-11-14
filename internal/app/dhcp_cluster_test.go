@@ -49,7 +49,7 @@ func openTestClusterService(t *testing.T) *cluster.Service {
 // (F28, D30).
 func TestReloadOnClusterWithDHCPLeftAlone(t *testing.T) {
 	t.Parallel()
-	service, _, _ := newTestDHCPService(t, true)
+	service, _, _ := newTestDHCPService(t, cluster.RolePrimary)
 	process := &process{dhcp: service}
 	settings := dhcpTestSettings(t)
 	changed, err := process.checkDHCP(settings, settings)

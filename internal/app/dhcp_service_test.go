@@ -37,7 +37,7 @@ func (gap *dhcpReadGapStore) DHCPLeases(ctx context.Context) ([]store.DHCPLease,
 // it acknowledged while the new engine was built isn't offered to another
 // client (RFC 2131 §4.3.1, §2.2).
 func TestDHCPServiceReloadReadsLeasesAfterOldServerStops(t *testing.T) {
-	service, listens, database := newTestDHCPService(t, false)
+	service, listens, database := newTestDHCPService(t, "")
 	gap := &dhcpReadGapStore{dhcpLeaseStore: database}
 	service.leases = gap
 	ctx := context.Background()
@@ -109,7 +109,7 @@ func (conn *dhcpReadFailConn) ReadPacket(buffer []byte) (int, int, error) {
 // A server whose socket fails is started again, so DHCP doesn't stay off
 // until the process restarts or [dhcp] changes.
 func TestDHCPServiceRestartsAfterReadFailure(t *testing.T) {
-	service, listens, _ := newTestDHCPService(t, false)
+	service, listens, _ := newTestDHCPService(t, "")
 	var mutex sync.Mutex
 	binds := 0
 	service.listen = func(ctx context.Context, port int) (dhcpConn, error) {
@@ -159,7 +159,7 @@ func TestDHCPServiceRestartsAfterReadFailure(t *testing.T) {
 // configuration: Apply accepts the settings, so a change elsewhere in
 // sable.toml isn't rejected, and the service binds once it can.
 func TestDHCPServiceRetriesUnbindablePort(t *testing.T) {
-	service, listens, _ := newTestDHCPService(t, false)
+	service, listens, _ := newTestDHCPService(t, "")
 	var mutex sync.Mutex
 	attempts := 0
 	service.listen = func(ctx context.Context, port int) (dhcpConn, error) {

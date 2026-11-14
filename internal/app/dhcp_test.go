@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dhcp"
 	"github.com/drudge/sable/internal/store"
@@ -64,7 +65,7 @@ func (log *dhcpListenLog) last() *fakeDHCPConn {
 	return log.conns[len(log.conns)-1]
 }
 
-func newTestDHCPService(t *testing.T, clustered bool) (*dhcpService, *dhcpListenLog, *store.Store) {
+func newTestDHCPService(t *testing.T, role string) (*dhcpService, *dhcpListenLog, *store.Store) {
 	t.Helper()
 	database, err := store.Open(context.Background(), "sqlite", filepath.Join(t.TempDir(), "sable.db"))
 	if err != nil {
@@ -72,7 +73,7 @@ func newTestDHCPService(t *testing.T, clustered bool) (*dhcpService, *dhcpListen
 	}
 	t.Cleanup(func() { _ = database.Close() })
 	listens := &dhcpListenLog{}
-	service := newDHCPService(database, func() string { return "node-a" }, func() bool { return clustered }, slog.New(slog.NewTextHandler(testLogWriter{t}, nil)))
+	service := newDHCPService(database, func() string { return "node-a" }, func() string { return role }, slog.New(slog.NewTextHandler(testLogWriter{t}, nil)))
 	service.listen = listens.listen
 	service.retry = 10 * time.Millisecond
 	service.link = func(int) (dhcp.Meta, error) {
@@ -98,7 +99,7 @@ func waitDHCPEvents(t *testing.T, listens *dhcpListenLog, want []string) {
 // keep the socket, a change closes the old socket before binding the new
 // one (only one process may hold port 67), and disabling closes it.
 func TestDHCPServiceFollowsConfiguration(t *testing.T) {
-	service, listens, _ := newTestDHCPService(t, false)
+	service, listens, _ := newTestDHCPService(t, "")
 	ctx := context.Background()
 	settings := dhcpTestSettings(t)
 	if err := service.Apply(ctx, ctx, config.DHCP{}); err != nil {
@@ -127,7 +128,7 @@ func TestDHCPServiceFollowsConfiguration(t *testing.T) {
 // Until leases are mirrored between nodes, a cluster refuses DHCP rather
 // than lease one address from two nodes.
 func TestDHCPServiceRefusesCluster(t *testing.T) {
-	service, listens, _ := newTestDHCPService(t, true)
+	service, listens, _ := newTestDHCPService(t, cluster.RolePrimary)
 	ctx := context.Background()
 	if err := service.Apply(ctx, ctx, dhcpTestSettings(t)); !errors.Is(err, errDHCPOnCluster) {
 		t.Fatalf("Apply on a cluster = %v; want errDHCPOnCluster", err)
@@ -141,7 +142,7 @@ func TestDHCPServiceRefusesCluster(t *testing.T) {
 // A lease acknowledged before a restart is in the store, and the restarted
 // server offers the client the same address (RFC 2131 §4.3.1, §2.2).
 func TestDHCPServiceKeepsLeasesAcrossRestart(t *testing.T) {
-	service, listens, database := newTestDHCPService(t, false)
+	service, listens, database := newTestDHCPService(t, "")
 	ctx := context.Background()
 	if err := service.Apply(ctx, ctx, dhcpTestSettings(t)); err != nil {
 		t.Fatal(err)
@@ -203,7 +204,7 @@ func TestDHCPLeaseStoreConversion(t *testing.T) {
 // declined for an hour, saved through the store, and the client's next
 // DISCOVER gets another address (RFC 2131 §4.4.1, §3.1 step 2).
 func TestDHCPServiceSetsAsideProbedConflict(t *testing.T) {
-	service, listens, database := newTestDHCPService(t, false)
+	service, listens, database := newTestDHCPService(t, "")
 	var probes sync.Map
 	service.probe = func(_ context.Context, address netip.Addr, _ net.HardwareAddr, _ time.Duration) (string, bool) {
 		_, again := probes.LoadOrStore(address, true)
@@ -240,4 +241,24 @@ func TestDHCPServiceSetsAsideProbedConflict(t *testing.T) {
 	if conflicts := service.stats.Conflicts.Load(); conflicts != 1 {
 		t.Fatalf("Conflicts = %d; want 1", conflicts)
 	}
+}
+
+// A replica takes [dhcp] from its primary. It keeps the settings without
+// serving them and never refuses them, or every later synchronization from
+// the primary fails with it (F29).
+func TestDHCPServiceReplicaHoldsPrimarySettings(t *testing.T) {
+	service, listens, _ := newTestDHCPService(t, cluster.RoleReplica)
+	ctx := context.Background()
+	settings := dhcpTestSettings(t)
+	if err := service.Check(settings); err != nil {
+		t.Fatalf("Check on a replica = %v; want nil", err)
+	}
+	if err := service.Apply(ctx, ctx, settings); err != nil {
+		t.Fatalf("Apply on a replica = %v; want nil", err)
+	}
+	process := &process{dhcp: service}
+	if _, err := process.checkDHCP(config.DHCP{}, settings); err != nil {
+		t.Fatalf("checkDHCP taking [dhcp] from the primary = %v; want nil", err)
+	}
+	waitDHCPEvents(t, listens, nil)
 }
