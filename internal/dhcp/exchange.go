@@ -78,7 +78,10 @@ func (exchange *exchange) verify(address netip.Addr) Result {
 	if !compiled.subnet.Contains(address) {
 		return exchange.nak("requested address is not on this network")
 	}
-	if reservation, found := compiled.reservation(exchange.request); found && reservation != address {
+	// The server never NAKs its own offer: a reserved client whose reservation
+	// is taken was offered a pool address and moves at a later renewal (D17).
+	if reservation, found := compiled.reservation(exchange.request); found && reservation != address &&
+		exchange.available(reservation) {
 		return exchange.nak("this client has a reserved address")
 	}
 	if owner, found := compiled.reservedBy[address]; found && owner != macKey(exchange.request) {
@@ -87,7 +90,7 @@ func (exchange *exchange) verify(address netip.Addr) Result {
 	if lease := exchange.engine.leases[address]; lease != nil && lease.holds(exchange.now) && lease.ClientKey != exchange.ref.key {
 		return exchange.nak("address is bound to another client")
 	}
-	if compiled.reserved(exchange.request) {
+	if reservation, found := compiled.reservation(exchange.request); found && reservation == address {
 		return exchange.ack(address)
 	}
 	if compiled.flags.reservedOnly {

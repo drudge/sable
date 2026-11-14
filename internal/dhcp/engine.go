@@ -143,7 +143,7 @@ func (engine *Engine) Handle(now time.Time, request Packet, meta Meta) Result {
 		return Result{Drop: "locally administered MAC"}
 	}
 	exchange := &exchange{engine: engine, scope: compiled, serverID: serverID, request: request, now: now,
-		ref: clientRef{compiled.id, clientKey(request, compiled.flags.ignoreClientID)}}
+		ref: clientRef{compiled.id, clientKey(request, compiled.flags.ignoreClientID || compiled.reserved(request))}}
 	switch request.MessageType() {
 	case Discover:
 		return exchange.answerDiscover()
@@ -194,6 +194,8 @@ func firstIPv4(addrs []netip.Prefix) netip.Addr {
 
 // clientKey is the client identifier when the client sent one and the scope
 // honours it, else the hardware type and address (RFC 2131 §4.2), as hex.
+// A reserved client is keyed by hardware address, since the reservation is,
+// so a PXE-to-OS identifier change renews its own lease (D16).
 func clientKey(request Packet, ignoreClientID bool) string {
 	if id, found := request.Option(optionClientID); found && len(id) > 0 && !ignoreClientID {
 		return hex.EncodeToString(id)
