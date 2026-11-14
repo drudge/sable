@@ -92,6 +92,7 @@ type process struct {
 	stateReplicator  *clusterStateReplicator
 	scheduledBackups *scheduledBackupService
 	unifiSync        *unifiSyncer
+	dhcp             *dhcpService
 	dynamicDNS       *dynamicdns.Manager
 	updateManager    *update.Manager
 	webServer        *web.Server
@@ -402,6 +403,11 @@ func (process *process) applyConfiguration(reloadContext context.Context, active
 			return err
 		}
 	}
+	if process.dhcp != nil {
+		if err := process.dhcp.Check(candidate.DHCP); err != nil {
+			return err
+		}
+	}
 	clusterRestartRequired := active.Cluster != candidate.Cluster
 	if err := process.activateConfiguration(reloadContext, candidate); err != nil {
 		return err
@@ -411,6 +417,11 @@ func (process *process) applyConfiguration(reloadContext context.Context, active
 	}
 	// After the recorder settings, so turning Insights off empties the table.
 	process.deviceAddresses.SetConfiguration(candidate)
+	if process.dhcp != nil {
+		if err := process.dhcp.Apply(reloadContext, process.runtimeContext, candidate.DHCP); err != nil {
+			return err
+		}
+	}
 	if clusterRestartRequired {
 		process.logger.Info("cluster bootstrap settings staged", "restart_required", true)
 	}
@@ -554,6 +565,7 @@ func (process *process) startIntegrations() {
 		backfillAppRollups(process.runtimeContext, database.BackfillAppRollups, process.logger)
 		compactQueryLogRollups(process.runtimeContext, database.CompactQueryLogRollups, rollupCompactionInterval, process.logger)
 	})
+	process.startDHCP()
 	process.dynamicDNS = dynamicdns.New(process.configurationManager, process.dnsProviderCredentials, database, process.leading, process.logger)
 	process.runWorker(func(context.Context) { process.dynamicDNS.Run(process.zoneRefreshContext) })
 	process.updateManager = newUpdateManager(update.Options{
@@ -779,6 +791,9 @@ func (process *process) shutdown(restartRequested bool) error {
 		logger.Info("Sable stopping")
 	}
 	process.stopRuntime()
+	// Before anything else lets go of the store, and so a restarted or
+	// web-updated process can bind port 67.
+	process.dhcp.Stop()
 	webError := process.webServer.Close(shutdownContext)
 	listenerError := process.listeners.Close(shutdownContext)
 	workerError := waitRuntimeWorkers(shutdownContext, &process.runtimeWorkers)

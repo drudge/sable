@@ -91,16 +91,7 @@ type dhcpServerHarness struct {
 
 func startDHCPServer(t *testing.T, save func(context.Context, []dhcp.Lease) error, link func(int) (dhcp.Meta, error)) *dhcpServerHarness {
 	t.Helper()
-	enabled := true
-	settings := config.DHCP{Enabled: true, Scopes: []config.DHCPScope{{
-		ID: "lan", Name: "LAN", Subnet: "10.0.7.0/24", Enabled: &enabled,
-		Lease: config.Duration{Duration: time.Hour}, Router: "10.0.7.1",
-		Ranges: []config.DHCPRange{{Start: "10.0.7.100", End: "10.0.7.119"}},
-	}}}
-	if err := settings.Validate(); err != nil {
-		t.Fatal(err)
-	}
-	engine, err := dhcp.New(settings, "node-a")
+	engine, err := dhcp.New(dhcpTestSettings(t), "node-a")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,6 +112,21 @@ func startDHCPServer(t *testing.T, save func(context.Context, []dhcp.Lease) erro
 	go func() { harness.done <- harness.server.run(ctx) }()
 	t.Cleanup(harness.stop)
 	return harness
+}
+
+// dhcpTestSettings is one enabled scope, 10.0.7.0/24, leasing .100 to .119.
+func dhcpTestSettings(t *testing.T) config.DHCP {
+	t.Helper()
+	enabled := true
+	settings := config.DHCP{Enabled: true, Scopes: []config.DHCPScope{{
+		ID: "lan", Name: "LAN", Subnet: "10.0.7.0/24", Enabled: &enabled,
+		Lease: config.Duration{Duration: time.Hour}, Router: "10.0.7.1",
+		Ranges: []config.DHCPRange{{Start: "10.0.7.100", End: "10.0.7.119"}},
+	}}}
+	if err := settings.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	return settings
 }
 
 func (harness *dhcpServerHarness) stop() {
