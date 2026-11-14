@@ -333,13 +333,31 @@ mirrored row keeps the owner's number and leaves this node's counter alone.
 - **Adopt on request:** a REQUEST without a server identifier, for an address in this node's range
   that isn't bound to another client, is ACKed and recorded. Moving from a router to Sable, or
   losing the lease table, then costs nothing.
-- **NAK only** when the requested address is off-link for the arrival subnet or is bound to another
-  client. An on-link address with no record outside this node's ranges gets silence.
+- **NAK only** when the requested address is off-link for the arrival subnet, is bound to another
+  client, or isn't the client's reservation while that reservation is free for it. An on-link
+  address with no record outside this node's ranges gets silence.
+- **The server stands behind its offer.** A REQUEST for the address the server just offered gets an
+  ACK. When a reservation can't be given yet (another client still holds it, or it was declined),
+  the client gets a pool address, and the NAK that moves it to the reservation comes at a later
+  renewal, once the reservation is free.
+- **A reserved client is known by its MAC.** The reservation is by MAC, so the binding is too, and
+  the client identifier doesn't split it. PXE firmware and the system it boots send different
+  identifiers and get the same address.
+- **Every lease change is returned.** When a client moves to another address, `Handle` returns the
+  old lease as released and the new one, and both are written before the ACK. The rows the store
+  holds always replay to the engine's view.
+- **Lease text is cleaned on the way in.** Host name (12) and vendor class (60) are bytes from the
+  network. The engine keeps valid UTF-8 without control characters, at most 255 bytes, and drops the
+  rest. PostgreSQL refuses a NUL or a bad sequence in a text column, and the same text reaches DNS
+  and the console.
 - A REQUEST that names another server drops the pending offer and gets no reply.
 - **Conflict probe** before an OFFER for a new binding, off the receive loop: an echo reply, or a
   neighbor entry with another MAC, marks the address `declined` for 1 h. A DECLINE does the same. A probe's row has no
   client, so its client key is `conflict:` and the MAC seen, or `conflict:echo`.
 - INFORM gets an ACK with options and no address.
+- Option 108 goes with the options that are never trimmed when the client asked for it. The trim
+  to the client's maximum message size fits the address plan first: mask, router, DNS servers, and
+  domain.
 - The receive queue is bounded and drops are counted. Outstanding offers are capped per scope.
 
 ## Parity checklist
