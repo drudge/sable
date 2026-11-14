@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS sable_dhcp_leases (
 )`,
 		"CREATE INDEX IF NOT EXISTS sable_dhcp_leases_client_idx ON sable_dhcp_leases (scope_id, client_key)",
 		"CREATE INDEX IF NOT EXISTS sable_dhcp_leases_seq_idx ON sable_dhcp_leases (node_id, seq)",
+		"CREATE INDEX IF NOT EXISTS sable_dhcp_leases_expires_idx ON sable_dhcp_leases (expires_at_ns)",
 		// Each node's last sequence number, kept apart from the leases so a
 		// prune that deletes the newest row never hands its number out again.
 		`
