@@ -34,6 +34,14 @@ docker run --detach --name sable --restart unless-stopped \
 
 `latest` tracks stable releases, `next` tracks prereleases, and an exact published version pins the image. The container runs as non-root and listens on the unprivileged DNS port 8053 internally. Both TCP and UDP mappings are required.
 
+## Host networking
+
+[compose.dhcp.yaml](../../compose.dhcp.yaml) runs the same image with `network_mode: host`, every capability dropped except `NET_BIND_SERVICE`, and no port map. A DHCP server needs it, because Docker's bridge doesn't pass broadcasts. The image's file capability lets the non-root process bind port 53 and port 67.
+
+Nothing maps port 53 to 8053 in host mode, and nothing keeps the console on loopback. Start with `compose.yaml` and finish setup. Set **Settings → Local End Points** to `0.0.0.0:53`, set `http_listen` in `/data/sable.toml` to the address you manage Sable from, then run `docker compose -f compose.dhcp.yaml up -d`.
+
+If a container logs `bind: permission denied` for a port below 1024, it dropped `NET_BIND_SERVICE` or runs an image older than the file capability. Add the capability, or pull a newer image. A web update can't fix an older image.
+
 ## Reach the console
 
 On the Docker host, open `http://localhost:5380`. From another computer, a tunnel keeps that HTTP connection private:

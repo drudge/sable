@@ -1,0 +1,28 @@
+# Sable with host networking, for DHCP. A DHCP server has to see broadcasts,
+# and Docker's bridge doesn't pass them, so this file has no port map.
+#
+# Host networking puts every listener on the host's interfaces, and nothing
+# maps port 53 to 8053. Start with compose.yaml, finish setup, and set
+# Settings > Local End Points to 0.0.0.0:53. Set http_listen in
+# /data/sable.toml on purpose, since no port map keeps it on loopback. Then
+# run: docker compose -f compose.dhcp.yaml up -d
+# The image's file capability lets the non-root process bind port 53 and
+# DHCP's port 67 with NET_BIND_SERVICE alone.
+services:
+  sable:
+    image: ghcr.io/drudge/sable:latest
+    container_name: sable
+    restart: unless-stopped
+    network_mode: host
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    volumes:
+      - sable-data:/data
+    environment:
+      TZ: ${TZ:-UTC}
+
+volumes:
+  sable-data:
+    name: sable-data

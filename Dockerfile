@@ -1,3 +1,14 @@
+# setcap only writes an extended attribute, so this stage runs on the build
+# platform for every target. The capability is permitted, not effective: with
+# the effective bit a container run with cap_drop ALL couldn't start. The
+# launcher raises it (cmd/sable/container_capabilities_linux.go). The binary is
+# owned by nonroot here because a chown after setcap clears the capability.
+FROM --platform=$BUILDPLATFORM alpine:3.22 AS capabilities
+ARG TARGETPLATFORM
+RUN apk add --no-cache libcap-setcap
+COPY ${TARGETPLATFORM}/sable /sable
+RUN chown 65532:65532 /sable && setcap cap_net_bind_service=p /sable
+
 FROM gcr.io/distroless/static-debian12:nonroot
 
 ARG TARGETPLATFORM
@@ -13,14 +24,15 @@ LABEL org.opencontainers.image.title="Sable" \
       org.opencontainers.image.revision="${REVISION}" \
       org.opencontainers.image.created="${CREATED}"
 
-COPY --chown=nonroot:nonroot ${TARGETPLATFORM}/sable /usr/local/bin/sable
+COPY --from=capabilities /sable /usr/local/bin/sable
 COPY --chown=nonroot:nonroot docker/data/ /data/
 
 WORKDIR /data
 VOLUME ["/data"]
 
-# DNS is deliberately unprivileged inside the container. Publish it as host
-# port 53 with -p 53:8053/tcp -p 53:8053/udp.
+# On a bridge, DNS stays unprivileged: publish it as host port 53 with
+# -p 53:8053/tcp -p 53:8053/udp. With host networking (compose.dhcp.yaml),
+# the file capability lets it bind port 53 and DHCP's port 67.
 EXPOSE 8053/tcp 8053/udp 5380/tcp 5443/tcp 853/tcp 443/tcp
 
 USER nonroot:nonroot

@@ -1,9 +1,14 @@
 package main
 
 import (
+	"errors"
+	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -64,5 +69,29 @@ func TestExecutableReleaseReadsTheMachineVersion(t *testing.T) {
 	}
 	if release != "2.4.0-rc.2" {
 		t.Fatalf("release = %q", release)
+	}
+}
+
+func TestContainerBindErrorSaysWhy(t *testing.T) {
+	denied := fmt.Errorf("listen udp 0.0.0.0:53: %w", &net.OpError{Op: "listen", Net: "udp",
+		Err: os.NewSyscallError("bind", syscall.EACCES)})
+	if got := explainContainerBind(denied).Error(); !strings.Contains(got, "NET_BIND_SERVICE") || !strings.Contains(got, "bind: permission denied") {
+		t.Fatalf("explainContainerBind(%v) = %q, want the cause kept and NET_BIND_SERVICE named", denied, got)
+	}
+	other := errors.New("open /data/sable.toml: no such file or directory")
+	if got := explainContainerBind(other); got != other {
+		t.Fatalf("explainContainerBind changed an unrelated error: %v", got)
+	}
+	if explainContainerBind(nil) != nil {
+		t.Fatal("explainContainerBind(nil) is not nil")
+	}
+}
+
+func TestRaiseBindCapabilityWithoutPermittedIsNoOp(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root holds every capability")
+	}
+	if err := raiseBindCapability(); err != nil {
+		t.Fatalf("raiseBindCapability without the capability permitted: %v", err)
 	}
 }

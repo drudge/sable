@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/drudge/sable/internal/update"
@@ -29,6 +30,13 @@ const (
 // data volume. On the next container restart this launcher selects that build
 // only when it is newer than the one shipped in the image.
 func containerCommand(arguments []string) error {
+	if err := raiseBindCapability(); err != nil {
+		fmt.Fprintf(os.Stderr, "sable: %v\n", err)
+	}
+	return explainContainerBind(launchContainer(arguments))
+}
+
+func launchContainer(arguments []string) error {
 	enabled, err := containerWebUpdatesEnabled(os.Getenv(containerWebUpdatesEnvironment))
 	if err != nil {
 		return err
@@ -53,6 +61,17 @@ func containerCommand(arguments []string) error {
 		return execContainerBinary(containerUpdateBinaryPath, arguments, os.Environ())
 	}
 	return run(arguments)
+}
+
+// explainContainerBind says why a listener couldn't bind a port below 1024
+// in the container. A web update can't fix it, since the launcher that raises
+// the capability is part of the image.
+func explainContainerBind(err error) error {
+	if !errors.Is(err, syscall.EACCES) {
+		return err
+	}
+	return fmt.Errorf("%w\nsable: ports below 1024 need NET_BIND_SERVICE: add it with cap_add if the container drops it,"+
+		" or pull a newer image if this one predates its file capability", err)
 }
 
 func containerWebUpdatesEnabled(value string) (bool, error) {
