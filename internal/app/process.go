@@ -403,10 +403,9 @@ func (process *process) applyConfiguration(reloadContext context.Context, active
 			return err
 		}
 	}
-	if process.dhcp != nil {
-		if err := process.dhcp.Check(candidate.DHCP); err != nil {
-			return err
-		}
+	dhcpChanged, err := process.checkDHCP(active.DHCP, candidate.DHCP)
+	if err != nil {
+		return err
 	}
 	clusterRestartRequired := active.Cluster != candidate.Cluster
 	if err := process.activateConfiguration(reloadContext, candidate); err != nil {
@@ -417,7 +416,7 @@ func (process *process) applyConfiguration(reloadContext context.Context, active
 	}
 	// After the recorder settings, so turning Insights off empties the table.
 	process.deviceAddresses.SetConfiguration(candidate)
-	if process.dhcp != nil {
+	if dhcpChanged {
 		if err := process.dhcp.Apply(reloadContext, process.runtimeContext, candidate.DHCP); err != nil {
 			return err
 		}
@@ -648,7 +647,10 @@ func (process *process) newWebServer() error {
 	}
 	process.webServer = webServer
 	webServer.SetDNSSECController(process.dnssec)
-	webServer.SetClusterController(process.clusterService)
+	webServer.SetClusterController(dhcpClusterGuard{
+		Service:     process.clusterService,
+		dhcpEnabled: func() bool { return process.current().DHCP.Enabled },
+	})
 	webServer.SetCertificateController(process.certificateManager)
 	webServer.SetDynamicDNSController(process.dynamicDNS)
 	webServer.SetUniFiController(process.unifiSync)
