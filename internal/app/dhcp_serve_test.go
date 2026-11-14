@@ -266,3 +266,45 @@ func (writer testLogWriter) Write(data []byte) (int, error) {
 	writer.t.Log(string(data))
 	return len(data), nil
 }
+
+// A client takes only the OFFER for its latest DISCOVER (RFC 2131 §4.4.1),
+// so offer_delay holds one OFFER per client, the newest, and at most
+// dhcpMaxDelayedOffers clients; a flood can't grow memory without bound (F23).
+func TestDHCPServerBoundsDelayedOffers(t *testing.T) {
+	conn := newFakeDHCPConn()
+	server := &dhcpServer{conn: conn, stats: &dhcpStats{}, logger: slog.New(slog.NewTextHandler(testLogWriter{t}, nil))}
+	reply := dhcpTestPacket(dhcp.Offer)
+	reply.Op = 2
+	for xid := range byte(100) {
+		request := dhcpTestPacket(dhcp.Discover)
+		request.XID = [4]byte{0, 0, 0, xid}
+		answer := reply
+		answer.XID = request.XID
+		server.send(context.Background(), request, dhcp.Result{Reply: &answer, Delay: 50 * time.Millisecond}, 7)
+	}
+	if waiting := server.delayed.waiting(); waiting != 1 {
+		t.Fatalf("%d OFFERs waiting for one client; want 1", waiting)
+	}
+	select {
+	case <-conn.wrote:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the delayed OFFER was never sent")
+	}
+	time.Sleep(100 * time.Millisecond)
+	if _, sent := conn.snapshot(); len(sent) != 1 || sent[0].reply.XID != [4]byte{0, 0, 0, 99} {
+		t.Fatalf("sent %d OFFERs; want one, for the latest DISCOVER (xid 99)", len(sent))
+	}
+
+	for client := range dhcpMaxDelayedOffers + 10 {
+		request := dhcpTestPacket(dhcp.Discover)
+		request.CHAddr = net.HardwareAddr{0x02, 0, 0, 0, byte(client >> 8), byte(client)}
+		server.send(context.Background(), request, dhcp.Result{Reply: &reply, Delay: time.Hour}, 7)
+	}
+	if waiting, full := server.delayed.waiting(), server.stats.DelayedFull.Load(); waiting != dhcpMaxDelayedOffers || full != 10 {
+		t.Fatalf("waiting = %d, dropped = %d; want %d and 10", waiting, full, dhcpMaxDelayedOffers)
+	}
+	server.delayed.stop()
+	if waiting := server.delayed.waiting(); waiting != 0 {
+		t.Fatalf("%d OFFERs still waiting after stop", waiting)
+	}
+}

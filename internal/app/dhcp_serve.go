@@ -42,6 +42,9 @@ type dhcpStats struct {
 	// Handled counts requests that changed leases and need no reply: a
 	// saved RELEASE or DECLINE (RFC 2131 §4.3.3, §4.3.4).
 	Received, Replied, Handled, Dropped, QueueFull, StoreFailed, Panics atomic.Uint64
+	// DelayedFull counts delayed OFFERs dropped because
+	// dhcpMaxDelayedOffers clients were already waiting for one.
+	DelayedFull atomic.Uint64
 	// Stale counts requests left unanswered while the engine waits to reload
 	// from the store after a failed save.
 	Stale atomic.Uint64
@@ -68,6 +71,8 @@ type dhcpServer struct {
 	logger *slog.Logger
 	queue  chan dhcpRequest
 	stats  *dhcpStats
+	// delayed holds the OFFERs waiting out offer_delay.
+	delayed dhcpDelayedOffers
 	// stale is set when a save failed and no reload has succeeded since.
 	// Only the serve goroutine touches it.
 	stale bool
@@ -83,6 +88,7 @@ func (server *dhcpServer) run(ctx context.Context) error {
 	}()
 	stop := context.AfterFunc(ctx, func() { _ = server.conn.Close() })
 	defer stop()
+	defer server.delayed.stop()
 	// A failed read leaves the socket open; close it here too, or with
 	// SO_REUSEADDR a restarted listener binds beside the leaked one.
 	defer func() { _ = server.conn.Close() }()
@@ -218,15 +224,13 @@ func (server *dhcpServer) send(ctx context.Context, request dhcp.Packet, result 
 		write()
 		return
 	}
-	go func() {
-		timer := time.NewTimer(result.Delay)
-		defer timer.Stop()
-		select {
-		case <-ctx.Done():
-		case <-timer.C:
-			write()
-		}
-	}()
+	if ctx.Err() != nil {
+		return
+	}
+	if !server.delayed.schedule(dhcpOfferKey(request), result.Delay, write) {
+		server.stats.DelayedFull.Add(1)
+		server.logger.Debug("delayed DHCP OFFER dropped; too many waiting", "limit", dhcpMaxDelayedOffers)
+	}
 }
 
 // dhcpDestination maps the engine's choice to an address and port
