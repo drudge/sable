@@ -172,7 +172,7 @@ func (exchange *exchange) answerDecline() Result {
 	}
 	address, found := exchange.addrOption(optionRequestedIP)
 	lease := exchange.engine.leases[address]
-	if !found || lease == nil || lease.ClientKey != exchange.ref.key || lease.NodeID != exchange.engine.node {
+	if !found || lease == nil || !exchange.owns(lease) || lease.NodeID != exchange.engine.node {
 		return Result{Drop: "decline for an address the client doesn't hold"}
 	}
 	declined := exchange.engine.decline(exchange.now, exchange.scope, address, exchange.ref.key)
@@ -186,7 +186,7 @@ func (exchange *exchange) answerRelease() Result {
 		return Result{Drop: "release for another server"}
 	}
 	lease := exchange.engine.leases[exchange.request.CIAddr]
-	if lease == nil || lease.ClientKey != exchange.ref.key || lease.State != LeaseActive || lease.NodeID != exchange.engine.node {
+	if lease == nil || !exchange.owns(lease) || lease.State != LeaseActive || lease.NodeID != exchange.engine.node {
 		return Result{Drop: "release for an address the client doesn't hold"}
 	}
 	lease.State, lease.ExpiresAt = LeaseReleased, exchange.now
