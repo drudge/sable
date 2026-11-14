@@ -104,8 +104,8 @@ func (server *dhcpServer) run(ctx context.Context) error {
 	}()
 	stop := context.AfterFunc(ctx, func() { _ = server.conn.Close() })
 	defer stop()
-	// A failed read leaves the socket open; close it here too, or with
-	// SO_REUSEADDR a restarted listener binds beside the leaked one.
+	// A failed read leaves the socket open; close it here too, or the
+	// leaked one holds the port and the restarted listener can't bind.
 	defer func() { _ = server.conn.Close() }()
 	err := server.read()
 	// Probes queue conflicts; none may run once the queue is closed.
