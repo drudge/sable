@@ -842,6 +842,8 @@ func zoneRecordSourceLabel(source string) string {
 		return "UniFi"
 	case zone.SourceAlias:
 		return "Alias"
+	case zone.SourceDHCP:
+		return "DHCP"
 	case "":
 		return ""
 	default:

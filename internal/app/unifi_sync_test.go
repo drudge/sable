@@ -24,10 +24,13 @@ var syncTestTime = time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
 type stubConfiguration struct {
 	settings    config.UniFi
 	insightsOff bool
+	dhcp        config.DHCP
 }
 
 func (stub *stubConfiguration) Current() config.Snapshot {
-	return config.Snapshot{Config: config.Config{UniFi: stub.settings, Insights: config.Insights{Enabled: !stub.insightsOff}}}
+	return config.Snapshot{Config: config.Config{
+		UniFi: stub.settings, Insights: config.Insights{Enabled: !stub.insightsOff}, DHCP: stub.dhcp,
+	}}
 }
 
 type stubZoneEditor struct {

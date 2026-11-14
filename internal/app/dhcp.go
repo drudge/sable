@@ -40,6 +40,9 @@ type dhcpService struct {
 	retry  time.Duration
 	logger *slog.Logger
 	stats  dhcpStats
+	// changed is told when a lease or the settings change, so the names
+	// follow. Nil skips it.
+	changed func()
 
 	mutex   sync.Mutex
 	active  config.DHCP
@@ -104,7 +107,14 @@ func (service *dhcpService) Apply(ctx context.Context, runtime context.Context, 
 		service.startLocked(runtime, settings, server)
 	}
 	service.active = settings
+	service.notifyChanged()
 	return nil
+}
+
+func (service *dhcpService) notifyChanged() {
+	if service.changed != nil {
+		service.changed()
+	}
 }
 
 // prepare builds a server with an engine for settings. Its leases are read
@@ -205,8 +215,11 @@ func (service *dhcpService) save(ctx context.Context, leases []dhcp.Lease) error
 	for index, lease := range leases {
 		rows[index] = dhcpLeaseToStore(lease)
 	}
-	_, err := service.leases.SaveDHCPLeases(ctx, rows)
-	return err
+	if _, err := service.leases.SaveDHCPLeases(ctx, rows); err != nil {
+		return err
+	}
+	service.notifyChanged()
+	return nil
 }
 
 func (service *dhcpService) load(ctx context.Context) ([]dhcp.Lease, error) {
@@ -261,6 +274,10 @@ func (process *process) startDHCP() {
 		func() string { return clusterService.Snapshot().NodeID },
 		func() string { return dhcpClusterRole(clusterService.Snapshot()) },
 		process.logger)
+	names := newDHCPNamer(process.configurationManager, process.zoneManager, process.database.DHCPLeases, process.leading, process.logger)
+	names.notifier = process.handler
+	process.dhcp.changed = names.Changed
+	process.runWorker(func(context.Context) { names.Run(process.zoneRefreshContext) })
 	if err := process.dhcp.Apply(process.runtimeContext, process.runtimeContext, process.current().DHCP); err != nil {
 		process.logger.Error("DHCP server not started", "error", err)
 	}
