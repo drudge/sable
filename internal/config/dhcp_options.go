@@ -120,41 +120,85 @@ func validateDHCPOptionData(item string, option DHCPOption) []error {
 // dhcpOptionValueWidth checks one value against its type and returns its
 // encoded size.
 func dhcpOptionValueWidth(kind DHCPOptionType, value string) (int, error) {
-	var bits, width int
-	signed := false
+	data, err := encodeDHCPOptionValue(kind, value)
+	if err != nil {
+		return dhcpOptionWidths[kind], err
+	}
+	return len(data), nil
+}
+
+// dhcpOptionWidths are the fixed encoded sizes; strings vary.
+var dhcpOptionWidths = map[DHCPOptionType]int{
+	DHCPOptionIPv4List: 4, DHCPOptionIPv4: 4, DHCPOptionBool: 1, DHCPOptionUint8: 1,
+	DHCPOptionUint16: 2, DHCPOptionUint32: 4, DHCPOptionInt32: 4,
+}
+
+// Encode returns the option's payload as it goes on the wire (RFC 2132 §2):
+// the hex bytes, or each value in its type, big-endian, concatenated.
+func (option DHCPOption) Encode() ([]byte, error) {
+	if option.Hex != "" {
+		return hex.DecodeString(option.Hex)
+	}
+	kind := DHCPOptionTypeOf(option.Code)
+	if kind == DHCPOptionUnknown {
+		return nil, fmt.Errorf("code %d has no known type", option.Code)
+	}
+	var data []byte
+	for _, value := range option.Value {
+		encoded, err := encodeDHCPOptionValue(kind, value)
+		if err != nil {
+			return nil, err
+		}
+		data = append(data, encoded...)
+	}
+	return data, nil
+}
+
+func encodeDHCPOptionValue(kind DHCPOptionType, value string) ([]byte, error) {
 	switch kind {
 	case DHCPOptionIPv4List, DHCPOptionIPv4:
-		if address, err := netip.ParseAddr(value); err != nil || !address.Is4() {
-			return 4, errors.New("must be an IPv4 address")
+		address, err := netip.ParseAddr(value)
+		if err != nil || !address.Is4() {
+			return nil, errors.New("must be an IPv4 address")
 		}
-		return 4, nil
+		octets := address.As4()
+		return octets[:], nil
 	case DHCPOptionString:
 		if value == "" {
-			return 0, errors.New("must not be empty")
+			return nil, errors.New("must not be empty")
 		}
-		return len(value), nil
+		return []byte(value), nil
 	case DHCPOptionBool:
-		if _, err := strconv.ParseBool(value); err != nil {
-			return 1, errors.New("must be true or false")
+		truth, err := strconv.ParseBool(value)
+		if err != nil {
+			return nil, errors.New("must be true or false")
 		}
-		return 1, nil
-	case DHCPOptionUint8:
-		bits, width = 8, 1
-	case DHCPOptionUint16:
-		bits, width = 16, 2
-	case DHCPOptionUint32:
-		bits, width = 32, 4
-	case DHCPOptionInt32:
-		bits, width, signed = 32, 4, true
+		if truth {
+			return []byte{1}, nil
+		}
+		return []byte{0}, nil
 	}
+	return encodeDHCPOptionInteger(kind, value)
+}
+
+func encodeDHCPOptionInteger(kind DHCPOptionType, value string) ([]byte, error) {
+	width := dhcpOptionWidths[kind]
+	bits := width * 8
+	var number uint64
 	var err error
-	if signed {
-		_, err = strconv.ParseInt(value, 10, bits)
+	if kind == DHCPOptionInt32 {
+		var signed int64
+		signed, err = strconv.ParseInt(value, 10, bits)
+		number = uint64(uint32(int32(signed)))
 	} else {
-		_, err = strconv.ParseUint(value, 10, bits)
+		number, err = strconv.ParseUint(value, 10, bits)
 	}
-	if err != nil {
-		return width, fmt.Errorf("must be a %d-bit integer", bits)
+	if err != nil || width == 0 {
+		return nil, fmt.Errorf("must be a %d-bit integer", bits)
 	}
-	return width, nil
+	data := make([]byte, width)
+	for index := range data {
+		data[width-1-index] = byte(number >> (8 * index))
+	}
+	return data, nil
 }
