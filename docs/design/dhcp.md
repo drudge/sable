@@ -13,7 +13,8 @@ broadcast, and needs **no new Linux capability**. Scopes and reservations live i
 configuration. Leases live in a store table, written by one node and mirrored to every node. In a
 cluster, every address range is pinned to one node ID. A reconciler on the primary turns leases into
 `Source="dhcp"` zone records, the way the UniFi sync does. There is no DHCPv6, no router
-advertisement, and no failover protocol.
+advertisement, and no failover protocol. In Docker it runs with host networking, still as the
+non-root user: the image gets a permitted-only file capability, and the launcher raises it.
 
 The goal is parity with the DHCP servers in AdGuard Home and Technitium. The
 [parity checklist](#parity-checklist) lists every feature of both and where it lands. Two gaps are
@@ -32,7 +33,7 @@ deliberate: DHCPv6 and router advertisements, which only AdGuard Home has.
 | `zone.Record` has a `Source`. The UniFi sync replaces only its own records, skips names a hand-authored record claims, advances the serial, and sends NOTIFY. | `internal/zone/model.go:111-127`, `internal/app/unifi_sync.go:340-356`, `:382-405`, `:648-663`, `:677-684`, `:714`, `internal/app/zone_notify.go:46-53` | Lease names reuse that pattern with a new `SourceDHCP`. No DHCID record. |
 | Expiring records are rejected in DNSSEC-signed zones. | `internal/zone/model.go:466-468` | Lease names don't use `Record.ExpiresAt`. The reconciler removes them. |
 | The systemd unit grants only `CAP_NET_BIND_SERVICE`. Nothing in the repo uses a raw socket. | `internal/install/install.go:177-178` | `CAP_NET_RAW` or `CAP_NET_ADMIN` would widen every install for a feature that's off by default. |
-| The Docker image is distroless and non-root behind a port map (`53:8053`). | `Dockerfile:1`, `:26`, `compose.yaml:12-13` | Bridge networking can't see a broadcast. Docker needs host networking. |
+| The Docker image is distroless and non-root behind a port map (`53:8053`). | `Dockerfile:1`, `:26`, `compose.yaml:12-13` | Bridge networking can't see a broadcast. Docker needs host networking. Host networking also removes what lets the non-root user bind a low port today, so the image has to change. See the [Docker bind check](#docker-bind-check). |
 | The neighbor table is already read over netlink. | `internal/neighbors/neighbors_linux.go:8` | Conflict detection can use it. No ARP socket. |
 | Device identities are rows keyed by address, MAC, and source (`"unifi"`, `"neighbor"`). | `internal/insights/devices/devices.go:32-38`, `internal/store/devices.go:49-53` | A lease is one more identity source, `"dhcp"`. No schema change for Insights. |
 | The store has one migration step. | `internal/store/migrate.go:29-34` | The lease table is step 2. |
@@ -61,6 +62,34 @@ clustered. Technitium always broadcasts to clients without an address too, which
 evidence for phones and Windows. RFC 2131 §4.1 allows it when unicast isn't possible. Slice 4 turns
 the spike into a repeatable harness, and the [client matrix](#client-matrix) covers real devices
 before the first release.
+
+### Docker bind check
+
+Run on 2026-11-14 with Docker 26.1.5, runc 1.1.15, BuildKit through buildx 0.13.1, and kernel 6.12.
+The image was shaped like Sable's: distroless static, `USER nonroot`, `/data` owned by `nonroot`,
+and a static Go binary that prints its capability sets and binds UDP `:67`. Every row runs as the
+non-root user unless it says root.
+
+| Case | Result |
+|---|---|
+| Bridge network, no file capability. This is the image today. | Binds. Docker sets `net.ipv4.ip_unprivileged_port_start=0` in the container's own network namespace. |
+| Host network, no file capability | `bind: permission denied` |
+| Host network, `cap_add: NET_BIND_SERVICE` | `bind: permission denied`. For a non-root user `cap_add` only widens the bounding set. `CapEff` stays 0, because Docker sets no ambient capabilities. |
+| Host network, `--sysctl net.ipv4.ip_unprivileged_port_start=0` | The container doesn't start: "not allowed in host network namespace". |
+| Host network, root, `cap_drop: ALL`, `cap_add: NET_BIND_SERVICE` | Binds, but can't write `/data`. |
+| Host network, file capability `cap_net_bind_service=ep` | Binds. |
+| Either network, `=ep`, `cap_drop: ALL` | The container doesn't start: `exec: operation not permitted`. |
+| Host network, file capability `=p`, not raised | `bind: permission denied`. The capability is permitted but not effective. |
+| Host network, `=p`, raised by the process on every thread | Binds on 16 of 16 threads, and writes `/data`. |
+| The same, then `exec` of a copy that has no file capability | Binds. The ambient set carries the capability across. |
+| The same, then `exec` of the binary that has the file capability | `bind: permission denied`. Executing a file that has capabilities clears the ambient set. |
+| Host network, `=p`, raised, `cap_drop: ALL`, `cap_add: NET_BIND_SERVICE` | Binds. |
+| Host network, `=p`, raised, `no-new-privileges` | Binds. |
+| Bridge network, `=p`, `cap_drop: ALL` | Starts and binds, as it does today. The raise finds nothing permitted and is skipped. |
+| `docker save`, remove the image, `docker load` | The file capability is still there. It also survived `COPY --from --chown` in the build. |
+
+Not tested: Podman, Kubernetes, a push to and pull from a registry, and a DHCP exchange from inside
+a host-network container. The namespace spike covers the protocol. This check covers the bind.
 
 ## The five questions from the issue
 
@@ -153,8 +182,28 @@ before the first release.
   names differ per node. The configuration is shared by the cluster.
 - **Unprivileged LXC on Proxmox:** works on the container's bridge interface. Use one interface per
   VLAN, or point the router's DHCP relay at Sable. The relay is the answer for many VLANs.
-- **Docker:** host networking only (`compose.dhcp.yaml`). Bridge mode with a relay breaks the server
-  identifier, so it isn't documented.
+- **Docker:** host networking only, in a standalone `compose.dhcp.yaml`. Bridge mode with a relay
+  breaks the server identifier, so it isn't documented. Host networking removes the port map and
+  the namespace sysctl that let the non-root user bind low ports today, so the image changes. Each
+  point below is a row of the [Docker bind check](#docker-bind-check).
+  - The image build sets the file capability `cap_net_bind_service=p` on `/usr/local/bin/sable`,
+    with `setcap` in a build stage. It's permitted only. With the effective bit, a container run
+    with `cap_drop: ALL` wouldn't start.
+  - `sable container` raises the capability from the permitted set into the effective, inheritable,
+    and ambient sets on every thread, just before it runs the server or hands off to a web-updated
+    executable. It uses `syscall.AllThreadsSyscall`, which needs the `CGO_ENABLED=0` build that
+    releases already use. If the capability isn't permitted, the launcher does nothing. It never
+    re-executes `/usr/local/bin/sable`, because that would clear the ambient set.
+  - The container stays `nonroot` and `/data` keeps its owner. The process holds
+    `CAP_NET_BIND_SERVICE` alone, as it does under systemd.
+  - `compose.dhcp.yaml` sets `network_mode: host`, no `ports`, `cap_drop: [ALL]`, and
+    `cap_add: [NET_BIND_SERVICE]`.
+  - Nothing maps port 53 to 8053 in host mode. `dns_listen` moves to port 53 and binds through the
+    same capability. The port map no longer limits `http_listen` to loopback, so the guide sets it
+    on purpose.
+  - A failed bind below port 1024 in a container says why: the capability isn't in the bounding
+    set, or the image is older than the file capability. A web update can't fix an old image,
+    because the launcher is part of the image.
 - **Relays:** reply unicast to `giaddr:67`, echo option 82 unchanged, and accept
   a relayed request only when `giaddr` or the link selection is inside a configured scope.
 - **Off by default.** A scope's **Enable** action first probes for another DHCP server (a DISCOVER
@@ -353,6 +402,17 @@ Three AdGuard Home and Technitium behaviors are **not** copied, on purpose:
 - **Unicast to the hardware address** (`AF_PACKET` or `SIOCSARP`). It needs `CAP_NET_RAW` or
   `CAP_NET_ADMIN` on a process that parses hostile packets, for nothing a network notices.
 - **ARP probing over `AF_PACKET`.** Same capability cost. The neighbor table gives the same signal.
+- **Running the container as root** to bind `:67`. With `cap_drop: ALL`, root can't write `/data`.
+  Adding `DAC_OVERRIDE` leaves root-owned files, and those break the way back to the non-root
+  container.
+- **A file capability with the effective bit** (`=ep`). It needs no code, but every deployment that
+  runs with `cap_drop: ALL` stops starting on upgrade.
+- **`cap_add: NET_BIND_SERVICE` on its own.** It does nothing for a non-root user.
+- **Lowering `net.ipv4.ip_unprivileged_port_start` on the host.** It applies to every user on the
+  host, and it's a manual step outside the compose file.
+- **macvlan or ipvlan in place of host networking.** The bind would work with no image change. But
+  the operator has to choose a parent interface, a subnet, and an address, and the host can't reach
+  the container over that interface without extra setup. This wasn't run.
 - **Leases in the replicated snapshot.** Every ACK would publish a full-state generation.
 - **Ranges that follow the primary role.** Two primaries in a partition hand out the same
   addresses.
@@ -399,6 +459,13 @@ before it and passes after it, and the other checks that prove it.
      `SABLE_TEST_NETNS=1`: `udhcpc`, `dhcpcd`, `systemd-networkd`, a dnsmasq relay, a squatter, and
      the binary holding `CapEff=0x400`.
    - Check: `perfdhcp` at 500 clients with no drops. The systemd unit is unchanged.
+   - Image: the `setcap` build stage, the raise in `cmd/sable/container.go`, and
+     `compose.dhcp.yaml`. This part doesn't depend on slices 1 to 3 and can land first.
+   - Test first, for the image: `mage dockerSmoke` starts the snapshot image with
+     `--network host --cap-drop ALL --cap-add NET_BIND_SERVICE` and a DNS listener on a loopback
+     port below 1024, and asserts that it answers. Today that fails with
+     `bind: permission denied`. The test also asserts that a bridge run with `--cap-drop ALL` still
+     starts.
 5. **Names.** The reconciler, the collision order, PTR records, TTL, and NOTIFY.
    - Test first: one test per collision pair, and removal on release, expiry, and decline.
    - Check: a signed zone stays valid. 1,000 renewals produce no zone revision. Turning DHCP off
@@ -443,6 +510,13 @@ a server restart. The namespace harness can't stand in for this.
     Sable can't detect that. The guide says it up front.
   - Turning the router's DHCP off at cutover. It's a runbook step, and the recurring probe alert is
     the backstop.
+  - In Docker host mode: moving `dns_listen` to port 53, choosing `http_listen`, and freeing ports
+    53 and 67 on the host, where `systemd-resolved` often holds 53. The compose file can't do any
+    of these. The guide lists them in order, and the bind error names the port.
+- **An unpinned build stage.** The `setcap` stage adds a second base image to the build. Pin it by
+  digest. A missing or wrong file capability can't ship unnoticed, because the `dockerSmoke`
+  host-network case fails. The distroless base is a floating tag today; pinning it is separate
+  work.
 - **A dependency without release tags.** `insomniacslk/dhcp` publishes no versions, so the pin is a
   pseudo-version and Dependabot will move it to whatever is on its default branch. Import only
   `dhcpv4`, keep it behind `internal/dhcp/wire.go`, and review each bump by its diff. The surface
