@@ -249,6 +249,9 @@ func StopNode(t *testing.T, node *Node) {
 	})
 }
 
+// Logs returns what the node has logged so far.
+func (node *Node) Logs() string { return node.logs.String() }
+
 // Logger returns a debug-level text logger writing to writer.
 func Logger(writer io.Writer) *slog.Logger {
 	return slog.New(slog.NewTextHandler(writer, &slog.HandlerOptions{Level: slog.LevelDebug}))

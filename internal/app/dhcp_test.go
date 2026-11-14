@@ -262,3 +262,20 @@ func TestDHCPServiceReplicaHoldsPrimarySettings(t *testing.T) {
 	}
 	waitDHCPEvents(t, listens, nil)
 }
+
+// A join that is still applying the primary's state counts as a replica, so
+// the primary's [dhcp] isn't served before the join completes (F30).
+func TestDHCPClusterRole(t *testing.T) {
+	for _, test := range []struct {
+		state cluster.State
+		want  string
+	}{
+		{cluster.State{}, ""},
+		{cluster.State{Joining: true}, cluster.RoleReplica},
+		{cluster.State{Initialized: true, LocalRole: cluster.RolePrimary}, cluster.RolePrimary},
+	} {
+		if got := dhcpClusterRole(test.state); got != test.want {
+			t.Errorf("dhcpClusterRole(%+v) = %q, want %q", test.state, got, test.want)
+		}
+	}
+}

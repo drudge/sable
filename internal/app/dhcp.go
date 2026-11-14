@@ -239,6 +239,19 @@ func dhcpLeaseFromStore(row store.DHCPLease) dhcp.Lease {
 	}
 }
 
+// dhcpClusterRole is the node's role for DHCP: none outside a cluster, and a
+// replica's while a join applies the primary's state, so the primary's
+// [dhcp] is held and not served before the join completes (F30).
+func dhcpClusterRole(state cluster.State) string {
+	switch {
+	case state.Initialized:
+		return state.LocalRole
+	case state.Joining:
+		return cluster.RoleReplica
+	}
+	return ""
+}
+
 // startDHCP starts the DHCP server with the configuration. A failure leaves
 // DNS running and is logged: port 67 taken or a cluster shouldn't keep the
 // rest of Sable down.
@@ -246,12 +259,7 @@ func (process *process) startDHCP() {
 	clusterService := process.clusterService
 	process.dhcp = newDHCPService(process.database,
 		func() string { return clusterService.Snapshot().NodeID },
-		func() string {
-			if state := clusterService.Snapshot(); state.Initialized {
-				return state.LocalRole
-			}
-			return ""
-		},
+		func() string { return dhcpClusterRole(clusterService.Snapshot()) },
 		process.logger)
 	if err := process.dhcp.Apply(process.runtimeContext, process.runtimeContext, process.current().DHCP); err != nil {
 		process.logger.Error("DHCP server not started", "error", err)
