@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/netip"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -351,5 +352,42 @@ func TestDHCPServerDropsOversizeDatagram(t *testing.T) {
 	}
 	if _, sent := harness.conn.snapshot(); len(sent) != 0 {
 		t.Fatalf("answered an oversize datagram with %d replies", len(sent))
+	}
+}
+
+// A store that stays down must not be read once per request: a flood while
+// the engine is stale would queue a 2 s read behind every datagram. The
+// server reads at most once per dhcpReloadInterval and stays silent between.
+func TestDHCPServerLimitsStaleReloads(t *testing.T) {
+	var loads atomic.Int32
+	var clock atomic.Int64
+	start := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
+	harness := startDHCPServer(t, func(context.Context, []dhcp.Lease) error {
+		return errors.New("database is locked")
+	}, nil)
+	harness.server.now = func() time.Time { return start.Add(time.Duration(clock.Load())) }
+	harness.server.load = func(context.Context) ([]dhcp.Lease, error) {
+		loads.Add(1)
+		return nil, errors.New("database is locked")
+	}
+	harness.exchange(t, dhcpTestPacket(dhcp.Discover))
+	harness.waitWrite(t)
+	_, sent := harness.conn.snapshot()
+	harness.exchange(t, dhcpTestRequest(sent[0].reply)) // save fails, reload fails: stale
+	for range 50 {
+		harness.exchange(t, dhcpTestPacket(dhcp.Discover))
+	}
+	harness.waitIdle(t, 52)
+	if got := loads.Load(); got != 1 {
+		t.Fatalf("store read %d times within one interval, want 1", got)
+	}
+	if stale := harness.stats.Stale.Load(); stale != 50 {
+		t.Fatalf("Stale = %d, want 50", stale)
+	}
+	clock.Store(int64(time.Second)) // dhcpReloadInterval
+	harness.exchange(t, dhcpTestPacket(dhcp.Discover))
+	harness.waitIdle(t, 53)
+	if got := loads.Load(); got != 2 {
+		t.Fatalf("store read %d times after the interval passed, want 2", got)
 	}
 }

@@ -26,6 +26,10 @@ const (
 	// up before a client's first retransmit at 4 s (RFC 2131 §4.1) and the
 	// requests behind it are still answered in time.
 	dhcpSaveTimeout = 2 * time.Second
+	// dhcpReloadInterval is the least time between reads of the store while
+	// the engine is stale. A store that stays down is then read once a second,
+	// not once per datagram with dhcpSaveTimeout behind each.
+	dhcpReloadInterval = time.Second
 )
 
 // dhcpConn is the server's socket: datagrams with the interface they
@@ -92,6 +96,9 @@ type dhcpServer struct {
 	// stale is set when a save failed and no reload has succeeded since.
 	// Only the serve goroutine touches it.
 	stale bool
+	// reloadedAt is when the last reload started; only the serve goroutine
+	// touches it.
+	reloadedAt time.Time
 }
 
 // run serves until ctx ends or the socket fails, then closes the socket.
@@ -165,7 +172,7 @@ func (server *dhcpServer) handleSafely(ctx context.Context, request dhcpRequest)
 }
 
 func (server *dhcpServer) handle(ctx context.Context, request dhcpRequest) {
-	if server.stale && !server.reload(ctx) {
+	if server.stale && !server.reloadStale(ctx) {
 		// Until the engine matches the store again, any answer may promise
 		// what the store doesn't hold; stay silent and let clients retransmit.
 		server.stats.Stale.Add(1)
@@ -227,9 +234,19 @@ func (server *dhcpServer) commit(ctx context.Context, leases []dhcp.Lease) bool 
 	return false
 }
 
+// reloadStale reloads a stale engine unless the last try was under
+// dhcpReloadInterval ago. A clock that went back counts as due.
+func (server *dhcpServer) reloadStale(ctx context.Context) bool {
+	if since := server.now().Sub(server.reloadedAt); since >= 0 && since < dhcpReloadInterval {
+		return false
+	}
+	return server.reload(ctx)
+}
+
 // reload replaces the engine's lease view with the store's and reports
 // whether it did. Pending offers live outside the view and survive.
 func (server *dhcpServer) reload(ctx context.Context) bool {
+	server.reloadedAt = server.now()
 	loadCtx, cancel := context.WithTimeout(ctx, dhcpSaveTimeout)
 	defer cancel()
 	leases, err := server.load(loadCtx)

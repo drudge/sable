@@ -240,6 +240,11 @@ func TestDHCPServerStaysSilentUntilReloadSucceeds(t *testing.T) {
 		}
 		return nil
 	}, nil)
+	// Each reading of the clock is a reload interval later, so the limit on
+	// stale reloads never holds one back here.
+	var tick atomic.Int64
+	start := harness.server.now()
+	harness.server.now = func() time.Time { return start.Add(time.Duration(tick.Add(1)) * time.Second) }
 	harness.server.load = func(context.Context) ([]dhcp.Lease, error) {
 		if loadFailures.Add(-1) >= 0 {
 			return nil, errors.New("database is locked")
