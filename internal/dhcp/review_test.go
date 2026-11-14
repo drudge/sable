@@ -334,6 +334,9 @@ func TestReview618ConcurrentHandle(t *testing.T) {
 // A DISCOVER flood can't cost more than a bounded amount of work per packet,
 // even on a big exhausted pool with the offer table full.
 func TestReview618DiscoverCostOnFullLargePool(t *testing.T) {
+	if raceEnabled {
+		t.Skip("timing probe; the race detector slows every DISCOVER")
+	}
 	enabled := true
 	settings := config.DHCP{Enabled: true, Scopes: []config.DHCPScope{{
 		ID: "big", Name: "Big", Subnet: "10.64.0.0/16", Enabled: &enabled, Lease: config.Duration{Duration: time.Hour},
