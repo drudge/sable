@@ -252,7 +252,7 @@ routes = []                     # option 121, [{ to = "10.9.0.0/16", via = "10.0
 register_names = true
 reverse = true
 ttl = "5m"
-ipv6_only_preferred = ""        # "30m" answers option 108
+ipv6_only_preferred = "0s"      # off; "30m" answers option 108
 reserved_only = false           # true: no dynamic leases
 ignore_client_id = false        # true: key leases on the MAC only
 block_random_macs = false       # true: no dynamic lease for a locally administered MAC
@@ -283,7 +283,10 @@ value = ["10.0.7.5"]            # typed by code; an unknown code takes hex = "..
 - An exclusion is the gap between two ranges. The console shows it as an exclusion and writes
   ranges.
 - Validation: ranges and reservations are inside the subnet. Nothing overlaps across scopes. One
-  reservation per MAC and per address in a scope. `router` is in the subnet. `domain` is a zone
+  reservation per MAC and per address in a scope. A reservation's name is unique within its
+  `domain`, across scopes, because a named reservation always publishes `<name>.<domain>`.
+  `offer_delay` and `conflict_probe` together are at most 2.5 s: both run before the OFFER, and a
+  client retransmits its DISCOVER as early as 3 s (RFC 2131 §4.1). `router` is in the subnet. `domain` is a zone
   Sable is Primary for, created if missing as `writableUniFiZone` does
   (`internal/app/unifi_sync.go:619`). Every `node` is a current member. A raw option can't set a
   code that has a field or that the engine owns (1, 3, 6, 15, 51, 53, 54, 58, 59, 61, 81, 82).
