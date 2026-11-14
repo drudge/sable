@@ -308,3 +308,36 @@ func TestDHCPServerBoundsDelayedOffers(t *testing.T) {
 		t.Fatalf("%d OFFERs still waiting after stop", waiting)
 	}
 }
+
+// A client retransmitting DISCOVER faster than offer_delay keeps its first
+// deadline; restarting the clock on each retry would never send (F24).
+func TestDHCPServerRetransmitKeepsOfferDeadline(t *testing.T) {
+	conn := newFakeDHCPConn()
+	conn.wrote = make(chan struct{}, 64)
+	server := &dhcpServer{conn: conn, stats: &dhcpStats{}, logger: slog.New(slog.NewTextHandler(testLogWriter{t}, nil))}
+	defer server.delayed.stop()
+	reply := dhcpTestPacket(dhcp.Offer)
+	reply.Op = 2
+	for range 12 {
+		server.send(context.Background(), dhcpTestPacket(dhcp.Discover), dhcp.Result{Reply: &reply, Delay: 200 * time.Millisecond}, 7)
+		time.Sleep(50 * time.Millisecond)
+	}
+	if _, sent := conn.snapshot(); len(sent) == 0 {
+		t.Fatal("no OFFER for a client retrying every 50ms under a 200ms offer_delay")
+	}
+}
+
+// A datagram longer than dhcpMaxPacket isn't DHCP and isn't parsed
+// truncated: it's dropped and counted.
+func TestDHCPServerDropsOversizeDatagram(t *testing.T) {
+	harness := startDHCPServer(t, func(context.Context, []dhcp.Lease) error { return nil }, nil)
+	payload := dhcpTestPacket(dhcp.Discover).Marshal()
+	harness.conn.inbound <- append(payload, make([]byte, dhcpMaxPacket+1-len(payload))...)
+	harness.waitIdle(t, 1)
+	if dropped := harness.stats.Dropped.Load(); dropped != 1 {
+		t.Fatalf("dropped = %d; want the oversize datagram dropped", dropped)
+	}
+	if _, sent := harness.conn.snapshot(); len(sent) != 0 {
+		t.Fatalf("answered an oversize datagram with %d replies", len(sent))
+	}
+}

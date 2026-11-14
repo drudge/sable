@@ -103,7 +103,9 @@ func (server *dhcpServer) run(ctx context.Context) error {
 
 func (server *dhcpServer) read() error {
 	for {
-		buffer := make([]byte, dhcpMaxPacket)
+		// One byte spare tells a datagram over dhcpMaxPacket from one that
+		// fits, so an oversize one is dropped instead of parsed truncated.
+		buffer := make([]byte, dhcpMaxPacket+1)
 		n, ifIndex, err := server.conn.ReadPacket(buffer)
 		if err != nil {
 			if errors.Is(err, net.ErrClosed) {
@@ -112,6 +114,10 @@ func (server *dhcpServer) read() error {
 			return fmt.Errorf("read DHCP socket: %w", err)
 		}
 		server.stats.Received.Add(1)
+		if n > dhcpMaxPacket {
+			server.stats.Dropped.Add(1)
+			continue
+		}
 		select {
 		case server.queue <- dhcpRequest{payload: buffer[:n], ifIndex: ifIndex}:
 		default:
