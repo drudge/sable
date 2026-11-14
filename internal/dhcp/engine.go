@@ -157,18 +157,30 @@ func (engine *Engine) scopeFor(request Packet, meta Meta) (*scope, netip.Addr) {
 	relayed := request.GIAddr.Is4() && !request.GIAddr.IsUnspecified()
 	for _, compiled := range engine.scopes {
 		if relayed {
-			if compiled.subnet.Contains(request.GIAddr) && len(meta.Addrs) > 0 {
-				return compiled, meta.Addrs[0].Addr()
+			if serverID := firstIPv4(meta.Addrs); compiled.subnet.Contains(request.GIAddr) && serverID.IsValid() {
+				return compiled, serverID
 			}
 			continue
 		}
 		for _, local := range meta.Addrs {
-			if compiled.subnet.Contains(local.Addr()) {
-				return compiled, local.Addr()
+			if address := local.Addr().Unmap(); compiled.subnet.Contains(address) {
+				return compiled, address
 			}
 		}
 	}
 	return nil, netip.Addr{}
+}
+
+// firstIPv4 is the link's first IPv4 address, the server identifier for a
+// relayed request (RFC 2132 §9.7 is four octets). Interfaces often list an
+// IPv6 address first.
+func firstIPv4(addrs []netip.Prefix) netip.Addr {
+	for _, local := range addrs {
+		if address := local.Addr().Unmap(); address.Is4() {
+			return address
+		}
+	}
+	return netip.Addr{}
 }
 
 // clientKey is the client identifier when the client sent one and the scope

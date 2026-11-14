@@ -35,7 +35,8 @@ func FuzzHandle(f *testing.F) {
 		meta := testLink
 		if relayed {
 			packet.GIAddr = netip.MustParseAddr("10.0.7.1")
-			meta = Meta{Addrs: []netip.Prefix{netip.MustParsePrefix("192.168.50.2/24")}}
+			// Real interfaces often list a link-local IPv6 address first (F6).
+			meta = Meta{Addrs: []netip.Prefix{netip.MustParsePrefix("fe80::1/64"), netip.MustParsePrefix("192.168.50.2/24")}}
 		}
 		for range 2 {
 			result := engine.Handle(testNow, packet, meta)

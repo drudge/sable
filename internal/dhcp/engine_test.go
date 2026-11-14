@@ -180,6 +180,31 @@ func TestRequestNAKAndAdoptRules(t *testing.T) {
 // A relayed request is answered through the relay with option 82 echoed
 // unchanged and last (RFC 3046 §2.1, §2.2); a relayed NAK sets the broadcast
 // bit (RFC 2131 §4.3.2).
+// A relayed request on a link that lists an IPv6 address first is answered
+// from the link's IPv4 address; one with no IPv4 address is dropped. Neither
+// may panic (F6).
+func TestRelayedWithIPv6FirstAddress(t *testing.T) {
+	engine := newTestEngine(t, nil)
+	meta := Meta{Interface: "eth0", Addrs: []netip.Prefix{
+		netip.MustParsePrefix("fe80::1/64"), netip.MustParsePrefix("10.0.7.2/24")}}
+	request := clientPacket(Discover, testMAC)
+	request.GIAddr = netip.MustParseAddr("10.0.7.1")
+	result := engine.Handle(testNow, request, meta)
+	if result.Reply == nil {
+		t.Fatalf("no offer: %s", result.Drop)
+	}
+	if got := result.Reply.YIAddr; !got.Is4() {
+		t.Fatal(got)
+	}
+	if id, _ := result.Reply.Option(optionServerID); netip.AddrFrom4([4]byte(id)) != netip.MustParseAddr("10.0.7.2") {
+		t.Fatalf("server identifier = %v, want 10.0.7.2", id)
+	}
+	v6Only := Meta{Interface: "eth0", Addrs: []netip.Prefix{netip.MustParsePrefix("fe80::1/64")}}
+	if result := engine.Handle(testNow, request, v6Only); result.Reply != nil {
+		t.Fatalf("answered a relayed request with no IPv4 server identifier: %+v", result.Reply)
+	}
+}
+
 func TestRelayedRequestsEchoOption82(t *testing.T) {
 	engine := newTestEngine(t, nil)
 	relayInfo := Option{Code: optionRelayInfo, Data: []byte{1, 4, 0, 0, 0, 7, 2, 2, 0xbe, 0xef}}

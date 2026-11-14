@@ -180,6 +180,9 @@ func parseAddrs(values []string) []netip.Addr {
 func packAddrs(addresses []netip.Addr) []byte {
 	data := make([]byte, 0, 4*len(addresses))
 	for _, address := range addresses {
+		if address = address.Unmap(); !address.Is4() {
+			continue
+		}
 		octets := address.As4()
 		data = append(data, octets[:]...)
 	}
