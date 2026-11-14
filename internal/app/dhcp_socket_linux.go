@@ -1,11 +1,13 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
 	"net/netip"
 	"syscall"
+	"time"
 
 	"golang.org/x/net/ipv4"
 )
@@ -69,3 +71,33 @@ func (conn *udpDHCPConn) WritePacket(payload []byte, ifIndex int, source netip.A
 }
 
 func (conn *udpDHCPConn) Close() error { return conn.conn.Close() }
+
+// seekDHCP is a dhcpSeek on a UDP socket on port 68. SO_REUSEADDR lets it
+// share the port with a DHCP client on the host; IP_PKTINFO sends the
+// broadcast out of link and keeps only replies that came in on it.
+func seekDHCP(ctx context.Context, link dhcpProbeLink, discover []byte, wait time.Duration) ([][]byte, error) {
+	conn, err := listenDHCP(ctx, dhcpClientPort)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	_ = conn.conn.SetDeadline(time.Now().Add(wait))
+	stop := context.AfterFunc(ctx, func() { _ = conn.conn.SetDeadline(time.Now()) })
+	defer stop()
+	broadcast := netip.AddrPortFrom(netip.AddrFrom4([4]byte{255, 255, 255, 255}), dhcpServerPort)
+	if err := conn.WritePacket(discover, link.Index, netip.Addr{}, broadcast); err != nil {
+		return nil, err
+	}
+	var replies [][]byte
+	buffer := make([]byte, dhcpMaxPacket+1)
+	for {
+		n, ifIndex, err := conn.ReadPacket(buffer)
+		if err != nil {
+			// The deadline ends every probe; it isn't a failure.
+			return replies, nil
+		}
+		if ifIndex == link.Index && n <= dhcpMaxPacket {
+			replies = append(replies, bytes.Clone(buffer[:n]))
+		}
+	}
+}

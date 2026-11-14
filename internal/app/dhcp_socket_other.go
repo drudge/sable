@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 // listenDHCP is Linux only for now: the server needs the arrival interface of
@@ -14,3 +15,7 @@ func listenDHCP(context.Context, int) (*udpDHCPConn, error) {
 }
 
 type udpDHCPConn struct{ dhcpConn }
+
+func seekDHCP(context.Context, dhcpProbeLink, []byte, time.Duration) ([][]byte, error) {
+	return nil, errors.New("the DHCP server probe runs on Linux only")
+}

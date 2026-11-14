@@ -159,7 +159,7 @@ func (server *dhcpServer) serve(ctx context.Context) {
 // handleSafely answers one request. A panic loses that request only: the
 // client retransmits, and the server keeps serving the rest of the network.
 // The engine may have changed its view before the panic, so the next request
-// reloads it from the store first, as after a failed save (D25).
+// reloads it from the store first, as after a failed save (D27).
 func (server *dhcpServer) handleSafely(ctx context.Context, request dhcpRequest) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -219,7 +219,7 @@ func (server *dhcpServer) recordConflict(ctx context.Context, conflict dhcpConfl
 // commit writes the leases a request changed. The ACK promises the client
 // its lease, so it goes out only once the store has it (RFC 2131 §4.3.1).
 // The engine already changed its view, so a failed save reloads it from the
-// store rather than leave the two apart (D25).
+// store rather than leave the two apart (D27).
 func (server *dhcpServer) commit(ctx context.Context, leases []dhcp.Lease) bool {
 	saveCtx, cancel := context.WithTimeout(ctx, dhcpSaveTimeout)
 	err := server.save(saveCtx, leases)
