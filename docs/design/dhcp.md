@@ -1,7 +1,7 @@
 # DHCP server design
 
-Design for [#506](https://github.com/drudge/sable/issues/506). Status: proposed, waiting on the
-maintainer's sign-off. Read against `main` at `29d3555a`. Nothing here is built yet.
+Design for [#506](https://github.com/drudge/sable/issues/506). Status: approved 2026-11-14. Build order and tests are in Build slices.
+Read against `main` at `29d3555a`.
 
 This is a design record, not a user guide. The guide, `docs/configuration.md`, and
 `docs/reference/api.md` are written by the slices that ship the feature.
