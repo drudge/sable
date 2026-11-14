@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/netip"
 	"slices"
@@ -14,8 +15,8 @@ import (
 	"github.com/drudge/sable/internal/dnsname"
 )
 
-// DHCP bounds. The client's first retransmission comes 4 s after a DISCOVER
-// (RFC 2131 §4.1), so the offer delay and probe together stay well inside it.
+// DHCP bounds. A client retransmits its DISCOVER after 4 s randomised by
+// ±1 s (RFC 2131 §4.1), so the offer delay and probe together stay under 3 s.
 const (
 	minimumDHCPLease      = 2 * time.Minute
 	maximumDHCPLease      = 365 * 24 * time.Hour
@@ -23,8 +24,10 @@ const (
 	maximumDHCPRecordTTL  = 24 * time.Hour
 	minimumDHCPV6OnlyWait = 300 * time.Second // MIN_V6ONLY_WAIT, RFC 8925 §3.4
 	maximumDHCPOfferWait  = 2 * time.Second
-	maximumDHCPServerName = 63  // sname is 64 octets with its NUL (RFC 2131 §2)
-	maximumDHCPBootFile   = 127 // file is 128 octets with its NUL
+	maximumDHCPOfferTotal = 2500 * time.Millisecond
+	maximumDHCPV6OnlyWait = math.MaxUint32 * time.Second // option 108 is 32-bit seconds
+	maximumDHCPServerName = 63                           // sname is 64 octets with its NUL (RFC 2131 §2)
+	maximumDHCPBootFile   = 127                          // file is 128 octets with its NUL
 )
 
 // Validate reports every problem with the DHCP settings that the file alone
@@ -54,6 +57,35 @@ func (settings DHCP) validate() []error {
 		for other := range index {
 			if subnets[index].IsValid() && subnets[other].IsValid() && subnets[index].Overlaps(subnets[other]) {
 				problems = append(problems, fmt.Errorf("%s.subnet overlaps scopes[%d]", field, other))
+			}
+		}
+	}
+	return append(problems, validateDHCPReservationNames(settings.Scopes)...)
+}
+
+// validateDHCPReservationNames keeps a reservation name to one owner per
+// domain, across scopes: each publishes name.domain, and two would race for
+// the record. A scope's own duplicates are reported with its reservations.
+func validateDHCPReservationNames(scopes []DHCPScope) []error {
+	var problems []error
+	owners := map[string]string{}
+	for scopeIndex, scope := range scopes {
+		domain, err := dnsname.Normalize(scope.Domain)
+		if scope.Domain == "" || err != nil {
+			continue
+		}
+		local := map[string]bool{}
+		for index, reservation := range scope.Reservations {
+			name := strings.ToLower(reservation.Name)
+			if name == "" || local[name] {
+				continue
+			}
+			local[name] = true
+			item := fmt.Sprintf("dhcp.scopes[%d].reservations[%d]", scopeIndex, index)
+			if first, found := owners[name+"."+domain]; found {
+				problems = append(problems, fmt.Errorf("%s.name %s.%s is already reserved by %s", item, name, domain, first))
+			} else {
+				owners[name+"."+domain] = item
 			}
 		}
 	}
@@ -153,6 +185,12 @@ func (scope DHCPScope) validateTimers(field string) []error {
 	}
 	if wait := scope.IPv6OnlyPreferred.Duration; wait != 0 && wait < minimumDHCPV6OnlyWait {
 		problems = append(problems, fmt.Errorf("%s.ipv6_only_preferred must be at least %s", field, Duration{minimumDHCPV6OnlyWait}))
+	} else if wait > maximumDHCPV6OnlyWait {
+		problems = append(problems, fmt.Errorf("%s.ipv6_only_preferred must be at most %d seconds", field, uint32(math.MaxUint32)))
+	}
+	if total := scope.OfferDelay.Duration + scope.ConflictProbeTimeout(); total > maximumDHCPOfferTotal {
+		problems = append(problems, fmt.Errorf("%s.offer_delay and conflict_probe together must be at most %s, not %s",
+			field, Duration{maximumDHCPOfferTotal}, Duration{total}))
 	}
 	return problems
 }

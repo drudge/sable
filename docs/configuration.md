@@ -726,12 +726,12 @@ it.
 | `register_names` | `true` | Publishes an A record for each named lease. |
 | `reverse` | `true` | Publishes a PTR record for each named lease. |
 | `ttl` | `5m` | TTL of those records. `10s` to `24h`. |
-| `ipv6_only_preferred` | off | Answers option 108 (RFC 8925) with this wait. At least `5m`. |
+| `ipv6_only_preferred` | off | Answers option 108 (RFC 8925) with this wait. At least `5m`, and at most 4294967295 seconds (the option is 32 bits). |
 | `reserved_only` | `false` | Answers reserved devices only. Needs at least one reservation. |
 | `ignore_client_id` | `false` | Keys leases on the MAC address only, for devices that change their client identifier between boots. |
 | `block_random_macs` | `false` | Gives no dynamic lease to a locally administered (randomized) MAC address. |
 | `offer_delay` | `0s` | Holds offers back, up to `2s`, so Sable can stand behind another DHCP server. |
-| `conflict_probe` | `500ms` | How long to wait for a reply when checking that an address is free before offering it. `0s` turns probing off. Up to `2s`. |
+| `conflict_probe` | `500ms` | How long to wait for a reply when checking that an address is free before offering it. `0s` turns probing off. Up to `2s`, and with `offer_delay` no more than `2.5s` in all, so the offer beats the client's first retransmission (RFC 2131 §4.1). |
 
 `boot` sets what PXE clients need: `next_server` (siaddr and option 150),
 `server_name` (option 66, up to 63 bytes), and `file` (option 67, up to 127
@@ -743,7 +743,8 @@ gap between two ranges. In a cluster each range names the node that serves it;
 every `node` must be a current member.
 
 **Reservations** give one MAC address a fixed address inside the subnet. A scope
-allows one reservation per MAC address, per address, and per name. `name` is a
+allows one reservation per MAC address, per address, and per name, and a name
+belongs to one reservation across every scope that shares its `domain`. `name` is a
 single DNS label; a named reservation always publishes its records.
 
 **Other options** go in `options`, one per code. RFC 2132 options with a known

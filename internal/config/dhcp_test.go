@@ -170,6 +170,8 @@ func TestDHCPConfigurationValidation(t *testing.T) {
 		{"v6only too short", edit(`ipv6_only_preferred = "30m"`, `ipv6_only_preferred = "1m"`), "dhcp.scopes[0].ipv6_only_preferred must be at least 5m"},
 		{"offer delay too long", edit(`offer_delay = "250ms"`, `offer_delay = "10s"`), "dhcp.scopes[0].offer_delay must be between"},
 		{"probe too long", edit(`conflict_probe = "0s"`, `conflict_probe = "10s"`), "dhcp.scopes[0].conflict_probe must be between"},
+		{"offer delay and probe past a retransmit", edit(`offer_delay = "250ms"`, `offer_delay = "2s"`, `conflict_probe = "0s"`, `conflict_probe = "2s"`), "dhcp.scopes[0].offer_delay and conflict_probe together must be at most 2.5s, not 4s"},
+		{"v6only past option 108", edit(`ipv6_only_preferred = "30m"`, `ipv6_only_preferred = "1200000h"`), "dhcp.scopes[0].ipv6_only_preferred must be at most 4294967295 seconds"},
 		{"boot file too long", edit(`file = "pxelinux.0"`, `file = "`+strings.Repeat("x", 128)+`"`), "dhcp.scopes[0].boot.file must be at most 127 bytes"},
 		{"bad next server", edit(`next_server = "10.0.7.5"`, `next_server = "tftp"`), "dhcp.scopes[0].boot.next_server must be an IPv4 address"},
 		{"bad mac", edit(`mac = "AA-BB-CC-DD-EE-FF"`, `mac = "nope"`), "dhcp.scopes[0].reservations[0].mac must be a 48-bit MAC address"},
@@ -216,10 +218,25 @@ subnet = "10.0.0.0/16"
 start = "10.0.9.10"
 end = "10.0.9.20"
 `
+	sharedDomainScope := `
+[[dhcp.scopes]]
+id = "iot"
+name = "IoT"
+subnet = "10.0.8.0/24"
+domain = "lan.example.com"
+
+[[dhcp.scopes.reservations]]
+mac = "aa:bb:cc:dd:ee:01"
+address = "10.0.8.20"
+name = "Nas"
+`
 	cases := []struct {
 		name, body string
 		want       []string
 	}{
+		{"reservation name reused in a shared domain", dhcpExample + sharedDomainScope, []string{
+			"dhcp.scopes[1].reservations[0].name nas.lan.example.com is already reserved by dhcp.scopes[0].reservations[0]",
+		}},
 		{"duplicate reservation", duplicateReservation, []string{
 			"dhcp.scopes[0].reservations[1].mac duplicates reservations[0]",
 			"dhcp.scopes[0].reservations[1].address duplicates reservations[0]",
