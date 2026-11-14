@@ -31,6 +31,8 @@ var migrations = []migration{
 	// idempotent upgrade every start used to run, so it brings any earlier
 	// schema, 1.6.1's included, to the one this build expects.
 	{1, "schema before versioned migrations", (*Store).migrateBaseline},
+	// The DHCP server's leases (#506).
+	{2, "DHCP leases", (*Store).migrateDHCPLeases},
 }
 
 // queryLogBackfillChunk is how many query log IDs one backfill statement
