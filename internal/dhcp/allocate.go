@@ -88,7 +88,7 @@ func (exchange *exchange) available(address netip.Addr) bool {
 	if exchange.isServerAddress(address) {
 		return false
 	}
-	if lease := exchange.engine.leases[address]; lease != nil && lease.ClientKey != exchange.ref.key && lease.holds(exchange.now) {
+	if lease := exchange.engine.leases[address]; lease != nil && !exchange.owns(lease) && lease.holds(exchange.now) {
 		return false
 	}
 	if lease := exchange.engine.leases[address]; lease != nil && lease.State == LeaseDeclined && lease.holds(exchange.now) {
@@ -124,6 +124,18 @@ func (exchange *exchange) holdOffer(address netip.Addr) bool {
 	}
 	engine.offers[exchange.ref] = offer{address: address, expires: exchange.now.Add(offerHold)}
 	return true
+}
+
+// owns reports whether lease is this client's: bound under its key, or, for
+// a reserved client, bound to its MAC under any client identifier. The
+// reservation is by MAC (D16), so a lease the host took under an RFC 4361
+// identifier before it was reserved is still its own (F13).
+func (exchange *exchange) owns(lease *Lease) bool {
+	if lease.ClientKey == exchange.ref.key {
+		return true
+	}
+	return lease.State == LeaseActive && lease.MAC != "" && exchange.scope.reserved(exchange.request) &&
+		strings.EqualFold(lease.MAC, exchange.request.CHAddr.String())
 }
 
 func macKey(request Packet) string { return strings.ToLower(request.CHAddr.String()) }

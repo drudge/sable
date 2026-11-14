@@ -38,7 +38,7 @@ func (exchange *exchange) answerDiscover() Result {
 	// Probe a new binding once: not a reservation, not the client's own
 	// lease, and not an offer it already had (a retransmitted DISCOVER).
 	repeat := wasPending && pending.address == address
-	if lease := exchange.engine.leases[address]; !reserved && !repeat && (lease == nil || lease.ClientKey != exchange.ref.key) {
+	if lease := exchange.engine.leases[address]; !reserved && !repeat && (lease == nil || !exchange.owns(lease)) {
 		result.Probe, result.ProbeTimeout = address, exchange.scope.probeTimeout
 		if result.ProbeTimeout == 0 {
 			result.Probe = netip.Addr{}
@@ -87,7 +87,7 @@ func (exchange *exchange) verify(address netip.Addr) Result {
 	if owner, found := compiled.reservedBy[address]; found && owner != macKey(exchange.request) {
 		return exchange.nak("address is reserved for another client")
 	}
-	if lease := exchange.engine.leases[address]; lease != nil && lease.holds(exchange.now) && lease.ClientKey != exchange.ref.key {
+	if lease := exchange.engine.leases[address]; lease != nil && lease.holds(exchange.now) && !exchange.owns(lease) {
 		return exchange.nak("address is bound to another client")
 	}
 	if reservation, found := compiled.reservation(exchange.request); found && reservation == address {
@@ -122,16 +122,35 @@ func (exchange *exchange) ack(address netip.Addr) Result {
 	if vendor, found := request.Option(optionVendorClass); found {
 		lease.VendorClass = cleanText(vendor)
 	}
+	save := exchange.releaseOthers(address)
+	save = append(save, *exchange.engine.remember(lease))
+	delete(exchange.engine.offers, exchange.ref)
+	return Result{Reply: exchange.reply(Ack, address), Destination: exchange.destination(), Save: save}
+}
+
+// releaseOthers ends the client's active leases other than address, so it
+// never holds two (D19). A reserved client's leases are found by MAC, since
+// one it took before the reservation is keyed by its client identifier (F13).
+func (exchange *exchange) releaseOthers(address netip.Addr) []Lease {
+	var held []*Lease
+	if previous, found := exchange.engine.clients[exchange.ref]; found {
+		held = append(held, exchange.engine.leases[previous])
+	}
+	if exchange.scope.reserved(exchange.request) {
+		for _, lease := range exchange.engine.leases {
+			if lease.ScopeID == exchange.scope.id && lease.ClientKey != exchange.ref.key && exchange.owns(lease) {
+				held = append(held, lease)
+			}
+		}
+	}
 	var save []Lease
-	if previous, found := exchange.engine.clients[exchange.ref]; found && previous != address {
-		if old := exchange.engine.leases[previous]; old != nil && old.ClientKey == exchange.ref.key && old.State == LeaseActive {
+	for _, old := range held {
+		if old != nil && old.Address != address && exchange.owns(old) && old.State == LeaseActive {
 			old.State, old.ExpiresAt = LeaseReleased, exchange.now
 			save = append(save, *old)
 		}
 	}
-	save = append(save, *exchange.engine.remember(lease))
-	delete(exchange.engine.offers, exchange.ref)
-	return Result{Reply: exchange.reply(Ack, address), Destination: exchange.destination(), Save: save}
+	return save
 }
 
 func (exchange *exchange) nak(message string) Result {
