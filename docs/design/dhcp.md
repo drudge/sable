@@ -149,7 +149,10 @@ a host-network container. The namespace spike covers the protocol. This check co
   A replica sends rows changed since the primary's last acknowledged sequence on the heartbeat
   (`Heartbeat.Leases`, at most 500 a beat). The primary sends the merged set back on the sync
   response with a cursor per replica, the way `ClientIdentities` travels. Every node holds every
-  lease, a few seconds stale at most. A new primary acknowledges 0 and gets a full resend.
+  lease, a few seconds stale at most. A new primary acknowledges 0 and gets a full resend. A node
+  whose own counter is below the sequence the primary acknowledges (its database was wiped or
+  restored) raises its counter to that number and resends every row, so a number is never used
+  twice.
 - **What a node outage costs with no action.** Reserved clients: nothing. Dynamic clients of the
   dead node: nothing until their lease runs out. They retry the dead node from half the lease time,
   broadcast from 87.5%, and take a new address from a surviving range only at expiry. With a 24 h
@@ -252,7 +255,7 @@ routes = []                     # option 121, [{ to = "10.9.0.0/16", via = "10.0
 register_names = true
 reverse = true
 ttl = "5m"
-ipv6_only_preferred = ""        # "30m" answers option 108
+ipv6_only_preferred = "0s"      # off; "30m" answers option 108
 reserved_only = false           # true: no dynamic leases
 ignore_client_id = false        # true: key leases on the MAC only
 block_random_macs = false       # true: no dynamic lease for a locally administered MAC
@@ -283,7 +286,10 @@ value = ["10.0.7.5"]            # typed by code; an unknown code takes hex = "..
 - An exclusion is the gap between two ranges. The console shows it as an exclusion and writes
   ranges.
 - Validation: ranges and reservations are inside the subnet. Nothing overlaps across scopes. One
-  reservation per MAC and per address in a scope. `router` is in the subnet. `domain` is a zone
+  reservation per MAC and per address in a scope. A reservation's name is unique within its
+  `domain`, across scopes, because a named reservation always publishes `<name>.<domain>`.
+  `offer_delay` and `conflict_probe` together are at most 2.5 s: both run before the OFFER, and a
+  client retransmits its DISCOVER as early as 3 s (RFC 2131 §4.1). `router` is in the subnet. `domain` is a zone
   Sable is Primary for, created if missing as `writableUniFiZone` does
   (`internal/app/unifi_sync.go:619`). Every `node` is a current member. A raw option can't set a
   code that has a field or that the engine owns (1, 3, 6, 15, 51, 53, 54, 58, 59, 61, 81, 82).
@@ -296,8 +302,11 @@ value = ["10.0.7.5"]            # typed by code; an unknown code takes hex = "..
 Migration step 2 adds `sable_dhcp_leases`: `node_id`, `address`, `scope_id`, `client_key`, `mac`,
 `client_id`, `hostname` (as sent), `label` (as registered), `state` (active, released, expired,
 declined), `bound_at_ns`, `expires_at_ns`, `seq`, `relay`, `vendor_class`. The primary key is
-`(node_id, address)`, with an index on `(scope_id, client_key)`. Rows for this node are the truth.
-Rows for other nodes are mirrors.
+`(node_id, address)`, with indexes on `(scope_id, client_key)`, `(node_id, seq)`, and
+`(expires_at_ns)` for the prune. Rows for this node are the truth. Rows for other nodes are mirrors.
+The step also adds `sable_dhcp_lease_seqs`, each node's last sequence number, kept apart from the
+leases so a prune never hands a number out again. Only a write by the owner takes a number. A
+mirrored row keeps the owner's number and leaves this node's counter alone.
 
 - `client_key` is the client identifier when one is sent, otherwise the hardware type and address
   (RFC 2131 §4.2). A reservation matches on MAC whatever the client identifier, so a machine that
@@ -305,7 +314,10 @@ Rows for other nodes are mirrors.
 - The packet path reads an in-memory table. Every ACK is written to the store **before** it's sent.
   A failed write means no reply, a counter, and an alert. The client retries. Offers stay in memory
   for 60 s.
-- Expired rows are kept 30 days, so a returning client gets its old address.
+- Expired rows are kept 30 days, so a returning client gets its old address. The prune never
+  removes an `active` row, and only the owner marks one expired. So a range takeover adopts the old
+  owner's `active` rows in that range under the new owner, with the same client and expiry, and
+  every node drops the old owner's rows for a range once the configuration moves it.
 
 ## Engine
 
@@ -321,12 +333,34 @@ Rows for other nodes are mirrors.
 - **Adopt on request:** a REQUEST without a server identifier, for an address in this node's range
   that isn't bound to another client, is ACKed and recorded. Moving from a router to Sable, or
   losing the lease table, then costs nothing.
-- **NAK only** when the requested address is off-link for the arrival subnet or is bound to another
-  client. An on-link address with no record outside this node's ranges gets silence.
+- **NAK only** when the requested address is off-link for the arrival subnet, is bound to another
+  client, or isn't the client's reservation while that reservation is free for it. An on-link
+  address with no record outside this node's ranges gets silence.
+- **The server stands behind its offer.** A REQUEST for the address the server just offered gets an
+  ACK. When a reservation can't be given yet (another client still holds it, or it was declined),
+  the client gets a pool address, and the NAK that moves it to the reservation comes at a later
+  renewal, once the reservation is free.
+- **A reserved client is known by its MAC.** The reservation is by MAC, so the binding is too, and
+  the client identifier doesn't split it. PXE firmware and the system it boots send different
+  identifiers and get the same address. A lease that MAC already held under a client identifier,
+  from before it had a reservation, is that client's too: when lease rows enter the engine's view
+  (`Load`, and a mirrored row in slice 8), a row whose MAC is reserved in its scope is keyed by the
+  MAC. Reserving a lease a host holds keeps the host on it.
+- **Every lease change is returned.** When a client moves to another address, `Handle` returns the
+  old lease as released and the new one, and both are written before the ACK. The rows the store
+  holds always replay to the engine's view.
+- **Lease text is cleaned on the way in.** Host name (12) and vendor class (60) are bytes from the
+  network. The engine keeps valid UTF-8 without control characters, at most 255 bytes, and drops the
+  rest. PostgreSQL refuses a NUL or a bad sequence in a text column, and the same text reaches DNS
+  and the console.
 - A REQUEST that names another server drops the pending offer and gets no reply.
 - **Conflict probe** before an OFFER for a new binding, off the receive loop: an echo reply, or a
-  neighbor entry with another MAC, marks the address `declined` for 1 h. A DECLINE does the same.
+  neighbor entry with another MAC, marks the address `declined` for 1 h. A DECLINE does the same. A probe's row has no
+  client, so its client key is `conflict:` and the MAC seen, or `conflict:echo`.
 - INFORM gets an ACK with options and no address.
+- Option 108 goes with the options that are never trimmed when the client asked for it. The trim
+  to the client's maximum message size fits the address plan first: mask, router, DNS servers, and
+  domain.
 - The receive queue is bounded and drops are counted. Outstanding offers are capped per scope.
 
 ## Parity checklist
