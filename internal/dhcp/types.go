@@ -24,6 +24,16 @@ const (
 	Inform   MessageType = 8
 )
 
+// String is the message type's name as RFC 2132 §9.6 writes it, without the
+// DHCP prefix.
+func (kind MessageType) String() string {
+	names := [...]string{"", "DISCOVER", "OFFER", "REQUEST", "DECLINE", "ACK", "NAK", "RELEASE", "INFORM"}
+	if int(kind) < len(names) && kind != 0 {
+		return names[kind]
+	}
+	return "unknown"
+}
+
 // Option codes the engine reads or writes itself (RFC 2132, RFC 3046,
 // RFC 3397, RFC 3442, RFC 5859, RFC 6842, RFC 8925).
 const (

@@ -1,0 +1,71 @@
+package app
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"net/netip"
+	"syscall"
+
+	"golang.org/x/net/ipv4"
+)
+
+// udpDHCPConn is the server's UDP socket on port 67 of every IPv4 address.
+// IP_PKTINFO names the interface each request came in on, which picks the
+// scope (RFC 2131 §4.3.1), and sends each broadcast reply out of that same
+// interface; without it the kernel routes 255.255.255.255 by the default
+// route alone.
+type udpDHCPConn struct {
+	conn   net.PacketConn
+	packet *ipv4.PacketConn
+}
+
+// listenDHCP opens the server socket. Port 67 is below 1024, so the process
+// needs CAP_NET_BIND_SERVICE, as it does for DNS on port 53.
+func listenDHCP(ctx context.Context, port int) (*udpDHCPConn, error) {
+	config := net.ListenConfig{Control: func(_, _ string, raw syscall.RawConn) error {
+		var optionErr error
+		err := raw.Control(func(fd uintptr) {
+			if optionErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); optionErr != nil {
+				return
+			}
+			optionErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_BROADCAST, 1)
+		})
+		if err != nil {
+			return err
+		}
+		return optionErr
+	}}
+	conn, err := config.ListenPacket(ctx, "udp4", fmt.Sprintf("0.0.0.0:%d", port))
+	if err != nil {
+		return nil, err
+	}
+	packet := ipv4.NewPacketConn(conn)
+	if err := packet.SetControlMessage(ipv4.FlagInterface, true); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("ask for the arrival interface: %w", err)
+	}
+	return &udpDHCPConn{conn: conn, packet: packet}, nil
+}
+
+func (conn *udpDHCPConn) ReadPacket(buffer []byte) (int, int, error) {
+	n, control, _, err := conn.packet.ReadFrom(buffer)
+	if err != nil {
+		return 0, 0, err
+	}
+	if control == nil {
+		return n, 0, nil
+	}
+	return n, control.IfIndex, nil
+}
+
+func (conn *udpDHCPConn) WritePacket(payload []byte, ifIndex int, source netip.Addr, destination netip.AddrPort) error {
+	control := &ipv4.ControlMessage{IfIndex: ifIndex}
+	if source.Is4() {
+		control.Src = source.AsSlice()
+	}
+	_, err := conn.packet.WriteTo(payload, control, net.UDPAddrFromAddrPort(destination))
+	return err
+}
+
+func (conn *udpDHCPConn) Close() error { return conn.conn.Close() }
