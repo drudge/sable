@@ -8,10 +8,10 @@ import (
 )
 
 // dhcpMaxDelayedOffers bounds the OFFERs held back by offer_delay or a
-// conflict probe (D28). A client's newer DISCOVER replaces its waiting OFFER,
+// conflict probe (D29). A client's newer DISCOVER replaces its waiting OFFER,
 // so this caps distinct clients, not repeats; past it the OFFER is dropped
 // and counted.
-const dhcpMaxDelayedOffers = 1024
+const dhcpMaxDelayedOffers = 512
 
 // dhcpDelayedOffers holds each client's OFFER until its offer_delay is up and
 // its address has been probed. Waiting OFFERs are runtime timers, and a probe

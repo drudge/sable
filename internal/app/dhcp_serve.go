@@ -234,7 +234,7 @@ func (server *dhcpServer) reload(ctx context.Context) bool {
 	defer cancel()
 	leases, err := server.load(loadCtx)
 	if err != nil {
-		server.logger.Warn("reload DHCP leases after a failed save; not answering", "error", err)
+		server.logger.Warn("read DHCP leases from the store; not answering until it works", "error", err)
 		return false
 	}
 	server.engine.Load(leases)

@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/drudge/sable/internal/config"
@@ -318,19 +319,24 @@ func TestDHCPServerBoundsDelayedOffers(t *testing.T) {
 // A client retransmitting DISCOVER faster than offer_delay keeps its first
 // deadline; restarting the clock on each retry would never send (F24).
 func TestDHCPServerRetransmitKeepsOfferDeadline(t *testing.T) {
-	conn := newFakeDHCPConn()
-	conn.wrote = make(chan struct{}, 64)
-	server := &dhcpServer{conn: conn, stats: &dhcpStats{}, logger: slog.New(slog.NewTextHandler(testLogWriter{t}, nil))}
-	defer server.delayed.stop()
-	reply := dhcpTestPacket(dhcp.Offer)
-	reply.Op = 2
-	for range 12 {
-		server.send(context.Background(), dhcpTestPacket(dhcp.Discover), dhcp.Result{Reply: &reply, Delay: 200 * time.Millisecond}, 7)
-		time.Sleep(50 * time.Millisecond)
-	}
-	if _, sent := conn.snapshot(); len(sent) == 0 {
-		t.Fatal("no OFFER for a client retrying every 50ms under a 200ms offer_delay")
-	}
+	synctest.Test(t, func(t *testing.T) {
+		conn := newFakeDHCPConn()
+		conn.wrote = make(chan struct{}, 64)
+		server := &dhcpServer{conn: conn, stats: &dhcpStats{}, logger: slog.New(slog.NewTextHandler(testLogWriter{t}, nil))}
+		defer server.delayed.stop()
+		reply := dhcpTestPacket(dhcp.Offer)
+		reply.Op = 2
+		// offer_delay at its 2 s maximum; the client retransmits every second,
+		// as Android's NetworkStack and iPXE do.
+		for range 10 {
+			server.send(context.Background(), dhcpTestPacket(dhcp.Discover), dhcp.Result{Reply: &reply, Delay: 2 * time.Second}, 7)
+			time.Sleep(time.Second)
+			synctest.Wait()
+		}
+		if _, sent := conn.snapshot(); len(sent) < 4 {
+			t.Fatalf("%d OFFERs in 10 s for a client retrying every 1 s under a 2 s offer_delay; want one per first deadline", len(sent))
+		}
+	})
 }
 
 // A datagram longer than dhcpMaxPacket isn't DHCP and isn't parsed

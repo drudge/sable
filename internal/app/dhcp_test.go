@@ -74,6 +74,7 @@ func newTestDHCPService(t *testing.T, clustered bool) (*dhcpService, *dhcpListen
 	listens := &dhcpListenLog{}
 	service := newDHCPService(database, func() string { return "node-a" }, func() bool { return clustered }, slog.New(slog.NewTextHandler(testLogWriter{t}, nil)))
 	service.listen = listens.listen
+	service.retry = 10 * time.Millisecond
 	service.link = func(int) (dhcp.Meta, error) {
 		return dhcp.Meta{Interface: "eth0", Addrs: []netip.Prefix{netip.MustParsePrefix("10.0.7.2/24")}}, nil
 	}

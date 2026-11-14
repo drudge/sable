@@ -34,8 +34,10 @@ type dhcpService struct {
 	link      func(int) (dhcp.Meta, error)
 	probe     dhcpProbe
 	port      int
-	logger    *slog.Logger
-	stats     dhcpStats
+	// retry is the first wait before binding again after a failure.
+	retry  time.Duration
+	logger *slog.Logger
+	stats  dhcpStats
 
 	mutex   sync.Mutex
 	active  config.DHCP
@@ -45,15 +47,18 @@ type dhcpService struct {
 // dhcpRunning is one started server and how to stop it.
 type dhcpRunning struct {
 	cancel context.CancelFunc
-	done   chan error
+	done   chan struct{}
 }
+
+// dhcpRetryMax caps the wait between attempts to bring the server back.
+const dhcpRetryMax = 30 * time.Second
 
 func newDHCPService(leases dhcpLeaseStore, node func() string, clustered func() bool, logger *slog.Logger) *dhcpService {
 	logger = logger.With("component", "dhcp")
 	return &dhcpService{
 		leases: leases, node: node, clustered: clustered,
 		listen: func(ctx context.Context, port int) (dhcpConn, error) { return listenDHCP(ctx, port) },
-		link:   dhcpLink, probe: newDHCPProber(logger).probe, port: dhcpServerPort, logger: logger,
+		link:   dhcpLink, probe: newDHCPProber(logger).probe, port: dhcpServerPort, retry: time.Second, logger: logger,
 	}
 }
 
@@ -66,9 +71,10 @@ func (service *dhcpService) Check(settings config.DHCP) error {
 }
 
 // Apply moves the server to settings: unchanged settings keep it running,
-// disabled ones stop it, and anything else replaces it. The new engine is
-// built and its leases read before the old server stops, and the old socket
-// closes before the new one binds port 67.
+// disabled ones stop it, and anything else replaces it. Only settings the
+// engine refuses reject the change. Port 67 or the store being unavailable
+// is a condition of the host, not of the configuration, so it is logged and
+// retried and never holds back a change elsewhere in sable.toml.
 func (service *dhcpService) Apply(ctx context.Context, runtime context.Context, settings config.DHCP) error {
 	service.mutex.Lock()
 	defer service.mutex.Unlock()
@@ -80,7 +86,7 @@ func (service *dhcpService) Apply(ctx context.Context, runtime context.Context, 
 	}
 	var server *dhcpServer
 	if settings.Enabled {
-		prepared, err := service.prepare(ctx, settings)
+		prepared, err := service.prepare(settings)
 		if err != nil {
 			return err
 		}
@@ -88,46 +94,81 @@ func (service *dhcpService) Apply(ctx context.Context, runtime context.Context, 
 	}
 	service.stopLocked()
 	if server != nil {
-		if err := service.startLocked(runtime, server); err != nil {
-			return err
-		}
+		service.startLocked(runtime, settings, server)
 	}
 	service.active = settings
 	return nil
 }
 
-// prepare builds an engine for settings holding the store's leases.
-func (service *dhcpService) prepare(ctx context.Context, settings config.DHCP) (*dhcpServer, error) {
+// prepare builds a server with an engine for settings. Its leases are read
+// once the old server has stopped, so none it acknowledges are missed.
+func (service *dhcpService) prepare(settings config.DHCP) (*dhcpServer, error) {
 	engine, err := dhcp.New(settings, service.node())
 	if err != nil {
 		return nil, fmt.Errorf("start DHCP engine: %w", err)
 	}
-	server := &dhcpServer{
+	return &dhcpServer{
 		engine: engine, save: service.save, load: service.load, link: service.link, probe: service.probe,
 		now: time.Now, logger: service.logger, stats: &service.stats,
-	}
-	if !server.reload(ctx) {
-		return nil, errors.New("read DHCP leases from the store")
-	}
-	return server, nil
+	}, nil
 }
 
-func (service *dhcpService) startLocked(runtime context.Context, server *dhcpServer) error {
-	conn, err := service.listen(runtime, service.port)
+// startLocked binds port 67 and reads the store's leases now, so the old
+// server has stopped and nothing it acknowledged is missed, then leaves the
+// server to supervise.
+func (service *dhcpService) startLocked(runtime context.Context, settings config.DHCP, server *dhcpServer) {
+	ctx, cancel := context.WithCancel(runtime)
+	running := &dhcpRunning{cancel: cancel, done: make(chan struct{})}
+	err := service.bind(ctx, server)
+	go func() {
+		defer close(running.done)
+		service.supervise(ctx, settings, server, err)
+	}()
+	service.running = running
+}
+
+// supervise serves until ctx ends. A bind that failed (err) or a socket that
+// stops is tried again, waiting service.retry at first and twice as long
+// each time after, up to dhcpRetryMax.
+func (service *dhcpService) supervise(ctx context.Context, settings config.DHCP, server *dhcpServer, err error) {
+	wait := service.retry
+	for {
+		if err == nil {
+			wait = service.retry
+			if err = server.run(ctx); err == nil {
+				err = errors.New("DHCP socket closed")
+			}
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		service.logger.Error("DHCP server not running; trying again", "error", err, "in", wait)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+		wait = min(2*wait, dhcpRetryMax)
+		// The engine was built from these settings before, so it builds again.
+		if server, err = service.prepare(settings); err != nil {
+			service.logger.Error("DHCP server not restarted", "error", err)
+			return
+		}
+		err = service.bind(ctx, server)
+	}
+}
+
+// bind gives server its socket and the store's leases. A failed read leaves
+// it silent until a reload works, as after a failed save (D25).
+func (service *dhcpService) bind(ctx context.Context, server *dhcpServer) error {
+	conn, err := service.listen(ctx, service.port)
 	if err != nil {
 		return fmt.Errorf("listen for DHCP on port %d: %w", service.port, err)
 	}
 	server.conn = conn
-	ctx, cancel := context.WithCancel(runtime)
-	running := &dhcpRunning{cancel: cancel, done: make(chan error, 1)}
-	go func() {
-		err := server.run(ctx)
-		if err != nil {
-			service.logger.Error("DHCP server stopped", "error", err)
-		}
-		running.done <- err
-	}()
-	service.running = running
+	if !server.reload(ctx) {
+		server.stale = true
+	}
 	service.logger.Info("DHCP server started", "port", service.port)
 	return nil
 }
