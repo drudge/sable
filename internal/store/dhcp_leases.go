@@ -71,6 +71,13 @@ CREATE TABLE IF NOT EXISTS sable_dhcp_leases (
 )`,
 		"CREATE INDEX IF NOT EXISTS sable_dhcp_leases_client_idx ON sable_dhcp_leases (scope_id, client_key)",
 		"CREATE INDEX IF NOT EXISTS sable_dhcp_leases_seq_idx ON sable_dhcp_leases (node_id, seq)",
+		// Each node's last sequence number, kept apart from the leases so a
+		// prune that deletes the newest row never hands its number out again.
+		`
+CREATE TABLE IF NOT EXISTS sable_dhcp_lease_seqs (
+    node_id TEXT PRIMARY KEY,
+    seq BIGINT NOT NULL
+)`,
 	}
 }
 
@@ -94,14 +101,29 @@ func (store *Store) SaveDHCPLease(ctx context.Context, lease DHCPLease) (DHCPLea
 		return lease, err
 	}
 	err := store.withTx(ctx, "DHCP lease", func(transaction *sql.Tx) error {
-		if err := transaction.QueryRowContext(ctx,
-			"SELECT COALESCE(MAX(seq), 0) + 1 FROM sable_dhcp_leases WHERE node_id = "+store.placeholder(1),
-			lease.NodeID).Scan(&lease.Seq); err != nil {
-			return fmt.Errorf("next DHCP lease sequence: %w", err)
+		seq, err := store.nextDHCPLeaseSeq(ctx, transaction, lease.NodeID)
+		if err != nil {
+			return err
 		}
+		lease.Seq = seq
 		return store.upsertDHCPLease(ctx, transaction, lease)
 	})
 	return lease, err
+}
+
+// nextDHCPLeaseSeq takes the node's next sequence number. The counter only
+// climbs, whatever PruneDHCPLeases deletes, so a replica that has seen a
+// number never misses a later write; on Postgres the upsert's row lock also
+// keeps two writers on one node from taking the same number.
+func (store *Store) nextDHCPLeaseSeq(ctx context.Context, transaction *sql.Tx, nodeID string) (int64, error) {
+	var seq int64
+	if err := transaction.QueryRowContext(ctx, `
+INSERT INTO sable_dhcp_lease_seqs (node_id, seq) VALUES (`+store.placeholders(2)+`)
+ON CONFLICT (node_id) DO UPDATE SET seq = sable_dhcp_lease_seqs.seq + 1
+RETURNING seq`, nodeID, 1).Scan(&seq); err != nil {
+		return 0, fmt.Errorf("next DHCP lease sequence: %w", err)
+	}
+	return seq, nil
 }
 
 func validDHCPLease(lease DHCPLease) error {

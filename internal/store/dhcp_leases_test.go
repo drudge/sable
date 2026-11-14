@@ -20,7 +20,68 @@ func TestDHCPLeaseStorePostgres(t *testing.T) {
 	if dsn == "" {
 		t.Skip("SABLE_TEST_POSTGRES_DSN is not set")
 	}
-	testDHCPLeaseStore(t, openPostgresTestStore(t, dsn))
+	storage := openPostgresTestStore(t, dsn)
+	testDHCPLeaseStore(t, storage)
+	testDHCPLeaseSeqConcurrent(t, storage)
+}
+
+// A prune that deletes a node's newest row doesn't hand its sequence number
+// out again: a replica already past it would never ask for the next write.
+func TestDHCPLeaseSeqSurvivesPrune(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	storage := openIdentityStore(t)
+	now := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
+	if _, err := storage.SaveDHCPLease(ctx, testDHCPLease("node-a", "10.0.7.100", "c1", DHCPLeaseActive, now.Add(time.Hour))); err != nil {
+		t.Fatal(err)
+	}
+	pruned, err := storage.SaveDHCPLease(ctx, testDHCPLease("node-a", "10.0.7.101", "c2", DHCPLeaseExpired, now.Add(-2*dhcpLeaseRetention)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count, err := storage.PruneDHCPLeases(ctx, now); err != nil || count != 1 {
+		t.Fatalf("prune = %d, %v; want 1", count, err)
+	}
+	next, err := storage.SaveDHCPLease(ctx, testDHCPLease("node-a", "10.0.7.102", "c3", DHCPLeaseActive, now.Add(time.Hour)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Seq <= pruned.Seq {
+		t.Fatalf("write after the prune took seq %d; want more than the pruned row's %d", next.Seq, pruned.Seq)
+	}
+	since, err := storage.DHCPLeasesSince(ctx, "node-a", pruned.Seq, 10)
+	if err != nil || len(since) != 1 || since[0].Address != next.Address {
+		t.Fatalf("since seq %d = %+v, %v; want only the new write", pruned.Seq, since, err)
+	}
+}
+
+// Writers on one node racing each other each take their own sequence number.
+func testDHCPLeaseSeqConcurrent(t *testing.T, storage *Store) {
+	t.Helper()
+	ctx := context.Background()
+	expires := time.Date(2026, 11, 14, 13, 0, 0, 0, time.UTC)
+	const writers = 16
+	seqs := make(chan int64, writers)
+	errs := make(chan error, writers)
+	for index := range writers {
+		go func() {
+			address := netip.AddrFrom4([4]byte{10, 0, 8, byte(index + 1)}).String()
+			lease, err := storage.SaveDHCPLease(ctx, testDHCPLease("node-race", address, address, DHCPLeaseActive, expires))
+			seqs <- lease.Seq
+			errs <- err
+		}()
+	}
+	seen := map[int64]bool{}
+	for range writers {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+		seq := <-seqs
+		if seen[seq] {
+			t.Fatalf("two concurrent writes took seq %d", seq)
+		}
+		seen[seq] = true
+	}
 }
 
 func testDHCPLease(node, address, client string, state DHCPLeaseState, expires time.Time) DHCPLease {
