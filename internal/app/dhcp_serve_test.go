@@ -112,6 +112,7 @@ func startDHCPServer(t *testing.T, save func(context.Context, []dhcp.Lease) erro
 	harness := &dhcpServerHarness{conn: newFakeDHCPConn(), stats: &dhcpStats{}, done: make(chan error, 1)}
 	harness.server = &dhcpServer{
 		engine: engine, conn: harness.conn, save: save, link: link,
+		load:   func(context.Context) ([]dhcp.Lease, error) { return nil, nil },
 		now:    func() time.Time { return time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC) },
 		logger: slog.New(slog.NewTextHandler(testLogWriter{t}, &slog.HandlerOptions{Level: slog.LevelDebug})), stats: harness.stats,
 	}

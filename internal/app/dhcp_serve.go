@@ -22,6 +22,10 @@ const (
 	dhcpMaxPacket  = 1500
 	dhcpServerPort = 67
 	dhcpClientPort = 68
+	// dhcpSaveTimeout bounds one lease save or reload, so a hung store gives
+	// up before a client's first retransmit at 4 s (RFC 2131 §4.1) and the
+	// requests behind it are still answered in time.
+	dhcpSaveTimeout = 2 * time.Second
 )
 
 // dhcpConn is the server's socket: datagrams with the interface they
@@ -35,7 +39,12 @@ type dhcpConn interface {
 
 // dhcpStats counts what the server did with each datagram.
 type dhcpStats struct {
-	Received, Replied, Dropped, QueueFull, StoreFailed, Panics atomic.Uint64
+	// Handled counts requests that changed leases and need no reply: a
+	// saved RELEASE or DECLINE (RFC 2131 §4.3.3, §4.3.4).
+	Received, Replied, Handled, Dropped, QueueFull, StoreFailed, Panics atomic.Uint64
+	// Stale counts requests left unanswered while the engine waits to reload
+	// from the store after a failed save.
+	Stale atomic.Uint64
 }
 
 type dhcpRequest struct {
@@ -50,11 +59,18 @@ type dhcpServer struct {
 	engine *dhcp.Engine
 	conn   dhcpConn
 	save   func(context.Context, []dhcp.Lease) error
+	// load reads every lease from the store, to put the engine back in step
+	// with it after a failed save (the engine changes its view before the
+	// save, and the store is the record).
+	load   func(context.Context) ([]dhcp.Lease, error)
 	link   func(ifIndex int) (dhcp.Meta, error)
 	now    func() time.Time
 	logger *slog.Logger
 	queue  chan dhcpRequest
 	stats  *dhcpStats
+	// stale is set when a save failed and no reload has succeeded since.
+	// Only the serve goroutine touches it.
+	stale bool
 }
 
 // run serves until ctx ends or the socket fails, then closes the socket.
@@ -67,6 +83,9 @@ func (server *dhcpServer) run(ctx context.Context) error {
 	}()
 	stop := context.AfterFunc(ctx, func() { _ = server.conn.Close() })
 	defer stop()
+	// A failed read leaves the socket open; close it here too, or with
+	// SO_REUSEADDR a restarted listener binds beside the leaked one.
+	defer func() { _ = server.conn.Close() }()
 	err := server.read()
 	close(server.queue)
 	<-done
@@ -114,6 +133,12 @@ func (server *dhcpServer) handleSafely(ctx context.Context, request dhcpRequest)
 }
 
 func (server *dhcpServer) handle(ctx context.Context, request dhcpRequest) {
+	if server.stale && !server.reload(ctx) {
+		// Until the engine matches the store again, any answer may promise
+		// what the store doesn't hold; stay silent and let clients retransmit.
+		server.stats.Stale.Add(1)
+		return
+	}
 	packet, err := dhcp.Parse(request.payload)
 	if err != nil {
 		server.stats.Dropped.Add(1)
@@ -125,22 +150,52 @@ func (server *dhcpServer) handle(ctx context.Context, request dhcpRequest) {
 		return
 	}
 	result := server.engine.Handle(server.now(), packet, meta)
-	if len(result.Save) > 0 {
-		// The ACK promises the client its lease, so it goes out only once the
-		// store has it (RFC 2131 §4.3.1: the server must commit the binding
-		// before it sends the DHCPACK).
-		if err := server.save(ctx, result.Save); err != nil {
-			server.stats.StoreFailed.Add(1)
-			server.logger.Warn("save DHCP lease; reply withheld", "error", err)
-			return
-		}
+	if len(result.Save) > 0 && !server.commit(ctx, result.Save) {
+		return
 	}
 	if result.Reply == nil {
-		server.stats.Dropped.Add(1)
-		server.logger.Debug("DHCP request dropped", "type", packet.MessageType(), "reason", result.Drop)
+		counter, message := &server.stats.Dropped, "DHCP request dropped"
+		if len(result.Save) > 0 {
+			counter, message = &server.stats.Handled, "DHCP request handled"
+		}
+		counter.Add(1)
+		server.logger.Debug(message, "type", packet.MessageType(), "reason", result.Drop)
 		return
 	}
 	server.send(ctx, packet, result, request.ifIndex)
+}
+
+// commit writes the leases a request changed. The ACK promises the client
+// its lease, so it goes out only once the store has it (RFC 2131 §4.3.1).
+// The engine already changed its view, so a failed save reloads it from the
+// store rather than leave the two apart (D25).
+func (server *dhcpServer) commit(ctx context.Context, leases []dhcp.Lease) bool {
+	saveCtx, cancel := context.WithTimeout(ctx, dhcpSaveTimeout)
+	err := server.save(saveCtx, leases)
+	cancel()
+	if err == nil {
+		return true
+	}
+	server.stats.StoreFailed.Add(1)
+	server.logger.Warn("save DHCP lease; reply withheld", "error", err)
+	server.stale = true
+	server.reload(ctx)
+	return false
+}
+
+// reload replaces the engine's lease view with the store's and reports
+// whether it did. Pending offers live outside the view and survive.
+func (server *dhcpServer) reload(ctx context.Context) bool {
+	loadCtx, cancel := context.WithTimeout(ctx, dhcpSaveTimeout)
+	defer cancel()
+	leases, err := server.load(loadCtx)
+	if err != nil {
+		server.logger.Warn("reload DHCP leases after a failed save; not answering", "error", err)
+		return false
+	}
+	server.engine.Load(leases)
+	server.stale = false
+	return true
 }
 
 // send writes a reply now, or after the scope's offer delay without holding
