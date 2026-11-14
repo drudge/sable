@@ -109,7 +109,8 @@ SELECT
 	if profiles != 1 || administrators != 1 {
 		t.Fatalf("legacy user profiles = %d, administrator roles = %d; want 1 and 1", profiles, administrators)
 	}
-	for _, index := range []string{"sable_query_log_occurred_at_idx", "sable_query_log_client_key_idx", "sable_query_log_name_key_idx", "sable_client_seen_last_idx"} {
+	for _, index := range []string{"sable_query_log_occurred_at_idx", "sable_query_log_client_key_idx", "sable_query_log_name_key_idx", "sable_client_seen_last_idx",
+		"sable_dhcp_leases_client_idx", "sable_dhcp_leases_seq_idx", "sable_dhcp_leases_expires_idx"} {
 		if !indexExists(t, upgraded, index) {
 			t.Errorf("index %s is missing after the upgrade", index)
 		}
