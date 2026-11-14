@@ -100,32 +100,31 @@ func packSearch(names []string) ([]byte, error) {
 	return data, nil
 }
 
-// replyOptions picks the options for an OFFER or ACK: the basics, whatever
-// the client asked for (everything when it sent no list), and option 108
-// only when asked (RFC 8925 §3.3). Codes the caller already set win.
+// replyOptions picks the options for an OFFER or ACK, in the order they
+// claim room in a small reply: the basics (DNS among them), then whatever
+// else the client asked for (everything when it sent no list). Option 108
+// is the caller's, as a required option (RFC 8925 §3.3). Codes the caller
+// already set win.
 func (compiled *scope) replyOptions(request Packet, serverID netip.Addr) []Option {
 	asked, listed := request.Option(optionParameters)
-	wants := func(code uint8) bool {
-		return !listed || slices.Contains(basicOptions, code) || slices.Contains(asked, code)
-	}
-	var options []Option
-	for _, option := range compiled.options {
-		if wants(option.Code) {
-			options = append(options, option)
-		}
-		if option.Code == optionRoutes && slices.Contains(asked, optionMSRoutes) {
-			options = append(options, Option{Code: optionMSRoutes, Data: option.Data})
-		}
-	}
 	dnsServers := compiled.dns
 	if len(dnsServers) == 0 && serverID.IsValid() {
 		dnsServers = []netip.Addr{serverID}
 	}
-	options = append(options, Option{Code: optionDNS, Data: packAddrs(dnsServers)})
-	if compiled.v6OnlySet && slices.Contains(asked, optionV6OnlyPrefer) {
-		options = append(options, Option{Code: optionV6OnlyPrefer, Data: binary.BigEndian.AppendUint32(nil, compiled.v6OnlyWait)})
+	basics := []Option{{Code: optionDNS, Data: packAddrs(dnsServers)}}
+	var others []Option
+	for _, option := range compiled.options {
+		switch {
+		case slices.Contains(basicOptions, option.Code):
+			basics = append(basics, option)
+		case !listed || slices.Contains(asked, option.Code):
+			others = append(others, option)
+		}
+		if option.Code == optionRoutes && slices.Contains(asked, optionMSRoutes) {
+			others = append(others, Option{Code: optionMSRoutes, Data: option.Data})
+		}
 	}
-	return options
+	return append(basics, others...)
 }
 
 // fitOptions keeps the required options and as many others as fit in the

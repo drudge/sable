@@ -85,7 +85,16 @@ func (engine *Engine) Leases() []Lease {
 	return leases
 }
 
+// remember puts lease in the view. A client that loses its address to
+// another drops out of the client index, so the index never holds more
+// entries than there are leases (rotating MACs would grow it otherwise).
 func (engine *Engine) remember(lease Lease) *Lease {
+	if old := engine.leases[lease.Address]; old != nil {
+		oldRef := clientRef{old.ScopeID, old.ClientKey}
+		if oldRef != (clientRef{lease.ScopeID, lease.ClientKey}) && engine.clients[oldRef] == lease.Address {
+			delete(engine.clients, oldRef)
+		}
+	}
 	stored := &lease
 	engine.leases[lease.Address] = stored
 	engine.clients[clientRef{lease.ScopeID, lease.ClientKey}] = lease.Address

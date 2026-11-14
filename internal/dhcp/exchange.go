@@ -111,22 +111,24 @@ func (exchange *exchange) ack(address netip.Addr) Result {
 		lease.ClientID = hex.EncodeToString(id)
 	}
 	if name, found := request.Option(optionHostname); found {
-		lease.Hostname = string(name)
+		lease.Hostname = cleanText(name)
 	}
 	if relay, found := request.Option(optionRelayInfo); found {
 		lease.Relay = hex.EncodeToString(relay)
 	}
 	if vendor, found := request.Option(optionVendorClass); found {
-		lease.VendorClass = string(vendor)
+		lease.VendorClass = cleanText(vendor)
 	}
+	var save []Lease
 	if previous, found := exchange.engine.clients[exchange.ref]; found && previous != address {
 		if old := exchange.engine.leases[previous]; old != nil && old.ClientKey == exchange.ref.key && old.State == LeaseActive {
 			old.State, old.ExpiresAt = LeaseReleased, exchange.now
+			save = append(save, *old)
 		}
 	}
-	saved := *exchange.engine.remember(lease)
+	save = append(save, *exchange.engine.remember(lease))
 	delete(exchange.engine.offers, exchange.ref)
-	return Result{Reply: exchange.reply(Ack, address), Destination: exchange.destination(), Save: &saved}
+	return Result{Reply: exchange.reply(Ack, address), Destination: exchange.destination(), Save: save}
 }
 
 func (exchange *exchange) nak(message string) Result {
@@ -151,7 +153,8 @@ func (exchange *exchange) answerDecline() Result {
 	if !found || lease == nil || lease.ClientKey != exchange.ref.key || lease.NodeID != exchange.engine.node {
 		return Result{Drop: "decline for an address the client doesn't hold"}
 	}
-	return Result{Save: exchange.engine.decline(exchange.now, exchange.scope, address, exchange.ref.key), Drop: "declined"}
+	declined := exchange.engine.decline(exchange.now, exchange.scope, address, exchange.ref.key)
+	return Result{Save: []Lease{*declined}, Drop: "declined"}
 }
 
 // release ends the client's lease early and keeps the row, so the client
@@ -165,8 +168,7 @@ func (exchange *exchange) answerRelease() Result {
 		return Result{Drop: "release for an address the client doesn't hold"}
 	}
 	lease.State, lease.ExpiresAt = LeaseReleased, exchange.now
-	saved := *lease
-	return Result{Save: &saved, Drop: "released"}
+	return Result{Save: []Lease{*lease}, Drop: "released"}
 }
 
 // inform answers with configuration and no lease (RFC 2131 §4.3.5).

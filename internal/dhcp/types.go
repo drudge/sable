@@ -125,9 +125,10 @@ const (
 type Result struct {
 	Reply       *Packet
 	Destination Destination
-	// Save is a lease to write before the reply goes out, so a client is
-	// never told it holds a lease the store doesn't have.
-	Save *Lease
+	// Save is the leases to write, in order, before the reply goes out, so
+	// a client is never told it holds a lease the store doesn't have. An ACK
+	// that moves a client carries its old lease, released, first.
+	Save []Lease
 	// Delay holds an OFFER back (offer_delay).
 	Delay time.Duration
 	// Probe is an address to check for another holder, for up to

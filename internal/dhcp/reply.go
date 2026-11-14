@@ -36,9 +36,14 @@ func (exchange *exchange) reply(kind MessageType, yiaddr netip.Addr) *Packet {
 		return reply
 	}
 	exchange.addBoot(reply)
-	leased := !isZero(yiaddr)
-	if leased {
+	if !isZero(yiaddr) {
 		required = append(required, leaseOptions(exchange.scope)...)
+	}
+	if exchange.v6Only() {
+		// RFC 8925 §3.3: a MUST when the client asked, so it never yields
+		// to a vendor option in a 576-octet reply.
+		required = append(required, Option{Code: optionV6OnlyPrefer,
+			Data: binary.BigEndian.AppendUint32(nil, exchange.scope.v6OnlyWait)})
 	}
 	reply.Options = fitOptions(request, required, exchange.scope.replyOptions(request, exchange.serverID))
 	return reply

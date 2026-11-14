@@ -23,7 +23,7 @@ func TestRFC2131Table4ClientMessages(t *testing.T) {
 	}
 	wantSaved := func(state LeaseState) check {
 		return func(t *testing.T, _ *Engine, bound netip.Addr, result Result) {
-			if result.Reply != nil || result.Save == nil || result.Save.State != state || result.Save.Address != bound {
+			if result.Reply != nil || len(result.Save) != 1 || result.Save[0].State != state || result.Save[0].Address != bound {
 				t.Fatalf("result = %+v; want no reply and %s saved for %s", result, state, bound)
 			}
 		}
@@ -170,7 +170,7 @@ func TestRequestNAKAndAdoptRules(t *testing.T) {
 			if got != testCase.want {
 				t.Fatalf("reply = %d (%s); want %d", got, result.Drop, testCase.want)
 			}
-			if got == Ack && (result.Save == nil || result.Save.Address.String() != requested) {
+			if got == Ack && (len(result.Save) == 0 || result.Save[len(result.Save)-1].Address.String() != requested) {
 				t.Fatalf("ACK saved %+v; want the lease on %s", result.Save, requested)
 			}
 		})
