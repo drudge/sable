@@ -452,7 +452,8 @@ func DockerSnapshot(ctx context.Context) error {
 }
 
 // DockerSmoke builds the snapshot images and starts the native-architecture
-// image, then verifies its version command and public health endpoint.
+// image, then verifies its version command, its port 53 bind under host
+// networking with NET_BIND_SERVICE alone, and its public health endpoint.
 func DockerSmoke(ctx context.Context) error {
 	if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
 		return fmt.Errorf("container smoke does not support host architecture %q", runtime.GOARCH)
@@ -470,6 +471,9 @@ func DockerSmoke(ctx context.Context) error {
 	}
 	if err := smokeContainerWebUpdates(ctx, image, version); err != nil {
 		return err
+	}
+	if err := run(ctx, nil, "scripts/container/bind-smoke.sh", image); err != nil {
+		return fmt.Errorf("run container bind smoke: %w", err)
 	}
 	name := fmt.Sprintf("sable-smoke-%d", time.Now().UnixNano())
 	defer removeContainer(context.Background(), name)
