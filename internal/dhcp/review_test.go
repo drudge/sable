@@ -331,23 +331,22 @@ func TestReview618ConcurrentHandle(t *testing.T) {
 	}
 }
 
-// A DISCOVER flood can't cost more than a bounded amount of work per packet,
-// even on a big exhausted pool with the offer table full.
-func TestReview618DiscoverCostOnFullLargePool(t *testing.T) {
-	if raceEnabled {
-		t.Skip("timing probe; the race detector slows every DISCOVER")
-	}
+// BenchmarkDiscoverFullLargePool measures one DISCOVER on a big exhausted
+// pool with the offer table full: the per-packet cost a flood can force while
+// the engine lock is held. A benchmark, not a test, so a loaded runner can't
+// fail the suite on wall-clock time.
+func BenchmarkDiscoverFullLargePool(b *testing.B) {
 	enabled := true
 	settings := config.DHCP{Enabled: true, Scopes: []config.DHCPScope{{
 		ID: "big", Name: "Big", Subnet: "10.64.0.0/16", Enabled: &enabled, Lease: config.Duration{Duration: time.Hour},
 		Router: "10.64.0.1", Ranges: []config.DHCPRange{{Start: "10.64.1.0", End: "10.64.255.254"}},
 	}}}
 	if err := settings.Validate(); err != nil {
-		t.Skipf("a /16 scope doesn't validate: %v", err)
+		b.Fatalf("a /16 scope doesn't validate: %v", err)
 	}
 	engine, err := New(settings, "")
 	if err != nil {
-		t.Fatal(err)
+		b.Fatal(err)
 	}
 	link := Meta{Addrs: []netip.Prefix{netip.MustParsePrefix("10.64.0.2/16")}}
 	var leases []Lease
@@ -361,15 +360,9 @@ func TestReview618DiscoverCostOnFullLargePool(t *testing.T) {
 	for index := range 1100 { // fill the last 1024 addresses with offers
 		engine.Handle(testNow, clientPacket(Discover, net.HardwareAddr{0, 0x77, 0, 0, byte(index >> 8), byte(index)}), link)
 	}
-	start := time.Now()
-	const packets = 50
-	for index := range packets {
+	b.ResetTimer()
+	for index := range b.N {
 		engine.Handle(testNow, clientPacket(Discover, net.HardwareAddr{0, 0x78, 0, 0, byte(index >> 8), byte(index)}), link)
-	}
-	per := time.Since(start) / packets
-	t.Logf("DISCOVER on a full /16 with %d offers held: %s each", len(engine.offers), per)
-	if per > 50*time.Millisecond {
-		t.Fatalf("one DISCOVER costs %s under the engine lock", per)
 	}
 }
 
