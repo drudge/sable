@@ -342,7 +342,10 @@ mirrored row keeps the owner's number and leaves this node's counter alone.
   renewal, once the reservation is free.
 - **A reserved client is known by its MAC.** The reservation is by MAC, so the binding is too, and
   the client identifier doesn't split it. PXE firmware and the system it boots send different
-  identifiers and get the same address.
+  identifiers and get the same address. A lease that MAC already held under a client identifier,
+  from before it had a reservation, is that client's too: when lease rows enter the engine's view
+  (`Load`, and a mirrored row in slice 8), a row whose MAC is reserved in its scope is keyed by the
+  MAC. Reserving a lease a host holds keeps the host on it.
 - **Every lease change is returned.** When a client moves to another address, `Handle` returns the
   old lease as released and the new one, and both are written before the ACK. The rows the store
   holds always replay to the engine's view.
