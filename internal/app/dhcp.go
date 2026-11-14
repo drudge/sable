@@ -32,6 +32,7 @@ type dhcpService struct {
 	clustered func() bool
 	listen    func(context.Context, int) (dhcpConn, error)
 	link      func(int) (dhcp.Meta, error)
+	probe     dhcpProbe
 	port      int
 	logger    *slog.Logger
 	stats     dhcpStats
@@ -48,10 +49,11 @@ type dhcpRunning struct {
 }
 
 func newDHCPService(leases dhcpLeaseStore, node func() string, clustered func() bool, logger *slog.Logger) *dhcpService {
+	logger = logger.With("component", "dhcp")
 	return &dhcpService{
 		leases: leases, node: node, clustered: clustered,
 		listen: func(ctx context.Context, port int) (dhcpConn, error) { return listenDHCP(ctx, port) },
-		link:   dhcpLink, port: dhcpServerPort, logger: logger.With("component", "dhcp"),
+		link:   dhcpLink, probe: newDHCPProber(logger).probe, port: dhcpServerPort, logger: logger,
 	}
 }
 
@@ -101,7 +103,7 @@ func (service *dhcpService) prepare(ctx context.Context, settings config.DHCP) (
 		return nil, fmt.Errorf("start DHCP engine: %w", err)
 	}
 	server := &dhcpServer{
-		engine: engine, save: service.save, load: service.load, link: service.link,
+		engine: engine, save: service.save, load: service.load, link: service.link, probe: service.probe,
 		now: time.Now, logger: service.logger, stats: &service.stats,
 	}
 	if !server.reload(ctx) {

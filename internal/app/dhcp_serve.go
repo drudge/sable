@@ -48,12 +48,27 @@ type dhcpStats struct {
 	// Stale counts requests left unanswered while the engine waits to reload
 	// from the store after a failed save.
 	Stale atomic.Uint64
+	// Conflicts counts offered addresses a probe found in use.
+	Conflicts atomic.Uint64
 }
 
+// dhcpRequest is a datagram for the engine, or a probe's conflict to record
+// in its turn.
 type dhcpRequest struct {
-	payload []byte
-	ifIndex int
+	payload  []byte
+	ifIndex  int
+	conflict *dhcpConflict
 }
+
+// dhcpConflict is an offered address something else answered for.
+type dhcpConflict struct {
+	address netip.Addr
+	holder  string
+}
+
+// dhcpProbe reports what already uses address, if anything: "echo", or the
+// hardware address the neighbor table holds for it other than client's.
+type dhcpProbe func(ctx context.Context, address netip.Addr, client net.HardwareAddr, timeout time.Duration) (holder string, found bool)
 
 // dhcpServer moves datagrams between a socket and the engine. One goroutine
 // reads, one serves in arrival order, so the leases of one ACK are written
@@ -67,6 +82,7 @@ type dhcpServer struct {
 	// save, and the store is the record).
 	load   func(context.Context) ([]dhcp.Lease, error)
 	link   func(ifIndex int) (dhcp.Meta, error)
+	probe  dhcpProbe
 	now    func() time.Time
 	logger *slog.Logger
 	queue  chan dhcpRequest
@@ -88,11 +104,12 @@ func (server *dhcpServer) run(ctx context.Context) error {
 	}()
 	stop := context.AfterFunc(ctx, func() { _ = server.conn.Close() })
 	defer stop()
-	defer server.delayed.stop()
 	// A failed read leaves the socket open; close it here too, or with
 	// SO_REUSEADDR a restarted listener binds beside the leaked one.
 	defer func() { _ = server.conn.Close() }()
 	err := server.read()
+	// Probes queue conflicts; none may run once the queue is closed.
+	server.delayed.stop()
 	close(server.queue)
 	<-done
 	if ctx.Err() != nil {
@@ -154,6 +171,10 @@ func (server *dhcpServer) handle(ctx context.Context, request dhcpRequest) {
 		server.stats.Stale.Add(1)
 		return
 	}
+	if request.conflict != nil {
+		server.recordConflict(ctx, *request.conflict)
+		return
+	}
 	packet, err := dhcp.Parse(request.payload)
 	if err != nil {
 		server.stats.Dropped.Add(1)
@@ -178,6 +199,14 @@ func (server *dhcpServer) handle(ctx context.Context, request dhcpRequest) {
 		return
 	}
 	server.send(ctx, packet, result, request.ifIndex)
+}
+
+// recordConflict takes a probed address out of the pool, in the serve
+// goroutine like every other engine change, and saves it through commit.
+func (server *dhcpServer) recordConflict(ctx context.Context, conflict dhcpConflict) {
+	if lease := server.engine.Conflict(server.now(), conflict.address, conflict.holder); lease != nil {
+		server.commit(ctx, []dhcp.Lease{*lease})
+	}
 }
 
 // commit writes the leases a request changed. The ACK promises the client
@@ -226,17 +255,39 @@ func (server *dhcpServer) send(ctx context.Context, request dhcp.Packet, result 
 		}
 		server.stats.Replied.Add(1)
 	}
-	if result.Delay <= 0 {
+	var probe func() bool
+	if result.Probe.IsValid() && server.probe != nil {
+		probe = func() bool { return server.probeFree(ctx, request, result) }
+	}
+	if result.Delay <= 0 && probe == nil {
 		write()
 		return
 	}
 	if ctx.Err() != nil {
 		return
 	}
-	if !server.delayed.schedule(dhcpOfferKey(request), result.Delay, write) {
+	if !server.delayed.schedule(dhcpOfferKey(request), result.Delay, write, probe) {
 		server.stats.DelayedFull.Add(1)
 		server.logger.Debug("delayed DHCP OFFER dropped; too many waiting", "limit", dhcpMaxDelayedOffers)
 	}
+}
+
+// probeFree checks the offered address off the serve goroutine and reports
+// whether the OFFER may go (RFC 2131 §4.4.1). A taken address is queued for
+// the engine to set aside; the client's retransmitted DISCOVER gets another.
+func (server *dhcpServer) probeFree(ctx context.Context, request dhcp.Packet, result dhcp.Result) bool {
+	holder, found := server.probe(ctx, result.Probe, request.CHAddr, result.ProbeTimeout)
+	if !found {
+		return true
+	}
+	server.stats.Conflicts.Add(1)
+	server.logger.Warn("offered DHCP address is in use; setting it aside", "address", result.Probe, "holder", holder)
+	select {
+	case server.queue <- dhcpRequest{conflict: &dhcpConflict{address: result.Probe, holder: holder}}:
+	default:
+		server.stats.QueueFull.Add(1)
+	}
+	return false
 }
 
 // dhcpDestination maps the engine's choice to an address and port

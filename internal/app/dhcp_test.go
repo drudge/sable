@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"net/netip"
 	"path/filepath"
 	"reflect"
@@ -76,6 +77,7 @@ func newTestDHCPService(t *testing.T, clustered bool) (*dhcpService, *dhcpListen
 	service.link = func(int) (dhcp.Meta, error) {
 		return dhcp.Meta{Interface: "eth0", Addrs: []netip.Prefix{netip.MustParsePrefix("10.0.7.2/24")}}, nil
 	}
+	service.probe = func(context.Context, netip.Addr, net.HardwareAddr, time.Duration) (string, bool) { return "", false }
 	t.Cleanup(service.Stop)
 	return service, listens, database
 }
@@ -193,5 +195,48 @@ func TestDHCPLeaseStoreConversion(t *testing.T) {
 		if got := store.DHCPLeaseState(state); !slices.Contains([]store.DHCPLeaseState{store.DHCPLeaseActive, store.DHCPLeaseReleased, store.DHCPLeaseExpired, store.DHCPLeaseDeclined}, got) {
 			t.Fatalf("engine state %q has no store state", state)
 		}
+	}
+}
+
+// An offered address that answers a probe isn't offered: it's set aside as
+// declined for an hour, saved through the store, and the client's next
+// DISCOVER gets another address (RFC 2131 §4.4.1, §3.1 step 2).
+func TestDHCPServiceSetsAsideProbedConflict(t *testing.T) {
+	service, listens, database := newTestDHCPService(t, false)
+	var probes sync.Map
+	service.probe = func(_ context.Context, address netip.Addr, _ net.HardwareAddr, _ time.Duration) (string, bool) {
+		_, again := probes.LoadOrStore(address, true)
+		return "echo", !again && address == netip.MustParseAddr("10.0.7.100")
+	}
+	ctx := context.Background()
+	settings := dhcpTestSettings(t)
+	settings.Scopes[0].Ranges = []config.DHCPRange{{Start: "10.0.7.100", End: "10.0.7.101"}}
+	if err := service.Apply(ctx, ctx, settings); err != nil {
+		t.Fatal(err)
+	}
+	conn := listens.last()
+	conn.inbound <- dhcpTestPacket(dhcp.Discover).Marshal()
+	deadline := time.Now().Add(5 * time.Second)
+	var rows []store.DHCPLease
+	for time.Now().Before(deadline) && len(rows) == 0 {
+		time.Sleep(time.Millisecond)
+		rows, _ = database.DHCPLeases(ctx)
+	}
+	if len(rows) != 1 || rows[0].Address != netip.MustParseAddr("10.0.7.100") ||
+		rows[0].State != store.DHCPLeaseDeclined || rows[0].ClientKey != "conflict:echo" {
+		t.Fatalf("store holds %+v; want 10.0.7.100 declined by conflict:echo", rows)
+	}
+	if _, sent := conn.snapshot(); len(sent) != 0 {
+		t.Fatalf("sent %d replies for an address in use", len(sent))
+	}
+	retry := dhcpTestPacket(dhcp.Discover)
+	retry.XID = [4]byte{1, 2, 3, 4}
+	conn.inbound <- retry.Marshal()
+	<-conn.wrote
+	if _, sent := conn.snapshot(); sent[0].reply.YIAddr != netip.MustParseAddr("10.0.7.101") {
+		t.Fatalf("offered %v after the conflict; want 10.0.7.101", sent[0].reply.YIAddr)
+	}
+	if conflicts := service.stats.Conflicts.Load(); conflicts != 1 {
+		t.Fatalf("Conflicts = %d; want 1", conflicts)
 	}
 }

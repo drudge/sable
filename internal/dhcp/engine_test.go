@@ -301,7 +301,7 @@ func TestConflictProbe(t *testing.T) {
 	if result.Probe != result.Reply.YIAddr || result.ProbeTimeout != config.DefaultDHCPConflictProbe {
 		t.Fatalf("probe = %s for %s; want the offered address for the default timeout", result.Probe, result.ProbeTimeout)
 	}
-	saved := engine.Conflict(testNow, result.Probe)
+	saved := engine.Conflict(testNow, result.Probe, "echo")
 	if saved == nil || saved.State != LeaseDeclined || saved.ExpiresAt != testNow.Add(declineHold) {
 		t.Fatalf("conflict saved %+v; want the address declined for an hour", saved)
 	}
