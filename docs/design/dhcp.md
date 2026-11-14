@@ -149,7 +149,10 @@ a host-network container. The namespace spike covers the protocol. This check co
   A replica sends rows changed since the primary's last acknowledged sequence on the heartbeat
   (`Heartbeat.Leases`, at most 500 a beat). The primary sends the merged set back on the sync
   response with a cursor per replica, the way `ClientIdentities` travels. Every node holds every
-  lease, a few seconds stale at most. A new primary acknowledges 0 and gets a full resend.
+  lease, a few seconds stale at most. A new primary acknowledges 0 and gets a full resend. A node
+  whose own counter is below the sequence the primary acknowledges (its database was wiped or
+  restored) raises its counter to that number and resends every row, so a number is never used
+  twice.
 - **What a node outage costs with no action.** Reserved clients: nothing. Dynamic clients of the
   dead node: nothing until their lease runs out. They retry the dead node from half the lease time,
   broadcast from 87.5%, and take a new address from a surviving range only at expiry. With a 24 h
@@ -299,8 +302,11 @@ value = ["10.0.7.5"]            # typed by code; an unknown code takes hex = "..
 Migration step 2 adds `sable_dhcp_leases`: `node_id`, `address`, `scope_id`, `client_key`, `mac`,
 `client_id`, `hostname` (as sent), `label` (as registered), `state` (active, released, expired,
 declined), `bound_at_ns`, `expires_at_ns`, `seq`, `relay`, `vendor_class`. The primary key is
-`(node_id, address)`, with an index on `(scope_id, client_key)`. Rows for this node are the truth.
-Rows for other nodes are mirrors.
+`(node_id, address)`, with indexes on `(scope_id, client_key)`, `(node_id, seq)`, and
+`(expires_at_ns)` for the prune. Rows for this node are the truth. Rows for other nodes are mirrors.
+The step also adds `sable_dhcp_lease_seqs`, each node's last sequence number, kept apart from the
+leases so a prune never hands a number out again. Only a write by the owner takes a number. A
+mirrored row keeps the owner's number and leaves this node's counter alone.
 
 - `client_key` is the client identifier when one is sent, otherwise the hardware type and address
   (RFC 2131 §4.2). A reservation matches on MAC whatever the client identifier, so a machine that
@@ -308,7 +314,10 @@ Rows for other nodes are mirrors.
 - The packet path reads an in-memory table. Every ACK is written to the store **before** it's sent.
   A failed write means no reply, a counter, and an alert. The client retries. Offers stay in memory
   for 60 s.
-- Expired rows are kept 30 days, so a returning client gets its old address.
+- Expired rows are kept 30 days, so a returning client gets its old address. The prune never
+  removes an `active` row, and only the owner marks one expired. So a range takeover adopts the old
+  owner's `active` rows in that range under the new owner, with the same client and expiry, and
+  every node drops the old owner's rows for a range once the configuration moves it.
 
 ## Engine
 
@@ -328,7 +337,8 @@ Rows for other nodes are mirrors.
   client. An on-link address with no record outside this node's ranges gets silence.
 - A REQUEST that names another server drops the pending offer and gets no reply.
 - **Conflict probe** before an OFFER for a new binding, off the receive loop: an echo reply, or a
-  neighbor entry with another MAC, marks the address `declined` for 1 h. A DECLINE does the same.
+  neighbor entry with another MAC, marks the address `declined` for 1 h. A DECLINE does the same. A probe's row has no
+  client, so its client key is `conflict:` and the MAC seen, or `conflict:echo`.
 - INFORM gets an ACK with options and no address.
 - The receive queue is bounded and drops are counted. Outstanding offers are capped per scope.
 
