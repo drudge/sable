@@ -8,6 +8,136 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.9.0-beta.1] - 2026-11-15
+
+Sable 1.9.0-beta.1 adds a DHCPv4 server. It hands out addresses, keeps
+reservations, and publishes each device's name in a zone Sable serves, so a
+device's name resolves the moment it gets its lease. Every node of a cluster
+serves DHCP from its own slice of each range. DHCP is off until you set up a
+scope. This is a beta: try it on one network with a way back before you rely
+on it.
+
+### Upgrading from 1.8.2
+
+- Update every node in a cluster first. Sable won't turn DHCP on while a
+  member runs an older release, because 1.8.2 can't load a configuration
+  with a `[dhcp]` section.
+- Port 67 needs the right to bind a low port and to see broadcasts. The
+  systemd service already has `CAP_NET_BIND_SERVICE`. In Docker, use host
+  networking with the new `compose.dhcp.yaml`, which keeps only
+  `NET_BIND_SERVICE`; Docker's bridge doesn't pass broadcasts. A web update
+  can't add the image's new file capability to an older container: pull the
+  1.9.0-beta.1 image.
+- The DNS Administrator and Operator roles now have `dhcp.read` and
+  `dhcp.write`, and Auditor has `dhcp.read`. `dhcp.read` lists every lease with the device's hardware
+  address. Check API tokens and users with those roles.
+- The database gains a lease table on first start, which 1.8.2 ignores. To
+  go back to 1.8.2, remove the `[dhcp]` section first; a backup taken with
+  DHCP set up won't load on 1.8.2.
+- Cluster clocks must agree within 30 seconds. A replica on 1.8.2 with a
+  wrong clock shows as offline, as before, because it can't answer the
+  primary's clock check; the primary's log still names the clock. Update
+  every node first.
+- Nothing else is needed. Turning DHCP on is your choice; until then Sable
+  answers DNS as before.
+
+### DHCP
+
+- Scopes serve DHCPv4 (RFC 2131) on any interface with an address in the
+  subnet. **DHCP → Set Up** fills a scope in from the network: the router
+  Sable found, a pool that leaves out Sable's own address and the router's,
+  and Sable as the DNS server. A scope can have several ranges, a lease
+  time, DNS, NTP and search domains, static routes (option 121, RFC 3442),
+  PXE boot settings, IPv6-only preferred (option 108, RFC 8925) and custom
+  options.
+- Before an offer, Sable pings the address to check nothing already uses it
+  (RFC 2131 section 2.2). Before **Turn On**, it listens up to 8 seconds for
+  another DHCP server on each of the scope's networks and names the one that
+  answers.
+- Each lease's name is published as an A record and, with **Reverse** on, a
+  PTR record. The label comes from the reservation, else the device's FQDN
+  option (option 81, RFC 4702) or host name (option 12). A record you added
+  by hand wins over a reservation, a reservation over a UniFi name, and a
+  UniFi name over a dynamic lease. Sable never renames a device with a `-2`
+  suffix, and a lease never takes `wpad` or `isatap`.
+- Relayed requests are answered when the relay's address is inside a scope,
+  and the relay agent information (option 82, RFC 3046) is echoed back.
+  A renewal a device sends straight to Sable takes the scope that holds its
+  address (RFC 2131 section 4.3.2), so it works behind a relay that passes
+  on broadcasts only, and on a node whose own address is a /31 or /32.
+- The **DHCP** page lists leases, reservations and scopes. **Reserve** turns
+  a lease into a reservation, and reservation edits apply without a restart.
+- **Import** brings reservations from dnsmasq, Pi-hole 5 and 6, OpenWrt,
+  AdGuard Home, Technitium and UniFi. **Preview** lists what it would add and
+  skip, with the reason, and saves nothing. The same import is
+  `POST /api/v1/dhcp/import`, with `dry_run=true` to preview.
+- The JSON API covers scopes, reservations, leases and takeover. New MCP
+  tools `get_dhcp_status`, `list_dhcp_leases`, `set_dhcp_reservation` and
+  `remove_dhcp_reservation` are off until you add them to the MCP tools,
+  and a token needs the new `dhcp.read` or `dhcp.write` permission as well.
+- The **DHCP** guide walks through moving from a router or another server,
+  with a test device first and a way back.
+
+### Clustering
+
+- Turn DHCP off before you create or join a cluster.
+- Each node leases only from its own slice of every range, so two nodes that
+  lose touch never hand out the same address. Every node answers every
+  reservation. The scope dialog splits a range evenly across nodes and warns
+  when a slice is smaller than the scope's active leases.
+- Leases travel on the cluster heartbeat, so every node holds all of them
+  and the primary publishes every name.
+- **Take Over DHCP Ranges** on an offline node's **Cluster** page moves its
+  ranges to the primary, which renews its devices on the addresses they
+  hold. **Promote This Replica** takes over the old primary's ranges in the
+  same step. A node that comes back after a takeover stops serving those
+  ranges.
+- A node whose database is wiped or restored from a backup takes its leases
+  back from the other nodes, including leases made or released since the
+  backup.
+- A node whose clock is more than 30 seconds off keeps serving its own
+  ranges. Both **Cluster** pages show it as **Clock out of step** with the
+  offset, both logs name the clock, and its ranges can't be taken over until
+  its clock is set. After 5 minutes out of step, alerts send **Node clock out
+  of step**, and **Node clock back in step** once it syncs again.
+
+### Insights
+
+- DHCP leases name devices on the **Devices** tab, after your own names and
+  UniFi's. The device drawer shows a device's lease, with **Reserve
+  Address**.
+
+### Console
+
+- With security off, the console now refuses cross-site requests that change
+  something. Same-site and API requests still go through.
+
+### Known gaps in this beta
+
+- DHCPv4 only. DHCPv6 is not included.
+- The scope for a relayed request comes from the relay's address (giaddr)
+  alone. Link selection (RFC 3527) and subnet selection (RFC 3011) aren't
+  built.
+- Relays tried: ISC dhcrelay 4.4.3 with option 82, and dnsmasq 2.91's relay.
+  No hardware router's relay has been tried.
+- While a node's clock is out of step, the primary doesn't publish names for
+  the leases it grants. Once the clock is set, a lease it granted while
+  behind shows as ended until the device renews.
+- Not yet tried: Operator, Auditor and DNS Administrator sessions in the console, a live UniFi
+  controller, Safari and Firefox, two replicas restored at once, clock skew
+  on a PostgreSQL cluster, and promoting a replica whose clock is out of
+  step.
+
+### Fixed
+
+- Stopping Sable no longer waits up to five seconds on idle connections.
+- SQLite writes from one process queue for the write lock instead of failing
+  with `SQLITE_BUSY` under load.
+
+### Dependencies
+
+- Added github.com/insomniacslk/dhcp for DHCPv4 messages.
+
 ## [1.8.2] - 2026-11-14
 
 Sable 1.8.2 is built with Go 1.27.4, which fixes a crash in the console and
