@@ -45,7 +45,7 @@ func (service dhcpService) Import(ctx context.Context, who actor, scope string, 
 	if err != nil {
 		return dhcpImportResult{}, refuse(http.StatusUnprocessableEntity, "%s", err.Error())
 	}
-	settings := dhcpClone(service.server.config.Current().Config.DHCP)
+	settings := service.server.config.Current().Config.DHCP.Clone()
 	result, err := dhcpImportPlan(&settings, scope, parsed)
 	if err != nil || dryRun || len(result.Added) == 0 {
 		result.DryRun = dryRun
@@ -130,7 +130,7 @@ func dhcpImportFits(settings *config.DHCP, target *config.DHCPScope, reservation
 			}
 		}
 	}
-	trial := dhcpClone(*settings)
+	trial := settings.Clone()
 	scope, err := dhcpScope(&trial, target.ID)
 	if err != nil {
 		return err
@@ -173,6 +173,9 @@ func (server *Server) importDHCPConsole(writer http.ResponseWriter, request *htt
 		server.renderFormProblem(writer, request, notice, refuse(http.StatusBadRequest, "%s", err.Error()))
 		return
 	}
+	// The preview sends the export back in a hidden field, and Back shows it
+	// in the text box. Both hold text, so a UTF-16 upload goes on as UTF-8.
+	text = strings.TrimSpace(dhcpimport.Text([]byte(text)))
 	who, scope, step := requestActor(request, ""), request.FormValue("scope"), request.FormValue("step")
 	if step == "back" {
 		server.render(writer, request, pages.DHCPImportSource(pages.DHCPImportSourceView{Scopes: server.dhcpImportScopes(who), Scope: scope, Text: text}))

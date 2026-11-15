@@ -172,10 +172,19 @@ a host-network container. The namespace spike covers the protocol. This check co
   response with a cursor per replica, the way `ClientIdentities` travels. Every node holds every
   lease, a few seconds stale at most. A new primary acknowledges 0 and gets a full resend. A node
   whose own counter is below the sequence the primary acknowledges (its database was wiped or
-  restored) first takes its own rows back from the primary's mirror, a batch a beat, keeping their
-  sequence numbers and any address it wrote since the wipe, and reloads them into the running
+  restored) first takes its own rows back from the primary's mirror, from the first, a batch a
+  beat (`LeaseReport.Recovered` says how far it has got), keeping their sequence numbers and any
+  address it wrote since the wipe, and reloads them into the running
   server, so a client keeps the address it was told it holds (RFC 2131 §4.3.1). Then it raises its
-  counter past that number and resends every row, so a number is never used twice.
+  counter past that number and resends every row, so a number is never used twice. A count can't
+  show a wipe once the node has leased as many since as it held before, so a counter that takes
+  its first number also opens a recovery in `sable_dhcp_lease_recovery` (schema step 3): the node
+  asks for its rows from the first until the primary has none left to send, then renumbers every
+  row past both counts. A primary that lost rows takes them back the same way from the replicas'
+  mirrors (`LeaseReport.Wanted`), and ends only after every replica has none left to send. Its
+  recovery also opens when a replica holds a higher number of its rows than its counter has
+  reached, before the counter is raised to that number: a wiped primary hears from a replica
+  before it leases anything, and one restored from an older backup never takes a first number.
 - **What a node outage costs with no action.** Reserved clients: nothing. Dynamic clients of the
   dead node: nothing until their lease runs out. They retry the dead node from half the lease time,
   broadcast from 87.5%, and take a new address from a surviving range only at expiry. With a 24 h

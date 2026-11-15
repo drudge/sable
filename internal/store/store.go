@@ -27,6 +27,9 @@ import (
 type Store struct {
 	database *sql.DB
 	driver   string
+	// writer queues this process's SQLite transactions; see withTxOptions.
+	// It is nil on PostgreSQL.
+	writer chan struct{}
 	// trackingOff stops client sightings and identities from being recorded
 	// while Insights is off.
 	trackingOff atomic.Bool
@@ -65,6 +68,9 @@ func Open(ctx context.Context, driver, dsn string) (*Store, error) {
 		return nil, fmt.Errorf("open %s database: %w", driver, err)
 	}
 	store := &Store{database: database, driver: driver}
+	if driver == "sqlite" {
+		store.writer = make(chan struct{}, 1)
+	}
 	if err := database.PingContext(ctx); err != nil {
 		database.Close()
 		return nil, fmt.Errorf("ping %s database: %w", driver, err)

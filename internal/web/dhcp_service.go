@@ -330,7 +330,7 @@ func (service dhcpService) update(ctx context.Context, who actor, action, messag
 		return refuse(http.StatusNotImplemented, "this configuration source is read-only")
 	}
 	err := editor.Update(ctx, func(configuration *config.Config) error {
-		settings := dhcpClone(configuration.DHCP)
+		settings := configuration.DHCP.Clone()
 		if err := mutate(&settings); err != nil {
 			return err
 		}
@@ -381,7 +381,29 @@ func (service dhcpService) rows(ctx context.Context) ([]store.DHCPLease, error) 
 		service.server.logger.Warn("read DHCP leases failed", "error", err)
 		return nil, refuse(http.StatusServiceUnavailable, "the lease store isn't answering; try again")
 	}
-	return rows, nil
+	return dhcpNewestRows(rows), nil
+}
+
+// dhcpNewestRows keeps one row per address: the most recently bound, and on
+// equal BoundAt the one that expires later (the rule of the engine's Load).
+// After a range takeover the offline node's row and the new owner's renewal
+// both hold the address, and an address is bound to one client at a time
+// (RFC 2131 §4.3.1). Other rows keep their first-seen order.
+func dhcpNewestRows(rows []store.DHCPLease) []store.DHCPLease {
+	at := make(map[netip.Addr]int, len(rows))
+	kept := make([]store.DHCPLease, 0, len(rows))
+	for _, row := range rows {
+		index, seen := at[row.Address]
+		switch {
+		case !seen:
+			at[row.Address] = len(kept)
+			kept = append(kept, row)
+		case row.BoundAt.After(kept[index].BoundAt) ||
+			(row.BoundAt.Equal(kept[index].BoundAt) && row.ExpiresAt.After(kept[index].ExpiresAt)):
+			kept[index] = row
+		}
+	}
+	return kept
 }
 
 func dhcpAddress(raw string) (netip.Addr, error) {
@@ -399,16 +421,6 @@ func dhcpScope(settings *config.DHCP, id string) (*config.DHCPScope, error) {
 		}
 	}
 	return nil, refuse(http.StatusNotFound, "there's no DHCP scope %q", id)
-}
-
-// dhcpClone copies settings deeply enough that a change to its scopes or
-// their reservations can't reach the snapshot it came from.
-func dhcpClone(settings config.DHCP) config.DHCP {
-	settings.Scopes = slices.Clone(settings.Scopes)
-	for index := range settings.Scopes {
-		settings.Scopes[index].Reservations = slices.Clone(settings.Scopes[index].Reservations)
-	}
-	return settings
 }
 
 // dhcpRowHolds reports whether a lease row holds its address at now: active

@@ -15,18 +15,23 @@ type leaseStore struct {
 	mu      sync.Mutex
 	rows    map[[2]string]SharedLease
 	counter map[string]int64
-	changed int
+	// recovery holds how far each node whose counter started over has taken
+	// its rows back.
+	recovery map[string]int64
+	changed  int
 }
 
 func newLeaseStore() *leaseStore {
-	return &leaseStore{rows: map[[2]string]SharedLease{}, counter: map[string]int64{}}
+	return &leaseStore{rows: map[[2]string]SharedLease{}, counter: map[string]int64{}, recovery: map[string]int64{}}
 }
 
 // save writes a lease the node owns with its next sequence number.
 func (store *leaseStore) save(nodeID, address, hostname string) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	store.counter[nodeID]++
+	if store.counter[nodeID]++; store.counter[nodeID] == 1 {
+		store.recovery[nodeID] = 0
+	}
 	store.rows[[2]string{nodeID, address}] = SharedLease{NodeID: nodeID, Address: address, ScopeID: "lan",
 		ClientKey: "01:" + address, Hostname: hostname, State: "active", Seq: store.counter[nodeID],
 		ExpiresAt: time.Now().Add(time.Hour).UTC().Truncate(time.Second)}
@@ -104,6 +109,36 @@ func (store *leaseStore) Raise(_ context.Context, nodeID string, seq int64) (boo
 	return true, nil
 }
 
+func (store *leaseStore) Behind(_ context.Context, nodeID string, seq int64) (bool, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.counter[nodeID] >= seq {
+		return false, nil
+	}
+	if _, open := store.recovery[nodeID]; !open {
+		store.recovery[nodeID] = 0
+	}
+	return true, nil
+}
+
+func (store *leaseStore) Recovery(_ context.Context, nodeID string) (int64, bool, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	seq, open := store.recovery[nodeID]
+	return seq, open, nil
+}
+
+func (store *leaseStore) Recovered(_ context.Context, nodeID string, seq int64, done bool) error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if held, open := store.recovery[nodeID]; done {
+		delete(store.recovery, nodeID)
+	} else if open {
+		store.recovery[nodeID] = max(held, seq)
+	}
+	return nil
+}
+
 func (store *leaseStore) Changed() {
 	store.mu.Lock()
 	defer store.mu.Unlock()
@@ -112,7 +147,7 @@ func (store *leaseStore) Changed() {
 
 func (store *leaseStore) mirror() LeaseMirror {
 	return LeaseMirror{Held: store.Held, Since: store.Since, Mirror: store.Mirror, Raise: store.Raise,
-		Recover: store.Recover, Changed: store.Changed}
+		Recover: store.Recover, Behind: store.Behind, Recovery: store.Recovery, Recovered: store.Recovered, Changed: store.Changed}
 }
 
 func (store *leaseStore) hostnames(nodeID string) []string {

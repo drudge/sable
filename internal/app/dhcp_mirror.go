@@ -16,6 +16,9 @@ type dhcpMirrorStore interface {
 	MirrorDHCPLeases(context.Context, []store.DHCPLease) (int, error)
 	RaiseDHCPLeaseSeq(ctx context.Context, nodeID string, seq int64) (bool, error)
 	RecoverDHCPLeases(context.Context, []store.DHCPLease) (int, error)
+	OpenDHCPLeaseRecoveryBelow(ctx context.Context, nodeID string, seq int64) (bool, error)
+	DHCPLeaseRecovery(ctx context.Context, nodeID string) (int64, bool, error)
+	AdvanceDHCPLeaseRecovery(ctx context.Context, nodeID string, seq int64, done bool) error
 }
 
 // dhcpLeaseMirror lets the cluster mirror every node's leases into this
@@ -53,7 +56,10 @@ func dhcpLeaseMirror(leases dhcpMirrorStore, changed func(), recovered func(cont
 			}
 			return written, err
 		},
-		Changed: changed,
+		Behind:    leases.OpenDHCPLeaseRecoveryBelow,
+		Recovery:  leases.DHCPLeaseRecovery,
+		Recovered: leases.AdvanceDHCPLeaseRecovery,
+		Changed:   changed,
 	}
 }
 

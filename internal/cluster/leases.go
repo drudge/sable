@@ -61,9 +61,15 @@ type SharedLease struct {
 // LeaseReport travels both ways. Held is the highest sequence number the
 // sender holds of each node's leases, and Rows are leases the receiver lacks:
 // a replica's own on a heartbeat, every other node's on a sync response.
+// Recovered, set only by a replica part way through taking its own leases
+// back after a wipe, is the highest number it has taken back so far. Wanted,
+// set only by a primary taking its own leases back the same way, is the
+// number after which it wants the replica's mirror of them on the next beat.
 type LeaseReport struct {
-	Held map[string]int64 `json:"held"`
-	Rows []SharedLease    `json:"rows,omitempty"`
+	Held      map[string]int64 `json:"held"`
+	Rows      []SharedLease    `json:"rows,omitempty"`
+	Recovered *int64           `json:"recovered,omitempty"`
+	Wanted    *int64           `json:"wanted,omitempty"`
 }
 
 // LeaseMirror reads and writes this node's lease table for the mirror.
@@ -72,14 +78,24 @@ type LeaseReport struct {
 // to a number and renumbers its rows above it, reporting whether it did.
 // Recover, when set, writes this node's own rows back from the primary's
 // mirror after a wipe, keeping their numbers and passing over any address it
-// already holds. Changed, when set, is called after a mirror writes something.
+// already holds. Recovery, when set, reports whether the node's counter
+// started over and how far it has taken its rows back since, which its count
+// can't show once it has leased as many since as it held before; Recovered
+// moves that on, or ends it when done. Behind, when set, opens that recovery
+// for a node whose counter is below a number another node holds of it, which
+// is how a primary that leased nothing since a wipe, or was restored from an
+// older backup, learns it lost leases. Changed, when set, is called after a
+// mirror writes something.
 type LeaseMirror struct {
-	Held    func(context.Context) (map[string]int64, error)
-	Since   func(ctx context.Context, nodeID string, seq int64, limit int) ([]SharedLease, error)
-	Mirror  func(context.Context, []SharedLease) (int, error)
-	Raise   func(ctx context.Context, nodeID string, seq int64) (bool, error)
-	Recover func(context.Context, []SharedLease) (int, error)
-	Changed func()
+	Held      func(context.Context) (map[string]int64, error)
+	Since     func(ctx context.Context, nodeID string, seq int64, limit int) ([]SharedLease, error)
+	Mirror    func(context.Context, []SharedLease) (int, error)
+	Raise     func(ctx context.Context, nodeID string, seq int64) (bool, error)
+	Recover   func(context.Context, []SharedLease) (int, error)
+	Behind    func(ctx context.Context, nodeID string, seq int64) (bool, error)
+	Recovery  func(ctx context.Context, nodeID string) (seq int64, open bool, err error)
+	Recovered func(ctx context.Context, nodeID string, seq int64, done bool) error
+	Changed   func()
 }
 
 func (mirror LeaseMirror) enabled() bool {
@@ -100,7 +116,7 @@ func (service *Service) SetLeaseMirror(mirror LeaseMirror) {
 // meant for.
 func (service *Service) leaseReportForPrimary(ctx context.Context) (*LeaseReport, string) {
 	service.mu.Lock()
-	mirror, primaryID, acknowledged := service.leaseMirror, service.leasePrimaryID, service.leaseAcknowledged
+	mirror, primaryID, acknowledged, wanted := service.leaseMirror, service.leasePrimaryID, service.leaseAcknowledged, service.leaseWanted
 	service.mu.Unlock()
 	if primaryID == "" || !mirror.enabled() {
 		return nil, ""
@@ -110,54 +126,102 @@ func (service *Service) leaseReportForPrimary(ctx context.Context) (*LeaseReport
 		service.warnLeaseMirror("read held DHCP leases", err)
 		return nil, ""
 	}
-	service.mu.Lock()
-	held[service.nodeID] = max(held[service.nodeID], service.leaseRecovered)
-	service.mu.Unlock()
 	rows, err := mirror.Since(ctx, service.nodeID, acknowledged, leaseBatchLimit)
 	if err != nil {
 		service.warnLeaseMirror("read DHCP leases to mirror", err)
 		return nil, ""
 	}
-	return &LeaseReport{Held: held, Rows: fitLeaseBatch(rows)}, primaryID
+	report := &LeaseReport{Held: held, Rows: service.withPrimaryLeases(ctx, mirror, primaryID, wanted, fitLeaseBatch(rows))}
+	stored, open := service.storedLeaseRecovery(ctx, mirror)
+	service.mu.Lock()
+	if recovered := max(service.leaseRecovered, stored); open || recovered > 0 {
+		report.Recovered = &recovered
+	}
+	service.mu.Unlock()
+	return report, primaryID
+}
+
+// withPrimaryLeases adds to a replica's own rows the primary's, from the
+// replica's mirror after the number the primary wants them from, as far as
+// the batch has room. A batch cut short ends on a whole number, as a
+// replica's recovery does (wholeLeaseNumbers).
+func (service *Service) withPrimaryLeases(ctx context.Context, mirror LeaseMirror, primaryID string, wanted *int64, own []SharedLease) []SharedLease {
+	room := leaseBatchLimit - len(own)
+	if wanted == nil || room <= 0 {
+		return own
+	}
+	theirs, err := mirror.Since(ctx, primaryID, *wanted, room)
+	if err != nil {
+		service.warnLeaseMirror("read the primary's DHCP leases to send back", err)
+		return own
+	}
+	rows := fitLeaseBatch(append(slices.Clone(own), theirs...))
+	if len(rows) <= len(own) {
+		return own
+	}
+	if cut := rows[len(own):]; len(cut) < len(theirs) || len(theirs) == room {
+		rows = append(rows[:len(own):len(own)], wholeLeaseNumbers(cut)...)
+	}
+	return rows
 }
 
 // exchangeLeases is the primary's side: it mirrors the sender's own leases,
 // then answers with what it holds and the leases the sender lacks: every
 // other node's, and first its own when the primary holds more of them than
-// the sender does, as after a wipe (receiveLeases). A row naming any node but the sender is dropped, so no member writes
-// another's leases. Without a report from the sender, which has yet to learn
-// the primary mirrors, the answer carries only what the primary holds.
+// the sender does, as after a wipe (receiveLeases). A row naming any node
+// but the sender is dropped, so no member writes another's leases. Without a
+// report from the sender, which has yet to learn the primary mirrors, the
+// answer carries only what the primary holds.
 func (service *Service) exchangeLeases(ctx context.Context, mirror LeaseMirror, from string, report *LeaseReport) *LeaseReport {
+	recovering := report != nil && report.Recovered != nil && service.holdsLeasesOf(ctx, mirror, from)
 	if report != nil {
 		own := slices.DeleteFunc(slices.Clone(report.Rows), func(row SharedLease) bool { return row.NodeID != from })
 		service.mirrorLeases(ctx, mirror, own)
 	}
+	var wanted *int64
 	if report != nil {
 		// A primary rebuilt from a backup counts again from below what the
-		// replicas hold of it, as a wiped replica does (receiveLeases).
+		// replicas hold of it, as a wiped replica does (receiveLeases), and
+		// takes its own rows back from the sender's mirror. A counter below
+		// what the sender holds opens that recovery first: once raised it
+		// takes no first number, and with the replicas up a wiped primary
+		// hears from one before it leases anything. A recovery this report
+		// opens has asked the sender for nothing yet, so it takes none of
+		// the rows the report carries.
+		_, asked := service.storedLeaseRecovery(ctx, mirror)
+		if held := report.Held[service.nodeID]; held > 0 && mirror.Behind != nil {
+			if _, err := mirror.Behind(ctx, service.nodeID, held); err != nil {
+				service.warnLeaseMirror("open the DHCP lease recovery", err)
+			}
+		}
 		if _, err := mirror.Raise(ctx, service.nodeID, report.Held[service.nodeID]); err != nil {
 			service.warnLeaseMirror("raise the DHCP lease counter", err)
 		}
+		wanted = service.recoverOwnLeases(ctx, mirror, from, report, asked)
 	}
 	held, err := mirror.Held(ctx)
 	if err != nil {
 		service.warnLeaseMirror("read held DHCP leases", err)
 		return nil
 	}
-	answer := &LeaseReport{Held: held}
+	answer := &LeaseReport{Held: held, Wanted: wanted}
 	if report == nil {
 		return answer
 	}
 	nodes := slices.DeleteFunc(slices.Sorted(maps.Keys(held)), func(node string) bool { return node == from })
 	for _, node := range append([]string{from}, nodes...) {
 		room := leaseBatchLimit - len(answer.Rows)
-		if room <= 0 || held[node] <= report.Held[node] {
+		takeBack := node == from && recovering
+		if room <= 0 || (held[node] <= report.Held[node] && !takeBack) {
 			continue
 		}
-		rows, err := mirror.Since(ctx, node, report.Held[node], room)
+		rows, err := mirror.Since(ctx, node, leaseCursor(node, from, report), room)
 		if err != nil {
 			service.warnLeaseMirror("read DHCP leases to mirror", err)
 			break
+		}
+		if fitted := fitLeaseBatch(rows); takeBack && (len(rows) == room || len(fitted) < len(rows)) {
+			rows = wholeLeaseNumbers(fitted)
 		}
 		answer.Rows = append(answer.Rows, rows...)
 	}
@@ -165,13 +229,135 @@ func (service *Service) exchangeLeases(ctx context.Context, mirror LeaseMirror, 
 	return answer
 }
 
+// recoverOwnLeases is a primary taking its own leases back from a replica's
+// mirror while its stored recovery is open, as after a wipe or a restore
+// from an older backup. It writes back the primary's rows the replica sent,
+// then returns the number after which it wants the next batch, or nil once
+// the replica holds none past it. Each replica mirrors on its own, so one
+// that holds none says nothing of the rest: only once every replica has said
+// so does it end the recovery and, when it took rows back, raise its counter
+// past them all and renumber its rows, so
+// rows granted since that share a number with the replica's reach it again
+// (raiseLeaseCounter). Rows naming the primary are taken only when its
+// recovery was open before the report came (asked), which is when it could
+// have asked for them, so a replica can't add to a primary whose counter has
+// reached everything the replica says it holds of it.
+func (service *Service) recoverOwnLeases(ctx context.Context, mirror LeaseMirror, from string, report *LeaseReport, asked bool) *int64 {
+	cursor, open := service.storedLeaseRecovery(ctx, mirror)
+	if !open || mirror.Recover == nil {
+		return nil
+	}
+	if own := slices.DeleteFunc(slices.Clone(report.Rows), func(row SharedLease) bool { return row.NodeID != service.nodeID }); asked && len(own) > 0 {
+		written, err := mirror.Recover(ctx, own)
+		if err != nil {
+			service.warnLeaseMirror("recover DHCP leases from a replica", err)
+			return nil
+		}
+		if written > 0 && mirror.Changed != nil {
+			mirror.Changed()
+		}
+		for _, row := range own {
+			cursor = max(cursor, row.Seq)
+		}
+		if err := mirror.Recovered(ctx, service.nodeID, cursor, false); err != nil {
+			service.warnLeaseMirror("note the DHCP lease recovery", err)
+		}
+	}
+	if report.Held[service.nodeID] > cursor {
+		return &cursor
+	}
+	if !service.allReplicasRecovered(from) {
+		return nil
+	}
+	held, err := mirror.Held(ctx)
+	if err != nil {
+		service.warnLeaseMirror("read held DHCP leases", err)
+		return &cursor
+	}
+	if !service.raiseLeaseCounter(ctx, mirror, report.Held[service.nodeID], held[service.nodeID], true, cursor > 0) {
+		return &cursor
+	}
+	service.mu.Lock()
+	service.leaseSourcesDone = nil
+	service.mu.Unlock()
+	return nil
+}
+
+// allReplicasRecovered notes that from holds none of this primary's leases
+// past its recovery's cursor, and reports whether every replica in the
+// manifest has now said so. The cursor only grows, so a replica that said so
+// once stays done. The notes live in memory: after a restart the primary
+// asks every replica again, which costs a beat and loses nothing.
+func (service *Service) allReplicasRecovered(from string) bool {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	if service.leaseSourcesDone == nil {
+		service.leaseSourcesDone = map[string]bool{}
+	}
+	service.leaseSourcesDone[from] = true
+	if service.manifest == nil {
+		return false
+	}
+	for _, node := range service.manifest.Nodes {
+		if node.ID != service.nodeID && !service.leaseSourcesDone[node.ID] {
+			return false
+		}
+	}
+	return true
+}
+
+// holdsLeasesOf reports whether this node held any of a node's leases
+// before its report: a node in recovery whose leases the primary has never
+// held has none to take back.
+func (service *Service) holdsLeasesOf(ctx context.Context, mirror LeaseMirror, node string) bool {
+	held, err := mirror.Held(ctx)
+	if err != nil {
+		service.warnLeaseMirror("read held DHCP leases", err)
+		return false
+	}
+	return held[node] > 0
+}
+
+// wholeLeaseNumbers drops the rows at the end of a cut batch that share the
+// last row's number. After a wipe two of a node's rows can share a number,
+// one from before and one since, and a recovery that takes the batch through
+// that number must not skip the one left out. A batch of one number keeps
+// it, so the recovery still moves.
+func wholeLeaseNumbers(rows []SharedLease) []SharedLease {
+	for end := len(rows) - 1; end > 0; end-- {
+		if rows[end-1].Seq != rows[len(rows)-1].Seq {
+			return rows[:end]
+		}
+	}
+	return rows
+}
+
+// leaseCursor is the number after which the primary sends node's leases to
+// the sender. Of other nodes' leases that's what the sender holds. Of the
+// sender's own, which the primary holds more of than the sender only after a
+// wipe, it's how far the sender has taken them back, from the first: the
+// sender's own count can include leases it granted since the wipe, and
+// starting there would skip as many of its oldest.
+func leaseCursor(node, from string, report *LeaseReport) int64 {
+	switch {
+	case node != from:
+		return report.Held[node]
+	case report.Recovered != nil:
+		return *report.Recovered
+	default:
+		return 0
+	}
+}
+
 // receiveLeases is the replica's side: it mirrors the other nodes' leases the
 // primary sent and learns how far the primary holds its own. When the primary
 // holds more of this node than its counter has reached, the database was
 // wiped or restored: the node first takes its own rows back from the mirror,
 // a batch a beat, and then raises the counter past them and sends every row
-// again under a new number.
-func (service *Service) receiveLeases(ctx context.Context, report *LeaseReport) {
+// again under a new number. Sent is the report this node's heartbeat carried:
+// without one the primary couldn't send this node's rows, so a recovery
+// waits for the next beat rather than end before it starts.
+func (service *Service) receiveLeases(ctx context.Context, sent, report *LeaseReport) {
 	service.mu.Lock()
 	mirror := service.leaseMirror
 	service.mu.Unlock()
@@ -180,17 +366,70 @@ func (service *Service) receiveLeases(ctx context.Context, report *LeaseReport) 
 	}
 	others := slices.DeleteFunc(slices.Clone(report.Rows), func(row SharedLease) bool { return row.NodeID == service.nodeID })
 	service.mirrorLeases(ctx, mirror, others)
+	service.mu.Lock()
+	service.leaseWanted = report.Wanted
+	service.mu.Unlock()
 	acknowledged := report.Held[service.nodeID]
-	if service.recoverLeases(ctx, mirror, report.Rows) < acknowledged {
+	stored, open := service.storedLeaseRecovery(ctx, mirror)
+	held, err := mirror.Held(ctx)
+	if err != nil {
+		service.warnLeaseMirror("read held DHCP leases", err)
 		return
 	}
-	if _, err := mirror.Raise(ctx, service.nodeID, acknowledged); err != nil {
-		service.warnLeaseMirror("raise the DHCP lease counter", err)
+	if sent == nil {
+		if open || held[service.nodeID] < acknowledged {
+			return
+		}
+	} else if service.recoverLeases(ctx, mirror, report.Rows) < acknowledged {
+		return
+	}
+	service.mu.Lock()
+	renumber := open && max(stored, service.leaseRecovered) > 0
+	service.mu.Unlock()
+	if !service.raiseLeaseCounter(ctx, mirror, acknowledged, held[service.nodeID], open, renumber) {
 		return
 	}
 	service.mu.Lock()
 	service.leaseAcknowledged, service.leaseRecovered = acknowledged, 0
 	service.mu.Unlock()
+}
+
+// raiseLeaseCounter ends a recovery: it lifts this node's counter past what
+// the primary holds of it and renumbers its rows above, so each reaches the
+// primary again. After a counter that started over, when the primary held
+// rows of this node from before, rows granted since may share numbers or
+// addresses with them, so it lifts the counter past its own rows too, which
+// renumbers every one of them. Open ends the stored recovery.
+func (service *Service) raiseLeaseCounter(ctx context.Context, mirror LeaseMirror, acknowledged, own int64, open, renumber bool) bool {
+	target := acknowledged
+	if renumber {
+		target = max(acknowledged, own) + 1
+	}
+	if _, err := mirror.Raise(ctx, service.nodeID, target); err != nil {
+		service.warnLeaseMirror("raise the DHCP lease counter", err)
+		return false
+	}
+	if open {
+		if err := mirror.Recovered(ctx, service.nodeID, 0, true); err != nil {
+			service.warnLeaseMirror("end the DHCP lease recovery", err)
+			return false
+		}
+	}
+	return true
+}
+
+// storedLeaseRecovery reports whether this node's counter started over and
+// it has yet to take its own leases back, and how far it has so far.
+func (service *Service) storedLeaseRecovery(ctx context.Context, mirror LeaseMirror) (int64, bool) {
+	if mirror.Recovery == nil || mirror.Recovered == nil {
+		return 0, false
+	}
+	seq, open, err := mirror.Recovery(ctx, service.nodeID)
+	if err != nil {
+		service.warnLeaseMirror("read the DHCP lease recovery", err)
+		return 0, false
+	}
+	return seq, open
 }
 
 // recoverLeases writes back this node's own rows the primary sent and
@@ -219,6 +458,11 @@ func (service *Service) recoverLeases(ctx context.Context, mirror LeaseMirror, r
 	service.leaseRecovered = max(service.leaseRecovered, recovered)
 	recovered = service.leaseRecovered
 	service.mu.Unlock()
+	if mirror.Recovered != nil {
+		if err := mirror.Recovered(ctx, service.nodeID, recovered, false); err != nil {
+			service.warnLeaseMirror("note the DHCP lease recovery", err)
+		}
+	}
 	return recovered
 }
 
