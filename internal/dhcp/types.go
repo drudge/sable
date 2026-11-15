@@ -114,10 +114,41 @@ func (packet Packet) MessageType() MessageType {
 }
 
 // Meta is where a request arrived: the interface's addresses with their
-// prefixes. A scope is served on the link whose subnet holds one of them.
+// prefixes, and the datagram's destination address. A scope is served on the
+// link whose subnet holds one of them.
 type Meta struct {
 	Interface string
 	Addrs     []netip.Prefix
+	// To is the datagram's destination: a broadcast, or this node's own
+	// address for a client that renews by unicast. Unset when the socket
+	// couldn't say, which counts as a broadcast.
+	To netip.Addr
+}
+
+// unicast reports the address a request was sent to when it came to this
+// node by unicast: not the limited broadcast, nor a directed broadcast of the
+// arrival link (RFC 919 §7, RFC 922 §7). A /31 or /32 has no directed
+// broadcast (RFC 3021): its last address is a host, often this node.
+func (meta Meta) unicast() (netip.Addr, bool) {
+	to := meta.To.Unmap()
+	if !to.Is4() || to.IsUnspecified() || to.IsMulticast() || to == netip.AddrFrom4([4]byte{255, 255, 255, 255}) {
+		return netip.Addr{}, false
+	}
+	for _, local := range meta.Addrs {
+		if local.Addr().Unmap().Is4() && local.Bits() < 31 && to == lastAddress(local) {
+			return netip.Addr{}, false
+		}
+	}
+	return to, true
+}
+
+// lastAddress is the all-ones host address of an IPv4 prefix, its directed
+// broadcast.
+func lastAddress(prefix netip.Prefix) netip.Addr {
+	octets := prefix.Masked().Addr().Unmap().As4()
+	host := uint32(1)<<(32-prefix.Bits()) - 1
+	value := uint32(octets[0])<<24 | uint32(octets[1])<<16 | uint32(octets[2])<<8 | uint32(octets[3]) | host
+	return netip.AddrFrom4([4]byte{byte(value >> 24), byte(value >> 16), byte(value >> 8), byte(value)})
 }
 
 // Destination is where a reply goes (RFC 2131 §4.1).

@@ -41,12 +41,12 @@ func newFakeDHCPConn() *fakeDHCPConn {
 	return &fakeDHCPConn{inbound: make(chan []byte, 8), closed: make(chan struct{}), wrote: make(chan struct{}, 8)}
 }
 
-func (conn *fakeDHCPConn) ReadPacket(buffer []byte) (int, int, error) {
+func (conn *fakeDHCPConn) ReadPacket(buffer []byte) (int, dhcpArrival, error) {
 	select {
 	case payload := <-conn.inbound:
-		return copy(buffer, payload), 7, nil
+		return copy(buffer, payload), dhcpArrival{ifIndex: 7}, nil
 	case <-conn.closed:
-		return 0, 0, net.ErrClosed
+		return 0, dhcpArrival{}, net.ErrClosed
 	}
 }
 
