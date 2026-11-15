@@ -31,7 +31,10 @@ type DHCPStatusView struct {
 	Enabled, Serving bool
 	// Clustered says this node is in a cluster, which doesn't serve DHCP.
 	Clustered bool
-	Received, Replied           uint64
+	// On is enabled in the saved settings, which the Turn On and Turn Off
+	// button changes; Enabled also counts a server still running.
+	On                bool
+	Received, Replied uint64
 }
 
 // DHCPLeaseRow is one lease that holds its address.
@@ -79,7 +82,7 @@ templ DHCPPage(view DHCPPageView) {
 
 templ DHCPContent(view DHCPPageView) {
 	<div class="dhcp-page page-stack isotope-control-page" id="dhcp-content" data-isotope-tabs data-active-tab={ view.ActiveTab } data-tab-param="tab" data-title-base="DHCP">
-		@components.PageHeader(components.PageHeaderProps{Title: "DHCP", Description: "Hand out addresses on your network and name each device in DNS"})
+		@components.PageHeader(components.PageHeaderProps{Title: "DHCP", Description: "Hand out addresses on your network and name each device in DNS", Actions: dhcpPowerAction(view)})
 		@Toast(view.Message, "success")
 		<div id="dhcp-notice">
 			if view.Error != "" {

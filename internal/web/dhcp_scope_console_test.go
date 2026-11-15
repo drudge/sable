@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/drudge/sable/internal/auth"
 	"github.com/drudge/sable/internal/config"
 )
 
@@ -74,5 +75,37 @@ func TestDHCPConsoleEditsScopes(t *testing.T) {
 	response = dhcpConsoleRequest(t, server, http.MethodPost, "/ui/dhcp/scopes/delete", url.Values{"id": {"guest"}})
 	if response.Code != http.StatusOK || len(configuration.snapshot.Config.DHCP.Scopes) != 1 {
 		t.Fatalf("delete scope = %d, scopes %+v", response.Code, configuration.snapshot.Config.DHCP.Scopes)
+	}
+}
+
+func TestDHCPConsoleTurnsTheServerOnAndOff(t *testing.T) {
+	t.Parallel()
+	server, configuration, _ := newDHCPConsoleServer(t)
+	response := dhcpConsoleRequest(t, server, http.MethodPost, "/ui/dhcp/enabled", url.Values{"enabled": {"false"}})
+	if response.Code != http.StatusOK || configuration.snapshot.Config.DHCP.Enabled || !strings.Contains(response.Body.String(), "Turned DHCP off") {
+		t.Fatalf("turn off = %d, enabled %v: %s", response.Code, configuration.snapshot.Config.DHCP.Enabled, response.Body.String())
+	}
+	if body := response.Body.String(); !strings.Contains(body, "Turn On") || strings.Contains(body, "Turn Off") {
+		t.Errorf("an off server's page lacks the Turn On button")
+	}
+	response = dhcpConsoleRequest(t, server, http.MethodPost, "/ui/dhcp/enabled", url.Values{"enabled": {"true"}})
+	if response.Code != http.StatusOK || !configuration.snapshot.Config.DHCP.Enabled {
+		t.Fatalf("turn on = %d, enabled %v: %s", response.Code, configuration.snapshot.Config.DHCP.Enabled, response.Body.String())
+	}
+}
+
+// TestDHCPServiceOperatorCannotTurnTheServerOff: turning DHCP on hands out
+// every scope's router and resolvers, so it needs settings.write like the
+// rest of [dhcp] (D47); the built-in Operator has only dhcp.write.
+func TestDHCPServiceOperatorCannotTurnTheServerOff(t *testing.T) {
+	t.Parallel()
+	server, configuration, _ := newDHCPTestServer(t)
+	operator := actor{principal: auth.Principal{UserID: 12, Username: "dhcp-operator", Permissions: builtInRolePermissions("Operator")}}
+	if err := server.dhcpService().SetEnabled(t.Context(), operator, false); err == nil || !configuration.snapshot.Config.DHCP.Enabled {
+		t.Fatalf("Operator SetEnabled(false) = %v, enabled %v; want refused and still on", err, configuration.snapshot.Config.DHCP.Enabled)
+	}
+	admin := actor{principal: auth.Principal{UserID: 1, Username: "admin", Permissions: builtInRolePermissions("Administrator")}}
+	if err := server.dhcpService().SetEnabled(t.Context(), admin, false); err != nil || configuration.snapshot.Config.DHCP.Enabled {
+		t.Fatalf("Administrator SetEnabled(false) = %v, enabled %v", err, configuration.snapshot.Config.DHCP.Enabled)
 	}
 }

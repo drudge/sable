@@ -184,6 +184,20 @@ func (service dhcpService) RemoveScope(ctx context.Context, who actor, id string
 	})
 }
 
+// SetEnabled turns the DHCP server on or off, keeping its scopes. Like Save,
+// it needs settings.write (D47): turning it on hands out every scope's
+// router and resolvers.
+func (service dhcpService) SetEnabled(ctx context.Context, who actor, enabled bool) error {
+	if err := service.allowed(who, auth.PermissionSettingsWrite); err != nil {
+		return err
+	}
+	action := map[bool]string{true: "dhcp.enable", false: "dhcp.disable"}[enabled]
+	return service.update(ctx, who, action, action, func(settings *config.DHCP) error {
+		settings.Enabled = enabled
+		return nil
+	})
+}
+
 // RemoveLease ends this node's lease on address. The client keeps using it
 // until it next renews, when it's offered an address again (RFC 2131 §4.4.5).
 func (service dhcpService) RemoveLease(ctx context.Context, who actor, raw string) error {

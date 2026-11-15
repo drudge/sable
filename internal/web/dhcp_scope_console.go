@@ -37,6 +37,16 @@ func (server *Server) deleteDHCPScope(writer http.ResponseWriter, request *http.
 	})
 }
 
+func (server *Server) setDHCPEnabled(writer http.ResponseWriter, request *http.Request) {
+	server.dhcpMutation(writer, request, "#dhcp-notice", func(service dhcpService, who actor) (string, error) {
+		enabled := request.FormValue("enabled") == "true"
+		if err := service.SetEnabled(request.Context(), who, enabled); err != nil {
+			return "", err
+		}
+		return ifThenString(enabled, "Turned DHCP on", "Turned DHCP off"), nil
+	})
+}
+
 // dhcpScopeFromForm starts from the saved scope, so a field the dialog
 // doesn't show keeps its value, and an add can't replace a scope by reusing
 // its ID.

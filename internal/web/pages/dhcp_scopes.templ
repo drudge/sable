@@ -19,6 +19,27 @@ templ dhcpSetupEmpty(view DHCPPageView) {
 	}
 }
 
+// dhcpPowerAction turns the server on or off once it has a scope; the
+// settings refuse DHCP that's on with nothing to serve.
+templ dhcpPowerAction(view DHCPPageView) {
+	if view.CanConfigure && len(view.Scopes) > 0 {
+		if view.Status.On {
+			@components.Button(components.ButtonProps{Label: "Turn Off", Icon: "power", Variant: components.ButtonOutline, Attrs: dhcpPowerPost(view, false)})
+		} else {
+			@components.Button(components.ButtonProps{Label: "Turn On", Icon: "power", Attrs: dhcpPowerPost(view, true)})
+		}
+	}
+}
+
+func dhcpPowerPost(view DHCPPageView, enabled bool) templ.Attributes {
+	attrs := dhcpPost("/ui/dhcp/enabled", view.ActiveTab, map[string]string{"enabled": fmt.Sprint(enabled)})
+	if !enabled {
+		attrs["hx-confirm"] = "Turn DHCP off? Devices keep their addresses until they next renew, then get no answer from this server."
+		attrs["data-confirm-title"], attrs["data-confirm-action"] = "Turn DHCP off?", "Turn Off"
+	}
+	return attrs
+}
+
 templ dhcpScopesPanel(view DHCPPageView) {
 	@components.Card(components.CardProps{Class: "isotope-data-card"}) {
 		@components.CardHeader(components.CardHeaderProps{Title: "Scopes", Description: "Each network this server hands out addresses on", DescriptionClass: "desktop-only", Class: "isotope-data-header"}) {

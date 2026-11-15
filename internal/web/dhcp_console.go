@@ -98,7 +98,7 @@ func (server *Server) dhcpPageView(request *http.Request) pages.DHCPPageView {
 		view.Error = sentence(err.Error())
 		return view
 	}
-	view.Status = pages.DHCPStatusView{Enabled: state.Status.Enabled || state.Settings.Enabled, Serving: state.Status.Serving,
+	view.Status = pages.DHCPStatusView{Enabled: state.Status.Enabled || state.Settings.Enabled, On: state.Settings.Enabled, Serving: state.Status.Serving,
 		Clustered: state.Status.Clustered || (server.cluster != nil && server.cluster.Snapshot().Initialized), Received: state.Status.Received, Replied: state.Status.Replied}
 	view.CanWrite = service.allowed(who, auth.PermissionDHCPWrite) == nil && !view.Console.ControlPlaneReadOnly
 	view.CanConfigure = view.CanWrite && service.allowed(who, auth.PermissionSettingsWrite) == nil
