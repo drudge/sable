@@ -95,13 +95,18 @@ These actions require their matching administrative permissions. Reload responds
 | --- | --- |
 | `GET /api/v1/dhcp` | The server's `status` (on, answering, counters) and its `settings`, the `[dhcp]` section as JSON |
 | `PUT /api/v1/dhcp` | Replaces the `[dhcp]` section with the body, in the same shape; returns what `GET` does |
+| `GET /api/v1/dhcp/networks` | The IPv4 networks this server has an address on that no scope covers yet: `interface`, `prefix` (the server's address and length), `gateway` when the interface has a default route, and the `suggested` scope for it |
+| `POST /api/v1/dhcp/probe` | Broadcasts a DISCOVER out of each network a scope serves and lists the other DHCP servers that answered in `others` (`interface`, `server`, `offered`). An interface the probe couldn't go out of is named in `error` |
 | `GET /api/v1/dhcp/leases` | The leases that hold an address now, by address. `scope` limits them to one scope |
 | `POST /api/v1/dhcp/leases/{address}/reserve` | Makes the lease's client a reservation on its address. An optional body sets `name` and `comment`; the name defaults to the one the lease registered |
 | `DELETE /api/v1/dhcp/leases/{address}` | Ends this node's lease on the address. The client keeps it until it renews, then is offered an address again |
+| `GET /api/v1/dhcp/scopes/{scope}` | One scope's settings, in the shape of a `[[dhcp.scopes]]` entry |
+| `PUT /api/v1/dhcp/scopes/{scope}` | Adds the scope or replaces its settings. The path sets its `id`, and its reservations stay as they are |
+| `DELETE /api/v1/dhcp/scopes/{scope}` | Removes the scope and its reservations. Its leases end when they expire |
 | `PUT /api/v1/dhcp/scopes/{scope}/reservations/{mac}` | Sets the reservation for a hardware address: a body with `address`, and optionally `name` and `comment` |
 | `DELETE /api/v1/dhcp/scopes/{scope}/reservations/{mac}` | Removes the reservation for a hardware address |
 
-Reading needs `dhcp.read` and changing needs `dhcp.write`. Replacing the whole section with `PUT /api/v1/dhcp` needs `settings.write` too, since a scope's domain becomes a Primary zone and its router and DNS servers go to every client. Changes are validated as a whole, like an edit to `sable.toml`, and a replica refuses them. Keys are the ones in [the DHCP configuration](../configuration.md#dhcp-server), and durations are strings such as `12h`. An unknown key is refused.
+Reading needs `dhcp.read` and changing needs `dhcp.write`. Replacing the whole section with `PUT /api/v1/dhcp`, or saving or removing a scope, needs `settings.write` too, since a scope's domain becomes a Primary zone and its router and DNS servers go to every client. Changes are validated as a whole, like an edit to `sable.toml`, and a replica refuses them. Keys are the ones in [the DHCP configuration](../configuration.md#dhcp-server), and durations are strings such as `12h`. An unknown key is refused.
 
 ```sh
 curl --fail-with-body -X PUT \
