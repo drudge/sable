@@ -44,19 +44,19 @@ func openTestClusterService(t *testing.T) *cluster.Service {
 	return service
 }
 
-// On a cluster with [dhcp] enabled, DHCP is refused at start; a reload that
-// leaves [dhcp] alone must still apply, and one that changes it is refused
-// (F28, D30).
+// On a cluster with [dhcp] refused at start, a reload that leaves [dhcp]
+// alone must still apply, and one that changes it is refused (F28, D30).
 func TestReloadOnClusterWithDHCPLeftAlone(t *testing.T) {
 	t.Parallel()
 	service, _, _ := newTestDHCPService(t, cluster.RolePrimary)
+	service.cluster = testDHCPCluster("node-a")
 	process := &process{dhcp: service}
 	settings := dhcpTestSettings(t)
 	changed, err := process.checkDHCP(settings, settings)
 	if changed || err != nil {
 		t.Fatalf("checkDHCP with [dhcp] unchanged = %v, %v; want false, nil", changed, err)
 	}
-	if _, err := process.checkDHCP(config.DHCP{}, settings); !errors.Is(err, errDHCPOnCluster) {
-		t.Fatalf("checkDHCP enabling DHCP on a cluster = %v; want errDHCPOnCluster", err)
+	if _, err := process.checkDHCP(config.DHCP{}, settings); !errors.Is(err, errDHCPRangeUnpinned) {
+		t.Fatalf("checkDHCP enabling an unpinned range on a cluster = %v; want errDHCPRangeUnpinned", err)
 	}
 }

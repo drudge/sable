@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"net"
@@ -14,6 +15,8 @@ import (
 )
 
 const (
+	// dhcpOptionVendorClass is the vendor class identifier (RFC 2132 §9.13).
+	dhcpOptionVendorClass = 60
 	// dhcpOthersInterval is how often a serving node looks for another DHCP
 	// server on its networks (docs/design/dhcp.md §4). Two servers on one
 	// link hand out conflicting leases, and a router whose DHCP came back on
@@ -84,12 +87,7 @@ func (service *dhcpService) findOthers(ctx context.Context, settings config.DHCP
 		failed[""] = err
 		return nil, failed
 	}
-	own := map[netip.Addr]bool{}
-	for _, link := range links {
-		for _, prefix := range link.Meta.Addrs {
-			own[prefix.Addr()] = true
-		}
-	}
+	own := service.ownAddresses(links)
 	for _, link := range links {
 		if !dhcpServesLink(settings, link.Meta) {
 			continue
@@ -101,6 +99,26 @@ func (service *dhcpService) findOthers(ctx context.Context, settings config.DHCP
 		found = append(found, others...)
 	}
 	return found, failed
+}
+
+// ownAddresses is the server identifiers that aren't another server: this
+// node's interface addresses and its cluster peers' addresses, since a peer
+// serves its own ranges of the same scopes (D36).
+func (service *dhcpService) ownAddresses(links []dhcpProbeLink) map[netip.Addr]bool {
+	own := map[netip.Addr]bool{}
+	for _, link := range links {
+		for _, prefix := range link.Meta.Addrs {
+			own[prefix.Addr()] = true
+		}
+	}
+	for _, node := range service.clusterState().Nodes {
+		for _, text := range node.Addresses {
+			if address, err := netip.ParseAddr(text); err == nil {
+				own[address.Unmap()] = true
+			}
+		}
+	}
+	return own
 }
 
 // noteProbeFailures logs when the probe stops being able to go out of an
@@ -147,7 +165,7 @@ func dhcpServesLink(settings config.DHCP, meta dhcp.Meta) bool {
 // own addresses that offered a lease. Nothing is requested, so an offered
 // address is only held until that server's offer times out.
 func (service *dhcpService) probeLink(ctx context.Context, link dhcpProbeLink, own map[netip.Addr]bool) ([]dhcpOtherServer, error) {
-	discover := dhcpProbeDiscover(link.MAC)
+	discover := dhcpProbeDiscover(link.MAC, service.ownProbes.tag())
 	defer service.ownProbes.add(discover.XID)()
 	var found []dhcpOtherServer
 	for try := range dhcpOthersTries {
@@ -167,10 +185,31 @@ func (service *dhcpService) probeLink(ctx context.Context, link dhcpProbeLink, o
 // flight. A probe's broadcast loops back to this node's own port 67 socket,
 // and answering it would hold a pool address on offer to the node itself at
 // every probe (F32, D36). Only this process's IDs are dropped, so two
-// standalone servers on one link still find each other.
+// standalone servers on one link still find each other. On a cluster a probe
+// also carries the cluster's tag (dhcpProbeVendorPrefix), and every node of
+// the cluster drops it the same way.
 type dhcpOwnProbes struct {
 	mutex sync.Mutex
 	xids  map[[4]byte]int
+	// cluster is this node's cluster ID, empty outside a cluster. Nil is
+	// outside a cluster.
+	cluster func() string
+}
+
+// dhcpProbeVendorPrefix starts the vendor class identifier (option 60, RFC
+// 2132 §9.13) of a cluster node's probe; the cluster ID follows it.
+const dhcpProbeVendorPrefix = "sable-probe/"
+
+// tag is the vendor class this node's probes carry: nil outside a cluster.
+func (probes *dhcpOwnProbes) tag() []byte {
+	if probes == nil || probes.cluster == nil {
+		return nil
+	}
+	id := probes.cluster()
+	if id == "" {
+		return nil
+	}
+	return []byte(dhcpProbeVendorPrefix + id)
 }
 
 // add marks xid in flight until the returned func is called.
@@ -197,9 +236,24 @@ func (probes *dhcpOwnProbes) sent(datagram []byte) bool {
 		return false
 	}
 	probes.mutex.Lock()
-	defer probes.mutex.Unlock()
 	_, found := probes.xids[[4]byte(datagram[4:8])]
-	return found
+	probes.mutex.Unlock()
+	return found || probes.fromPeer(datagram)
+}
+
+// fromPeer reports whether datagram is a probe from a node of this node's
+// cluster: it carries the cluster's tag.
+func (probes *dhcpOwnProbes) fromPeer(datagram []byte) bool {
+	tag := probes.tag()
+	if tag == nil {
+		return false
+	}
+	request, err := dhcp.Parse(datagram)
+	if err != nil {
+		return false
+	}
+	vendor, found := request.Option(dhcpOptionVendorClass)
+	return found && bytes.Equal(vendor, tag)
 }
 
 // dhcpOtherOffers is the servers other than own that answered discover with
@@ -224,14 +278,17 @@ func dhcpOtherOffers(link dhcpProbeLink, discover dhcp.Packet, replies [][]byte,
 	return found
 }
 
-// dhcpProbeDiscover is a DISCOVER from mac with a random transaction ID and
-// the broadcast flag.
-func dhcpProbeDiscover(mac net.HardwareAddr) dhcp.Packet {
+// dhcpProbeDiscover is a DISCOVER from mac with a random transaction ID, the
+// broadcast flag, and the cluster's tag as its vendor class when it has one.
+func dhcpProbeDiscover(mac net.HardwareAddr, tag []byte) dhcp.Packet {
 	packet := dhcp.Packet{
 		Op: 1, HType: 1, Flags: 0x8000, CHAddr: mac,
 		CIAddr: netip.IPv4Unspecified(), YIAddr: netip.IPv4Unspecified(),
 		SIAddr: netip.IPv4Unspecified(), GIAddr: netip.IPv4Unspecified(),
 		Options: []dhcp.Option{{Code: 53, Data: []byte{byte(dhcp.Discover)}}},
+	}
+	if tag != nil {
+		packet.Options = append(packet.Options, dhcp.Option{Code: dhcpOptionVendorClass, Data: tag})
 	}
 	_, _ = rand.Read(packet.XID[:])
 	return packet

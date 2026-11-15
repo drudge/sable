@@ -738,7 +738,11 @@ bytes).
 **Ranges** are inclusive pools of dynamic addresses inside the subnet, never
 the network or broadcast address, and they can't overlap. An exclusion is the
 gap between two ranges. In a cluster each range names the node that serves it;
-every `node` must be a current member.
+every `node` must be a current member, and the primary refuses a range without
+one, since every node would lease from it. A node leases only from its own
+ranges, so two nodes that lose touch never hand out the same address. Size each
+node's ranges to carry the whole network, so losing a node never empties a
+pool. Every node answers a scope's reservations.
 
 **Reservations** give one MAC address a fixed address inside the subnet. A scope
 allows one reservation per MAC address, per address, and per name, and a name
@@ -759,7 +763,11 @@ each change saves to `[dhcp]` like an edit to `sable.toml`.
 
 The `[dhcp]` section replicates from a cluster's primary to every node. While
 it's empty it's left out of the replicated configuration, so a node from before
-DHCP keeps working. Upgrade every node before you add a scope.
+DHCP keeps working. Upgrade every node before you add a scope: the primary
+refuses to turn DHCP on while a member runs an older release than its own.
+Every node records its leases and the cluster heartbeat shares them, so each
+node holds every lease and the primary publishes every lease's name. Turn DHCP
+off before creating or joining a cluster.
 
 ## Integrations: MCP server
 
