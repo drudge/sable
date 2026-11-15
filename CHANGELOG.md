@@ -36,7 +36,8 @@ on it.
   DHCP set up won't load on 1.8.2.
 - Cluster clocks must agree within 30 seconds. A replica on 1.8.2 with a
   wrong clock shows as offline, as before, because it can't answer the
-  primary's clock check. Update every node first.
+  primary's clock check; the primary's log still names the clock. Update
+  every node first.
 - Nothing else is needed. Turning DHCP on is your choice; until then Sable
   answers DNS as before.
 
