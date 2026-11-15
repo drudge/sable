@@ -10,8 +10,25 @@ import (
 // opens the scope dialog; without it, it says who can.
 templ dhcpSetupEmpty(view DHCPPageView) {
 	if view.CanConfigure {
-		@components.EmptyState(components.EmptyStateProps{Icon: "router", IconBox: true, Title: "DHCP isn't set up", Description: "Add a scope to hand out addresses on one network and name each device in DNS.", Class: "dhcp-setup-empty"}) {
-			@components.Button(components.ButtonProps{Label: "Add Scope", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": dhcpScopeDialogID("", true), "data-replica-primary-action": true}})
+		@components.EmptyState(components.EmptyStateProps{Icon: "router", IconBox: true, Title: "DHCP isn't set up", Description: ifThen(len(view.Networks) > 0, "Pick the network to hand out addresses on, or add a scope for a relayed one.", "Add a scope to hand out addresses on one network and name each device in DNS."), Class: "dhcp-setup-empty"}) {
+			@components.Button(components.ButtonProps{Label: "Add Scope", Icon: "plus", Variant: ifThen(len(view.Networks) > 0, components.ButtonOutline, components.ButtonPrimary), Compact: true, Attrs: templ.Attributes{"data-dialog-open": dhcpScopeDialogID("", true), "data-replica-primary-action": true}})
+		}
+		if len(view.Networks) > 0 {
+			<section class="dhcp-setup-networks" aria-label="Networks this server is on">
+				<h4>Networks this server is on</h4>
+				<div class="dhcp-network-list">
+					for _, network := range view.Networks {
+						<article class="dhcp-network-row">
+							<span class="dhcp-network-icon">@Icon("house-wifi")</span>
+							<div>
+								<strong>{ network.Scope.Subnet }</strong>
+								<small>{ dhcpNetworkDetail(network) }</small>
+							</div>
+							@components.Button(components.ButtonProps{Label: "Set Up", Compact: true, Attrs: templ.Attributes{"data-dialog-open": dhcpScopeFormID(network.Scope, true), "data-replica-primary-action": true, "aria-label": "Set up " + network.Scope.Subnet}})
+						</article>
+					}
+				</div>
+			</section>
 		}
 	} else {
 		@components.EmptyState(components.EmptyStateProps{Icon: "router", IconBox: true, Title: "DHCP isn't set up", Description: "An administrator can add a scope to hand out addresses from this server.", Class: "dhcp-setup-empty"})
@@ -22,12 +39,30 @@ templ dhcpSetupEmpty(view DHCPPageView) {
 // settings refuse DHCP that's on with nothing to serve.
 templ dhcpPowerAction(view DHCPPageView) {
 	if view.CanConfigure && len(view.Scopes) > 0 {
-		if view.Status.On {
+		if view.ProbeRefused && !view.Status.On {
+			@components.Button(components.ButtonProps{Label: "Turn On Anyway", Icon: "power", Busy: true, Variant: components.ButtonOutline, Compact: true, Attrs: dhcpForceOnPost(view)})
+		} else if view.Status.On {
 			@components.Button(components.ButtonProps{Label: "Turn Off", Icon: "power", Variant: components.ButtonOutline, Compact: true, Attrs: dhcpPowerPost(view, false)})
 		} else {
-			@components.Button(components.ButtonProps{Label: "Turn On", Icon: "power", Compact: true, Attrs: dhcpPowerPost(view, true)})
+			@components.Button(components.ButtonProps{Label: "Turn On", Icon: "power", Busy: true, Compact: true, Attrs: dhcpPowerPost(view, true)})
 		}
 	}
+}
+
+// dhcpForceOnPost turns the server on without the probe, after it refused.
+func dhcpForceOnPost(view DHCPPageView) templ.Attributes {
+	attrs := dhcpPost("/ui/dhcp/enabled", view.ActiveTab, map[string]string{"enabled": "true", "force": "true"})
+	attrs["hx-confirm"] = "Turn DHCP on anyway? Two DHCP servers on one network hand out conflicting addresses."
+	attrs["data-confirm-title"], attrs["data-confirm-action"] = "Turn DHCP on anyway?", "Turn On Anyway"
+	return attrs
+}
+
+func dhcpNetworkDetail(network DHCPNetworkView) string {
+	detail := network.Interface + " · this server is " + network.Address
+	if network.Gateway != "" {
+		detail += " · router " + network.Gateway
+	}
+	return detail
 }
 
 func dhcpPowerPost(view DHCPPageView, enabled bool) templ.Attributes {
@@ -83,14 +118,17 @@ templ dhcpScopeActions(view DHCPPageView, scope DHCPScopeView) {
 // network needs; the rest (options, routes, boot, flags) stay in sable.toml
 // and keep their values when the dialog saves.
 templ dhcpScopeDialog(scope DHCPScopeView, add bool) {
-	@components.Dialog(components.DialogProps{ID: dhcpScopeDialogID(scope.ID, add), Title: ifThen(add, "Add Scope", "Edit Scope"), Description: ifThen(add, "Hand out addresses on one network", dhcpScopeTitle(scope)+" · "+scope.Subnet), Class: "isotope-form-dialog dhcp-scope-dialog"}) {
+	@components.Dialog(components.DialogProps{ID: dhcpScopeFormID(scope, add), Title: ifThen(add, "Add Scope", "Edit Scope"), Description: ifThen(add, "Hand out addresses on one network", dhcpScopeTitle(scope)+" · "+scope.Subnet), Class: "isotope-form-dialog dhcp-scope-dialog"}) {
 		<form hx-post="/ui/dhcp/scopes" hx-target="#dhcp-content" hx-swap="outerHTML">
 			<input type="hidden" name="tab" value="scopes"/>
 			<div class="isotope-dialog-body">
-				<div class="dhcp-form-notice" id={ DHCPScopeNoticeID(scope.ID, add) }></div>
+				<div class="dhcp-form-notice" id={ DHCPScopeNoticeID(scope.ID, scope.Suggest, add) }></div>
 				if add {
 					<input type="hidden" name="new" value="1"/>
-					@components.Field(components.FieldProps{ID: dhcpScopeDialogID("", true) + "__id", Label: "ID", Help: "A short, permanent key that leases refer to, like `lan`.", Input: templ.Attributes{"name": "id", "class": "mono-input", "placeholder": "lan", "pattern": "[a-z0-9][a-z0-9-]*", "maxlength": "32", "autocomplete": "off", "spellcheck": "false", "required": true}})
+					if scope.Suggest != "" {
+						<input type="hidden" name="suggest" value={ scope.Suggest }/>
+					}
+					@components.Field(components.FieldProps{ID: dhcpScopeFormID(scope, add) + "__id", Label: "ID", Help: "A short, permanent key that leases refer to, like `lan`.", Input: templ.Attributes{"name": "id", "value": scope.ID, "class": "mono-input", "placeholder": "lan", "pattern": "[a-z0-9][a-z0-9\\-]*", "maxlength": "32", "autocomplete": "off", "spellcheck": "false", "required": true}})
 				} else {
 					<input type="hidden" name="id" value={ scope.ID }/>
 				}
@@ -116,7 +154,7 @@ templ dhcpScopeDialog(scope DHCPScopeView, add bool) {
 }
 
 templ dhcpScopeField(scope DHCPScopeView, add bool, name, label, help, placeholder, class string, input templ.Attributes) {
-	@components.Field(components.FieldProps{ID: dhcpScopeDialogID(scope.ID, add) + "__" + name, Label: label, Help: help, Input: dhcpScopeInput(name, placeholder, class, input)})
+	@components.Field(components.FieldProps{ID: dhcpScopeFormID(scope, add) + "__" + name, Label: label, Help: help, Input: dhcpScopeInput(name, placeholder, class, input)})
 }
 
 func dhcpScopeInput(name, placeholder, class string, input templ.Attributes) templ.Attributes {
@@ -166,7 +204,16 @@ func dhcpScopeDialogID(id string, add bool) string {
 	return "dhcp-scope-" + id
 }
 
+// dhcpScopeFormID is the dialog that adds or edits scope: an add filled in
+// from a host network has its own.
+func dhcpScopeFormID(scope DHCPScopeView, add bool) string {
+	if add && scope.Suggest != "" {
+		return dhcpScopeDialogID("", true) + "-" + scope.Suggest
+	}
+	return dhcpScopeDialogID(scope.ID, add)
+}
+
 // DHCPScopeNoticeID is where a scope form shows why it didn't save.
-func DHCPScopeNoticeID(id string, add bool) string {
-	return dhcpScopeDialogID(id, add) + "__notice"
+func DHCPScopeNoticeID(id, suggest string, add bool) string {
+	return dhcpScopeFormID(DHCPScopeView{ID: id, Suggest: suggest}, add) + "__notice"
 }

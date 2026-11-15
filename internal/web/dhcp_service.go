@@ -35,6 +35,11 @@ type dhcpController interface {
 	Status() DHCPStatus
 	Leases(context.Context) ([]store.DHCPLease, error)
 	RemoveLease(context.Context, netip.Addr) (bool, error)
+	// Networks lists the IPv4 networks this host has an address on.
+	Networks() ([]DHCPNetwork, error)
+	// FindOthers probes the networks settings' scopes serve for another
+	// DHCP server. An error says which interfaces it couldn't go out of.
+	FindOthers(context.Context, config.DHCP) ([]DHCPOtherServer, error)
 }
 
 // SetDHCPController attaches the DHCP server to the console.
@@ -187,9 +192,14 @@ func (service dhcpService) RemoveScope(ctx context.Context, who actor, id string
 // SetEnabled turns the DHCP server on or off, keeping its scopes. Like Save,
 // it needs settings.write (D47): turning it on hands out every scope's
 // router and resolvers.
-func (service dhcpService) SetEnabled(ctx context.Context, who actor, enabled bool) error {
+func (service dhcpService) SetEnabled(ctx context.Context, who actor, enabled, force bool) error {
 	if err := service.allowed(who, auth.PermissionSettingsWrite); err != nil {
 		return err
+	}
+	if enabled {
+		if err := service.checkNoOthers(ctx, force); err != nil {
+			return err
+		}
 	}
 	action := map[bool]string{true: "dhcp.enable", false: "dhcp.disable"}[enabled]
 	return service.update(ctx, who, action, action, func(settings *config.DHCP) error {

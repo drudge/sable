@@ -22,6 +22,11 @@ type DHCPPageView struct {
 	// CanConfigure says the viewer may add and edit scopes, which also
 	// needs settings.write (D47).
 	CanConfigure bool
+	// Networks are the host's networks without a scope, offered by setup.
+	Networks []DHCPNetworkView
+	// ProbeRefused says Turn On found another server, or couldn't look,
+	// so the header offers Turn On Anyway.
+	ProbeRefused bool
 	Message      string
 	Error        string
 }
@@ -47,11 +52,21 @@ type DHCPLeaseRow struct {
 // DHCPScopeView is one scope and its reservations.
 type DHCPScopeView struct {
 	ID, Name, Subnet, Router, Domain, DNS, Lease string
+	// Suggest keys an Add Scope dialog filled in from a host network, so
+	// each network gets its own.
+	Suggest string
 	// RangeStart and RangeEnd are the first range, the one the scope
 	// dialog edits; MoreRanges counts the others, set in sable.toml.
 	RangeStart, RangeEnd string
 	MoreRanges           int
 	Reservations         []DHCPReservationRow
+}
+
+// DHCPNetworkView is a network this server has an address on, with the
+// scope setup suggests for it.
+type DHCPNetworkView struct {
+	Interface, Address, Gateway string
+	Scope                       DHCPScopeView
 }
 
 // DHCPReservationRow is one reservation, with the expiry of the lease its
@@ -95,6 +110,9 @@ templ DHCPContent(view DHCPPageView) {
 			}
 			if view.CanConfigure {
 				@dhcpScopeDialog(DHCPScopeView{}, true)
+				for _, network := range view.Networks {
+					@dhcpScopeDialog(network.Scope, true)
+				}
 			}
 		} else {
 			@dhcpOverview(view)

@@ -101,11 +101,11 @@ func TestDHCPServiceOperatorCannotTurnTheServerOff(t *testing.T) {
 	t.Parallel()
 	server, configuration, _ := newDHCPTestServer(t)
 	operator := actor{principal: auth.Principal{UserID: 12, Username: "dhcp-operator", Permissions: builtInRolePermissions("Operator")}}
-	if err := server.dhcpService().SetEnabled(t.Context(), operator, false); err == nil || !configuration.snapshot.Config.DHCP.Enabled {
+	if err := server.dhcpService().SetEnabled(t.Context(), operator, false, false); err == nil || !configuration.snapshot.Config.DHCP.Enabled {
 		t.Fatalf("Operator SetEnabled(false) = %v, enabled %v; want refused and still on", err, configuration.snapshot.Config.DHCP.Enabled)
 	}
 	admin := actor{principal: auth.Principal{UserID: 1, Username: "admin", Permissions: builtInRolePermissions("Administrator")}}
-	if err := server.dhcpService().SetEnabled(t.Context(), admin, false); err != nil || configuration.snapshot.Config.DHCP.Enabled {
+	if err := server.dhcpService().SetEnabled(t.Context(), admin, false, false); err != nil || configuration.snapshot.Config.DHCP.Enabled {
 		t.Fatalf("Administrator SetEnabled(false) = %v, enabled %v", err, configuration.snapshot.Config.DHCP.Enabled)
 	}
 }

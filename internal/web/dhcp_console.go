@@ -3,6 +3,7 @@ package web
 import (
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/drudge/sable/internal/auth"
@@ -124,7 +125,30 @@ func (server *Server) dhcpPageView(request *http.Request) pages.DHCPPageView {
 		}
 		view.Scopes = append(view.Scopes, scopeView)
 	}
+	if len(view.Scopes) == 0 && view.CanConfigure {
+		view.Networks = server.dhcpNetworkViews(who)
+	}
 	return view
+}
+
+// dhcpNetworkViews is what setup offers: each host network with the scope
+// it suggests. A host whose networks can't be read offers none.
+func (server *Server) dhcpNetworkViews(who actor) []pages.DHCPNetworkView {
+	networks, err := server.dhcpService().Networks(who)
+	if err != nil {
+		server.logger.Warn("list host networks for DHCP setup", "error", err)
+	}
+	var views []pages.DHCPNetworkView
+	for index, network := range networks {
+		scope := dhcpScopeView(network.Suggested)
+		scope.Suggest = strconv.Itoa(index + 1)
+		view := pages.DHCPNetworkView{Interface: network.Interface, Address: network.Prefix.Addr().String(), Scope: scope}
+		if network.Gateway.IsValid() {
+			view.Gateway = network.Gateway.String()
+		}
+		views = append(views, view)
+	}
+	return views
 }
 
 // dhcpLeaseName is the name a lease registered, or the host name its client
