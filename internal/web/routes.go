@@ -475,6 +475,8 @@ func routeTable() []route {
 		{pattern: "POST /ui/dhcp/enabled", handler: (*Server).setDHCPEnabled, perm: auth.PermissionDHCPWrite},
 		{pattern: "GET /api/v1/dhcp", handler: (*Server).dhcpAPI, perm: auth.PermissionDHCPRead},
 		{pattern: "PUT /api/v1/dhcp", handler: (*Server).saveDHCPAPI, perm: auth.PermissionDHCPWrite, bodyLimit: dhcpSettingsLimit},
+		{pattern: "GET /api/v1/dhcp/networks", handler: (*Server).dhcpNetworksAPI, perm: auth.PermissionDHCPRead},
+		{pattern: "POST /api/v1/dhcp/probe", handler: (*Server).dhcpProbeAPI, perm: auth.PermissionDHCPWrite},
 		{pattern: "GET /api/v1/dhcp/leases", handler: (*Server).dhcpLeasesAPI, perm: auth.PermissionDHCPRead},
 		{pattern: "POST /api/v1/dhcp/leases/{address}/reserve", handler: (*Server).reserveDHCPLeaseAPI, perm: auth.PermissionDHCPWrite},
 		{pattern: "DELETE /api/v1/dhcp/leases/{address}", handler: (*Server).removeDHCPLeaseAPI, perm: auth.PermissionDHCPWrite},

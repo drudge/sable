@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -13,7 +14,7 @@ import (
 // they are.
 func (server *Server) saveDHCPScope(writer http.ResponseWriter, request *http.Request) {
 	id, add := strings.TrimSpace(request.FormValue("id")), request.FormValue("new") != ""
-	notice := "#" + pages.DHCPScopeNoticeID(id, add)
+	notice := "#" + pages.DHCPScopeNoticeID(id, request.FormValue("suggest"), add)
 	server.dhcpMutation(writer, request, notice, func(service dhcpService, who actor) (string, error) {
 		scope, err := dhcpScopeFromForm(service, who, id, add, request)
 		if err != nil {
@@ -37,14 +38,22 @@ func (server *Server) deleteDHCPScope(writer http.ResponseWriter, request *http.
 	})
 }
 
+// setDHCPEnabled turns the server on or off. When Turn On's probe finds
+// another server, the page says which and offers Turn On Anyway.
 func (server *Server) setDHCPEnabled(writer http.ResponseWriter, request *http.Request) {
-	server.dhcpMutation(writer, request, "#dhcp-notice", func(service dhcpService, who actor) (string, error) {
-		enabled := request.FormValue("enabled") == "true"
-		if err := service.SetEnabled(request.Context(), who, enabled); err != nil {
-			return "", err
-		}
-		return ifThenString(enabled, "Turned DHCP on", "Turned DHCP off"), nil
-	})
+	enabled, force := request.FormValue("enabled") == "true", request.FormValue("force") == "true"
+	err := server.dhcpService().SetEnabled(request.Context(), requestActor(request, ""), enabled, force)
+	var probed *dhcpProbeRefusal
+	switch {
+	case errors.As(err, &probed):
+		view := server.dhcpPageView(request)
+		view.Error, view.ProbeRefused = probed.Error(), true
+		server.render(writer, request, pages.DHCPContent(view))
+	case err != nil:
+		server.renderFormProblem(writer, request, "#dhcp-notice", err)
+	default:
+		server.renderDHCP(writer, request, ifThenString(enabled, "Turned DHCP on", "Turned DHCP off"))
+	}
 }
 
 // dhcpScopeFromForm starts from the saved scope, so a field the dialog

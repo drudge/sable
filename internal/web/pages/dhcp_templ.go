@@ -31,6 +31,11 @@ type DHCPPageView struct {
 	// CanConfigure says the viewer may add and edit scopes, which also
 	// needs settings.write (D47).
 	CanConfigure bool
+	// Networks are the host's networks without a scope, offered by setup.
+	Networks []DHCPNetworkView
+	// ProbeRefused says Turn On found another server, or couldn't look,
+	// so the header offers Turn On Anyway.
+	ProbeRefused bool
 	Message      string
 	Error        string
 }
@@ -56,11 +61,21 @@ type DHCPLeaseRow struct {
 // DHCPScopeView is one scope and its reservations.
 type DHCPScopeView struct {
 	ID, Name, Subnet, Router, Domain, DNS, Lease string
+	// Suggest keys an Add Scope dialog filled in from a host network, so
+	// each network gets its own.
+	Suggest string
 	// RangeStart and RangeEnd are the first range, the one the scope
 	// dialog edits; MoreRanges counts the others, set in sable.toml.
 	RangeStart, RangeEnd string
 	MoreRanges           int
 	Reservations         []DHCPReservationRow
+}
+
+// DHCPNetworkView is a network this server has an address on, with the
+// scope setup suggests for it.
+type DHCPNetworkView struct {
+	Interface, Address, Gateway string
+	Scope                       DHCPScopeView
 }
 
 // DHCPReservationRow is one reservation, with the expiry of the lease its
@@ -134,7 +149,7 @@ func DHCPContent(view DHCPPageView) templ.Component {
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templruntime.NewAttributeExpression(view.ActiveTab).Resolve(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 84, Col: 124}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 99, Col: 124}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var3)
 		if templ_7745c5c3_Err != nil {
@@ -193,6 +208,12 @@ func DHCPContent(view DHCPPageView) templ.Component {
 				templ_7745c5c3_Err = dhcpScopeDialog(DHCPScopeView{}, true).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
+				}
+				for _, network := range view.Networks {
+					templ_7745c5c3_Err = dhcpScopeDialog(network.Scope, true).Render(ctx, templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
 				}
 			}
 		} else {
@@ -439,7 +460,7 @@ func dhcpLeasesPanel(view DHCPPageView) templ.Component {
 					var templ_7745c5c3_Var8 string
 					templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(dhcpDisplayName(lease.Name))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 186, Col: 73}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 204, Col: 73}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 					if templ_7745c5c3_Err != nil {
@@ -452,7 +473,7 @@ func dhcpLeasesPanel(view DHCPPageView) templ.Component {
 					var templ_7745c5c3_Var9 string
 					templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(lease.Address)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 186, Col: 119}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 204, Col: 119}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 					if templ_7745c5c3_Err != nil {
@@ -465,7 +486,7 @@ func dhcpLeasesPanel(view DHCPPageView) templ.Component {
 					var templ_7745c5c3_Var10 string
 					templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(lease.MAC)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 186, Col: 160}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 204, Col: 160}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 					if templ_7745c5c3_Err != nil {
@@ -478,7 +499,7 @@ func dhcpLeasesPanel(view DHCPPageView) templ.Component {
 					var templ_7745c5c3_Var11 string
 					templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs("Expires " + FormatShortDateTime(lease.Expires, view.Console.TimeDisplay, false))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 186, Col: 259}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 204, Col: 259}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 					if templ_7745c5c3_Err != nil {
@@ -521,7 +542,7 @@ func dhcpLeasesPanel(view DHCPPageView) templ.Component {
 						var templ_7745c5c3_Var13 string
 						templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(lease.Address)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 194, Col: 31}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 212, Col: 31}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 						if templ_7745c5c3_Err != nil {
@@ -534,7 +555,7 @@ func dhcpLeasesPanel(view DHCPPageView) templ.Component {
 						var templ_7745c5c3_Var14 string
 						templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(dhcpDisplayName(lease.Name))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 195, Col: 39}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 213, Col: 39}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 						if templ_7745c5c3_Err != nil {
@@ -547,7 +568,7 @@ func dhcpLeasesPanel(view DHCPPageView) templ.Component {
 						var templ_7745c5c3_Var15 string
 						templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(lease.MAC)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 196, Col: 27}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 214, Col: 27}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 						if templ_7745c5c3_Err != nil {
@@ -560,7 +581,7 @@ func dhcpLeasesPanel(view DHCPPageView) templ.Component {
 						var templ_7745c5c3_Var16 string
 						templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(dhcpScopeName(view.Scopes, lease.Scope))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 197, Col: 70}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 215, Col: 70}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 						if templ_7745c5c3_Err != nil {
@@ -573,7 +594,7 @@ func dhcpLeasesPanel(view DHCPPageView) templ.Component {
 						var templ_7745c5c3_Var17 string
 						templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(FormatShortDateTime(lease.Expires, view.Console.TimeDisplay, false))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 198, Col: 98}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 216, Col: 98}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 						if templ_7745c5c3_Err != nil {
@@ -649,7 +670,7 @@ func dhcpLeaseActions(view DHCPPageView, lease DHCPLeaseRow) templ.Component {
 				var templ_7745c5c3_Var19 string
 				templ_7745c5c3_Var19, templ_7745c5c3_Err = templruntime.NewAttributeExpression("Reserve " + lease.Address).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 214, Col: 84}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 232, Col: 84}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var19)
 				if templ_7745c5c3_Err != nil {
@@ -662,7 +683,7 @@ func dhcpLeaseActions(view DHCPPageView, lease DHCPLeaseRow) templ.Component {
 				var templ_7745c5c3_Var20 string
 				templ_7745c5c3_Var20, templ_7745c5c3_Err = templruntime.NewAttributeExpression(lease.Address).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 214, Col: 149}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 232, Col: 149}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
 				if templ_7745c5c3_Err != nil {
@@ -711,7 +732,7 @@ func dhcpLeaseActions(view DHCPPageView, lease DHCPLeaseRow) templ.Component {
 				var templ_7745c5c3_Var21 string
 				templ_7745c5c3_Var21, templ_7745c5c3_Err = templruntime.NewAttributeExpression("Remove the lease on " + lease.Address).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 217, Col: 103}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 235, Col: 103}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
 				if templ_7745c5c3_Err != nil {
@@ -732,7 +753,7 @@ func dhcpLeaseActions(view DHCPPageView, lease DHCPLeaseRow) templ.Component {
 				var templ_7745c5c3_Var22 string
 				templ_7745c5c3_Var22, templ_7745c5c3_Err = templruntime.NewAttributeExpression("Remove the lease on " + lease.Address + "? The device keeps the address until it next renews, then asks for one again.").Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 217, Col: 357}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 235, Col: 357}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 				if templ_7745c5c3_Err != nil {
@@ -874,7 +895,7 @@ func dhcpReservationsPanel(view DHCPPageView) templ.Component {
 								var templ_7745c5c3_Var27 string
 								templ_7745c5c3_Var27, templ_7745c5c3_Err = templruntime.NewAttributeExpression(dhcpReservationDialogID(reservation)).Resolve(ctx)
 								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 242, Col: 84}
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 260, Col: 84}
 								}
 								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var27)
 								if templ_7745c5c3_Err != nil {
@@ -892,7 +913,7 @@ func dhcpReservationsPanel(view DHCPPageView) templ.Component {
 							var templ_7745c5c3_Var28 string
 							templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(dhcpDisplayName(reservation.Name))
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 243, Col: 46}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 261, Col: 46}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 							if templ_7745c5c3_Err != nil {
@@ -905,7 +926,7 @@ func dhcpReservationsPanel(view DHCPPageView) templ.Component {
 							var templ_7745c5c3_Var29 string
 							templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(reservation.Address)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 244, Col: 38}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 262, Col: 38}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 							if templ_7745c5c3_Err != nil {
@@ -918,7 +939,7 @@ func dhcpReservationsPanel(view DHCPPageView) templ.Component {
 							var templ_7745c5c3_Var30 string
 							templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(reservation.MAC)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 245, Col: 34}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 263, Col: 34}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 							if templ_7745c5c3_Err != nil {
@@ -931,7 +952,7 @@ func dhcpReservationsPanel(view DHCPPageView) templ.Component {
 							var templ_7745c5c3_Var31 string
 							templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(dhcpReservationLease(view, reservation))
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 246, Col: 71}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 264, Col: 71}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 							if templ_7745c5c3_Err != nil {
@@ -944,7 +965,7 @@ func dhcpReservationsPanel(view DHCPPageView) templ.Component {
 							var templ_7745c5c3_Var32 string
 							templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(reservation.Comment)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 247, Col: 51}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 265, Col: 51}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 							if templ_7745c5c3_Err != nil {
@@ -1005,7 +1026,7 @@ func dhcpReservationMobileRow(view DHCPPageView, reservation DHCPReservationRow)
 		var templ_7745c5c3_Var34 string
 		templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(dhcpDisplayName(reservation.Name))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 259, Col: 75}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 277, Col: 75}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 		if templ_7745c5c3_Err != nil {
@@ -1018,7 +1039,7 @@ func dhcpReservationMobileRow(view DHCPPageView, reservation DHCPReservationRow)
 		var templ_7745c5c3_Var35 string
 		templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(reservation.Address)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 259, Col: 127}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 277, Col: 127}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 		if templ_7745c5c3_Err != nil {
@@ -1031,7 +1052,7 @@ func dhcpReservationMobileRow(view DHCPPageView, reservation DHCPReservationRow)
 		var templ_7745c5c3_Var36 string
 		templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(reservation.MAC)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 259, Col: 174}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 277, Col: 174}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 		if templ_7745c5c3_Err != nil {
@@ -1044,7 +1065,7 @@ func dhcpReservationMobileRow(view DHCPPageView, reservation DHCPReservationRow)
 		var templ_7745c5c3_Var37 string
 		templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(ifThen(reservation.LeaseExpires.IsZero(), "No lease now", "Leased until "+FormatShortDateTime(reservation.LeaseExpires, view.Console.TimeDisplay, false)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 259, Col: 348}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 277, Col: 348}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 		if templ_7745c5c3_Err != nil {
@@ -1091,7 +1112,7 @@ func dhcpReservationActions(view DHCPPageView, reservation DHCPReservationRow) t
 			var templ_7745c5c3_Var39 string
 			templ_7745c5c3_Var39, templ_7745c5c3_Err = templruntime.NewAttributeExpression("Edit the reservation for " + dhcpReservationLabel(reservation)).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 267, Col: 121}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 285, Col: 121}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var39)
 			if templ_7745c5c3_Err != nil {
@@ -1104,7 +1125,7 @@ func dhcpReservationActions(view DHCPPageView, reservation DHCPReservationRow) t
 			var templ_7745c5c3_Var40 string
 			templ_7745c5c3_Var40, templ_7745c5c3_Err = templruntime.NewAttributeExpression(dhcpReservationDialogID(reservation)).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 267, Col: 179}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 285, Col: 179}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var40)
 			if templ_7745c5c3_Err != nil {
@@ -1133,7 +1154,7 @@ func dhcpReservationActions(view DHCPPageView, reservation DHCPReservationRow) t
 				var templ_7745c5c3_Var41 string
 				templ_7745c5c3_Var41, templ_7745c5c3_Err = templruntime.NewAttributeExpression("Remove the reservation for " + dhcpReservationLabel(reservation)).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 268, Col: 130}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 286, Col: 130}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var41)
 				if templ_7745c5c3_Err != nil {
@@ -1154,7 +1175,7 @@ func dhcpReservationActions(view DHCPPageView, reservation DHCPReservationRow) t
 				var templ_7745c5c3_Var42 string
 				templ_7745c5c3_Var42, templ_7745c5c3_Err = templruntime.NewAttributeExpression("Remove the reservation for " + dhcpReservationLabel(reservation) + "? " + reservation.Address + " goes back to the pool once its lease ends.").Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 268, Col: 423}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 286, Col: 423}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var42)
 				if templ_7745c5c3_Err != nil {
@@ -1229,7 +1250,7 @@ func dhcpReservationDialog(view DHCPPageView, reservation DHCPReservationRow, ad
 			var templ_7745c5c3_Var45 string
 			templ_7745c5c3_Var45, templ_7745c5c3_Err = templruntime.NewAttributeExpression(DHCPReservationNoticeID(reservation.Scope, reservation.MAC, add)).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 280, Col: 103}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 298, Col: 103}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var45)
 			if templ_7745c5c3_Err != nil {
@@ -1252,7 +1273,7 @@ func dhcpReservationDialog(view DHCPPageView, reservation DHCPReservationRow, ad
 					var templ_7745c5c3_Var46 string
 					templ_7745c5c3_Var46, templ_7745c5c3_Err = templruntime.NewAttributeExpression(scope.ID).Resolve(ctx)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 284, Col: 31}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 302, Col: 31}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var46)
 					if templ_7745c5c3_Err != nil {
@@ -1265,7 +1286,7 @@ func dhcpReservationDialog(view DHCPPageView, reservation DHCPReservationRow, ad
 					var templ_7745c5c3_Var47 string
 					templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinStringErrs(scope.Name + " (" + scope.Subnet + ")")
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 284, Col: 74}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 302, Col: 74}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
 					if templ_7745c5c3_Err != nil {
@@ -1288,7 +1309,7 @@ func dhcpReservationDialog(view DHCPPageView, reservation DHCPReservationRow, ad
 				var templ_7745c5c3_Var48 string
 				templ_7745c5c3_Var48, templ_7745c5c3_Err = templruntime.NewAttributeExpression(reservation.Scope).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 288, Col: 64}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 306, Col: 64}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var48)
 				if templ_7745c5c3_Err != nil {
@@ -1316,7 +1337,7 @@ func dhcpReservationDialog(view DHCPPageView, reservation DHCPReservationRow, ad
 				var templ_7745c5c3_Var49 string
 				templ_7745c5c3_Var49, templ_7745c5c3_Err = templruntime.NewAttributeExpression(reservation.MAC).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 294, Col: 60}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 312, Col: 60}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var49)
 				if templ_7745c5c3_Err != nil {

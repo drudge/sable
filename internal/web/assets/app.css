@@ -3886,15 +3886,15 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 /* TSIG keys. A row states the algorithm, whether the vault holds a secret, and
    which zones depend on the key, because removing one breaks every transfer
    and update it guards. */
-.tsig-key-list { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); }
-.tsig-key-row { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr) auto 2rem; align-items: center; gap: var(--space-3); border-top: 1px solid var(--border); padding: var(--space-3) var(--space-4); }
-.tsig-key-row:first-child { border-top: 0; }
-.tsig-key-row:hover { background: color-mix(in oklch, var(--muted) 45%, transparent); }
-.tsig-key-icon { display: grid; place-items: center; color: var(--muted-foreground); }
-.tsig-key-icon .nav-icon { width: 1rem; height: 1rem; }
-.tsig-key-row > div { display: grid; min-width: 0; gap: .15rem; }
-.tsig-key-row strong { font: 500 .875rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-wrap: anywhere; }
-.tsig-key-row small { color: var(--muted-foreground); font-size: .7rem; overflow-wrap: anywhere; }
+.tsig-key-list, .dhcp-network-list { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); }
+.tsig-key-row, .dhcp-network-row { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr) auto 2rem; align-items: center; gap: var(--space-3); border-top: 1px solid var(--border); padding: var(--space-3) var(--space-4); }
+.tsig-key-row:first-child, .dhcp-network-row:first-child { border-top: 0; }
+.tsig-key-row:hover, .dhcp-network-row:hover { background: color-mix(in oklch, var(--muted) 45%, transparent); }
+.tsig-key-icon, .dhcp-network-icon { display: grid; place-items: center; color: var(--muted-foreground); }
+.tsig-key-icon .nav-icon, .dhcp-network-icon .nav-icon { width: 1rem; height: 1rem; }
+.tsig-key-row > div, .dhcp-network-row > div { display: grid; min-width: 0; gap: .15rem; }
+.tsig-key-row strong, .dhcp-network-row strong { font: 500 .875rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-wrap: anywhere; }
+.tsig-key-row small, .dhcp-network-row small { color: var(--muted-foreground); font-size: .7rem; overflow-wrap: anywhere; }
 .tsig-key-warning { display: flex; align-items: center; gap: .3rem; color: var(--destructive); }
 .tsig-key-warning .nav-icon { width: .85rem; height: .85rem; flex: 0 0 auto; }
 .tsig-empty { gap: .35rem; padding: 2.5rem var(--space-4); }
@@ -3908,6 +3908,12 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
   .tsig-key-row { grid-template-columns: 1.5rem minmax(0, 1fr) 2rem; padding-inline: var(--space-3); }
   .tsig-key-row .button.compact { grid-column: 2 / -1; justify-self: start; }
 }
+
+/* DHCP setup lists the host's networks in the same divided rows: an icon,
+   the interface and address, and Set Up. */
+.dhcp-network-row { grid-template-columns: 1.5rem minmax(0, 1fr) auto; }
+.dhcp-setup-networks { display: grid; gap: var(--space-3); padding: 0 var(--space-6) var(--space-6); }
+.dhcp-setup-networks > h4 { font-size: .8rem; font-weight: 500; color: var(--muted-foreground); }
 
 /* Motion preferences cover every interaction, including swapped fragments and
    third-party loading indicators, rather than relying on each component. */

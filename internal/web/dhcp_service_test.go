@@ -19,8 +19,22 @@ import (
 // testDHCPController keeps leases in memory and removes them as the engine
 // does: the row stays, released.
 type testDHCPController struct {
-	mutex  sync.Mutex
-	leases []store.DHCPLease
+	mutex    sync.Mutex
+	leases   []store.DHCPLease
+	networks []DHCPNetwork
+	others   []DHCPOtherServer
+	probes   int
+}
+
+func (controller *testDHCPController) Networks() ([]DHCPNetwork, error) {
+	return controller.networks, nil
+}
+
+func (controller *testDHCPController) FindOthers(context.Context, config.DHCP) ([]DHCPOtherServer, error) {
+	controller.mutex.Lock()
+	defer controller.mutex.Unlock()
+	controller.probes++
+	return controller.others, nil
 }
 
 func (controller *testDHCPController) Status() DHCPStatus {
