@@ -101,7 +101,7 @@ These actions require their matching administrative permissions. Reload responds
 | `PUT /api/v1/dhcp/scopes/{scope}/reservations/{mac}` | Sets the reservation for a hardware address: a body with `address`, and optionally `name` and `comment` |
 | `DELETE /api/v1/dhcp/scopes/{scope}/reservations/{mac}` | Removes the reservation for a hardware address |
 
-Reading needs `dhcp.read` and changing needs `dhcp.write`. Changes are validated as a whole, like an edit to `sable.toml`, and a replica refuses them. Keys are the ones in [the DHCP configuration](../configuration.md#dhcp-server), and durations are strings such as `12h`. An unknown key is refused.
+Reading needs `dhcp.read` and changing needs `dhcp.write`. Replacing the whole section with `PUT /api/v1/dhcp` needs `settings.write` too, since a scope's domain becomes a Primary zone and its router and DNS servers go to every client. Changes are validated as a whole, like an edit to `sable.toml`, and a replica refuses them. Keys are the ones in [the DHCP configuration](../configuration.md#dhcp-server), and durations are strings such as `12h`. An unknown key is refused.
 
 ```sh
 curl --fail-with-body -X PUT \
