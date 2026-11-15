@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"maps"
 	"slices"
@@ -15,7 +16,27 @@ const (
 	// leaseBatchLimit caps the leases one heartbeat or sync response
 	// carries; the rest follow on the next beats (docs/design/dhcp.md §3).
 	leaseBatchLimit = 500
+	// leaseBatchBytes caps the same batch by its encoded size, well inside
+	// MaximumHeartbeatBytes: a row keeps what the client sent, and 500 rows
+	// at the wire's maximum are over two megabytes.
+	leaseBatchBytes = 256 << 10
 )
+
+// fitLeaseBatch cuts rows to leaseBatchBytes of JSON, keeping at least one
+// so the mirror always moves on.
+func fitLeaseBatch(rows []SharedLease) []SharedLease {
+	size := 0
+	for index, row := range rows {
+		encoded, err := json.Marshal(row)
+		if err != nil {
+			return rows[:index]
+		}
+		if size += len(encoded) + 1; size > leaseBatchBytes && index > 0 {
+			return rows[:index]
+		}
+	}
+	return rows
+}
 
 // SharedLease is a DHCP lease as it crosses between nodes. Seq is the
 // owner's sequence number, which every mirror keeps.
@@ -90,7 +111,7 @@ func (service *Service) leaseReportForPrimary(ctx context.Context) (*LeaseReport
 		service.warnLeaseMirror("read DHCP leases to mirror", err)
 		return nil, ""
 	}
-	return &LeaseReport{Held: held, Rows: rows}, primaryID
+	return &LeaseReport{Held: held, Rows: fitLeaseBatch(rows)}, primaryID
 }
 
 // exchangeLeases is the primary's side: it mirrors the sender's own leases,
@@ -102,6 +123,13 @@ func (service *Service) exchangeLeases(ctx context.Context, mirror LeaseMirror, 
 	if report != nil {
 		own := slices.DeleteFunc(slices.Clone(report.Rows), func(row SharedLease) bool { return row.NodeID != from })
 		service.mirrorLeases(ctx, mirror, own)
+	}
+	if report != nil {
+		// A primary rebuilt from a backup counts again from below what the
+		// replicas hold of it, as a wiped replica does (receiveLeases).
+		if _, err := mirror.Raise(ctx, service.nodeID, report.Held[service.nodeID]); err != nil {
+			service.warnLeaseMirror("raise the DHCP lease counter", err)
+		}
 	}
 	held, err := mirror.Held(ctx)
 	if err != nil {
@@ -124,6 +152,7 @@ func (service *Service) exchangeLeases(ctx context.Context, mirror LeaseMirror, 
 		}
 		answer.Rows = append(answer.Rows, rows...)
 	}
+	answer.Rows = fitLeaseBatch(answer.Rows)
 	return answer
 }
 
