@@ -1,0 +1,5 @@
+{"meta":{"rc":"ok"},"data":[
+ {"mac":"00:11:22:33:44:50","name":"Office AP","hostname":"uap","use_fixedip":true,"fixed_ip":"10.0.7.50","note":"closet"},
+ {"mac":"00:11:22:33:44:51","hostname":"guest","use_fixedip":false,"fixed_ip":"10.0.7.51"},
+ {"mac":"00:11:22:33:44:52","hostname":"sensor","use_fixedip":true,"fixed_ip":"10.0.7.52"}
+]}

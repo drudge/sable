@@ -1,0 +1,2 @@
+{"enabled":true,"interface_name":"eth0","v4":{"gateway_ip":"10.0.7.1"},"leases":[{"mac":"00:11:22:33:44:31","ip":"10.0.7.160","hostname":"dyn","expires":"2026-11-16T10:00:00Z"}],
+ "static_leases":[{"mac":"00:11:22:33:44:30","ip":"10.0.7.30","hostname":"camera"}]}
