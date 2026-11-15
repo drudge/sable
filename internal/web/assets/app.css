@@ -844,6 +844,11 @@ textarea:focus { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in o
 [data-block-list-add].htmx-request .block-list-add-pending { display: inline-flex; }
 [data-block-list-add].htmx-request .icon-loader-circle { animation: blocking-refresh-spin .8s linear infinite; }
 .block-list-add-button:disabled { cursor: wait; }
+.button .button-idle, .button .button-pending { display: inline-flex; align-items: center; gap: inherit; }
+.button .button-pending, .button.htmx-request .button-idle { display: none; }
+.button.htmx-request .button-pending { display: inline-flex; }
+.button.htmx-request { cursor: wait; }
+.button.htmx-request .icon-loader-circle { animation: blocking-refresh-spin .8s linear infinite; }
 .dashboard-footer { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-1) var(--space-1) 0; color: var(--muted-foreground); font-size: .7rem; }
 .dashboard-footer-status { display: inline-flex; flex: 0 0 auto; align-items: center; gap: .35rem; color: var(--foreground); }
 .dashboard-footer-details { display: flex; min-width: 0; flex: 1; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .35rem var(--space-4); }
@@ -2305,11 +2310,11 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 .cluster-status-card > header h2 > span { min-width: 0; }
 .cluster-status-card > header h2 .nav-icon { width: var(--status-card-title-icon-size); height: var(--status-card-title-icon-size); color: var(--info); }
 .cluster-status-card > header p { margin: .35rem 0 0; color: var(--muted-foreground); font-size: .8rem; }
-.cluster-empty-state { min-height: 18rem; gap: .55rem; padding: var(--space-8); }
-.cluster-empty-state > .empty-state-icon { width: 3.5rem; height: 3.5rem; border-radius: 999px; background: var(--muted); }
-.cluster-empty-state > .empty-state-icon .nav-icon { width: 1.65rem; height: 1.65rem; }
-.cluster-empty-state h3 { margin: .4rem 0 0; font-size: 1.05rem; }
-.cluster-empty-state p { max-width: 28rem; font-size: .8rem; line-height: 1.5; }
+.cluster-empty-state, .dhcp-setup-empty { min-height: 18rem; gap: .55rem; padding: var(--space-8); }
+.cluster-empty-state > .empty-state-icon, .dhcp-setup-empty > .empty-state-icon { width: 3.5rem; height: 3.5rem; border-radius: 999px; background: var(--muted); }
+.cluster-empty-state > .empty-state-icon .nav-icon, .dhcp-setup-empty > .empty-state-icon .nav-icon { width: 1.65rem; height: 1.65rem; }
+.cluster-empty-state h3, .dhcp-setup-empty h3 { margin: .4rem 0 0; font-size: 1.05rem; }
+.cluster-empty-state p, .dhcp-setup-empty p { max-width: 28rem; font-size: .8rem; line-height: 1.5; }
 .cluster-restart-notice { display: flex; max-width: 30rem; align-items: center; gap: var(--space-2); border: 1px solid var(--warning-strong); border-radius: .5rem; background: rgb(217 119 6 / .08); padding: .65rem .8rem; color: color-mix(in oklch, var(--warning-strong) 72%, var(--foreground)); font-size: .72rem; line-height: 1.4; text-align: left; }
 .cluster-restart-notice .nav-icon { width: .95rem; height: .95rem; flex: 0 0 .95rem; }
 .cluster-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: .6rem; margin-top: var(--space-3); }
@@ -2667,6 +2672,8 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 .mobile-role-list { display: flex; min-width: 0; flex-wrap: wrap; gap: var(--space-1); color: var(--muted-foreground); }
 .admin-mobile-group-row > div.admin-mobile-group-copy { grid-template-columns: minmax(0, 1fr); gap: .35rem; }
 .dhcp-mobile-row > div.dhcp-mobile-copy { grid-template-columns: minmax(0, 1fr); gap: .35rem; }
+.dhcp-page .page-header > .button, .dhcp-range-cell { flex: none; white-space: nowrap; }
+.dhcp-setup-empty > .button { margin-top: var(--space-2); }
 .dhcp-mobile-copy small.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 .admin-mobile-user-trailing, .admin-mobile-group-trailing { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-3); }
 .admin-mobile-user-statuses { display: flex; align-items: center; gap: .3rem; }
@@ -3884,15 +3891,15 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 /* TSIG keys. A row states the algorithm, whether the vault holds a secret, and
    which zones depend on the key, because removing one breaks every transfer
    and update it guards. */
-.tsig-key-list { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); }
-.tsig-key-row { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr) auto 2rem; align-items: center; gap: var(--space-3); border-top: 1px solid var(--border); padding: var(--space-3) var(--space-4); }
-.tsig-key-row:first-child { border-top: 0; }
-.tsig-key-row:hover { background: color-mix(in oklch, var(--muted) 45%, transparent); }
-.tsig-key-icon { display: grid; place-items: center; color: var(--muted-foreground); }
-.tsig-key-icon .nav-icon { width: 1rem; height: 1rem; }
-.tsig-key-row > div { display: grid; min-width: 0; gap: .15rem; }
-.tsig-key-row strong { font: 500 .875rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-wrap: anywhere; }
-.tsig-key-row small { color: var(--muted-foreground); font-size: .7rem; overflow-wrap: anywhere; }
+.tsig-key-list, .dhcp-network-list { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); }
+.tsig-key-row, .dhcp-network-row { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr) auto 2rem; align-items: center; gap: var(--space-3); border-top: 1px solid var(--border); padding: var(--space-3) var(--space-4); }
+.tsig-key-row:first-child, .dhcp-network-row:first-child { border-top: 0; }
+.tsig-key-row:hover, .dhcp-network-row:hover { background: color-mix(in oklch, var(--muted) 45%, transparent); }
+.tsig-key-icon, .dhcp-network-icon { display: grid; place-items: center; color: var(--muted-foreground); }
+.tsig-key-icon .nav-icon, .dhcp-network-icon .nav-icon { width: 1rem; height: 1rem; }
+.tsig-key-row > div, .dhcp-network-row > div { display: grid; min-width: 0; gap: .15rem; }
+.tsig-key-row strong, .dhcp-network-row strong { font: 500 .875rem ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-wrap: anywhere; }
+.tsig-key-row small, .dhcp-network-row small { color: var(--muted-foreground); font-size: .7rem; overflow-wrap: anywhere; }
 .tsig-key-warning { display: flex; align-items: center; gap: .3rem; color: var(--destructive); }
 .tsig-key-warning .nav-icon { width: .85rem; height: .85rem; flex: 0 0 auto; }
 .tsig-empty { gap: .35rem; padding: 2.5rem var(--space-4); }
@@ -3906,6 +3913,12 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
   .tsig-key-row { grid-template-columns: 1.5rem minmax(0, 1fr) 2rem; padding-inline: var(--space-3); }
   .tsig-key-row .button.compact { grid-column: 2 / -1; justify-self: start; }
 }
+
+/* DHCP setup lists the host's networks in the same divided rows: an icon,
+   the interface and address, and Set Up. */
+.dhcp-network-row { grid-template-columns: 1.5rem minmax(0, 1fr) auto; }
+.dhcp-setup-networks { display: grid; gap: var(--space-3); padding: 0 var(--space-6) var(--space-6); }
+.dhcp-setup-networks > h4 { font-size: .8rem; font-weight: 500; color: var(--muted-foreground); }
 
 /* Motion preferences cover every interaction, including swapped fragments and
    third-party loading indicators, rather than relying on each component. */

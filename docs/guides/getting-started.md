@@ -11,7 +11,7 @@ Moving an existing deployment? Follow [Migrate from Technitium](technitium-migra
 - Have access to the host console in case a network change interrupts name resolution.
 - Decide who may reach the administrative console. Keep it private; do not expose an unrestricted recursive DNS service to the internet.
 
-Sable is a DNS server, not a DHCP server. Your router or existing DHCP service will advertise its address to clients later.
+Your router or existing DHCP service will advertise Sable's address to clients later. Sable can take over DHCP too, once DNS works: see [Hand out addresses with DHCP](dhcp.md).
 
 ## 1. Install a node
 

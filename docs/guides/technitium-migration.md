@@ -51,7 +51,7 @@ List each forward and reverse zone, its type, serial, signing status, update wri
 | APP records and DNS apps | Replace the behavior explicitly; Sable's text importer skips Technitium APP records and reports their names |
 | FWD or ANAME records | Review against Sable's [FWD](../reference/records/fwd.md) and [ANAME](../reference/records/aname.md) semantics; successful parsing alone does not prove equivalent behavior |
 | Blocking, exceptions, resolver settings, and access rules | Recreate and test the [blocking](blocking.md) and [forwarding](forwarding.md) policies |
-| DHCP, reservations, and DHCP-generated names | Keep or replace the DHCP service separately; Sable does not provide DHCP |
+| DHCP, reservations, and DHCP-generated names | Import the reservations into a Sable scope and switch over as in [Hand out addresses with DHCP](dhcp.md); names register in the scope's domain |
 | Dynamic update scripts and integrations | Reconfigure endpoints and credentials using [RFC 2136](dynamic-updates.md), [Dynamic DNS](dynamic-dns.md), or [UniFi sync](unifi.md) as appropriate |
 | Users, API tokens, certificates, and TSIG secrets | Configure these separately; zone files and AXFR do not carry them |
 
