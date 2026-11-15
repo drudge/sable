@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/drudge/sable/internal/cluster"
@@ -43,6 +44,9 @@ type dhcpService struct {
 	// changed is told when a lease or the settings change, so the names
 	// follow. Nil skips it.
 	changed func()
+
+	// current is the server that last bound port 67, for removals.
+	current atomic.Pointer[dhcpServer]
 
 	mutex   sync.Mutex
 	active  config.DHCP
@@ -187,6 +191,7 @@ func (service *dhcpService) bind(ctx context.Context, server *dhcpServer) error 
 	if !server.reload(ctx) {
 		server.stale = true
 	}
+	service.current.Store(server)
 	service.logger.Info("DHCP server started", "port", service.port)
 	return nil
 }
@@ -209,6 +214,7 @@ func (service *dhcpService) stopLocked() {
 	service.running.cancel()
 	<-service.running.done
 	service.running = nil
+	service.current.Store(nil)
 }
 
 func (service *dhcpService) save(ctx context.Context, leases []dhcp.Lease) error {

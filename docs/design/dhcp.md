@@ -249,7 +249,8 @@ a host-network container. The namespace spike covers the protocol. This check co
   the range and options, enable. A lease row has **Reserve** and **Remove**. A reservation row has
   **Edit**, **Remove**, and, when it has a live lease, the lease's expiry.
 - **API:** `GET/PUT /api/v1/dhcp`, `/dhcp/scopes`, `/dhcp/scopes/{id}`,
-  `/dhcp/scopes/{id}/reservations`, `GET /dhcp/leases`, `POST /dhcp/leases/{address}/reserve`,
+  `PUT/DELETE /dhcp/scopes/{id}/reservations/{mac}` (one reservation per call, like the MCP tools),
+  `GET /dhcp/leases`, `POST /dhcp/leases/{address}/reserve`,
   `DELETE /dhcp/leases/{address}`, `DELETE /dhcp/leases?scope={id}`, `POST /dhcp/probe`, and
   `POST /dhcp/import`.
 - **MCP:** `get_dhcp_status`, `list_dhcp_leases`, `set_dhcp_reservation`, and
