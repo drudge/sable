@@ -105,9 +105,10 @@ These actions require their matching administrative permissions. Reload responds
 | `DELETE /api/v1/dhcp/scopes/{scope}` | Removes the scope and its reservations. Its leases end when they expire |
 | `PUT /api/v1/dhcp/scopes/{scope}/reservations/{mac}` | Sets the reservation for a hardware address: a body with `address`, and optionally `name` and `comment` |
 | `DELETE /api/v1/dhcp/scopes/{scope}/reservations/{mac}` | Removes the reservation for a hardware address |
+| `POST /api/v1/dhcp/takeover` | Pins every range of an offline cluster node, named by `node` (its ID) in the body, to the primary that receives it, so the primary serves them. Refused while the node is online |
 | `POST /api/v1/dhcp/import` | Adds the reservations in another server's export, sent as the body: dnsmasq `dhcp-host` lines, AdGuard Home's `leases.json`, a Technitium scope from `/api/dhcp/scopes/get`, or a UniFi `rest/user` list. `scope` names the scope (it can be left out when there's one), and `dry_run=true` reports without saving. A reservation the scope already has is never replaced; the reply lists what was `added`, `skipped` and why |
 
-Reading needs `dhcp.read` and changing needs `dhcp.write`. Replacing the whole section with `PUT /api/v1/dhcp`, or saving or removing a scope, needs `settings.write` too, since a scope's domain becomes a Primary zone and its router and DNS servers go to every client. Changes are validated as a whole, like an edit to `sable.toml`, and a replica refuses them. Keys are the ones in [the DHCP configuration](../configuration.md#dhcp-server), and durations are strings such as `12h`. An unknown key is refused.
+Reading needs `dhcp.read` and changing needs `dhcp.write`. Replacing the whole section with `PUT /api/v1/dhcp`, saving or removing a scope, or taking over a node's ranges, needs `settings.write` too, since a scope's domain becomes a Primary zone and its router and DNS servers go to every client. Changes are validated as a whole, like an edit to `sable.toml`, and a replica refuses them. Keys are the ones in [the DHCP configuration](../configuration.md#dhcp-server), and durations are strings such as `12h`. An unknown key is refused.
 
 ```sh
 curl --fail-with-body -X PUT \

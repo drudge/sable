@@ -742,7 +742,10 @@ every `node` must be a current member, and the primary refuses a range without
 one, since every node would lease from it. A node leases only from its own
 ranges, so two nodes that lose touch never hand out the same address. Size each
 node's ranges to carry the whole network, so losing a node never empties a
-pool. Every node answers a scope's reservations.
+pool. Every node answers a scope's reservations. The console's scope dialog
+splits a cluster scope's range evenly across the nodes, and **Take Over DHCP
+Ranges** on the Cluster page pins an offline node's ranges to the primary
+([On a cluster](guides/dhcp.md#on-a-cluster)).
 
 **Reservations** give one MAC address a fixed address inside the subnet. A scope
 allows one reservation per MAC address, per address, and per name, and a name

@@ -80,6 +80,12 @@ type ClusterNodeView struct {
 	Local bool
 	// Link is the address of the node's details panel.
 	Link string
+	// DHCPRanges counts the DHCP ranges pinned to the node; an offline
+	// replica with some offers Take Over DHCP Ranges.
+	DHCPRanges int
+	// DHCPTakeover is set on this node when it's a replica whose primary
+	// has DHCP ranges: promoting it for recovery takes them over too.
+	DHCPTakeover, DHCPTakeoverName string
 }
 
 templ ClusterPage(view ClusterPageView) {
@@ -606,10 +612,15 @@ templ clusterNodeActions(node ClusterNodeView, localRole string, inPanel bool) {
 					if inPanel {
 						hx-replace-url="/cluster"
 					}
-					hx-confirm="Promote this replica for recovery? Ensure the former primary is offline to avoid two writable primaries."
+					hx-confirm={ clusterPromoteConfirm(node) }
 					data-confirm-title="Promote for recovery?"
 					data-confirm-action="Promote"
-				><button class={ clusterNodeActionClass(inPanel, false) } type="submit">@Icon("arrow-right")<span>Promote This Replica</span></button></form>
+				>
+					if node.DHCPTakeover != "" {
+						<input type="hidden" name="dhcp_takeover" value={ node.DHCPTakeover }/>
+					}
+					<button class={ clusterNodeActionClass(inPanel, false) } type="submit">@Icon("arrow-right")<span>Promote This Replica</span></button>
+				</form>
 			}
 			if clusterNodeManaged(node, localRole) {
 				<form
@@ -624,6 +635,23 @@ templ clusterNodeActions(node ClusterNodeView, localRole string, inPanel bool) {
 					data-confirm-title="Remove replica?"
 					data-confirm-action="Remove Replica"
 				><button class={ clusterNodeActionClass(inPanel, true) } type="submit">@Icon("trash")<span>Remove Replica</span></button></form>
+				if node.State != "online" && node.DHCPRanges > 0 {
+					<form
+						hx-post="/ui/dhcp/takeover"
+						hx-target="#cluster-content"
+						hx-swap="outerHTML"
+						hx-sync="#cluster-content:replace"
+						if inPanel {
+							hx-replace-url="/cluster"
+						}
+						hx-confirm={ "Serve " + node.Name + "'s DHCP ranges from this node? Its clients renew here on the addresses they hold. If " + node.Name + " comes back, it stops serving them." }
+						data-confirm-title="Take over DHCP ranges?"
+						data-confirm-action="Take Over"
+					>
+						<input type="hidden" name="node" value={ node.ID }/>
+						<button class={ clusterNodeActionClass(inPanel, false) } type="submit">@Icon("router")<span>Take Over DHCP Ranges</span></button>
+					</form>
+				}
 				if node.State == "online" && node.SyncState == "current" {
 					<form
 						hx-post={ "/ui/cluster/nodes/" + node.ID + "/promote" }
@@ -643,6 +671,16 @@ templ clusterNodeActions(node ClusterNodeView, localRole string, inPanel bool) {
 			}
 		</div>
 	}
+}
+
+// clusterPromoteConfirm asks before a recovery promotion, which also takes
+// over the primary's DHCP ranges when it has any (design §3).
+func clusterPromoteConfirm(node ClusterNodeView) string {
+	confirm := "Promote this replica for recovery? Ensure the former primary is offline to avoid two writable primaries."
+	if node.DHCPTakeover != "" {
+		confirm += " This node also takes over " + node.DHCPTakeoverName + "'s DHCP ranges."
+	}
+	return confirm
 }
 
 // clusterNodeManaged reports whether the primary may remove or promote node:
