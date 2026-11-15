@@ -72,3 +72,25 @@ func TestDeviceDrawerShowsTheLeaseAndReservesIt(t *testing.T) {
 		t.Fatalf("reserve a missing lease = %d:\n%s", response.Code, response.Body.String())
 	}
 }
+
+// A device's drawer shows only its own lease: when another client now holds
+// an address the laptop used, or the address was declined, the laptop has no
+// lease to show or reserve (F60).
+func TestDeviceDrawerIgnoresAnotherClientsLease(t *testing.T) {
+	t.Parallel()
+	for _, row := range []store.DHCPLease{
+		{ClientKey: "01aa:bb:cc:00:00:01", MAC: "aa:bb:cc:00:00:01", Hostname: "phone", State: store.DHCPLeaseActive},
+		{ClientKey: "declined", State: store.DHCPLeaseDeclined},
+	} {
+		server := newInsightsTestServer(t)
+		server.withDeviceLease(t)
+		now := time.Now()
+		row.NodeID, row.Address, row.ScopeID = "node-a", netip.MustParseAddr("10.0.0.5"), "lan"
+		row.BoundAt, row.ExpiresAt = now.Add(-time.Minute), now.Add(time.Hour)
+		server.SetDHCPController(&testDHCPController{leases: []store.DHCPLease{row}})
+		body := server.get(t, "everything", "/ui/insights/device?range=day&key="+url.QueryEscape(insightsTestLaptop), true).Body.String()
+		if strings.Contains(body, `id="insight-device-lease"`) || strings.Contains(body, "data-device-reserve") {
+			t.Errorf("%s lease on 10.0.0.5 shows in the laptop's drawer", row.State)
+		}
+	}
+}
