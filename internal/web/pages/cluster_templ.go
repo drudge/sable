@@ -4086,9 +4086,9 @@ func clusterNodeActions(node ClusterNodeView, localRole string, inPanel bool) te
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var153 string
-				templ_7745c5c3_Var153, templ_7745c5c3_Err = templruntime.NewAttributeExpression("Remove " + node.Name + " from this cluster? This only removes its membership; it does not erase data on that server.").Resolve(ctx)
+				templ_7745c5c3_Var153, templ_7745c5c3_Err = templruntime.NewAttributeExpression(clusterRemoveConfirm(node)).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 634, Col: 136}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `cluster.templ`, Line: 634, Col: 44}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var153)
 				if templ_7745c5c3_Err != nil {
@@ -4403,6 +4403,16 @@ func clusterPromoteConfirm(node ClusterNodeView) string {
 // a replica of its own, but not a node that also claims the primary role.
 func clusterNodeManaged(node ClusterNodeView, localRole string) bool {
 	return !node.Local && localRole == "Primary" && node.SyncState != "conflict"
+}
+
+// clusterRemoveConfirm asks before removing node, and says when it still has
+// DHCP ranges pinned to it: once it's gone no node leases from them.
+func clusterRemoveConfirm(node ClusterNodeView) string {
+	message := "Remove " + node.Name + " from this cluster? This only removes its membership; it does not erase data on that server."
+	if node.DHCPRanges > 0 {
+		message += fmt.Sprintf(" It still has %d DHCP %s pinned to it, and no node leases from %s once it's gone: take %s over or pin %s to another node first.", node.DHCPRanges, plural(node.DHCPRanges, "range", "ranges"), plural(node.DHCPRanges, "it", "them"), plural(node.DHCPRanges, "it", "them"), plural(node.DHCPRanges, "it", "them"))
+	}
+	return message
 }
 
 func clusterNodeActionClass(inPanel bool, remove bool) string {

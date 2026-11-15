@@ -189,3 +189,58 @@ func TestDHCPTakeOverRangesAPI(t *testing.T) {
 		t.Fatalf("POST /api/v1/dhcp/takeover = %d: %s", response.Code, response.Body.String())
 	}
 }
+
+// Ranges set by hand with a gap keep the gap when the dialog moves the whole
+// range's edges: only the outer edges move, and an edge can't cross into the
+// gap, which would lease addresses the operator kept out of the pool.
+func TestDHCPConsoleKeepsAGapInHandSetRangesOnCluster(t *testing.T) {
+	t.Parallel()
+	nodes := []cluster.Node{{ID: "node-a", Name: "ns1"}, {ID: "node-b", Name: "ns2"}}
+	ranges := []config.DHCPRange{
+		{Start: "192.0.2.100", End: "192.0.2.109", Node: "node-a"},
+		{Start: "192.0.2.120", End: "192.0.2.129", Node: "node-b"}}
+	got, err := dhcpFormRanges(ranges, "192.0.2.100", "192.0.2.138", nodes)
+	want := []config.DHCPRange{
+		{Start: "192.0.2.100", End: "192.0.2.109", Node: "node-a"},
+		{Start: "192.0.2.120", End: "192.0.2.138", Node: "node-b"}}
+	if err != nil || !slices.Equal(got, want) {
+		t.Fatalf("dhcpFormRanges end .138 = %v, %v; want %v", got, err, want)
+	}
+	if got, err = dhcpFormRanges(ranges, "192.0.2.100", "192.0.2.115", nodes); err == nil {
+		t.Fatalf("dhcpFormRanges end .115 = %v; want a refusal, it cuts into the gap", got)
+	}
+}
+
+// A takeover writes new settings and leaves the ones the running server
+// holds alone, so the reload sees the moved ranges and serves them.
+func TestDHCPTakeOverLeavesTheSettingsInUseAlone(t *testing.T) {
+	t.Parallel()
+	server, configuration, _ := newDHCPClusterConsoleServer(t, "node-a", "node-b")
+	inUse := configuration.snapshot.Config.DHCP
+
+	response := dhcpConsoleRequest(t, server, http.MethodPost, "/ui/dhcp/takeover", url.Values{"node": {"node-b"}})
+	if response.Code != http.StatusOK {
+		t.Fatalf("take over = %d: %s", response.Code, response.Body.String())
+	}
+	if got := inUse.Scopes[0].Ranges[1].Node; got != "node-b" {
+		t.Fatalf("the takeover rewrote the settings in use (range pinned to %s), so the reload sees nothing to apply", got)
+	}
+	if got := configuration.snapshot.Config.DHCP.Scopes[0].Ranges[1].Node; got != "node-a" {
+		t.Fatalf("the saved settings pin the range to %s; want node-a", got)
+	}
+}
+
+// Remove Replica says when the node still has DHCP ranges pinned to it:
+// once it's gone no node leases from them.
+func TestDHCPRemoveReplicaWarnsAboutItsRanges(t *testing.T) {
+	t.Parallel()
+	server, configuration, _ := newDHCPClusterConsoleServer(t, "node-a", "")
+	page := dhcpConsoleRequest(t, server, http.MethodGet, "/ui/cluster/node?name=ns2", nil).Body.String()
+	expectContains(t, "Remove Replica for a node with a range", page,
+		"It still has 1 DHCP range pinned to it, and no node leases from it once it&#39;s gone")
+
+	configuration.snapshot.Config.DHCP.Scopes[0].Ranges[1].Node = "node-a"
+	if page := dhcpConsoleRequest(t, server, http.MethodGet, "/ui/cluster/node?name=ns2", nil).Body.String(); strings.Contains(page, "DHCP range pinned") {
+		t.Error("Remove Replica warns about DHCP ranges for a node with none")
+	}
+}
