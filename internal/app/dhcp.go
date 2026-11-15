@@ -256,6 +256,9 @@ func (service *dhcpService) bind(ctx context.Context, server *dhcpServer) error 
 	if !server.reload(ctx) {
 		server.stale = true
 	}
+	// Status reads current, so it must find a queue there: a server it
+	// can see is one that takes requests, not one still starting.
+	server.openQueue()
 	service.current.Store(server)
 	service.logger.Info("DHCP server started", "port", service.port)
 	return nil

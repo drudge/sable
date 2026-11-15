@@ -127,6 +127,77 @@ func (service dhcpService) Save(ctx context.Context, who actor, settings config.
 	})
 }
 
+// Scope returns the settings of the scope with id.
+func (service dhcpService) Scope(who actor, id string) (config.DHCPScope, error) {
+	state, err := service.State(who)
+	if err != nil {
+		return config.DHCPScope{}, err
+	}
+	scope, err := dhcpScope(&state.Settings, id)
+	if err != nil {
+		return config.DHCPScope{}, err
+	}
+	return *scope, nil
+}
+
+// SetScope adds the scope with id, or replaces its settings. The scope keeps
+// the reservations it has, since they're set one at a time with
+// SetReservation. Like Save, it needs settings.write (D47).
+func (service dhcpService) SetScope(ctx context.Context, who actor, id string, scope config.DHCPScope) (config.DHCPScope, error) {
+	if err := service.allowed(who, auth.PermissionSettingsWrite); err != nil {
+		return config.DHCPScope{}, err
+	}
+	scope.ID = strings.TrimSpace(id)
+	err := service.update(ctx, who, "dhcp.scope.set", "saved DHCP scope "+scope.ID, func(settings *config.DHCP) error {
+		current, err := dhcpScope(settings, scope.ID)
+		if err != nil {
+			scope.Reservations = nil
+			settings.Scopes = append(settings.Scopes, scope)
+			return nil
+		}
+		scope.Reservations = current.Reservations
+		*current = scope
+		return nil
+	})
+	if err != nil {
+		return config.DHCPScope{}, err
+	}
+	saved := service.server.config.Current().Config.DHCP
+	if current, _ := dhcpScope(&saved, scope.ID); current != nil {
+		return *current, nil
+	}
+	return scope, nil
+}
+
+// RemoveScope takes the scope with id, and its reservations, out of [dhcp].
+// Its leases stay in the store until they expire.
+func (service dhcpService) RemoveScope(ctx context.Context, who actor, id string) error {
+	if err := service.allowed(who, auth.PermissionSettingsWrite); err != nil {
+		return err
+	}
+	return service.update(ctx, who, "dhcp.scope.remove", "removed DHCP scope "+id, func(settings *config.DHCP) error {
+		if _, err := dhcpScope(settings, id); err != nil {
+			return err
+		}
+		settings.Scopes = slices.DeleteFunc(settings.Scopes, func(scope config.DHCPScope) bool { return scope.ID == id })
+		return nil
+	})
+}
+
+// SetEnabled turns the DHCP server on or off, keeping its scopes. Like Save,
+// it needs settings.write (D47): turning it on hands out every scope's
+// router and resolvers.
+func (service dhcpService) SetEnabled(ctx context.Context, who actor, enabled bool) error {
+	if err := service.allowed(who, auth.PermissionSettingsWrite); err != nil {
+		return err
+	}
+	action := map[bool]string{true: "dhcp.enable", false: "dhcp.disable"}[enabled]
+	return service.update(ctx, who, action, action, func(settings *config.DHCP) error {
+		settings.Enabled = enabled
+		return nil
+	})
+}
+
 // RemoveLease ends this node's lease on address. The client keeps using it
 // until it next renews, when it's offered an address again (RFC 2131 §4.4.5).
 func (service dhcpService) RemoveLease(ctx context.Context, who actor, raw string) error {
