@@ -111,6 +111,29 @@ func (engine *Engine) remember(lease Lease) *Lease {
 	return stored
 }
 
+// Remove ends this node's lease on address now, for an operator removing it,
+// and returns the row to save; nil when the address has no lease that holds
+// it. A declined address goes back to the pool too. The row stays, as after a
+// RELEASE (RFC 2131 §4.3.4), so the client is offered the same address when
+// it next asks, unless another client takes it first. A pending offer of the
+// address is dropped so it can't be acknowledged afterward.
+func (engine *Engine) Remove(now time.Time, address netip.Addr) *Lease {
+	engine.mutex.Lock()
+	defer engine.mutex.Unlock()
+	lease := engine.leases[address]
+	if lease == nil || lease.NodeID != engine.node || !lease.holds(now) {
+		return nil
+	}
+	for ref, pending := range engine.offers {
+		if pending.address == address {
+			delete(engine.offers, ref)
+		}
+	}
+	lease.State, lease.ExpiresAt = LeaseReleased, now
+	removed := *lease
+	return &removed
+}
+
 // Conflict takes an address out of the pool for an hour after a probe found
 // another holder, and returns the lease to save. holder names what answered:
 // "echo", or the hardware address the neighbor table showed.

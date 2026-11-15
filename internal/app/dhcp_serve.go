@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -62,6 +63,20 @@ type dhcpRequest struct {
 	payload  []byte
 	ifIndex  int
 	conflict *dhcpConflict
+	remove   *dhcpRemoval
+}
+
+// dhcpRemoval is an operator removing a lease. It runs in the serve goroutine
+// like every other engine change, so no request's save can land between the
+// engine forgetting the lease and the store writing it released.
+type dhcpRemoval struct {
+	address netip.Addr
+	done    chan dhcpRemoved
+}
+
+type dhcpRemoved struct {
+	lease *dhcp.Lease
+	err   error
 }
 
 // dhcpConflict is an offered address something else answered for.
@@ -93,6 +108,10 @@ type dhcpServer struct {
 	stats  *dhcpStats
 	// delayed holds the OFFERs waiting out offer_delay.
 	delayed dhcpDelayedOffers
+	// gate guards sending to queue from outside the read and serve
+	// goroutines: the queue is made and closed under it.
+	gate   sync.Mutex
+	closed bool
 	// stale is set when a save failed and no reload has succeeded since.
 	// Only the serve goroutine touches it.
 	stale bool
@@ -106,7 +125,7 @@ type dhcpServer struct {
 
 // run serves until ctx ends or the socket fails, then closes the socket.
 func (server *dhcpServer) run(ctx context.Context) error {
-	server.queue = make(chan dhcpRequest, dhcpQueueSize)
+	server.openQueue()
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -120,7 +139,7 @@ func (server *dhcpServer) run(ctx context.Context) error {
 	err := server.read()
 	// Probes queue conflicts; none may run once the queue is closed.
 	server.delayed.stop()
-	close(server.queue)
+	server.closeQueue()
 	<-done
 	if ctx.Err() != nil {
 		return nil
@@ -178,6 +197,10 @@ func (server *dhcpServer) handleSafely(ctx context.Context, request dhcpRequest)
 }
 
 func (server *dhcpServer) handle(ctx context.Context, request dhcpRequest) {
+	if request.remove != nil {
+		request.remove.done <- server.removeLease(ctx, request.remove.address)
+		return
+	}
 	if server.stale && !server.reloadStale(ctx) {
 		// Until the engine matches the store again, any answer may promise
 		// what the store doesn't hold; stay silent and let clients retransmit.
@@ -219,6 +242,64 @@ func (server *dhcpServer) handle(ctx context.Context, request dhcpRequest) {
 func (server *dhcpServer) recordConflict(ctx context.Context, conflict dhcpConflict) {
 	if lease := server.engine.Conflict(server.now(), conflict.address, conflict.holder); lease != nil {
 		server.commit(ctx, []dhcp.Lease{*lease})
+	}
+}
+
+// removeLease ends this node's lease on address and saves it. A stale view
+// reloads first, so the removal acts on what the store holds; when it can't,
+// nothing changes and the caller hears why.
+func (server *dhcpServer) removeLease(ctx context.Context, address netip.Addr) dhcpRemoved {
+	if server.stale && !server.reload(ctx) {
+		return dhcpRemoved{err: errDHCPLeasesUnavailable}
+	}
+	lease := server.engine.Remove(server.now(), address)
+	if lease == nil {
+		return dhcpRemoved{}
+	}
+	if !server.commit(ctx, []dhcp.Lease{*lease}) {
+		return dhcpRemoved{err: errDHCPLeasesUnavailable}
+	}
+	return dhcpRemoved{lease: lease}
+}
+
+// openQueue makes the request queue; closeQueue closes it, and submit after
+// that reports false instead of sending on a closed channel.
+func (server *dhcpServer) openQueue() {
+	server.gate.Lock()
+	defer server.gate.Unlock()
+	server.queue, server.closed = make(chan dhcpRequest, dhcpQueueSize), false
+}
+
+func (server *dhcpServer) closeQueue() {
+	server.gate.Lock()
+	defer server.gate.Unlock()
+	server.closed = true
+	close(server.queue)
+}
+
+// accepting reports whether the server is serving its queue.
+func (server *dhcpServer) accepting() bool {
+	if server == nil {
+		return false
+	}
+	server.gate.Lock()
+	defer server.gate.Unlock()
+	return server.queue != nil && !server.closed
+}
+
+// submit queues request for the serve goroutine, waiting for room until ctx
+// ends, and reports whether it was queued.
+func (server *dhcpServer) submit(ctx context.Context, request dhcpRequest) bool {
+	server.gate.Lock()
+	defer server.gate.Unlock()
+	if server.queue == nil || server.closed {
+		return false
+	}
+	select {
+	case server.queue <- request:
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }
 

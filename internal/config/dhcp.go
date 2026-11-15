@@ -21,8 +21,8 @@ const (
 // file; leases live in the store. Every key is omitted while unset, so a node
 // that predates DHCP can still decode a file that never used it.
 type DHCP struct {
-	Enabled bool        `toml:"enabled,omitempty"`
-	Scopes  []DHCPScope `toml:"scopes,omitempty"`
+	Enabled bool        `toml:"enabled,omitempty" json:"enabled"`
+	Scopes  []DHCPScope `toml:"scopes,omitempty" json:"scopes,omitempty"`
 }
 
 // DHCPScope is one IPv4 subnet. A node serves it on whichever interface has an
@@ -30,78 +30,78 @@ type DHCP struct {
 // (RFC 2131 §4.3.1). Option numbers are from RFC 2132 unless noted.
 type DHCPScope struct {
 	// ID is stable; leases refer to it, so a rename keeps them.
-	ID      string `toml:"id"`
-	Name    string `toml:"name"`
-	Subnet  string `toml:"subnet"`
-	Enabled *bool  `toml:"enabled,omitempty"`
+	ID      string `toml:"id" json:"id"`
+	Name    string `toml:"name" json:"name"`
+	Subnet  string `toml:"subnet" json:"subnet"`
+	Enabled *bool  `toml:"enabled,omitempty" json:"enabled,omitempty"`
 
-	Lease  Duration `toml:"lease,omitempty"`  // option 51
-	Router string   `toml:"router,omitempty"` // option 3
+	Lease  Duration `toml:"lease,omitempty" json:"lease,omitempty"`   // option 51
+	Router string   `toml:"router,omitempty" json:"router,omitempty"` // option 3
 	// DNS is option 6. Empty means every cluster node's address on the subnet.
-	DNS []string `toml:"dns,omitempty"`
+	DNS []string `toml:"dns,omitempty" json:"dns,omitempty"`
 	// Domain is option 15 and the zone lease names register in. The client
 	// never picks the zone (RFC 4702 §5).
-	Domain string      `toml:"domain,omitempty"`
-	Search []string    `toml:"search,omitempty"` // option 119 (RFC 3397)
-	NTP    []string    `toml:"ntp,omitempty"`    // option 42
-	Routes []DHCPRoute `toml:"routes,omitempty"` // option 121 (RFC 3442)
+	Domain string      `toml:"domain,omitempty" json:"domain,omitempty"`
+	Search []string    `toml:"search,omitempty" json:"search,omitempty"` // option 119 (RFC 3397)
+	NTP    []string    `toml:"ntp,omitempty" json:"ntp,omitempty"`       // option 42
+	Routes []DHCPRoute `toml:"routes,omitempty" json:"routes,omitempty"` // option 121 (RFC 3442)
 
-	RegisterNames *bool    `toml:"register_names,omitempty"`
-	Reverse       *bool    `toml:"reverse,omitempty"`
-	TTL           Duration `toml:"ttl,omitempty"`
+	RegisterNames *bool    `toml:"register_names,omitempty" json:"register_names,omitempty"`
+	Reverse       *bool    `toml:"reverse,omitempty" json:"reverse,omitempty"`
+	TTL           Duration `toml:"ttl,omitempty" json:"ttl,omitempty"`
 	// IPv6OnlyPreferred answers option 108 (RFC 8925) when set.
-	IPv6OnlyPreferred Duration `toml:"ipv6_only_preferred,omitempty"`
+	IPv6OnlyPreferred Duration `toml:"ipv6_only_preferred,omitempty" json:"ipv6_only_preferred,omitempty"`
 
-	ReservedOnly    bool      `toml:"reserved_only,omitempty"`
-	IgnoreClientID  bool      `toml:"ignore_client_id,omitempty"`
-	BlockRandomMACs bool      `toml:"block_random_macs,omitempty"`
-	OfferDelay      Duration  `toml:"offer_delay,omitempty"`
-	ConflictProbe   *Duration `toml:"conflict_probe,omitempty"`
+	ReservedOnly    bool      `toml:"reserved_only,omitempty" json:"reserved_only,omitempty"`
+	IgnoreClientID  bool      `toml:"ignore_client_id,omitempty" json:"ignore_client_id,omitempty"`
+	BlockRandomMACs bool      `toml:"block_random_macs,omitempty" json:"block_random_macs,omitempty"`
+	OfferDelay      Duration  `toml:"offer_delay,omitempty" json:"offer_delay,omitempty"`
+	ConflictProbe   *Duration `toml:"conflict_probe,omitempty" json:"conflict_probe,omitempty"`
 
-	Boot         *DHCPBoot         `toml:"boot,omitempty"`
-	Ranges       []DHCPRange       `toml:"ranges,omitempty"`
-	Reservations []DHCPReservation `toml:"reservations,omitempty"`
-	Options      []DHCPOption      `toml:"options,omitempty"`
+	Boot         *DHCPBoot         `toml:"boot,omitempty" json:"boot,omitempty"`
+	Ranges       []DHCPRange       `toml:"ranges,omitempty" json:"ranges,omitempty"`
+	Reservations []DHCPReservation `toml:"reservations,omitempty" json:"reservations,omitempty"`
+	Options      []DHCPOption      `toml:"options,omitempty" json:"options,omitempty"`
 }
 
 // DHCPRoute is one classless static route (RFC 3442).
 type DHCPRoute struct {
-	To  string `toml:"to"`
-	Via string `toml:"via"`
+	To  string `toml:"to" json:"to"`
+	Via string `toml:"via" json:"via"`
 }
 
 // DHCPBoot is what a PXE client needs: siaddr and option 150 (RFC 5859),
 // option 66, and option 67 (RFC 2132 §9.4, §9.5).
 type DHCPBoot struct {
-	NextServer string `toml:"next_server,omitempty"`
-	ServerName string `toml:"server_name,omitempty"`
-	File       string `toml:"file,omitempty"`
+	NextServer string `toml:"next_server,omitempty" json:"next_server,omitempty"`
+	ServerName string `toml:"server_name,omitempty" json:"server_name,omitempty"`
+	File       string `toml:"file,omitempty" json:"file,omitempty"`
 }
 
 // DHCPRange is an inclusive pool of dynamic addresses. In a cluster each range
 // is pinned to one node ID and served only by that node, whatever its role.
 // An exclusion is the gap between two ranges.
 type DHCPRange struct {
-	Start string `toml:"start"`
-	End   string `toml:"end"`
-	Node  string `toml:"node,omitempty"`
+	Start string `toml:"start" json:"start"`
+	End   string `toml:"end" json:"end"`
+	Node  string `toml:"node,omitempty" json:"node,omitempty"`
 }
 
 // DHCPReservation binds a hardware address to a fixed address. Every node
 // answers reservations, and a named one always publishes its records.
 type DHCPReservation struct {
-	MAC     string `toml:"mac"`
-	Address string `toml:"address"`
-	Name    string `toml:"name,omitempty"`
-	Comment string `toml:"comment,omitempty"`
+	MAC     string `toml:"mac" json:"mac"`
+	Address string `toml:"address" json:"address"`
+	Name    string `toml:"name,omitempty" json:"name,omitempty"`
+	Comment string `toml:"comment,omitempty" json:"comment,omitempty"`
 }
 
 // DHCPOption is an option without a field of its own. Value is typed by code;
 // a code with no known type takes Hex instead.
 type DHCPOption struct {
-	Code  int      `toml:"code"`
-	Value []string `toml:"value,omitempty"`
-	Hex   string   `toml:"hex,omitempty"`
+	Code  int      `toml:"code" json:"code"`
+	Value []string `toml:"value,omitempty" json:"value,omitempty"`
+	Hex   string   `toml:"hex,omitempty" json:"hex,omitempty"`
 }
 
 // IsZero reports whether nothing is configured, so the section can stay out
@@ -147,7 +147,8 @@ func durationOr(value, fallback time.Duration) time.Duration {
 	return value
 }
 
-func (settings *DHCP) normalize() {
+// Normalize canonicalizes every scope in place, as loading a file does.
+func (settings *DHCP) Normalize() {
 	for index := range settings.Scopes {
 		settings.Scopes[index].normalize()
 	}

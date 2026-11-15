@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/drudge/sable/internal/cluster"
@@ -48,6 +49,9 @@ type dhcpService struct {
 	// changed is told when a lease or the settings change, so the names
 	// follow. Nil skips it.
 	changed func()
+
+	// current is the server that last bound port 67, for removals.
+	current atomic.Pointer[dhcpServer]
 
 	mutex   sync.Mutex
 	active  config.DHCP
@@ -200,6 +204,7 @@ func (service *dhcpService) bind(ctx context.Context, server *dhcpServer) error 
 	if !server.reload(ctx) {
 		server.stale = true
 	}
+	service.current.Store(server)
 	service.logger.Info("DHCP server started", "port", service.port)
 	return nil
 }
@@ -223,6 +228,7 @@ func (service *dhcpService) stopLocked() {
 	<-service.running.done
 	service.running = nil
 	service.setOthers(nil)
+	service.current.Store(nil)
 }
 
 func (service *dhcpService) save(ctx context.Context, leases []dhcp.Lease) error {
@@ -252,7 +258,7 @@ func (service *dhcpService) load(ctx context.Context) ([]dhcp.Lease, error) {
 func dhcpLeaseToStore(lease dhcp.Lease) store.DHCPLease {
 	return store.DHCPLease{
 		NodeID: lease.NodeID, Address: lease.Address, ScopeID: lease.ScopeID, ClientKey: lease.ClientKey,
-		MAC: lease.MAC, ClientID: lease.ClientID, Hostname: lease.Hostname,
+		MAC: lease.MAC, ClientID: lease.ClientID, Hostname: lease.Hostname, Label: dhcpLabel(lease.Hostname, false),
 		State: store.DHCPLeaseState(lease.State), BoundAt: lease.BoundAt, ExpiresAt: lease.ExpiresAt,
 		Relay: lease.Relay, VendorClass: lease.VendorClass,
 	}
