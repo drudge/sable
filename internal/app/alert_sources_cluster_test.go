@@ -88,6 +88,14 @@ func silent(id, name string, lastContact time.Duration) cluster.Node {
 	return node
 }
 
+// skewed is a node that checks in, the last time just now, with a clock too
+// far from the lead's to sync.
+func skewed(id, name string, now time.Duration, offset int64) cluster.Node {
+	node := answering(id, name)
+	node.SyncState, node.ClockOffsetSeconds, node.LastContact = cluster.SyncClock, offset, clusterAlertStart.Add(now)
+	return node
+}
+
 // unheard is a node this one has not heard from since it started watching.
 func unheard(id, name string) cluster.Node {
 	node := answering(id, name)
@@ -160,6 +168,8 @@ func TestNodeOutageSourceAlertsAfterFiveMinutesAndWhenTheNodeIsBack(t *testing.T
 	t.Parallel()
 	down := func(since time.Duration) string { return clusterAlertID("node-down", secondNodeID, since) }
 	up := func(since time.Duration) string { return clusterAlertID("node-up", secondNodeID, since) }
+	clock := func(since time.Duration) string { return clusterAlertID("node-clock", secondNodeID, since) }
+	clockOK := func(since time.Duration) string { return clusterAlertID("node-clock-ok", secondNodeID, since) }
 	ns2 := func() cluster.Node { return answering(secondNodeID, "ns2") }
 	quiet := func(lastContact time.Duration) cluster.Node { return silent(secondNodeID, "ns2", lastContact) }
 	never := func() cluster.Node { return unheard(secondNodeID, "ns2") }
@@ -209,6 +219,37 @@ func TestNodeOutageSourceAlertsAfterFiveMinutesAndWhenTheNodeIsBack(t *testing.T
 			{after: 8*time.Minute + 49*time.Second, nodes: []cluster.Node{quiet(3*time.Minute + 50*time.Second)}},
 			{after: 8*time.Minute + 50*time.Second, nodes: []cluster.Node{quiet(3*time.Minute + 50*time.Second)},
 				want: []string{down(3*time.Minute + 50*time.Second)}},
+		}},
+		{name: "a node checking in with its clock out of step for five minutes alerts until its clock is back", moments: []clusterMoment{
+			{after: 0, nodes: []cluster.Node{ns2()}},
+			{after: time.Minute, nodes: []cluster.Node{skewed(secondNodeID, "ns2", time.Minute, 300)}},
+			{after: 5*time.Minute + 59*time.Second, nodes: []cluster.Node{skewed(secondNodeID, "ns2", 5*time.Minute+59*time.Second, 300)}},
+			{after: 6 * time.Minute, nodes: []cluster.Node{skewed(secondNodeID, "ns2", 6*time.Minute, 300)}, want: []string{clock(time.Minute)}},
+			{after: 31 * time.Minute, nodes: []cluster.Node{skewed(secondNodeID, "ns2", 31*time.Minute, -300)}, want: []string{clock(time.Minute)}},
+			{after: 32 * time.Minute, nodes: []cluster.Node{ns2()}, want: []string{clockOK(time.Minute)}},
+		}},
+		{name: "a node whose clock is out of step for under five minutes stays quiet", moments: []clusterMoment{
+			{after: time.Minute, nodes: []cluster.Node{skewed(secondNodeID, "ns2", time.Minute, 300)}},
+			{after: 5 * time.Minute, nodes: []cluster.Node{skewed(secondNodeID, "ns2", 5*time.Minute, 300)}},
+			{after: 6 * time.Minute, nodes: []cluster.Node{ns2()}},
+		}},
+		{name: "a down node that comes back with its clock out of step is back up, then out of step", moments: []clusterMoment{
+			{after: time.Minute, nodes: []cluster.Node{quiet(50 * time.Second)}},
+			{after: 6 * time.Minute, nodes: []cluster.Node{quiet(50 * time.Second)}, want: []string{down(50 * time.Second)}},
+			{after: 7 * time.Minute, nodes: []cluster.Node{skewed(secondNodeID, "ns2", 7*time.Minute, 300)}, want: []string{up(50 * time.Second)}},
+			{after: 12 * time.Minute, nodes: []cluster.Node{skewed(secondNodeID, "ns2", 12*time.Minute, 300)},
+				want: []string{up(50 * time.Second), clock(7 * time.Minute)}},
+			// It goes silent: its clock never came back, so no all-clear, and
+			// it is down from its last check-in.
+			{after: 13 * time.Minute, nodes: []cluster.Node{quiet(12 * time.Minute)}, want: []string{up(50 * time.Second)}},
+			{after: 17 * time.Minute, nodes: []cluster.Node{quiet(12 * time.Minute)},
+				want: []string{up(50 * time.Second), down(12 * time.Minute)}},
+		}},
+		{name: "a node that goes silent while out of step is not told as syncing again", moments: []clusterMoment{
+			{after: time.Minute, nodes: []cluster.Node{skewed(secondNodeID, "ns2", time.Minute, 300)}},
+			{after: 6 * time.Minute, nodes: []cluster.Node{skewed(secondNodeID, "ns2", 6*time.Minute, 300)}, want: []string{clock(time.Minute)}},
+			{after: 7 * time.Minute, nodes: []cluster.Node{quiet(6 * time.Minute)}},
+			{after: 11 * time.Minute, nodes: []cluster.Node{quiet(6 * time.Minute)}, want: []string{down(6 * time.Minute)}},
 		}},
 		{name: "a removed node's outage ends without an all-clear", moments: []clusterMoment{
 			{after: time.Minute, nodes: []cluster.Node{quiet(50 * time.Second)}},
@@ -398,6 +439,36 @@ func TestClusterAlertsAreWordedPlainly(t *testing.T) {
 				Headline: "ns2 is checking in again",
 				Summary:  "ns2 checked in with ns1 again after 1 hour 11 minutes out of touch.",
 				Reasons:  []string{"Out of touch for 1 hour 11 minutes", "Runs Sable 1.9.0"},
+			},
+		},
+		{
+			name: "a node whose clock is out of step", source: 0, self: firstNodeID,
+			moments: []clusterMoment{
+				{after: time.Minute, nodes: []cluster.Node{skewed(secondNodeID, "ns2", time.Minute, -420)}},
+				{after: 36 * time.Minute, nodes: []cluster.Node{skewed(secondNodeID, "ns2", 36*time.Minute, -420)},
+					want: []string{clusterAlertID("node-clock", secondNodeID, time.Minute)}},
+			},
+			want: alerts.Alert{
+				Kind: "cluster.node-clock", Problem: true, Tone: alerts.ToneAttention, Title: "Node clock out of step", Subject: "ns2",
+				Headline: "ns2 stopped syncing",
+				Summary:  "ns2 is up, but its clock is too far from ns1's for its check-ins to be trusted, so it has not synced for 35 minutes. Set both nodes to use NTP.",
+				Reasons:  []string{"Clock 7 minutes behind ns1's", "DNS at 192.0.2.2"},
+			},
+		},
+		{
+			name: "a node's clock back in step", source: 0, self: firstNodeID,
+			moments: []clusterMoment{
+				{after: time.Minute, nodes: []cluster.Node{skewed(secondNodeID, "ns2", time.Minute, 420)}},
+				{after: 6 * time.Minute, nodes: []cluster.Node{skewed(secondNodeID, "ns2", 6*time.Minute, 420)},
+					want: []string{clusterAlertID("node-clock", secondNodeID, time.Minute)}},
+				{after: 21 * time.Minute, nodes: []cluster.Node{answering(secondNodeID, "ns2")},
+					want: []string{clusterAlertID("node-clock-ok", secondNodeID, time.Minute)}},
+			},
+			want: alerts.Alert{
+				Kind: "cluster.node-clock-ok", Tone: alerts.TonePositive, Title: "Node clock back in step", Subject: "ns2",
+				Headline: "ns2 is syncing again",
+				Summary:  "ns2's clock is close enough to ns1's again after 20 minutes out of step.",
+				Reasons:  []string{"Out of step for 20 minutes"},
 			},
 		},
 		{

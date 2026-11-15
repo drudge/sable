@@ -60,6 +60,11 @@ type Heartbeat struct {
 	// the sender leads in that term. A member that does not know the field
 	// refuses the probe, which leaves its own role alone.
 	Primary *PrimaryClaim `json:"primary,omitempty"`
+	// ClockChallenge answers the challenge a primary sent with its last
+	// refusal of this member for its clock. It is signed with the rest, so
+	// the primary knows the member is up now and not replayed (D109). It is
+	// sent only to a primary that issued one.
+	ClockChallenge string `json:"clock_challenge,omitempty"`
 }
 
 type SyncConfiguration struct {
@@ -125,6 +130,7 @@ func (service *Service) StartMonitoring(ctx context.Context) {
 // connection from the former primary.
 func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, signature string) (result SyncConfiguration, resultErr error) {
 	if err := service.validateSynchronizationHeartbeat(heartbeat, signature); err != nil {
+		service.noteClockRefusal(heartbeat, signature, err)
 		return SyncConfiguration{}, err
 	}
 	if err := service.refreshPrimaryState(ctx); err != nil && !errors.Is(err, ErrNotInitialized) {
@@ -149,6 +155,7 @@ func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, si
 	}
 	now := service.clock()
 	service.replays.record(heartbeat.NodeID, signature, heartbeat.SentAt, now)
+	service.clearClockRefusalLocked(heartbeat.NodeID)
 	if heartbeat.Primary != nil {
 		return service.answerPrimaryProbeLocked(heartbeat, now)
 	}
@@ -259,11 +266,10 @@ func (service *Service) validateSynchronizationHeartbeat(heartbeat Heartbeat, si
 	return service.validateSynchronizationHeartbeatLocked(heartbeat, signature)
 }
 
+// validateSynchronizationHeartbeatLocked checks the signature and membership
+// before the clock, so a refusal for the clock is known to come from a member
+// that is up (D107).
 func (service *Service) validateSynchronizationHeartbeatLocked(heartbeat Heartbeat, signature string) error {
-	now := service.clock()
-	if heartbeat.SentAt.Before(now.Add(-heartbeatClockSkew)) || heartbeat.SentAt.After(now.Add(heartbeatClockSkew)) {
-		return errors.New("synchronization timestamp is outside the accepted clock window")
-	}
 	if service.heartbeatRevoked(heartbeat, signature) {
 		return ErrNodeRemoved
 	}
@@ -278,6 +284,9 @@ func (service *Service) validateSynchronizationHeartbeatLocked(heartbeat Heartbe
 	}
 	if !slices.ContainsFunc(service.manifest.Nodes, func(node member) bool { return node.ID == heartbeat.NodeID }) {
 		return ErrNodeRemoved
+	}
+	if offset := heartbeat.SentAt.Sub(service.clock()); offset < -heartbeatClockSkew || offset > heartbeatClockSkew {
+		return &clockWindowError{offset: offset}
 	}
 	if service.replays.seen(heartbeat.NodeID, signature) {
 		return errors.New("synchronization heartbeat is stale or replayed")
@@ -372,7 +381,7 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 		return nil
 	}
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("cluster primary rejected synchronization: %s", response.Status)
+		return service.primaryRefusal(primary.ID, response)
 	}
 	if heartbeat.Alerts != nil {
 		// The primary kept the list once it accepted the heartbeat, whatever
@@ -410,6 +419,12 @@ func (service *Service) primaryHeartbeatLocked(updateStatus *NodeUpdateStatus, p
 		AppliedGeneration: service.manifest.Generation,
 		StateDigest:       service.manifest.StateDigest,
 		UpSince:           service.startedAt, SentAt: service.clock(),
+	}
+	if found {
+		if service.clockChallengeFor == primary.ID {
+			heartbeat.ClockChallenge = service.clockChallenge
+		}
+		service.clockChallenge, service.clockChallengeFor = "", ""
 	}
 	var alertRevision, lookupRevision uint64
 	if found && service.alertPrimaryID == primary.ID {
@@ -490,6 +505,8 @@ func (service *Service) adoptSyncConfiguration(ctx context.Context, primary memb
 	}
 	firstSuccessfulSync := service.lastSuccessfulSync.IsZero()
 	service.lastSuccessfulSync = service.clock()
+	service.primaryClockRefusedAt = time.Time{}
+	service.clockChallenge, service.clockChallengeFor = "", ""
 	service.acceptPrimaryProtocolsLocked(primary.ID, configuration)
 	service.telemetry[candidate.PrimaryID] = nodeTelemetry{
 		heartbeat: Heartbeat{
