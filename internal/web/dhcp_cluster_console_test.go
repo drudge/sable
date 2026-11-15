@@ -190,6 +190,27 @@ func TestDHCPTakeOverRangesAPI(t *testing.T) {
 	}
 }
 
+// Ranges set by hand with a gap keep the gap when the dialog moves the whole
+// range's edges: only the outer edges move, and an edge can't cross into the
+// gap, which would lease addresses the operator kept out of the pool.
+func TestDHCPConsoleKeepsAGapInHandSetRangesOnCluster(t *testing.T) {
+	t.Parallel()
+	nodes := []cluster.Node{{ID: "node-a", Name: "ns1"}, {ID: "node-b", Name: "ns2"}}
+	ranges := []config.DHCPRange{
+		{Start: "192.0.2.100", End: "192.0.2.109", Node: "node-a"},
+		{Start: "192.0.2.120", End: "192.0.2.129", Node: "node-b"}}
+	got, err := dhcpFormRanges(ranges, "192.0.2.100", "192.0.2.138", nodes)
+	want := []config.DHCPRange{
+		{Start: "192.0.2.100", End: "192.0.2.109", Node: "node-a"},
+		{Start: "192.0.2.120", End: "192.0.2.138", Node: "node-b"}}
+	if err != nil || !slices.Equal(got, want) {
+		t.Fatalf("dhcpFormRanges end .138 = %v, %v; want %v", got, err, want)
+	}
+	if got, err = dhcpFormRanges(ranges, "192.0.2.100", "192.0.2.115", nodes); err == nil {
+		t.Fatalf("dhcpFormRanges end .115 = %v; want a refusal, it cuts into the gap", got)
+	}
+}
+
 // A takeover writes new settings and leaves the ones the running server
 // holds alone, so the reload sees the moved ranges and serves them.
 func TestDHCPTakeOverLeavesTheSettingsInUseAlone(t *testing.T) {

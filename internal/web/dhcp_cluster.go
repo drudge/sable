@@ -109,7 +109,9 @@ func (server *Server) takeOverDHCPRangesAPI(writer http.ResponseWriter, request 
 // dhcpFormRanges is the scope's ranges after the scope dialog. Outside a
 // cluster the dialog edits the first range. On a cluster it edits the whole
 // range, split evenly across the nodes (design §3); the same range keeps the
-// split it has, so an edit doesn't undo a takeover.
+// split it has, so an edit doesn't undo a takeover. Ranges set by hand with a
+// gap between them keep it: the dialog moves only the outer edges, since an
+// even re-split would lease the addresses the operator kept out of the pool.
 func dhcpFormRanges(ranges []config.DHCPRange, start, end string, nodes []cluster.Node) ([]config.DHCPRange, error) {
 	if len(nodes) == 0 {
 		return dhcpFirstRange(ranges, start, end), nil
@@ -121,6 +123,9 @@ func dhcpFormRanges(ranges []config.DHCPRange, start, end string, nodes []cluste
 		!slices.ContainsFunc(ranges, func(pool config.DHCPRange) bool { return pool.Node == "" }) {
 		return ranges, nil
 	}
+	if gap, ok := dhcpRangeGap(ranges); ok {
+		return dhcpMoveRangeEdges(ranges, gap, start, end)
+	}
 	ids := make([]string, len(nodes))
 	for index, node := range nodes {
 		ids[index] = node.ID
@@ -130,6 +135,63 @@ func dhcpFormRanges(ranges []config.DHCPRange, start, end string, nodes []cluste
 		return nil, refuse(http.StatusUnprocessableEntity, "%s", sentence(err.Error()))
 	}
 	return split, nil
+}
+
+// dhcpRangeGap is the first stretch of addresses that pinned ranges leave out
+// of the pool, as "first–last". It reports false when a range has no node, a
+// bound doesn't parse, or the ranges, sorted by start, are contiguous.
+func dhcpRangeGap(ranges []config.DHCPRange) (string, bool) {
+	sorted := slices.Clone(ranges)
+	for _, pool := range sorted {
+		if pool.Node == "" {
+			return "", false
+		}
+	}
+	slices.SortFunc(sorted, func(left, right config.DHCPRange) int {
+		return dhcpRangeStart(left).Compare(dhcpRangeStart(right))
+	})
+	for index := 1; index < len(sorted); index++ {
+		previous, errEnd := netip.ParseAddr(sorted[index-1].End)
+		next, errStart := netip.ParseAddr(sorted[index].Start)
+		if errEnd != nil || errStart != nil {
+			return "", false
+		}
+		if next.Compare(previous.Next()) > 0 {
+			return previous.Next().String() + "–" + next.Prev().String(), true
+		}
+	}
+	return "", false
+}
+
+// dhcpMoveRangeEdges moves the whole range's outer edges and leaves each
+// range's node and the inner ranges as they are. The start has to stay within
+// the first range and the end within the last, or the edge would cross the
+// gap the operator left; that is refused, naming the gap.
+func dhcpMoveRangeEdges(ranges []config.DHCPRange, gap, start, end string) ([]config.DHCPRange, error) {
+	moved := slices.Clone(ranges)
+	slices.SortFunc(moved, func(left, right config.DHCPRange) int {
+		return dhcpRangeStart(left).Compare(dhcpRangeStart(right))
+	})
+	low, high := &moved[0], &moved[len(moved)-1]
+	newStart, startErr := netip.ParseAddr(start)
+	newEnd, endErr := netip.ParseAddr(end)
+	if startErr != nil || endErr != nil {
+		return nil, refuse(http.StatusUnprocessableEntity, "the range start and end must be IPv4 addresses")
+	}
+	lowEnd, _ := netip.ParseAddr(low.End)
+	if newStart.Compare(lowEnd) > 0 || newEnd.Compare(dhcpRangeStart(*high)) < 0 {
+		return nil, refuse(http.StatusUnprocessableEntity,
+			"the ranges leave %s out of the pool; move the start or end only within the first and last range, or edit the ranges in the configuration", gap)
+	}
+	low.Start, high.End = start, end
+	return moved, nil
+}
+
+// dhcpRangeStart is the start of pool, or the zero address when it doesn't
+// parse, which sorts first.
+func dhcpRangeStart(pool config.DHCPRange) netip.Addr {
+	start, _ := netip.ParseAddr(pool.Start)
+	return start
 }
 
 // dhcpRangeEnvelope is the lowest start and highest end of ranges.
