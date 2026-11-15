@@ -1,0 +1,5 @@
+{"version":1,"leases":[
+ {"expires":"","ip":"10.0.7.20","hostname":"tv","mac":"00:11:22:33:44:20","static":true},
+ {"expires":"2026-11-16T10:00:00Z","ip":"10.0.7.150","hostname":"phone","mac":"00:11:22:33:44:21","static":false},
+ {"expires":"","ip":"10.0.7.22","hostname":"","mac":"00:11:22:33:44:22","static":true}
+]}

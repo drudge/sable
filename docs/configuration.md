@@ -653,12 +653,10 @@ It clears once a sync works.
 
 ## DHCP server
 
-> The DHCP server is still being built. Sable reads and checks the `[dhcp]`
-> section below, but it doesn't answer DHCP requests yet.
-
 Sable can hand out IPv4 addresses (DHCPv4, RFC 2131) and register each lease's
 name in a zone it serves. It's off by default, and the whole section stays out
-of `sable.toml` until you add a scope.
+of `sable.toml` until you add a scope. [Hand out addresses with DHCP](guides/dhcp.md)
+walks through setting it up and moving from another DHCP server.
 
 ```toml
 [dhcp]
