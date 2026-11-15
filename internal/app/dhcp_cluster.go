@@ -47,16 +47,24 @@ func checkDHCPCluster(settings config.DHCP, state cluster.State, release string)
 	if err := settings.ValidateNodes(members); err != nil {
 		return err
 	}
+	if err := dhcpRangesPinned(settings); err != nil {
+		return err
+	}
+	if len(older) > 0 {
+		return fmt.Errorf("update %s to Sable %s or later before serving DHCP on this cluster",
+			strings.Join(older, ", "), strings.TrimPrefix(release, "v"))
+	}
+	return nil
+}
+
+// dhcpRangesPinned refuses a range without a node (errDHCPRangeUnpinned).
+func dhcpRangesPinned(settings config.DHCP) error {
 	for scopeIndex, scope := range settings.Scopes {
 		for rangeIndex, pool := range scope.Ranges {
 			if pool.Node == "" {
 				return fmt.Errorf("dhcp.scopes[%d].ranges[%d]: %w", scopeIndex, rangeIndex, errDHCPRangeUnpinned)
 			}
 		}
-	}
-	if len(older) > 0 {
-		return fmt.Errorf("update %s to Sable %s or later before serving DHCP on this cluster",
-			strings.Join(older, ", "), strings.TrimPrefix(release, "v"))
 	}
 	return nil
 }

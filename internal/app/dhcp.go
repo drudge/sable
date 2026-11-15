@@ -102,6 +102,19 @@ func (service *dhcpService) Check(settings config.DHCP) error {
 	return checkDHCPCluster(settings, service.clusterState(), version.Release)
 }
 
+// checkServable refuses settings this node can't serve whatever the other
+// members are: on a cluster's primary, a range without a node. Apply asks only
+// this. A member that was removed or runs an older release is refused where
+// [dhcp] is edited (Check), not at start, when nothing was edited and the
+// node's own ranges would go unserved.
+func (service *dhcpService) checkServable(settings config.DHCP) error {
+	role := service.role()
+	if !settings.Enabled || role == "" || role == cluster.RoleReplica || role == dhcpRoleJoining {
+		return nil
+	}
+	return dhcpRangesPinned(settings)
+}
+
 // clusterState is this node's cluster state; zero outside a cluster.
 func (service *dhcpService) clusterState() cluster.State {
 	if service.cluster == nil {
@@ -122,16 +135,20 @@ func (service *dhcpService) newEngine(settings config.DHCP) (*dhcp.Engine, error
 
 // Apply moves the server to settings: unchanged settings keep it running,
 // disabled ones stop it, and anything else replaces it. Only settings the
-// engine refuses reject the change. Port 67 or the store being unavailable
-// is a condition of the host, not of the configuration, so it is logged and
-// retried and never holds back a change elsewhere in sable.toml.
+// engine refuses, or an unpinned range on a cluster (checkServable), reject
+// the change. The rest of what a cluster can't serve safely is refused where
+// [dhcp] is edited (Check, through checkDHCP): at start a node serves what is
+// pinned to it, whatever became of the other members since (D63). Port 67 or
+// the store being unavailable is a condition of the host, not of the
+// configuration, so it is logged and retried and never holds back a change
+// elsewhere in sable.toml.
 func (service *dhcpService) Apply(ctx context.Context, runtime context.Context, settings config.DHCP) error {
 	service.mutex.Lock()
 	defer service.mutex.Unlock()
 	if reflect.DeepEqual(service.active, settings) && (service.running != nil) == settings.Enabled {
 		return nil
 	}
-	if err := service.Check(settings); err != nil {
+	if err := service.checkServable(settings); err != nil {
 		return err
 	}
 	if applied, err := service.applyInPlace(settings); applied || err != nil {

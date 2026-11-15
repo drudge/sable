@@ -130,7 +130,9 @@ func (service dhcpService) Save(ctx context.Context, who actor, settings config.
 // RemoveLease ends this node's lease on address. The client keeps using it
 // until it next renews, when it's offered an address again (RFC 2131 §4.4.5).
 func (service dhcpService) RemoveLease(ctx context.Context, who actor, raw string) error {
-	if err := service.ready(who); err != nil {
+	// Not ready(): ending a lease changes only this node, and only the node
+	// that granted it can, so a replica takes it too.
+	if err := service.allowed(who, auth.PermissionDHCPWrite); err != nil {
 		return err
 	}
 	address, err := dhcpAddress(raw)
