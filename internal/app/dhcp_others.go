@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/netip"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/drudge/sable/internal/config"
@@ -56,12 +57,14 @@ type dhcpSeek func(ctx context.Context, link dhcpProbeLink, discover []byte, wai
 // watchOthers probes for other DHCP servers when the server starts and every
 // service.othersEvery after, until ctx ends.
 func (service *dhcpService) watchOthers(ctx context.Context, settings config.DHCP) {
+	failing := map[string]bool{}
 	for {
-		found := service.findOthers(ctx, settings)
+		found, failed := service.findOthers(ctx, settings)
 		if ctx.Err() != nil {
 			return
 		}
 		service.setOthers(found)
+		service.noteProbeFailures(failing, failed)
 		select {
 		case <-ctx.Done():
 			return
@@ -73,11 +76,13 @@ func (service *dhcpService) watchOthers(ctx context.Context, settings config.DHC
 // findOthers probes every interface that holds an address in a serving
 // scope. Relayed scopes have no local link; their relay agent sees what's
 // there.
-func (service *dhcpService) findOthers(ctx context.Context, settings config.DHCP) []dhcpOtherServer {
+// Failed maps each interface the probe couldn't go out of to why.
+func (service *dhcpService) findOthers(ctx context.Context, settings config.DHCP) (found []dhcpOtherServer, failed map[string]error) {
+	failed = map[string]error{}
 	links, err := service.links()
 	if err != nil {
-		service.logger.Debug("list interfaces for the DHCP server probe", "error", err)
-		return nil
+		failed[""] = err
+		return nil, failed
 	}
 	own := map[netip.Addr]bool{}
 	for _, link := range links {
@@ -85,13 +90,37 @@ func (service *dhcpService) findOthers(ctx context.Context, settings config.DHCP
 			own[prefix.Addr()] = true
 		}
 	}
-	var found []dhcpOtherServer
 	for _, link := range links {
-		if dhcpServesLink(settings, link.Meta) {
-			found = append(found, service.probeLink(ctx, link, own)...)
+		if !dhcpServesLink(settings, link.Meta) {
+			continue
+		}
+		others, err := service.probeLink(ctx, link, own)
+		if err != nil {
+			failed[link.Meta.Interface] = err
+		}
+		found = append(found, others...)
+	}
+	return found, failed
+}
+
+// noteProbeFailures logs when the probe stops being able to go out of an
+// interface, and when it can again, rather than at every probe: a probe that
+// can't run never sees another server, so its silence isn't an all-clear.
+// Failing is the interfaces failing after the last probe; it's updated.
+func (service *dhcpService) noteProbeFailures(failing map[string]bool, failed map[string]error) {
+	for name, err := range failed {
+		if !failing[name] {
+			failing[name] = true
+			service.logger.Warn("can't probe for another DHCP server; conflicting servers go unnoticed",
+				"interface", name, "error", err)
 		}
 	}
-	return found
+	for name := range failing {
+		if _, still := failed[name]; !still {
+			delete(failing, name)
+			service.logger.Warn("probing for another DHCP server again", "interface", name)
+		}
+	}
 }
 
 // dhcpServesLink reports whether a serving scope's subnet holds one of the
@@ -117,20 +146,59 @@ func dhcpServesLink(settings config.DHCP, meta dhcp.Meta) bool {
 // other server has answered, and returns the servers other than this node's
 // own addresses that offered a lease. Nothing is requested, so an offered
 // address is only held until that server's offer times out.
-func (service *dhcpService) probeLink(ctx context.Context, link dhcpProbeLink, own map[netip.Addr]bool) []dhcpOtherServer {
+func (service *dhcpService) probeLink(ctx context.Context, link dhcpProbeLink, own map[netip.Addr]bool) ([]dhcpOtherServer, error) {
 	discover := dhcpProbeDiscover(link.MAC)
+	defer service.ownProbes.add(discover.XID)()
 	var found []dhcpOtherServer
 	for try := range dhcpOthersTries {
 		discover.Secs = uint16(try) * uint16(dhcpOthersWait/time.Second)
 		replies, err := service.seek(ctx, link, discover.Marshal(), dhcpOthersWait)
 		if err != nil {
-			service.logger.Debug("probe for another DHCP server", "interface", link.Meta.Interface, "error", err)
-			return nil
+			return nil, err
 		}
 		if found = dhcpOtherOffers(link, discover, replies, own); len(found) > 0 || ctx.Err() != nil {
 			break
 		}
 	}
+	return found, nil
+}
+
+// dhcpOwnProbes is the transaction IDs of this node's probe DISCOVERs in
+// flight. A probe's broadcast loops back to this node's own port 67 socket,
+// and answering it would hold a pool address on offer to the node itself at
+// every probe (F32, D36). Only this process's IDs are dropped, so two
+// standalone servers on one link still find each other.
+type dhcpOwnProbes struct {
+	mutex sync.Mutex
+	xids  map[[4]byte]int
+}
+
+// add marks xid in flight until the returned func is called.
+func (probes *dhcpOwnProbes) add(xid [4]byte) func() {
+	probes.mutex.Lock()
+	defer probes.mutex.Unlock()
+	if probes.xids == nil {
+		probes.xids = map[[4]byte]int{}
+	}
+	probes.xids[xid]++
+	return func() {
+		probes.mutex.Lock()
+		defer probes.mutex.Unlock()
+		if probes.xids[xid]--; probes.xids[xid] <= 0 {
+			delete(probes.xids, xid)
+		}
+	}
+}
+
+// sent reports whether datagram is a client message (op BOOTREQUEST, RFC 2131
+// §2) carrying the transaction ID of a probe in flight.
+func (probes *dhcpOwnProbes) sent(datagram []byte) bool {
+	if probes == nil || len(datagram) < 8 || datagram[0] != 1 {
+		return false
+	}
+	probes.mutex.Lock()
+	defer probes.mutex.Unlock()
+	_, found := probes.xids[[4]byte(datagram[4:8])]
 	return found
 }
 

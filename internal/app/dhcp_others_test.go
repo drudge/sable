@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net"
 	"net/netip"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -80,7 +82,7 @@ func TestDHCPServiceFindsOtherServers(t *testing.T) {
 			{1, 2, 3},
 		}, nil
 	}
-	found := service.findOthers(context.Background(), dhcpTestSettings(t))
+	found, _ := service.findOthers(context.Background(), dhcpTestSettings(t))
 	if !slices.Equal(probed, []string{"eth0"}) {
 		t.Fatalf("probed %q, want only eth0, the link scope lan covers", probed)
 	}
@@ -177,11 +179,53 @@ func TestDHCPServiceProbeRetransmits(t *testing.T) {
 		}
 		return [][]byte{dhcpOthersTestReply(t, discover, dhcp.Offer, "10.0.7.1", nil)}, nil
 	}
-	found := service.findOthers(context.Background(), dhcpTestSettings(t))
+	found, _ := service.findOthers(context.Background(), dhcpTestSettings(t))
 	if len(sent) != 2 || sent[0].XID != sent[1].XID || sent[0].Secs != 0 || sent[1].Secs != 4 {
 		t.Fatalf("sent %d DISCOVERs %+v; want a retransmit of the first with secs 4", len(sent), sent)
 	}
 	if len(found) != 1 || found[0].Server != netip.MustParseAddr("10.0.7.1") {
 		t.Fatalf("found %+v, want 10.0.7.1 from the retransmit", found)
+	}
+}
+
+// A probe that can't open its socket says so once at Warn when it starts
+// failing and once when it works again, not at every probe: its silence
+// otherwise reads as no other server.
+func TestDHCPServiceWarnsWhenProbeCantRun(t *testing.T) {
+	service, _, _ := newTestDHCPService(t, "")
+	var logs strings.Builder
+	service.logger = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	failing := map[string]bool{}
+	down := map[string]error{"eth0": errors.New("address in use")}
+	service.noteProbeFailures(failing, down)
+	service.noteProbeFailures(failing, down)
+	service.noteProbeFailures(failing, map[string]error{})
+	if got := strings.Count(logs.String(), "can't probe for another DHCP server"); got != 1 {
+		t.Errorf("warned %d times while failing, want once:\n%s", got, logs.String())
+	}
+	if got := strings.Count(logs.String(), "probing for another DHCP server again"); got != 1 {
+		t.Errorf("warned %d times on recovery, want once:\n%s", got, logs.String())
+	}
+}
+
+// The probe marks its transaction ID in flight while it waits, so the
+// server's own socket drops the looped-back DISCOVER (D36), and clears it
+// after.
+func TestDHCPServiceProbeMarksItsTransaction(t *testing.T) {
+	service, _, _ := newTestDHCPService(t, "")
+	service.links = dhcpOthersTestLinks
+	marked := 0
+	service.seek = func(_ context.Context, _ dhcpProbeLink, discover []byte, _ time.Duration) ([][]byte, error) {
+		if service.ownProbes.sent(discover) {
+			marked++
+		}
+		return nil, nil
+	}
+	_, _ = service.findOthers(context.Background(), dhcpTestSettings(t))
+	if marked != dhcpOthersTries {
+		t.Fatalf("%d of %d DISCOVERs were marked as this node's own", marked, dhcpOthersTries)
+	}
+	if len(service.ownProbes.xids) != 0 {
+		t.Fatalf("probe left %d transactions marked", len(service.ownProbes.xids))
 	}
 }

@@ -6,12 +6,15 @@
 # SABLE_TEST_NETNS=1. Usage: SABLE_TEST_NETNS=1 scripts/dhcp/netns.sh [worktree]
 set -u
 if [ "${SABLE_TEST_NETNS:-}" != 1 ]; then echo "skipped: set SABLE_TEST_NETNS=1 to run the DHCP namespace harness"; exit 0; fi
+for tool in busybox /usr/sbin/dnsmasq python3 setpriv; do
+  command -v "$tool" >/dev/null || { echo "missing $tool: install busybox and dnsmasq-base"; exit 2; }
+done
 src=$(cd "${1:-.}" && pwd); here=$(cd "$(dirname "$0")" && pwd)
 export PATH=/usr/local/go/bin:$PATH GOEXPERIMENT=jsonv2 GOFLAGS=-p=1
 work=$(mktemp -d /tmp/sable-e2e.XXXXXX); chmod 755 "$work"
 S=sdh-s; pid=; NETNS="$S sdh-c1 sdh-c2 sdh-c3 sdh-q sdh-r"
 stop_server() { [ -n "$pid" ] && sudo kill "$pid" 2>/dev/null; for _ in $(seq 300); do sudo kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done; pid=; }
-cleanup() { stop_server; sudo pkill -f "udhcpc -i sdh" 2>/dev/null; [ -f "$work/rogue.pid" ] && sudo kill "$(cat "$work/rogue.pid")" 2>/dev/null; for n in $NETNS; do sudo ip netns del $n 2>/dev/null; done; [ "${KEEP:-}" ] || rm -rf "$work"; }
+cleanup() { stop_server; [ -n "${hold:-}" ] && sudo kill "$hold" 2>/dev/null; sudo pkill -f "udhcpc -i sdh" 2>/dev/null; [ -f "$work/rogue.pid" ] && sudo kill "$(cat "$work/rogue.pid")" 2>/dev/null; for n in $NETNS; do sudo ip netns del $n 2>/dev/null; done; [ "${KEEP:-}" ] || rm -rf "$work"; }
 trap cleanup EXIT; for n in $NETNS; do sudo ip netns del $n 2>/dev/null; done
 (cd "$src" && go build -o "$work/sable" ./cmd/sable) || { echo "build failed"; exit 2; }
 echo "sable built from $(git -C "$src" rev-parse --short=8 HEAD)"
@@ -26,7 +29,8 @@ sudo ip netns exec $S sysctl -qw net.ipv4.ping_group_range="0 2147483647"
 # retries "network is unreachable" about 7,700 times a second and fills the log.
 sudo ip -n $S route add default via 192.0.2.254
 sed -e 's/^http_listen = .*/http_listen = "127.0.0.1:15380"/' -e 's/^dns_listen = .*/dns_listen = ["127.0.0.1:18053"]/' \
-    -e 's/^domains = \["example.invalid"\]/domains = []/' "$src/config.example.toml" > "$work/sable.toml"
+    -e 's/^domains = \["example.invalid"\]/domains = []/' \
+    -e 's/^dnssec_trust_anchor_updates = .*/dnssec_trust_anchor_updates = false/' "$src/config.example.toml" > "$work/sable.toml"
 cat >> "$work/sable.toml" <<'TOML'
 
 [dhcp]
@@ -77,6 +81,16 @@ fail=0; ok() { echo "ok   $1"; }; bad() { echo "FAIL $1"; fail=1; }
 check() { if [ "$2" = "$3" ]; then ok "$1 ($2)"; else bad "$1: got '$2', want '$3'"; fi; }
 started() { grep -c "DHCP server started" log; }
 
+# A host DHCP client's socket on port 68, shaped like systemd-networkd's
+# (address:68, bound to the device, SO_REUSEADDR): the probe shares port 68
+# with it (D34), while port 67 is never shared (D33).
+sudo ip netns exec $S python3 -c '
+import socket, time
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, b"br0")
+s.bind(("192.0.2.1", 68)); time.sleep(3600)' &
+sleep 0.5; hold=$(pgrep -n -f 's.bind\(\("192.0.2.1", 68\)\)')
 start_server
 echo "server: pid $pid, uid $(sudo awk '/^Uid/{print $2}' /proc/$pid/status), CapEff $(sudo awk '/^CapEff/{print $2}' /proc/$pid/status)"
 a=$(lease c1); echo "$a"; ip1=$(ip_of "$a")
@@ -138,7 +152,7 @@ for _ in $(seq 80); do grep -q "another DHCP server" log && break; sleep 0.1; do
 grep "another DHCP server" log | cut -c1-240
 grep "another DHCP server" log | grep -q "192.0.2.2" && ok "the probe reports dnsmasq at 192.0.2.2" || bad "no report of the second server"
 grep "another DHCP server" log | grep -q "server=192.0.2.1 " && bad "the probe reported this server itself" || ok "the probe doesn't report this server"
-grep -i "probe for another DHCP server" log | head -2
+grep -q "can't probe for another DHCP server" log && bad "the probe couldn't share port 68 with the host's DHCP client" || ok "the probe shares port 68 with the host's DHCP client"
 
 [ "${KEEP:-}" ] && echo "kept $work"
 exit $fail

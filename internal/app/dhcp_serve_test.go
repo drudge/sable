@@ -104,7 +104,7 @@ func startDHCPServer(t *testing.T, save func(context.Context, []dhcp.Lease) erro
 	}
 	harness := &dhcpServerHarness{conn: newFakeDHCPConn(), stats: &dhcpStats{}, done: make(chan error, 1)}
 	harness.server = &dhcpServer{
-		engine: engine, conn: harness.conn, save: save, link: link,
+		engine: engine, conn: harness.conn, save: save, link: link, ownProbes: &dhcpOwnProbes{},
 		load:   func(context.Context) ([]dhcp.Lease, error) { return nil, nil },
 		now:    func() time.Time { return time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC) },
 		logger: slog.New(slog.NewTextHandler(testLogWriter{t}, &slog.HandlerOptions{Level: slog.LevelDebug})), stats: harness.stats,
@@ -389,5 +389,27 @@ func TestDHCPServerLimitsStaleReloads(t *testing.T) {
 	harness.waitIdle(t, 53)
 	if got := loads.Load(); got != 2 {
 		t.Fatalf("store read %d times after the interval passed, want 2", got)
+	}
+}
+
+// The probe for other servers broadcasts a DISCOVER that loops back to this
+// node's own port 67. Answering it would hold a pool address on offer to the
+// node itself at every probe (F32, D36), so it's dropped before the engine
+// and isn't counted; a client's DISCOVER behind it is still answered.
+func TestDHCPServerIgnoresItsOwnProbe(t *testing.T) {
+	harness := startDHCPServer(t, func(context.Context, []dhcp.Lease) error { return nil }, nil)
+	probe := dhcpProbeDiscover(dhcpTestMAC)
+	done := harness.server.ownProbes.add(probe.XID)
+	harness.exchange(t, probe)
+	harness.exchange(t, dhcpTestPacket(dhcp.Discover))
+	harness.waitWrite(t)
+	harness.waitIdle(t, 1)
+	_, sent := harness.conn.snapshot()
+	if received := harness.stats.Received.Load(); received != 1 || len(sent) != 1 {
+		t.Fatalf("received %d, sent %d; want only the client's DISCOVER taken and answered", received, len(sent))
+	}
+	done()
+	if harness.server.ownProbes.sent(probe.Marshal()) {
+		t.Fatal("a finished probe's transaction is still dropped")
 	}
 }

@@ -96,9 +96,12 @@ type dhcpServer struct {
 	// stale is set when a save failed and no reload has succeeded since.
 	// Only the serve goroutine touches it.
 	stale bool
-	// reloadedAt is when the last reload started; only the serve goroutine
+	// reloadedAt is when the last reload finished; only the serve goroutine
 	// touches it.
 	reloadedAt time.Time
+	// ownProbes is this node's probes for other DHCP servers in flight; their
+	// DISCOVERs loop back to this socket and aren't client requests (D36).
+	ownProbes *dhcpOwnProbes
 }
 
 // run serves until ctx ends or the socket fails, then closes the socket.
@@ -136,6 +139,9 @@ func (server *dhcpServer) read() error {
 				return nil
 			}
 			return fmt.Errorf("read DHCP socket: %w", err)
+		}
+		if server.ownProbes.sent(buffer[:n]) {
+			continue
 		}
 		server.stats.Received.Add(1)
 		if n > dhcpMaxPacket {
@@ -244,9 +250,11 @@ func (server *dhcpServer) reloadStale(ctx context.Context) bool {
 }
 
 // reload replaces the engine's lease view with the store's and reports
-// whether it did. Pending offers live outside the view and survive.
+// whether it did. Pending offers live outside the view and survive. The
+// limit counts from when the read ends: a hanging store holds each read for
+// dhcpSaveTimeout, longer than dhcpReloadInterval (F34).
 func (server *dhcpServer) reload(ctx context.Context) bool {
-	server.reloadedAt = server.now()
+	defer func() { server.reloadedAt = server.now() }()
 	loadCtx, cancel := context.WithTimeout(ctx, dhcpSaveTimeout)
 	defer cancel()
 	leases, err := server.load(loadCtx)

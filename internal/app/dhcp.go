@@ -52,6 +52,7 @@ type dhcpService struct {
 
 	othersMutex sync.Mutex
 	others      []dhcpOtherServer
+	ownProbes   dhcpOwnProbes
 }
 
 // dhcpRunning is one started server and how to stop it.
@@ -125,7 +126,7 @@ func (service *dhcpService) prepare(settings config.DHCP) (*dhcpServer, error) {
 	}
 	return &dhcpServer{
 		engine: engine, save: service.save, load: service.load, link: service.link, probe: service.probe,
-		now: time.Now, logger: service.logger, stats: &service.stats,
+		ownProbes: &service.ownProbes, now: time.Now, logger: service.logger, stats: &service.stats,
 	}, nil
 }
 
