@@ -99,3 +99,34 @@ func (server *Server) removeDHCPReservationAPI(writer http.ResponseWriter, reque
 	}
 	writer.WriteHeader(http.StatusNoContent)
 }
+
+func (server *Server) dhcpScopeAPI(writer http.ResponseWriter, request *http.Request) {
+	scope, err := server.dhcpService().Scope(requestActor(request, ""), request.PathValue("scope"))
+	if err != nil {
+		apiError(writer, serviceStatus(err), err.Error())
+		return
+	}
+	writeJSON(writer, http.StatusOK, scope)
+}
+
+func (server *Server) setDHCPScopeAPI(writer http.ResponseWriter, request *http.Request) {
+	var scope config.DHCPScope
+	if err := decodeJSON(request, &scope); err != nil {
+		apiError(writer, http.StatusBadRequest, "the body must be the scope's settings as JSON")
+		return
+	}
+	saved, err := server.dhcpService().SetScope(request.Context(), requestActor(request, ""), request.PathValue("scope"), scope)
+	if err != nil {
+		apiError(writer, serviceStatus(err), err.Error())
+		return
+	}
+	writeJSON(writer, http.StatusOK, saved)
+}
+
+func (server *Server) removeDHCPScopeAPI(writer http.ResponseWriter, request *http.Request) {
+	if err := server.dhcpService().RemoveScope(request.Context(), requestActor(request, ""), request.PathValue("scope")); err != nil {
+		apiError(writer, serviceStatus(err), err.Error())
+		return
+	}
+	writer.WriteHeader(http.StatusNoContent)
+}

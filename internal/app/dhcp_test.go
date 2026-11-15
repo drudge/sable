@@ -283,3 +283,24 @@ func TestDHCPClusterRole(t *testing.T) {
 		}
 	}
 }
+
+// Status reads the bound server from current, so a server bind has stored
+// is already taking requests. It used to make its queue only once run
+// started on the supervise goroutine, and about one console save in five
+// drew "Not answering on port 67" in that gap (F43).
+func TestDHCPServiceBoundServerIsServing(t *testing.T) {
+	service, _, _ := newTestDHCPService(t, "")
+	server, err := service.prepare(dhcpTestSettings(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := service.bind(ctx, server); err != nil {
+		t.Fatal(err)
+	}
+	defer server.conn.Close()
+	if !service.current.Load().accepting() {
+		t.Fatal("bind stored a server that isn't accepting requests yet")
+	}
+}

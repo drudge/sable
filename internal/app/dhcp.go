@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"reflect"
 	"slices"
 	"sync"
@@ -40,8 +41,11 @@ type dhcpService struct {
 	probe   dhcpProbe
 	// links and seek look for other DHCP servers every othersEvery while
 	// this one runs.
-	links       func() ([]dhcpProbeLink, error)
-	seek        dhcpSeek
+	links func() ([]dhcpProbeLink, error)
+	seek  dhcpSeek
+	// gateways maps each interface to its default route, for the router
+	// setup suggests.
+	gateways    func() map[string]netip.Addr
 	othersEvery time.Duration
 	port        int
 	// retry is the first wait before binding again after a failure.
@@ -86,7 +90,7 @@ func newDHCPService(leases dhcpLeaseStore, node func() string, role func() strin
 		leases: leases, node: node, role: role,
 		listen: func(ctx context.Context, port int) (dhcpConn, error) { return listenDHCP(ctx, port) },
 		link:   dhcpLink, probe: newDHCPProber(logger).probe, port: dhcpServerPort, retry: time.Second, logger: logger,
-		links: dhcpProbeLinks, seek: dhcpDefaultSeek, othersEvery: dhcpOthersInterval,
+		links: dhcpProbeLinks, seek: dhcpDefaultSeek, gateways: dhcpDefaultGateways, othersEvery: dhcpOthersInterval,
 	}
 }
 
@@ -296,6 +300,9 @@ func (service *dhcpService) bind(ctx context.Context, server *dhcpServer) error 
 	if !server.reload(ctx) {
 		server.stale = true
 	}
+	// Status reads current, so it must find a queue there: a server it
+	// can see is one that takes requests, not one still starting.
+	server.openQueue()
 	service.current.Store(server)
 	service.logger.Info("DHCP server started", "port", service.port)
 	return nil
@@ -399,8 +406,13 @@ func (process *process) startDHCP() {
 	if process.unifiSync != nil {
 		names.kick = process.unifiSync.SyncNow
 	}
-	process.dhcp.changed = names.Changed
+	identities := newDHCPIdentities(process.insightsEnabled, process.database.DHCPLeases,
+		func() string { return clusterService.Snapshot().NodeID },
+		func() config.DHCP { return process.current().DHCP },
+		process.deviceAddresses.Record(process.database.RecordClientIdentities), process.logger)
+	process.dhcp.changed = func() { names.Changed(); identities.Changed() }
 	process.runWorker(func(context.Context) { names.Run(process.zoneRefreshContext) })
+	process.runWorker(func(context.Context) { identities.Run(process.runtimeContext) })
 	if err := process.dhcp.Apply(process.runtimeContext, process.runtimeContext, process.current().DHCP); err != nil {
 		process.logger.Error("DHCP server not started", "error", err)
 	}

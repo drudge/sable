@@ -1,0 +1,5 @@
+{"response":{"name":"Default","startingAddress":"10.0.7.100","endingAddress":"10.0.7.199","subnetMask":"255.255.255.0",
+ "reservedLeases":[
+  {"hostName":"Server.home.arpa","hardwareAddress":"00-11-22-33-44-40","address":"10.0.7.40","comments":"rack"},
+  {"hostName":null,"hardwareAddress":"00-11-22-33-44-41","address":"10.0.7.41","comments":null}
+ ]},"status":"ok"}
