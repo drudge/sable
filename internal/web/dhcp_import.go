@@ -45,7 +45,7 @@ func (service dhcpService) Import(ctx context.Context, who actor, scope string, 
 	if err != nil {
 		return dhcpImportResult{}, refuse(http.StatusUnprocessableEntity, "%s", err.Error())
 	}
-	settings := dhcpClone(service.server.config.Current().Config.DHCP)
+	settings := service.server.config.Current().Config.DHCP.Clone()
 	result, err := dhcpImportPlan(&settings, scope, parsed)
 	if err != nil || dryRun || len(result.Added) == 0 {
 		result.DryRun = dryRun
@@ -130,7 +130,7 @@ func dhcpImportFits(settings *config.DHCP, target *config.DHCPScope, reservation
 			}
 		}
 	}
-	trial := dhcpClone(*settings)
+	trial := settings.Clone()
 	scope, err := dhcpScope(&trial, target.ID)
 	if err != nil {
 		return err
