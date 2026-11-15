@@ -63,6 +63,38 @@ func New(settings config.DHCP, node string) (*Engine, error) {
 	return engine, nil
 }
 
+// Rescope takes from's scopes and keeps this engine's leases, bindings and
+// offers, for a change to reservations alone (D48). An offer of an address
+// now reserved is withdrawn, since its client would be NAKed for it.
+func (engine *Engine) Rescope(from *Engine) {
+	from.mutex.Lock()
+	scopes := from.scopes
+	from.mutex.Unlock()
+	engine.mutex.Lock()
+	defer engine.mutex.Unlock()
+	engine.scopes = scopes
+	for ref, pending := range engine.offers {
+		compiled := engine.scope(ref.scope)
+		if compiled == nil {
+			delete(engine.offers, ref)
+			continue
+		}
+		if _, reserved := compiled.reservedBy[pending.address]; reserved {
+			delete(engine.offers, ref)
+		}
+	}
+}
+
+// scope returns the scope with id, or nil.
+func (engine *Engine) scope(id string) *scope {
+	for _, compiled := range engine.scopes {
+		if compiled.id == id {
+			return compiled
+		}
+	}
+	return nil
+}
+
 // SetLabeler sets the rule that names a lease, so the option 81 reply
 // (RFC 4702 §4) carries the name the namer publishes. Without one the
 // engine tells clients it registers nothing.

@@ -26,10 +26,12 @@ type dhcpListenLog struct {
 	conns  []*fakeDHCPConn
 }
 
+// listen records the event and its conn together, so a test that has seen
+// the event and asks for last() gets this conn, not the one before it.
 func (log *dhcpListenLog) listen(context.Context, int) (dhcpConn, error) {
-	log.record("listen")
 	conn := newFakeDHCPConn()
 	log.mutex.Lock()
+	log.events = append(log.events, "listen")
 	log.conns = append(log.conns, conn)
 	log.mutex.Unlock()
 	return &loggedDHCPConn{fakeDHCPConn: conn, log: log}, nil
