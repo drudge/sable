@@ -28,6 +28,10 @@ Inspect the group's actual grants in **Administration** before assigning it. A g
 
 Selected-zone grants use stable zone IDs. Do not assume that a similarly named replacement zone inherits an old grant.
 
+## Grant DHCP
+
+`dhcp.read` shows the DHCP settings and every lease, which names each device on the network with its hardware address. `dhcp.write` changes reservations and removes leases; changing the server's settings or its scopes takes `settings.write` as well. DNS Administrator has all three, Operator has both DHCP permissions and so manages reservations and leases, and Auditor has `dhcp.read`.
+
 ## Treat recovery capabilities separately
 
 `updates.read` allows version checks; `updates.apply` allows installing and restarting. `backup.create` permits access to an archive containing credential material; `backup.restore` can replace deployment state. Neither backup capability follows automatically from `settings.write`.

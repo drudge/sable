@@ -122,6 +122,7 @@ type Server struct {
 	cluster              clusterController
 	dynamicDNS           dynamicDNSController
 	unifi                unifiController
+	dhcp                 dhcpController
 	certificates         certificateController
 	tsigKeys             tsigController
 	updates              updateController

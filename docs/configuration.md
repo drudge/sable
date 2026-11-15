@@ -753,6 +753,12 @@ string, or `true` and `false`. Any other code takes `hex` instead. Codes that a
 scope field or the server itself sets can't be set here: 1, 3, 6, 15, 42, 50 to
 55, 57 to 59, 61, 66, 67, 81, 82, 108, 119, 121, and 150.
 
+The **DHCP** page in the console lists the leases that hold an address and each
+scope's reservations. **Reserve** on a lease keeps its address for that device,
+and **Remove** ends the lease, so the device asks again when it next renews
+(RFC 2131 §4.4.5). Reservations can be added, edited, and removed there too;
+each change saves to `[dhcp]` like an edit to `sable.toml`.
+
 The `[dhcp]` section replicates from a cluster's primary to every node. While
 it's empty it's left out of the replicated configuration, so a node from before
 DHCP keeps working. Upgrade every node before you add a scope.
