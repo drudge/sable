@@ -39,7 +39,7 @@ const {chromium} = require('playwright');
     // click meanwhile.
     const turnOn = await page.getByRole('button', {name: 'Turn On', exact: true}).elementHandle();
     await turnOn.click();
-    await page.waitForFunction(button => button.disabled && /Checking Network/.test(button.innerText), turnOn);
+    await page.waitForFunction(button => button.disabled && button.querySelector('.button-pending').checkVisibility(), turnOn);
     const box = await turnOn.boundingBox();
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     console.log('PASS Turn On is busy and disabled while the probe listens');
