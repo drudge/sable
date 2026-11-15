@@ -80,6 +80,7 @@ func newTestDHCPService(t *testing.T, role string) (*dhcpService, *dhcpListenLog
 		return dhcp.Meta{Interface: "eth0", Addrs: []netip.Prefix{netip.MustParsePrefix("10.0.7.2/24")}}, nil
 	}
 	service.probe = func(context.Context, netip.Addr, net.HardwareAddr, time.Duration) (string, bool) { return "", false }
+	service.links = func() ([]dhcpProbeLink, error) { return nil, nil }
 	t.Cleanup(service.Stop)
 	return service, listens, database
 }

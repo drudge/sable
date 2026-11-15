@@ -2,6 +2,7 @@ package dhcp
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"net/netip"
 
@@ -15,12 +16,22 @@ import (
 // Parse reads a DHCP message off the wire. It rejects anything that isn't a
 // BOOTREQUEST carrying a message type, since the engine answers nothing else.
 func Parse(data []byte) (Packet, error) {
+	return parse(data, dhcpv4.OpcodeBootRequest)
+}
+
+// ParseReply reads a server's BOOTREPLY carrying a message type, such as
+// another server's OFFER to a probe.
+func ParseReply(data []byte) (Packet, error) {
+	return parse(data, dhcpv4.OpcodeBootReply)
+}
+
+func parse(data []byte, op dhcpv4.OpcodeType) (Packet, error) {
 	message, err := dhcpv4.FromBytes(data)
 	if err != nil {
 		return Packet{}, err
 	}
-	if message.OpCode != dhcpv4.OpcodeBootRequest {
-		return Packet{}, errors.New("not a BOOTREQUEST")
+	if message.OpCode != op {
+		return Packet{}, fmt.Errorf("not a %s", op)
 	}
 	packet := Packet{
 		Op: uint8(message.OpCode), HType: uint8(message.HWType), Hops: message.HopCount,

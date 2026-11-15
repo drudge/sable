@@ -14,7 +14,7 @@ import (
 	"github.com/drudge/sable/internal/dhcp"
 )
 
-// Blake's review of slice 4's socket core (F18-F21, D25).
+// Blake's review of slice 4's socket core (F18-F21, D27).
 
 // reviewSocketStore is the store as the server leaves it: every save that
 // succeeded, applied in order.
@@ -62,7 +62,7 @@ func TestReviewSocketRefusedSaveThenRetransmitKeepsStoreAndEngineEqual(t *testin
 }
 
 // F22. The same move, but the save panics instead of failing. The recover
-// loses the request; D25 still has to reload the engine before the retransmit.
+// loses the request; D27 still has to reload the engine before the retransmit.
 func TestReviewSocketPanicAfterEngineChangeReloadsFromStore(t *testing.T) {
 	reviewSocketMoveAfterFault(t, func(store *reviewSocketStore) { store.panics = 1 })
 }
@@ -227,7 +227,7 @@ func TestReviewSocketSavedReleaseIsNotCountedAsDropped(t *testing.T) {
 	}
 }
 
-// D25's check: while reloads keep failing the server answers nothing, and the
+// D27's check: while reloads keep failing the server answers nothing, and the
 // first reload that succeeds puts it back in service.
 func TestDHCPServerStaysSilentUntilReloadSucceeds(t *testing.T) {
 	var loadFailures atomic.Int32
@@ -240,6 +240,11 @@ func TestDHCPServerStaysSilentUntilReloadSucceeds(t *testing.T) {
 		}
 		return nil
 	}, nil)
+	// Each reading of the clock is a reload interval later, so the limit on
+	// stale reloads never holds one back here.
+	var tick atomic.Int64
+	start := harness.server.now()
+	harness.server.now = func() time.Time { return start.Add(time.Duration(tick.Add(1)) * time.Second) }
 	harness.server.load = func(context.Context) ([]dhcp.Lease, error) {
 		if loadFailures.Add(-1) >= 0 {
 			return nil, errors.New("database is locked")

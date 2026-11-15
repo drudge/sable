@@ -1,11 +1,13 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
 	"net/netip"
 	"syscall"
+	"time"
 
 	"golang.org/x/net/ipv4"
 )
@@ -29,10 +31,24 @@ type udpDHCPConn struct {
 // server on this host and both would answer each DISCOVER. Without it the
 // bind fails with EADDRINUSE, which dhcpService logs and retries.
 func listenDHCP(ctx context.Context, port int) (*udpDHCPConn, error) {
+	return openDHCPSocket(ctx, port, false)
+}
+
+// listenDHCPClient opens the probe's socket on the client port. It sets
+// SO_REUSEADDR so it binds beside a DHCP client on this host (dhcpcd,
+// dhclient), which holds port 68 the same way; listenDHCP must not.
+func listenDHCPClient(ctx context.Context, port int) (*udpDHCPConn, error) {
+	return openDHCPSocket(ctx, port, true)
+}
+
+func openDHCPSocket(ctx context.Context, port int, shared bool) (*udpDHCPConn, error) {
 	config := net.ListenConfig{Control: func(_, _ string, raw syscall.RawConn) error {
 		var optionErr error
 		err := raw.Control(func(fd uintptr) {
 			optionErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_BROADCAST, 1)
+			if optionErr == nil && shared {
+				optionErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
+			}
 		})
 		if err != nil {
 			return err
@@ -72,3 +88,33 @@ func (conn *udpDHCPConn) WritePacket(payload []byte, ifIndex int, source netip.A
 }
 
 func (conn *udpDHCPConn) Close() error { return conn.conn.Close() }
+
+// seekDHCP is a dhcpSeek on a UDP socket on port 68, shared with a DHCP
+// client on the host (listenDHCPClient); IP_PKTINFO sends the
+// broadcast out of link and keeps only replies that came in on it.
+func seekDHCP(ctx context.Context, link dhcpProbeLink, discover []byte, wait time.Duration) ([][]byte, error) {
+	conn, err := listenDHCPClient(ctx, dhcpClientPort)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	_ = conn.conn.SetDeadline(time.Now().Add(wait))
+	stop := context.AfterFunc(ctx, func() { _ = conn.conn.SetDeadline(time.Now()) })
+	defer stop()
+	broadcast := netip.AddrPortFrom(netip.AddrFrom4([4]byte{255, 255, 255, 255}), dhcpServerPort)
+	if err := conn.WritePacket(discover, link.Index, netip.Addr{}, broadcast); err != nil {
+		return nil, err
+	}
+	var replies [][]byte
+	buffer := make([]byte, dhcpMaxPacket+1)
+	for {
+		n, ifIndex, err := conn.ReadPacket(buffer)
+		if err != nil {
+			// The deadline ends every probe; it isn't a failure.
+			return replies, nil
+		}
+		if ifIndex == link.Index && n <= dhcpMaxPacket {
+			replies = append(replies, bytes.Clone(buffer[:n]))
+		}
+	}
+}
