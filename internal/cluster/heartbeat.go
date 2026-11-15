@@ -393,7 +393,7 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 		service.recordSharedIdentities(ctx, configuration.ClientIdentities)
 		service.receiveAttachedNetworks(primary.Name, configuration.AttachedNetworks)
 		if configuration.LeaseProtocol == leaseProtocolVersion {
-			service.receiveLeases(ctx, configuration.Leases)
+			service.receiveLeases(ctx, heartbeat.Leases, configuration.Leases)
 		}
 	}
 	return service.adoptSyncConfiguration(ctx, primary, configuration)

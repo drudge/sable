@@ -33,6 +33,9 @@ var migrations = []migration{
 	{1, "schema before versioned migrations", (*Store).migrateBaseline},
 	// The DHCP server's leases (#506).
 	{2, "DHCP leases", (*Store).migrateDHCPLeases},
+	// Where a node whose lease counter started over keeps how far it has
+	// taken its own leases back from the primary.
+	{3, "DHCP lease recovery", (*Store).migrateDHCPLeaseRecovery},
 }
 
 // queryLogBackfillChunk is how many query log IDs one backfill statement
