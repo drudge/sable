@@ -11,7 +11,7 @@ Run one DHCP server per network. Two servers on one link both answer every reque
 - **Sable needs to see the network's broadcasts.** On Linux with the systemd service this works as is: the service already has `CAP_NET_BIND_SERVICE`, which covers port 67. In Docker, use host networking with [compose.dhcp.yaml](../../compose.dhcp.yaml) ([Run with Docker](install-docker.md) has the steps); Docker's bridge doesn't pass broadcasts. In a Proxmox LXC, give the container one interface on each network it serves, or use a relay (see [Many networks](#many-networks-and-vlans)).
 - **Clusters aren't supported yet.** Sable refuses to turn DHCP on for a cluster node. Use a standalone server for now.
 
-Before Sable offers an address, it pings it to check nothing already uses it (RFC 2131 §2.2). That needs unprivileged ping. If the host doesn't allow it, Sable logs a warning naming `net.ipv4.ping_group_range` and hands out addresses without the check.
+Before Sable offers an address, it pings it to check nothing already uses it (RFC 2131 §2.2). That needs unprivileged ping. If the host doesn't allow it, Sable logs a warning naming `net.ipv4.ping_group_range` and checks only the neighbor table, which misses a device that hasn't sent anything lately.
 
 ## Set up a scope
 
@@ -31,10 +31,11 @@ Bring the fixed addresses you already have before you switch. Sable reads export
 
 | From | What to send |
 |---|---|
-| dnsmasq, and Pi-hole 5 | The `dhcp-host=` lines, such as `/etc/dnsmasq.d/04-pihole-static-dhcp.conf` |
+| dnsmasq, Pi-hole 5, OpenWrt | The `dhcp-host=` lines, such as `/etc/dnsmasq.d/04-pihole-static-dhcp.conf` or OpenWrt's `/var/etc/dnsmasq.conf.*`, or a `--dhcp-hostsfile` |
+| Pi-hole 6 | `/etc/pihole/dnsmasq.conf`, or the `hosts` entries under `[dhcp]` in `pihole.toml`, one per line without the quotes |
 | AdGuard Home | `data/leases.json`, or the reply from `/control/dhcp/status` |
 | Technitium | The reply from `/api/dhcp/scopes/get?name=<scope>` |
-| UniFi | The reply from `rest/user` on the site (`/proxy/network/api/s/default/rest/user` on UniFi OS) |
+| UniFi | The reply from `rest/user` on the site (`/proxy/network/api/s/default/rest/user` on UniFi OS). Each device keeps the name Sable's UniFi sync gives it: its alias, then its host name |
 
 Send the file to the import endpoint with an API token that has `dhcp.write`. Try it with `dry_run=true` first; it reports what it would add and saves nothing:
 
