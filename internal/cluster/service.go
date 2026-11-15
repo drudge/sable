@@ -261,6 +261,9 @@ type Service struct {
 	leaseAcknowledged int64
 	leaseRecovered    int64
 	leaseWanted       *int64
+	// leaseSourcesDone, while this primary takes its own leases back, names
+	// the replicas that hold none past how far it has (recoverOwnLeases).
+	leaseSourcesDone map[string]bool
 	// attachedNetworks reads this node's IPv6 networks and takes the lead's.
 	attachedNetworks AttachedNetworks
 	// primaryClaims is the latest claim to lead seen from each other node,
