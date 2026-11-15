@@ -169,6 +169,44 @@ func testDHCPLeaseRecoverTakesTheRowBoundLater(t *testing.T, storage *Store) {
 	_ = moved
 }
 
+func TestDHCPLeaseRecoverTakesTheReleaseSQLite(t *testing.T) {
+	t.Parallel()
+	testDHCPLeaseRecoverTakesTheRelease(t, openIdentityStore(t))
+}
+
+func TestDHCPLeaseRecoverTakesTheReleasePostgres(t *testing.T) {
+	dsn := os.Getenv("SABLE_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("SABLE_TEST_POSTGRES_DSN is not set")
+	}
+	testDHCPLeaseRecoverTakesTheRelease(t, openPostgresTestStore(t, dsn))
+}
+
+// A release keeps the lease's bound time and ends it early (RFC 2131
+// §4.3.4). A node put back from a copy taken before the release holds the
+// lease active; the mirror's released row, bound at the same moment and
+// ending sooner, replaces it. The copy's row never replaces the release.
+func testDHCPLeaseRecoverTakesTheRelease(t *testing.T, storage *Store) {
+	t.Helper()
+	ctx := context.Background()
+	held := mustSaveDHCPLease(t, storage, mirrorTestLease("node-rl", "10.0.8.31", "printer", 0))
+	released := held
+	released.Seq, released.State, released.ExpiresAt = held.Seq+4, DHCPLeaseReleased, held.BoundAt.Add(time.Minute)
+	if count, err := storage.RecoverDHCPLeases(ctx, []DHCPLease{released}); err != nil || count != 1 {
+		t.Fatalf("recover the release = %d, %v; want 1: it ends sooner than the copy's row", count, err)
+	}
+	if count, err := storage.RecoverDHCPLeases(ctx, []DHCPLease{held}); err != nil || count != 0 {
+		t.Fatalf("recover the copy's row over the release = %d, %v; want 0", count, err)
+	}
+	leases, err := storage.DHCPLeasesSince(ctx, "node-rl", 0, 10)
+	if err != nil || len(leases) != 1 {
+		t.Fatalf("leases = %v, %v; want 1", leases, err)
+	}
+	if got := leases[0]; got.State != DHCPLeaseReleased || got.Seq != released.Seq || !got.ExpiresAt.Equal(released.ExpiresAt) {
+		t.Fatalf("the lease released since the copy is %+v; want released at seq %d ending %v", got, released.Seq, released.ExpiresAt)
+	}
+}
+
 func mirrorTestLease(node, address, client string, seq int64) DHCPLease {
 	lease := testDHCPLease(node, address, client, DHCPLeaseActive, time.Date(2026, 11, 14, 13, 0, 0, 0, time.UTC))
 	lease.Seq = seq

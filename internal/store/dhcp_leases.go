@@ -178,11 +178,15 @@ const (
 	dhcpLeaseReplace dhcpLeaseWrite = iota
 	// dhcpLeaseIfNewer replaces it only when its seq is lower: a mirror.
 	dhcpLeaseIfNewer
-	// dhcpLeaseIfBoundLater replaces it only when the row was bound later:
-	// this node's rows recovered from a mirror. What it wrote since a wipe
-	// was bound after anything the mirror holds and stays; a row put back
-	// from an older copy was bound before what the mirror saw since and
-	// goes (the row bound last is the record for an address).
+	// dhcpLeaseIfBoundLater replaces it only when the row was bound later,
+	// or bound at the same moment and ends sooner: this node's rows
+	// recovered from a mirror. What it wrote since a wipe was bound after
+	// anything the mirror holds and stays; a row put back from an older copy
+	// was bound before what the mirror saw since and goes (the row bound
+	// last is the record for an address). A release keeps the bound time and
+	// only ever brings the end forward (RFC 2131 §4.3.4), so at the same
+	// bound time the row that ends sooner is the later one. Seqs can't break
+	// the tie: a wiped node's counter starts over.
 	dhcpLeaseIfBoundLater
 )
 
@@ -198,7 +202,8 @@ func (store *Store) upsertDHCPLease(ctx context.Context, transaction *sql.Tx, le
 	case dhcpLeaseIfNewer:
 		conflict += "\nWHERE sable_dhcp_leases.seq < excluded.seq"
 	case dhcpLeaseIfBoundLater:
-		conflict += "\nWHERE sable_dhcp_leases.bound_at_ns < excluded.bound_at_ns"
+		conflict += "\nWHERE sable_dhcp_leases.bound_at_ns < excluded.bound_at_ns" +
+			"\n   OR (sable_dhcp_leases.bound_at_ns = excluded.bound_at_ns AND sable_dhcp_leases.expires_at_ns > excluded.expires_at_ns)"
 	}
 	result, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_dhcp_leases (`+dhcpLeaseColumns+`)
@@ -228,7 +233,9 @@ func (store *Store) MirrorDHCPLeases(ctx context.Context, leases []DHCPLease) (i
 // its address only when it was bound later: a lease written since a wipe is
 // the newer truth and stays, and a row from the copy gives way to the lease
 // or renewal the mirror saw after it, so the client that was told last keeps
-// its address (RFC 2131 §4.3.1). Both times are this node's own clock. The
+// its address (RFC 2131 §4.3.1); a release made since, bound at the same
+// moment and ending sooner, ends the copy's lease (§4.3.4). Both times are
+// this node's own clock. The
 // caller raises the counter past them once the recovery is done
 // (RaiseDHCPLeaseSeq).
 func (store *Store) RecoverDHCPLeases(ctx context.Context, leases []DHCPLease) (int, error) {
