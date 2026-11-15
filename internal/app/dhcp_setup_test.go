@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/dhcp"
 	"github.com/drudge/sable/internal/web"
 )
@@ -54,6 +55,20 @@ func TestDHCPServiceFindOthersReportsWhatAnswered(t *testing.T) {
 	others, err = service.FindOthers(context.Background(), dhcpTestSettings(t))
 	if len(others) != 0 || err == nil || !strings.Contains(err.Error(), "eth0: ") || !strings.Contains(err.Error(), "permission denied") {
 		t.Fatalf("FindOthers() with a failing probe = %+v, %v; want the interface and why", others, err)
+	}
+}
+
+// A cluster node can't enable DHCP yet, so Turn On sends no DISCOVER there.
+func TestDHCPServiceFindOthersSkipsClusterNodes(t *testing.T) {
+	service, _, _ := newTestDHCPService(t, "")
+	service.links = dhcpOthersTestLinks
+	service.role = func() string { return cluster.RolePrimary }
+	service.seek = func(context.Context, dhcpProbeLink, []byte, time.Duration) ([][]byte, error) {
+		t.Fatal("a cluster node probed")
+		return nil, nil
+	}
+	if others, err := service.FindOthers(context.Background(), dhcpTestSettings(t)); len(others) != 0 || err != nil {
+		t.Fatalf("FindOthers() on a cluster node = %+v, %v", others, err)
 	}
 }
 

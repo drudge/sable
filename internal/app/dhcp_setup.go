@@ -37,8 +37,13 @@ func (service *dhcpService) Networks() ([]web.DHCPNetwork, error) {
 }
 
 // FindOthers runs the other-server probe now, for Turn On: the same probe
-// the running server repeats every five minutes.
+// the running server repeats every five minutes. A cluster node sends none:
+// enabling there is refused (errDHCPOnCluster) and its peers aren't others
+// until slice 8 (D36).
 func (service *dhcpService) FindOthers(ctx context.Context, settings config.DHCP) ([]web.DHCPOtherServer, error) {
+	if service.role() != "" {
+		return nil, nil
+	}
 	found, failed := service.findOthers(ctx, settings)
 	others := make([]web.DHCPOtherServer, 0, len(found))
 	for _, other := range found {
