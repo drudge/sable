@@ -176,7 +176,11 @@ a host-network container. The namespace spike covers the protocol. This check co
   beat (`LeaseReport.Recovered` says how far it has got), keeping their sequence numbers and any
   address it wrote since the wipe, and reloads them into the running
   server, so a client keeps the address it was told it holds (RFC 2131 §4.3.1). Then it raises its
-  counter past that number and resends every row, so a number is never used twice.
+  counter past that number and resends every row, so a number is never used twice. A count can't
+  show a wipe once the node has leased as many since as it held before, so a counter that takes
+  its first number also opens a recovery in `sable_dhcp_lease_recovery` (schema step 3): the node
+  asks for its rows from the first until the primary has none left to send, then renumbers every
+  row past both counts.
 - **What a node outage costs with no action.** Reserved clients: nothing. Dynamic clients of the
   dead node: nothing until their lease runs out. They retry the dead node from half the lease time,
   broadcast from 87.5%, and take a new address from a surviving range only at expiry. With a 24 h
