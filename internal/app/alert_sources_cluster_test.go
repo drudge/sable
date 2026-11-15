@@ -239,8 +239,17 @@ func TestNodeOutageSourceAlertsAfterFiveMinutesAndWhenTheNodeIsBack(t *testing.T
 			{after: 7 * time.Minute, nodes: []cluster.Node{skewed(secondNodeID, "ns2", 7*time.Minute, 300)}, want: []string{up(50 * time.Second)}},
 			{after: 12 * time.Minute, nodes: []cluster.Node{skewed(secondNodeID, "ns2", 12*time.Minute, 300)},
 				want: []string{up(50 * time.Second), clock(7 * time.Minute)}},
-			{after: 13 * time.Minute, nodes: []cluster.Node{quiet(12 * time.Minute)},
-				want: []string{up(50 * time.Second), clockOK(7 * time.Minute)}},
+			// It goes silent: its clock never came back, so no all-clear, and
+			// it is down from its last check-in.
+			{after: 13 * time.Minute, nodes: []cluster.Node{quiet(12 * time.Minute)}, want: []string{up(50 * time.Second)}},
+			{after: 17 * time.Minute, nodes: []cluster.Node{quiet(12 * time.Minute)},
+				want: []string{up(50 * time.Second), down(12 * time.Minute)}},
+		}},
+		{name: "a node that goes silent while out of step is not told as syncing again", moments: []clusterMoment{
+			{after: time.Minute, nodes: []cluster.Node{skewed(secondNodeID, "ns2", time.Minute, 300)}},
+			{after: 6 * time.Minute, nodes: []cluster.Node{skewed(secondNodeID, "ns2", 6*time.Minute, 300)}, want: []string{clock(time.Minute)}},
+			{after: 7 * time.Minute, nodes: []cluster.Node{quiet(6 * time.Minute)}},
+			{after: 11 * time.Minute, nodes: []cluster.Node{quiet(6 * time.Minute)}, want: []string{down(6 * time.Minute)}},
 		}},
 		{name: "a removed node's outage ends without an all-clear", moments: []clusterMoment{
 			{after: time.Minute, nodes: []cluster.Node{quiet(50 * time.Second)}},

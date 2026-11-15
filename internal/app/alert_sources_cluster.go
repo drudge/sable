@@ -150,12 +150,14 @@ func (source *nodeOutageSource) Alerts(_ context.Context, now time.Time) ([]aler
 // when it has stopped checking in, or when it checks in with a clock too far
 // off for the lead to accept what it sends, so it has stopped syncing. Each
 // kind of outage ends with its own all-clear, and one turning into the other
-// ends the first.
+// ends the first. Only a node that is checking in gets an all-clear: one that
+// goes silent while its clock is out of step never came back in step, so that
+// outage ends quietly and the node is counted down from its last check-in.
 func (source *nodeOutageSource) track(node cluster.Node, lead string, now time.Time) {
 	outage, tracked := source.outages[node.ID]
 	clock := node.State == cluster.StateOnline && node.SyncState == cluster.SyncClock
 	if tracked && (node.State == cluster.StateOnline && !clock || outage.clock != clock) {
-		if !outage.declaredAt.IsZero() {
+		if !outage.declaredAt.IsZero() && node.State == cluster.StateOnline {
 			source.events = appendEvent(source.events, outageEndedAlert(node, lead, outage, now))
 		}
 		delete(source.outages, node.ID)
