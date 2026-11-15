@@ -48,18 +48,18 @@ func dhcpSetupEmpty(view DHCPPageView) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = components.Button(components.ButtonProps{Label: "Add Scope", Icon: "plus", Attrs: templ.Attributes{"data-dialog-open": "dhcp-scope-new", "data-replica-primary-action": true}}).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = components.Button(components.ButtonProps{Label: "Add Scope", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "dhcp-scope-new", "data-replica-primary-action": true}}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = components.EmptyState(components.EmptyStateProps{Icon: "router", IconBox: true, Title: "DHCP isn't set up", Description: "Add a scope to hand out addresses on one network and name each device in DNS."}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = components.EmptyState(components.EmptyStateProps{Icon: "router", IconBox: true, Title: "DHCP isn't set up", Description: "Add a scope to hand out addresses on one network and name each device in DNS.", Class: "dhcp-setup-empty"}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = components.EmptyState(components.EmptyStateProps{Icon: "router", IconBox: true, Title: "DHCP isn't set up", Description: "An administrator can add a scope to hand out addresses from this server."}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = components.EmptyState(components.EmptyStateProps{Icon: "router", IconBox: true, Title: "DHCP isn't set up", Description: "An administrator can add a scope to hand out addresses from this server.", Class: "dhcp-setup-empty"}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -89,12 +89,12 @@ func dhcpPowerAction(view DHCPPageView) templ.Component {
 		ctx = templ.ClearChildren(ctx)
 		if view.CanConfigure && len(view.Scopes) > 0 {
 			if view.Status.On {
-				templ_7745c5c3_Err = components.Button(components.ButtonProps{Label: "Turn Off", Icon: "power", Variant: components.ButtonOutline, Attrs: dhcpPowerPost(view, false)}).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = components.Button(components.ButtonProps{Label: "Turn Off", Icon: "power", Variant: components.ButtonOutline, Compact: true, Attrs: dhcpPowerPost(view, false)}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = components.Button(components.ButtonProps{Label: "Turn On", Icon: "power", Attrs: dhcpPowerPost(view, true)}).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = components.Button(components.ButtonProps{Label: "Turn On", Icon: "power", Compact: true, Attrs: dhcpPowerPost(view, true)}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -302,14 +302,14 @@ func dhcpScopesPanel(view DHCPPageView) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</code></td><td><code>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</code></td><td class=\"dhcp-range-cell\"><code>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var15 string
 					templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(dhcpScopeRange(scope))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 63, Col: 38}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 63, Col: 62}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 					if templ_7745c5c3_Err != nil {

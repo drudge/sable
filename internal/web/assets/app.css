@@ -2305,11 +2305,11 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 .cluster-status-card > header h2 > span { min-width: 0; }
 .cluster-status-card > header h2 .nav-icon { width: var(--status-card-title-icon-size); height: var(--status-card-title-icon-size); color: var(--info); }
 .cluster-status-card > header p { margin: .35rem 0 0; color: var(--muted-foreground); font-size: .8rem; }
-.cluster-empty-state { min-height: 18rem; gap: .55rem; padding: var(--space-8); }
-.cluster-empty-state > .empty-state-icon { width: 3.5rem; height: 3.5rem; border-radius: 999px; background: var(--muted); }
-.cluster-empty-state > .empty-state-icon .nav-icon { width: 1.65rem; height: 1.65rem; }
-.cluster-empty-state h3 { margin: .4rem 0 0; font-size: 1.05rem; }
-.cluster-empty-state p { max-width: 28rem; font-size: .8rem; line-height: 1.5; }
+.cluster-empty-state, .dhcp-setup-empty { min-height: 18rem; gap: .55rem; padding: var(--space-8); }
+.cluster-empty-state > .empty-state-icon, .dhcp-setup-empty > .empty-state-icon { width: 3.5rem; height: 3.5rem; border-radius: 999px; background: var(--muted); }
+.cluster-empty-state > .empty-state-icon .nav-icon, .dhcp-setup-empty > .empty-state-icon .nav-icon { width: 1.65rem; height: 1.65rem; }
+.cluster-empty-state h3, .dhcp-setup-empty h3 { margin: .4rem 0 0; font-size: 1.05rem; }
+.cluster-empty-state p, .dhcp-setup-empty p { max-width: 28rem; font-size: .8rem; line-height: 1.5; }
 .cluster-restart-notice { display: flex; max-width: 30rem; align-items: center; gap: var(--space-2); border: 1px solid var(--warning-strong); border-radius: .5rem; background: rgb(217 119 6 / .08); padding: .65rem .8rem; color: color-mix(in oklch, var(--warning-strong) 72%, var(--foreground)); font-size: .72rem; line-height: 1.4; text-align: left; }
 .cluster-restart-notice .nav-icon { width: .95rem; height: .95rem; flex: 0 0 .95rem; }
 .cluster-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: .6rem; margin-top: var(--space-3); }
@@ -2667,6 +2667,8 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 .mobile-role-list { display: flex; min-width: 0; flex-wrap: wrap; gap: var(--space-1); color: var(--muted-foreground); }
 .admin-mobile-group-row > div.admin-mobile-group-copy { grid-template-columns: minmax(0, 1fr); gap: .35rem; }
 .dhcp-mobile-row > div.dhcp-mobile-copy { grid-template-columns: minmax(0, 1fr); gap: .35rem; }
+.dhcp-page .page-header > .button, .dhcp-range-cell { flex: none; white-space: nowrap; }
+.dhcp-setup-empty > .button { margin-top: var(--space-2); }
 .dhcp-mobile-copy small.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 .admin-mobile-user-trailing, .admin-mobile-group-trailing { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-3); }
 .admin-mobile-user-statuses { display: flex; align-items: center; gap: .3rem; }

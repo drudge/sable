@@ -11,11 +11,11 @@ import (
 // opens the scope dialog; without it, it says who can.
 templ dhcpSetupEmpty(view DHCPPageView) {
 	if view.CanConfigure {
-		@components.EmptyState(components.EmptyStateProps{Icon: "router", IconBox: true, Title: "DHCP isn't set up", Description: "Add a scope to hand out addresses on one network and name each device in DNS."}) {
-			@components.Button(components.ButtonProps{Label: "Add Scope", Icon: "plus", Attrs: templ.Attributes{"data-dialog-open": "dhcp-scope-new", "data-replica-primary-action": true}})
+		@components.EmptyState(components.EmptyStateProps{Icon: "router", IconBox: true, Title: "DHCP isn't set up", Description: "Add a scope to hand out addresses on one network and name each device in DNS.", Class: "dhcp-setup-empty"}) {
+			@components.Button(components.ButtonProps{Label: "Add Scope", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "dhcp-scope-new", "data-replica-primary-action": true}})
 		}
 	} else {
-		@components.EmptyState(components.EmptyStateProps{Icon: "router", IconBox: true, Title: "DHCP isn't set up", Description: "An administrator can add a scope to hand out addresses from this server."})
+		@components.EmptyState(components.EmptyStateProps{Icon: "router", IconBox: true, Title: "DHCP isn't set up", Description: "An administrator can add a scope to hand out addresses from this server.", Class: "dhcp-setup-empty"})
 	}
 }
 
@@ -24,9 +24,9 @@ templ dhcpSetupEmpty(view DHCPPageView) {
 templ dhcpPowerAction(view DHCPPageView) {
 	if view.CanConfigure && len(view.Scopes) > 0 {
 		if view.Status.On {
-			@components.Button(components.ButtonProps{Label: "Turn Off", Icon: "power", Variant: components.ButtonOutline, Attrs: dhcpPowerPost(view, false)})
+			@components.Button(components.ButtonProps{Label: "Turn Off", Icon: "power", Variant: components.ButtonOutline, Compact: true, Attrs: dhcpPowerPost(view, false)})
 		} else {
-			@components.Button(components.ButtonProps{Label: "Turn On", Icon: "power", Attrs: dhcpPowerPost(view, true)})
+			@components.Button(components.ButtonProps{Label: "Turn On", Icon: "power", Compact: true, Attrs: dhcpPowerPost(view, true)})
 		}
 	}
 }
@@ -60,7 +60,7 @@ templ dhcpScopesPanel(view DHCPPageView) {
 				<tr if view.CanConfigure { data-dialog-open={ dhcpScopeDialogID(scope.ID, false) } }>
 					<td>{ dhcpScopeTitle(scope) }</td>
 					<td><code>{ scope.Subnet }</code></td>
-					<td><code>{ dhcpScopeRange(scope) }</code></td>
+					<td class="dhcp-range-cell"><code>{ dhcpScopeRange(scope) }</code></td>
 					<td><code>{ dhcpOr(scope.Router, "None") }</code></td>
 					<td class="muted-cell">{ dhcpOr(scope.Domain, "None") }</td>
 					<td class="muted-cell">{ dhcpOr(scope.Lease, "24h") }</td>
