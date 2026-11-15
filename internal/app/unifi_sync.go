@@ -73,6 +73,10 @@ type unifiSyncer struct {
 	notifying sync.WaitGroup
 
 	wake chan struct{}
+	// dhcpRole is the node's cluster role for DHCP (dhcpClusterRole); nil
+	// means outside a cluster. Reserved names yield only where DHCP is
+	// served (D38).
+	dhcpRole func() string
 
 	mu     sync.Mutex
 	status unifi.Status
@@ -311,6 +315,7 @@ func (syncer *unifiSyncer) synchronize(ctx context.Context, settings config.UniF
 	if err != nil {
 		return unifi.Plan{}, 0, err
 	}
+	skipped = append(skipped, leaveDHCPReservations(desired, dhcpReservedNames(dhcpServedSettings(syncer.configuration.Current().Config.DHCP, syncer.dhcpRole)))...)
 	// With no network mapped the sync only finds devices, and must not touch
 	// a zone: retiring records is for a mapping that stopped producing them.
 	if !settings.Publishes() {
@@ -531,6 +536,29 @@ func reverseZoneFor(zones map[netip.Prefix]string, address netip.Addr) (string, 
 	return best, found
 }
 
+// leaveDHCPReservations drops each forward record whose name a DHCP
+// reservation publishes: a reservation outranks a UniFi record. The host's
+// PTR goes with it, since planUniFiZones publishes a PTR only for a name it
+// published.
+func leaveDHCPReservations(desired map[string]*desiredZone, reserved map[string]bool) []string {
+	var skipped []string
+	for name, entry := range desired {
+		if isReverseZoneName(name) {
+			continue
+		}
+		entry.records = slices.DeleteFunc(entry.records, func(record zone.Record) bool {
+			fqdn, err := zone.RecordFQDN(name, record.Name)
+			if err != nil || !reserved[fqdn] {
+				return false
+			}
+			skipped = append(skipped, fqdn+" is a DHCP reservation")
+			return true
+		})
+	}
+	sort.Strings(skipped)
+	return skipped
+}
+
 // dedupeUniFiRecords drops exact duplicates and keeps one address per owner and
 // type, so two devices claiming the same name cannot produce a round-robin the
 // operator never asked for. Sorting first makes the winner deterministic.
@@ -581,7 +609,7 @@ func planUniFiZones(zones *[]zone.Zone, desired map[string]*desiredZone, now tim
 				published[fqdn] = true
 			}
 		}
-		publishUniFiRecords(target, records, now, &plan)
+		publishSourcedRecords(target, records, zone.SourceUniFi, now, &plan)
 	}
 	for _, name := range reverseNames {
 		entry := desired[name]
@@ -591,7 +619,7 @@ func planUniFiZones(zones *[]zone.Zone, desired map[string]*desiredZone, now tim
 		// stale records retired.
 		create := len(records) > 0 || len(entry.records) == 0
 		if target := writableUniFiZone(zones, entry, create, now, &plan); target != nil {
-			publishUniFiRecords(target, records, now, &plan)
+			publishSourcedRecords(target, records, zone.SourceUniFi, now, &plan)
 		}
 	}
 	retireUniFiReverseZones(zones, desired, now, &plan)
@@ -673,12 +701,14 @@ func publishedPTRs(records []zone.Record, published map[string]bool) []zone.Reco
 	return kept
 }
 
-// publishUniFiRecords lists a zone's records in the plan and applies them.
-func publishUniFiRecords(target *zone.Zone, records []zone.Record, now time.Time, plan *unifi.Plan) {
+// publishSourcedRecords lists a zone's records in the plan and replaces the
+// records with source by them, advancing the serial only when something
+// changed, so an unchanged sync never publishes a revision.
+func publishSourcedRecords(target *zone.Zone, records []zone.Record, source string, now time.Time, plan *unifi.Plan) {
 	for _, record := range records {
 		plan.Publishing = append(plan.Publishing, planRecord(target.Name, record))
 	}
-	if applyUniFiRecords(target, records, plan) {
+	if applySourcedRecords(target, records, source, plan) {
 		zone.AdvanceSerial(target, now)
 	}
 }
@@ -698,7 +728,7 @@ func retireUniFiReverseZones(zones *[]zone.Zone, desired map[string]*desiredZone
 		if _, wanted := desired[target.Name]; wanted {
 			continue
 		}
-		if applyUniFiRecords(target, nil, plan) {
+		if applySourcedRecords(target, nil, zone.SourceUniFi, plan) {
 			zone.AdvanceSerial(target, now)
 		}
 	}
@@ -709,13 +739,13 @@ func isReverseZoneName(name string) bool {
 	return strings.HasSuffix(name, ".in-addr.arpa") || strings.HasSuffix(name, ".ip6.arpa")
 }
 
-// applyUniFiRecords replaces the synchronizer-owned records in one zone and
-// reports whether anything changed.
-func applyUniFiRecords(target *zone.Zone, desired []zone.Record, plan *unifi.Plan) bool {
+// applySourcedRecords replaces the records one synchronizer owns, those with
+// its source, in one zone and reports whether anything changed.
+func applySourcedRecords(target *zone.Zone, desired []zone.Record, source string, plan *unifi.Plan) bool {
 	existing := make(map[string]zone.Record)
 	retained := make([]zone.Record, 0, len(target.Records))
 	for _, record := range target.Records {
-		if record.Source != zone.SourceUniFi {
+		if record.Source != source {
 			retained = append(retained, record)
 			continue
 		}

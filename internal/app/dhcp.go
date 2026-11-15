@@ -45,6 +45,9 @@ type dhcpService struct {
 	retry  time.Duration
 	logger *slog.Logger
 	stats  dhcpStats
+	// changed is told when a lease or the settings change, so the names
+	// follow. Nil skips it.
+	changed func()
 
 	mutex   sync.Mutex
 	active  config.DHCP
@@ -114,7 +117,14 @@ func (service *dhcpService) Apply(ctx context.Context, runtime context.Context, 
 		service.startLocked(runtime, settings, server)
 	}
 	service.active = settings
+	service.notifyChanged()
 	return nil
+}
+
+func (service *dhcpService) notifyChanged() {
+	if service.changed != nil {
+		service.changed()
+	}
 }
 
 // prepare builds a server with an engine for settings. Its leases are read
@@ -124,6 +134,7 @@ func (service *dhcpService) prepare(settings config.DHCP) (*dhcpServer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("start DHCP engine: %w", err)
 	}
+	engine.SetLabeler(dhcpLabel)
 	return &dhcpServer{
 		engine: engine, save: service.save, load: service.load, link: service.link, probe: service.probe,
 		ownProbes: &service.ownProbes, now: time.Now, logger: service.logger, stats: &service.stats,
@@ -219,8 +230,11 @@ func (service *dhcpService) save(ctx context.Context, leases []dhcp.Lease) error
 	for index, lease := range leases {
 		rows[index] = dhcpLeaseToStore(lease)
 	}
-	_, err := service.leases.SaveDHCPLeases(ctx, rows)
-	return err
+	if _, err := service.leases.SaveDHCPLeases(ctx, rows); err != nil {
+		return err
+	}
+	service.notifyChanged()
+	return nil
 }
 
 func (service *dhcpService) load(ctx context.Context) ([]dhcp.Lease, error) {
@@ -266,6 +280,11 @@ func dhcpClusterRole(state cluster.State) string {
 	return ""
 }
 
+// dhcpRole is this node's cluster role for DHCP now.
+func (process *process) dhcpRole() string {
+	return dhcpClusterRole(process.clusterService.Snapshot())
+}
+
 // startDHCP starts the DHCP server with the configuration. A failure leaves
 // DNS running and is logged: port 67 taken or a cluster shouldn't keep the
 // rest of Sable down.
@@ -273,8 +292,15 @@ func (process *process) startDHCP() {
 	clusterService := process.clusterService
 	process.dhcp = newDHCPService(process.database,
 		func() string { return clusterService.Snapshot().NodeID },
-		func() string { return dhcpClusterRole(clusterService.Snapshot()) },
-		process.logger)
+		process.dhcpRole, process.logger)
+	names := newDHCPNamer(process.configurationManager, process.zoneManager, process.database.DHCPLeases, process.leading, process.logger)
+	names.role = process.dhcpRole
+	names.notifier = process.handler
+	if process.unifiSync != nil {
+		names.kick = process.unifiSync.SyncNow
+	}
+	process.dhcp.changed = names.Changed
+	process.runWorker(func(context.Context) { names.Run(process.zoneRefreshContext) })
 	if err := process.dhcp.Apply(process.runtimeContext, process.runtimeContext, process.current().DHCP); err != nil {
 		process.logger.Error("DHCP server not started", "error", err)
 	}

@@ -546,6 +546,7 @@ func (process *process) startIntegrations() {
 	process.unifiSync.identities = process.deviceAddresses.Record(database.RecordClientIdentities)
 	process.unifiSync.reading = database.RecordUniFiReading
 	process.unifiSync.notifier = process.handler
+	process.unifiSync.dhcpRole = process.dhcpRole
 	process.runWorker(func(context.Context) { process.unifiSync.Run(process.zoneRefreshContext) })
 	process.runWorker(func(context.Context) {
 		runNeighborSampler(process.runtimeContext, process.insightsEnabled, neighbors.Read,

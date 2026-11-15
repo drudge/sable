@@ -129,8 +129,29 @@ a host-network container. The namespace spike covers the protocol. This check co
   reported its leases. An offline node keeps its names until it reports.
 - PTR records are written only when the scope has `reverse = true`, like a UniFi mapping. The record
   TTL is the scope's `ttl`.
-- The FQDN option in the reply says the server did the update (S=1), says so when it overrode the
-  client (O=1), and carries the name that was registered.
+- **One PTR per address.** A reserved address publishes only its reservation: a lease another MAC
+  still holds on it publishes neither A nor PTR until it ends. When two names still point at one
+  address, the name's winner also takes the PTR. A lease outside its scope's subnet (left over from
+  a renumbered scope) publishes nothing.
+- **Names follow serving.** DHCP's names publish, and the UniFi sync yields reserved names to them,
+  only on a node that serves DHCP. A cluster node accepts `[dhcp]` and doesn't serve it until slice
+  8, so it publishes no DHCP names. Slice 8 changes the one predicate that decides this.
+- A name that can't publish (its zone is a secondary or stub, or a hand-authored record holds it) is
+  logged at Info when the list changes; slice 6 shows it per lease.
+- **A lease never takes `wpad` or `isatap`** (D39). Either would make the client the LAN's proxy
+  auto-config host or IPv6 tunnel router; Microsoft DNS blocks both by default. A reservation can
+  use either.
+- **The FQDN option (81, RFC 4702 §4).** When the client sends it, the OFFER and ACK answer it. Its
+  first label wins over option 12. With a name to register, the reply sets S=1 and carries the full
+  name, `<label>.<domain>`, by the namer's rule (reservation name, else the client's, D39 applied).
+  O=1 when that differs from the client's S, so a client asking to do its own A update, or none
+  (N=1), is overridden: Sable owns the zone. With no name (no `domain`, `register_names = false`, or
+  a refused label) the reply sets N=1 and echoes the client's name. The encoding follows the
+  client's E bit, including the deprecated ASCII form (§2.3.1), and both RCODEs are 255 (§2.2). The
+  name in the reply is the one the namer asks for; a hand-authored record or UniFi record can still
+  hold it (§4.1 lets the name change between exchanges).
+- When the names reservations publish change, the namer runs the UniFi sync at once, so a name a
+  new reservation takes leaves UniFi (or comes back to it) without waiting for the next sync.
 - **Removal policy:** release, expiry, decline, a host name change, and turning DHCP off all remove
   the record on the next reconcile. Because the set is rebuilt from state, a missed event can't
   leave a record behind.

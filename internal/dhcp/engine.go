@@ -31,6 +31,7 @@ type Engine struct {
 	leases  map[netip.Addr]*Lease
 	clients map[clientRef]netip.Addr
 	offers  map[clientRef]offer
+	labeler Labeler
 }
 
 // clientRef names a client within a scope (RFC 2131 §4.2: a binding is the
@@ -60,6 +61,15 @@ func New(settings config.DHCP, node string) (*Engine, error) {
 		engine.scopes = append(engine.scopes, compiled)
 	}
 	return engine, nil
+}
+
+// SetLabeler sets the rule that names a lease, so the option 81 reply
+// (RFC 4702 §4) carries the name the namer publishes. Without one the
+// engine tells clients it registers nothing.
+func (engine *Engine) SetLabeler(labeler Labeler) {
+	engine.mutex.Lock()
+	defer engine.mutex.Unlock()
+	engine.labeler = labeler
 }
 
 // Load replaces the lease view: this node's leases and the other nodes'

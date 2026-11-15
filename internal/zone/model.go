@@ -126,6 +126,10 @@ type Record struct {
 // SourceUniFi marks records maintained by the UniFi host synchronizer.
 const SourceUniFi = "unifi"
 
+// SourceDHCP marks the A and PTR records the DHCP server publishes for its
+// reservations and leases.
+const SourceDHCP = "dhcp"
+
 // SourceAlias marks records an alias zone mirrors from its source zone. They
 // are replaced wholesale on every reconciliation, so nothing else may claim
 // this source.
