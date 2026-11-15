@@ -83,13 +83,14 @@ func newMCPTestServer(t *testing.T) (*Server, *editableTestConfiguration) {
 			{Permission: auth.PermissionZonesCreate, Surface: auth.SurfaceAPI},
 			mcpZoneGrant(auth.PermissionZonesRead, "zone-example"),
 		}},
-		"sable_pat_logs":     {UserID: 7, Username: "analyst", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionLogsRead}},
-		"sable_pat_metrics":  {UserID: 4, Username: "glance", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionMetricsRead}},
-		"sable_pat_settings": {UserID: 9, Username: "tinkerer", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionSettingsRead}},
-		"sable_pat_operator": {UserID: 10, Username: "operator", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionSettingsRead, auth.PermissionSettingsWrite}},
-		"sable_pat_cluster":  {UserID: 11, Username: "watchman", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionClusterRead}},
-		"sable_pat_updates":  {UserID: 8, Username: "watcher", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionUpdatesRead}},
-		"sable_pat_blocking": {UserID: 5, Username: "helper", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionBlockingRead, auth.PermissionBlockingWrite}},
+		"sable_pat_logs":          {UserID: 7, Username: "analyst", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionLogsRead}},
+		"sable_pat_metrics":       {UserID: 4, Username: "glance", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionMetricsRead}},
+		"sable_pat_settings":      {UserID: 9, Username: "tinkerer", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionSettingsRead}},
+		"sable_pat_operator":      {UserID: 10, Username: "operator", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionSettingsRead, auth.PermissionSettingsWrite}},
+		"sable_pat_dhcp_operator": {UserID: 12, Username: "dhcp-operator", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: builtInRolePermissions("Operator")},
+		"sable_pat_cluster":       {UserID: 11, Username: "watchman", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionClusterRead}},
+		"sable_pat_updates":       {UserID: 8, Username: "watcher", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionUpdatesRead}},
+		"sable_pat_blocking":      {UserID: 5, Username: "helper", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Permissions: []string{auth.PermissionBlockingRead, auth.PermissionBlockingWrite}},
 		"sable_pat_scoped": {UserID: 3, Username: "deploy", AuthenticatedByToken: true, Surface: auth.SurfaceAPI, Grants: []auth.Grant{
 			mcpZoneGrant(auth.PermissionZonesRead, "zone-example"),
 			mcpZoneGrant(auth.PermissionZonesRecords, "zone-example"),
@@ -733,4 +734,15 @@ func TestMCPUseIsCountedInMemoryAndSavedOnFlush(t *testing.T) {
 	if saved, _ := queries.LoadMCPUse(t.Context()); saved.Tool != "list_zones" || saved.CallsSince(time.Time{}) != 3 {
 		t.Fatalf("saved use = %+v, want the three calls", saved)
 	}
+}
+
+// builtInRolePermissions is a built-in role's permissions, so a test token
+// holds exactly what that role grants.
+func builtInRolePermissions(name string) []string {
+	for _, role := range auth.BuiltInRoles {
+		if role.Name == name {
+			return role.Permissions
+		}
+	}
+	panic("no built-in role " + name)
 }

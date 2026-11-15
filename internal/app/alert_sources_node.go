@@ -106,6 +106,7 @@ type nodeHealth struct {
 	// up to date itself.
 	trustAnchorUpdates func() bool
 	backups            *scheduledBackupService
+	dhcp               *dhcpService
 	auditLog           signInAuditLog
 	// signIns reports whether anyone signs in to this node at all. With
 	// security switched off nobody does, and there is nothing to count.
@@ -124,6 +125,7 @@ func (health nodeHealth) alertSources() []alerts.Source {
 			status: health.trustAnchors.Status, interval: health.trustAnchors.RefreshInterval,
 		},
 		backupAlertSource{node: health.node, schedule: health.backups.schedule},
+		dhcpOtherServerAlertSource{node: health.node, found: health.dhcp.otherServers},
 	}
 	if health.signIns {
 		sources = append(sources, &signInAlertSource{
@@ -614,4 +616,34 @@ func countOf(count int, singular, plural string) string {
 		return "1 " + singular
 	}
 	return strconv.Itoa(count) + " " + plural
+}
+
+// dhcpOtherServerAlertSource warns while another DHCP server answers on a
+// network this node serves. Clients take whichever OFFER comes first, so two
+// servers hand out conflicting leases (RFC 2131 §3.1, step 3).
+type dhcpOtherServerAlertSource struct {
+	node  func() alertNode
+	found func() []dhcpOtherServer
+}
+
+func (source dhcpOtherServerAlertSource) Alerts(_ context.Context, now time.Time) ([]alerts.Alert, error) {
+	found := source.found()
+	if len(found) == 0 {
+		return nil, nil
+	}
+	node := source.node()
+	news := make([]alerts.Alert, 0, len(found))
+	for _, other := range found {
+		news = append(news, alerts.Alert{
+			ID:    "server.dhcp-other-server:" + node.key() + ":" + other.Interface + ":" + other.Server.String(),
+			Group: config.AlertGroupServer, Kind: "server.dhcp-other-server", Problem: true, Tone: alerts.ToneAttention,
+			Title: "Another DHCP server", Subject: node.on(other.Interface),
+			Headline: other.Server.String() + " answers DHCP on " + node.on(other.Interface),
+			Summary: fmt.Sprintf("%s offered %s to a test request on %s. Clients take whichever offer arrives first, so they can get "+
+				"addresses Sable doesn't know about. Turn off DHCP on that device, often the router.", other.Server, other.Offered, other.Interface),
+			Reasons: []string{"Server " + other.Server.String(), "Offered " + other.Offered.String()},
+			Path:    "/", ObservedAt: now,
+		})
+	}
+	return news, nil
 }
