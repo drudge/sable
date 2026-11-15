@@ -122,6 +122,11 @@ func (store *Store) SaveDHCPLeases(ctx context.Context, leases []DHCPLease) ([]D
 				return err
 			}
 			saved[index].Seq = seq
+			if seq == 1 {
+				if err := store.openDHCPLeaseRecovery(ctx, transaction, saved[index].NodeID); err != nil {
+					return err
+				}
+			}
 			if _, err := store.upsertDHCPLease(ctx, transaction, saved[index], dhcpLeaseReplace); err != nil {
 				return err
 			}

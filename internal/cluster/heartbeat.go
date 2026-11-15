@@ -393,7 +393,7 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 		service.recordSharedIdentities(ctx, configuration.ClientIdentities)
 		service.receiveAttachedNetworks(primary.Name, configuration.AttachedNetworks)
 		if configuration.LeaseProtocol == leaseProtocolVersion {
-			service.receiveLeases(ctx, configuration.Leases)
+			service.receiveLeases(ctx, heartbeat.Leases, configuration.Leases)
 		}
 	}
 	return service.adoptSyncConfiguration(ctx, primary, configuration)
@@ -536,7 +536,7 @@ func (service *Service) acceptPrimaryProtocolsLocked(primaryID string, configura
 		service.lookupPrimaryID = primaryID
 	}
 	if service.leasePrimaryID != primaryID {
-		service.leaseAcknowledged, service.leaseRecovered = 0, 0
+		service.leaseAcknowledged, service.leaseRecovered, service.leaseWanted = 0, 0, nil
 	}
 	service.leasePrimaryID = ""
 	if configuration.LeaseProtocol == leaseProtocolVersion && configuration.PrimaryID == primaryID {
