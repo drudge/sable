@@ -1174,7 +1174,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .cache-title h2 { display: flex; align-items: center; gap: .6rem; margin: 0; font-size: var(--status-card-title-size); }
 .cache-title h2 .nav-icon { width: var(--status-card-title-icon-size); height: var(--status-card-title-icon-size); flex: 0 0 var(--status-card-title-icon-size); color: var(--warning); }
 .cache-title p { margin: .35rem 0 0; color: var(--muted-foreground); font-size: .8rem; }
-.cache-header-actions { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-2); }
+.cache-header-actions, .dhcp-header-actions { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-2); }
 .icon-button { display: grid; width: 2.25rem; height: 2.25rem; flex: 0 0 2.25rem; place-items: center; overflow: visible; border: 1px solid var(--border); border-radius: 50%; background: var(--background); }
 .icon-button:hover { background: var(--accent); }
 .icon-button .nav-icon { width: 1rem; height: 1rem; overflow: visible; }
@@ -3923,6 +3923,18 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 .dhcp-range-split-row small.tsig-key-warning { color: var(--warning-strong); }
 .dark .dhcp-range-split-row small.tsig-key-warning { color: var(--warning); }
 .dhcp-setup-networks > h4 { font-size: .8rem; font-weight: 500; color: var(--muted-foreground); }
+
+/* The import preview lists what it adds and skips in the same rows. */
+.dhcp-import-preview { display: grid; gap: var(--space-4); }
+.dhcp-import-summary { font-size: .8rem; color: var(--muted-foreground); }
+.dhcp-import-section { display: grid; gap: var(--space-2); }
+.dhcp-import-section > h4 { font-size: .8rem; font-weight: 500; color: var(--muted-foreground); }
+.dhcp-import-section .dhcp-network-row > small { color: var(--muted-foreground); font-size: .7rem; }
+@container page (max-width: 640px) {
+  .dhcp-import-section .dhcp-network-row { grid-template-columns: 1.5rem minmax(0, 1fr); }
+  .dhcp-import-section .dhcp-network-row > small { grid-column: 2; }
+  .isotope-data-header:has(> .dhcp-header-actions) { flex-wrap: wrap; }
+}
 
 /* Motion preferences cover every interaction, including swapped fragments and
    third-party loading indicators, rather than relying on each component. */

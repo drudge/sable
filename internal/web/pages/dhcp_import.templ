@@ -1,0 +1,184 @@
+package pages
+
+import (
+	"fmt"
+
+	"github.com/drudge/sable/internal/web/pages/components"
+)
+
+// DHCPImportNoticeID is where the Import Reservations dialog says why it
+// couldn't read or import an export.
+const DHCPImportNoticeID = "dhcp-import-notice"
+
+// DHCPImportScope is a scope the import can go into.
+type DHCPImportScope struct {
+	ID, Label string
+}
+
+// DHCPImportSourceView is the first step of the import: the scope and the
+// export, kept when the preview's Back brings it back.
+type DHCPImportSourceView struct {
+	Scopes []DHCPImportScope
+	Scope  string
+	Text   string
+}
+
+// DHCPImportNote is one entry the import passes over or changes, by the line
+// or list position it came from.
+type DHCPImportNote struct {
+	Line         int
+	MAC, Address  string
+	Text          string
+}
+
+// DHCPImportPreviewView is what a dry run found: the reservations it would
+// add, how many are already there, and what it would skip and why.
+type DHCPImportPreviewView struct {
+	Scope, ScopeLabel, Format, Text string
+	Added                           []DHCPReservationRow
+	Unchanged                       int
+	Skipped, Warnings               []DHCPImportNote
+}
+
+var dhcpImportFormats = map[string]string{"dnsmasq": "dnsmasq", "adguard": "AdGuard Home", "technitium": "Technitium", "unifi": "UniFi"}
+
+func dhcpImportFormat(format string) string {
+	if label, ok := dhcpImportFormats[format]; ok {
+		return label
+	}
+	return format
+}
+
+templ dhcpImportDialog(view DHCPPageView) {
+	@components.Dialog(components.DialogProps{ID: "dhcp-import", Title: "Import Reservations", Description: "Bring fixed addresses over from dnsmasq, Pi-hole, AdGuard Home, Technitium, or UniFi", Class: "isotope-zone-import-dialog dhcp-import-dialog"}) {
+		@DHCPImportSource(DHCPImportSourceView{Scopes: DHCPImportScopes(view.Scopes)})
+	}
+}
+
+func DHCPImportScopes(scopes []DHCPScopeView) []DHCPImportScope {
+	options := make([]DHCPImportScope, 0, len(scopes))
+	for _, scope := range scopes {
+		options = append(options, DHCPImportScope{ID: scope.ID, Label: scope.Name + " (" + scope.Subnet + ")"})
+	}
+	return options
+}
+
+// dhcpImportForm is the form both steps share: each answer swaps it in place,
+// and an import that saves swaps the whole page instead.
+templ dhcpImportForm() {
+	<form id="dhcp-import-form" class="blocking-dialog-form zone-import-form" hx-post="/ui/dhcp/reservations/import" hx-encoding="multipart/form-data" hx-target="this" hx-swap="outerHTML" hx-disable="findAll button[type='submit']">
+		<input type="hidden" name="tab" value="reservations"/>
+		{ children... }
+	</form>
+}
+
+templ DHCPImportSource(view DHCPImportSourceView) {
+	@dhcpImportForm() {
+		<div class="dhcp-form-notice" id={ DHCPImportNoticeID }></div>
+		if len(view.Scopes) > 1 {
+			<label><span>Scope</span><select name="scope">
+				for _, scope := range view.Scopes {
+					<option value={ scope.ID } selected?={ scope.ID == view.Scope }>{ scope.Label }</option>
+				}
+			</select></label>
+		} else if len(view.Scopes) == 1 {
+			<input type="hidden" name="scope" value={ view.Scopes[0].ID }/>
+		}
+		@ImportSource(ImportSourceProps{ID: "dhcp-import", Placeholder: "dhcp-host=00:11:22:33:44:55,192.168.1.20,printer", Accept: ".conf,.txt,.toml,.json,text/plain,application/json",
+			FileLabel: "Choose export", DropTitle: "Drop your export here", Formats: "dnsmasq or Pi-hole config, or AdGuard Home, Technitium, or UniFi JSON",
+			TextName: "import_text", TextLabel: "Export contents", TextHelp: "Paste dhcp-host lines or a JSON export.", Text: view.Text})
+		@components.DialogFooter("Cancel") {
+			@components.Button(components.ButtonProps{Label: "Preview", Icon: "arrow-right", Type: "submit", Busy: true, Disabled: view.Text == "", Attrs: templ.Attributes{"name": "step", "value": "preview", "data-zone-import-submit": true}})
+		}
+	}
+}
+
+templ DHCPImportPreview(view DHCPImportPreviewView) {
+	@dhcpImportForm() {
+		<input type="hidden" name="scope" value={ view.Scope }/>
+		<input type="hidden" name="import_text" value={ view.Text }/>
+		<div class="dhcp-import-preview">
+			<div class="dhcp-form-notice" id={ DHCPImportNoticeID }></div>
+			<p class="dhcp-import-summary">{ dhcpImportSummary(view) }</p>
+			if len(view.Added) > 0 {
+				@dhcpImportSection("To add") {
+					for _, reservation := range view.Added {
+						<article class="dhcp-network-row">
+							<span class="dhcp-network-icon">@Icon("plus")</span>
+							<div><strong>{ reservation.Address }</strong><small class="mono">{ reservation.MAC }</small></div>
+							<small>{ dhcpDisplayName(reservation.Name) }</small>
+						</article>
+					}
+				}
+			}
+			if len(view.Warnings) > 0 {
+				@dhcpImportSection("Added without their names") {
+					for _, note := range view.Warnings {
+						@dhcpImportNoteRow(note, "alert-triangle")
+					}
+				}
+			}
+			if len(view.Skipped) > 0 {
+				@dhcpImportSection("Skipped") {
+					for _, note := range view.Skipped {
+						@dhcpImportNoteRow(note, "ban")
+					}
+				}
+			}
+		</div>
+		<footer class="dialog-footer wizard-footer">
+			<button class="button outline" type="button" data-dialog-close>Cancel</button>
+			<div class="wizard-footer-advance">
+				@components.Button(components.ButtonProps{Label: "Back", Icon: "arrow-left", Variant: components.ButtonOutline, Type: "submit", Attrs: templ.Attributes{"name": "step", "value": "back"}})
+				@components.Button(components.ButtonProps{Label: dhcpImportAction(len(view.Added)), Icon: "download", Type: "submit", Busy: true, Disabled: len(view.Added) == 0, Attrs: templ.Attributes{"name": "step", "value": "apply", "data-replica-primary-action": true}})
+			</div>
+		</footer>
+	}
+}
+
+templ dhcpImportSection(title string) {
+	<section class="dhcp-import-section">
+		<h4>{ title }</h4>
+		<div class="dhcp-network-list">
+			{ children... }
+		</div>
+	</section>
+}
+
+templ dhcpImportNoteRow(note DHCPImportNote, icon string) {
+	<article class="dhcp-network-row">
+		<span class="dhcp-network-icon">@Icon(icon)</span>
+		<div><strong>{ dhcpImportNoteSubject(note) }</strong><small>{ note.Text }</small></div>
+		<small>{ fmt.Sprintf("Line %d", note.Line) }</small>
+	</article>
+}
+
+func dhcpImportNoteSubject(note DHCPImportNote) string {
+	switch {
+	case note.Address != "" && note.MAC != "":
+		return note.Address + " · " + note.MAC
+	case note.MAC != "":
+		return note.MAC
+	case note.Address != "":
+		return note.Address
+	}
+	return "Entry"
+}
+
+func dhcpImportSummary(view DHCPImportPreviewView) string {
+	summary := fmt.Sprintf("A %s export for %s: %d to add", dhcpImportFormat(view.Format), view.ScopeLabel, len(view.Added))
+	if view.Unchanged > 0 {
+		summary += fmt.Sprintf(", %d already reserved", view.Unchanged)
+	}
+	if len(view.Skipped) > 0 {
+		summary += fmt.Sprintf(", %d skipped", len(view.Skipped))
+	}
+	return summary + ". Nothing you already have is replaced."
+}
+
+func dhcpImportAction(count int) string {
+	if count == 0 {
+		return "Nothing to Import"
+	}
+	return fmt.Sprintf("Import %d %s", count, plural(count, "Reservation", "Reservations"))
+}

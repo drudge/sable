@@ -137,6 +137,7 @@ templ DHCPContent(view DHCPPageView) {
 			<div class="isotope-tab-panel" role="tabpanel" data-isotope-panel="scopes" hidden?={ view.ActiveTab != "scopes" }>@dhcpScopesPanel(view)</div>
 			if view.CanWrite {
 				@dhcpReservationDialog(view, DHCPReservationRow{Scope: view.Scopes[0].ID}, true)
+				@dhcpImportDialog(view)
 				for _, scope := range view.Scopes {
 					for _, reservation := range scope.Reservations {
 						@dhcpReservationDialog(view, reservation, false)
@@ -256,7 +257,10 @@ templ dhcpReservationsPanel(view DHCPPageView) {
 	@components.Card(components.CardProps{Class: "isotope-data-card"}) {
 		@components.CardHeader(components.CardHeaderProps{Title: "Reservations", Description: "Addresses kept for one device, by its MAC address", DescriptionClass: "desktop-only", Class: "isotope-data-header"}) {
 			if view.CanWrite {
-				@components.Button(components.ButtonProps{Label: "Add Reservation", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "dhcp-reservation-new", "data-replica-primary-action": true}})
+				<div class="dhcp-header-actions">
+					@components.Button(components.ButtonProps{Label: "Import", Icon: "upload", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"data-dialog-open": "dhcp-import", "data-replica-primary-action": true}})
+					@components.Button(components.ButtonProps{Label: "Add Reservation", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "dhcp-reservation-new", "data-replica-primary-action": true}})
+				</div>
 			}
 		}
 		if dhcpReservationCount(view.Scopes) == 0 {

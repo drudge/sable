@@ -37,7 +37,9 @@ Bring the fixed addresses you already have before you switch. Sable reads export
 | Technitium | The reply from `/api/dhcp/scopes/get?name=<scope>` |
 | UniFi | The reply from `rest/user` on the site (`/proxy/network/api/s/default/rest/user` on UniFi OS). Each device keeps the name Sable's UniFi sync gives it: its alias, then its host name |
 
-Send the file to the import endpoint with an API token that has `dhcp.write`. Try it with `dry_run=true` first; it reports what it would add and saves nothing:
+In the console, open **DHCP**, then **Reservations**, and choose **Import**. Upload the file or paste it, pick the scope, and choose **Preview**: it lists what it would add and what it would skip, and saves nothing until you choose **Import**.
+
+To script it, send the file to the import endpoint with an API token that has `dhcp.write`. Try it with `dry_run=true` first; it reports what it would add and saves nothing:
 
 ```sh
 curl --fail-with-body \

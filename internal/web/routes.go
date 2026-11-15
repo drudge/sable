@@ -470,6 +470,7 @@ func routeTable() []route {
 		{pattern: "POST /ui/dhcp/leases/reserve", handler: (*Server).reserveDHCPLease, perm: auth.PermissionDHCPWrite},
 		{pattern: "POST /ui/dhcp/leases/remove", handler: (*Server).removeDHCPLease, perm: auth.PermissionDHCPWrite, replicaLocal: true},
 		{pattern: "POST /ui/dhcp/reservations", handler: (*Server).saveDHCPReservation, perm: auth.PermissionDHCPWrite},
+		{pattern: "POST /ui/dhcp/reservations/import", handler: (*Server).importDHCPConsole, perm: auth.PermissionDHCPWrite, bodyLimit: 2 * dhcpSettingsLimit},
 		{pattern: "POST /ui/dhcp/reservations/delete", handler: (*Server).deleteDHCPReservation, perm: auth.PermissionDHCPWrite},
 		{pattern: "POST /ui/dhcp/scopes", handler: (*Server).saveDHCPScope, perm: auth.PermissionDHCPWrite},
 		{pattern: "POST /ui/dhcp/scopes/delete", handler: (*Server).deleteDHCPScope, perm: auth.PermissionDHCPWrite},

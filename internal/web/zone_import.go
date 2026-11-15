@@ -38,7 +38,7 @@ func (server *Server) exportZone(writer http.ResponseWriter, request *http.Reque
 }
 
 func (server *Server) importZone(writer http.ResponseWriter, request *http.Request) {
-	zoneText, err := readZoneImportText(writer, request)
+	zoneText, err := readImportText(request, maximumZoneImportBytes, "zone_text", "zone file")
 	selected := normalizeZoneName(request.FormValue("zone"))
 	if err != nil {
 		server.logZoneOperation(request, selected, err)
@@ -89,7 +89,7 @@ func (server *Server) importZone(writer http.ResponseWriter, request *http.Reque
 }
 
 func (server *Server) importNewZone(writer http.ResponseWriter, request *http.Request) {
-	zoneText, err := readZoneImportText(writer, request)
+	zoneText, err := readImportText(request, maximumZoneImportBytes, "zone_text", "zone file")
 	if err != nil {
 		server.logZoneOperation(request, "", err)
 		server.renderZoneMutation(writer, request, http.StatusBadRequest, "", "", err.Error())
@@ -148,28 +148,30 @@ func (server *Server) importNewZone(writer http.ResponseWriter, request *http.Re
 	server.renderZoneMutation(writer, request, http.StatusOK, selected, message, "")
 }
 
-func readZoneImportText(writer http.ResponseWriter, request *http.Request) (string, error) {
-	if err := request.ParseMultipartForm(maximumZoneImportBytes); err != nil {
-		return "", errors.New("the zone file is too large or invalid")
+// readImportText reads what an import dialog sent: the text in the field
+// named field, or else the file it uploaded. what names it in errors.
+func readImportText(request *http.Request, limit int64, field, what string) (string, error) {
+	if err := request.ParseMultipartForm(limit); err != nil {
+		return "", errors.New("the " + what + " is too large or invalid")
 	}
-	zoneText := strings.TrimSpace(request.FormValue("zone_text"))
-	if zoneText != "" {
-		return zoneText, nil
+	text := strings.TrimSpace(request.FormValue(field))
+	if text != "" {
+		return text, nil
 	}
 	file, _, err := request.FormFile("file")
 	if err != nil {
-		return "", errors.New("paste or select a zone file to import")
+		return "", errors.New("paste or select a " + what + " to import")
 	}
 	defer file.Close()
-	contents, err := io.ReadAll(io.LimitReader(file, maximumZoneImportBytes+1))
-	if err != nil || len(contents) > maximumZoneImportBytes {
-		return "", errors.New("the selected zone file could not be read")
+	contents, err := io.ReadAll(io.LimitReader(file, limit+1))
+	if err != nil || int64(len(contents)) > limit {
+		return "", errors.New("the selected " + what + " could not be read")
 	}
-	zoneText = strings.TrimSpace(string(contents))
-	if zoneText == "" {
-		return "", errors.New("the selected zone file is empty")
+	text = strings.TrimSpace(string(contents))
+	if text == "" {
+		return "", errors.New("the selected " + what + " is empty")
 	}
-	return zoneText, nil
+	return text, nil
 }
 
 func importedZoneName(supplied, contents string) (string, error) {
