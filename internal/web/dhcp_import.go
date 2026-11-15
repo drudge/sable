@@ -173,6 +173,9 @@ func (server *Server) importDHCPConsole(writer http.ResponseWriter, request *htt
 		server.renderFormProblem(writer, request, notice, refuse(http.StatusBadRequest, "%s", err.Error()))
 		return
 	}
+	// The preview sends the export back in a hidden field, and Back shows it
+	// in the text box. Both hold text, so a UTF-16 upload goes on as UTF-8.
+	text = strings.TrimSpace(dhcpimport.Text([]byte(text)))
 	who, scope, step := requestActor(request, ""), request.FormValue("scope"), request.FormValue("step")
 	if step == "back" {
 		server.render(writer, request, pages.DHCPImportSource(pages.DHCPImportSourceView{Scopes: server.dhcpImportScopes(who), Scope: scope, Text: text}))
