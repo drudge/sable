@@ -1,0 +1,150 @@
+package pages
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/drudge/sable/internal/web/pages/components"
+)
+
+// dhcpSetupEmpty is the page before any scope exists. With settings.write it
+// opens the scope dialog; without it, it says who can.
+templ dhcpSetupEmpty(view DHCPPageView) {
+	if view.CanConfigure {
+		@components.EmptyState(components.EmptyStateProps{Icon: "router", IconBox: true, Title: "DHCP isn't set up", Description: "Add a scope to hand out addresses on one network and name each device in DNS."}) {
+			@components.Button(components.ButtonProps{Label: "Add Scope", Icon: "plus", Attrs: templ.Attributes{"data-dialog-open": "dhcp-scope-new", "data-replica-primary-action": true}})
+		}
+	} else {
+		@components.EmptyState(components.EmptyStateProps{Icon: "router", IconBox: true, Title: "DHCP isn't set up", Description: "An administrator can add a scope to hand out addresses from this server."})
+	}
+}
+
+templ dhcpScopesPanel(view DHCPPageView) {
+	@components.Card(components.CardProps{Class: "isotope-data-card"}) {
+		@components.CardHeader(components.CardHeaderProps{Title: "Scopes", Description: "Each network this server hands out addresses on", DescriptionClass: "desktop-only", Class: "isotope-data-header"}) {
+			if view.CanConfigure {
+				@components.Button(components.ButtonProps{Label: "Add Scope", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "dhcp-scope-new", "data-replica-primary-action": true}})
+			}
+		}
+		<div class="admin-mobile-list">
+			for _, scope := range view.Scopes {
+				<article class="admin-mobile-row static dhcp-mobile-row">
+					<div class="dhcp-mobile-copy"><strong>{ dhcpScopeTitle(scope) }</strong><small class="mono">{ scope.Subnet }</small><small class="mono">{ dhcpScopeRange(scope) }</small><small>{ dhcpOr(scope.Domain, "No domain") }</small></div>
+					@dhcpScopeActions(view, scope)
+				</article>
+			}
+		</div>
+		@components.DataTable(components.DataTableProps{Caption: "Scopes", Columns: []components.DataTableColumn{{Label: "Name"}, {Label: "Subnet"}, {Label: "Range"}, {Label: "Router"}, {Label: "Domain"}, {Label: "Lease Time"}, {Label: "Actions", Class: "right-cell"}}}) {
+			for _, scope := range view.Scopes {
+				<tr if view.CanConfigure { data-dialog-open={ dhcpScopeDialogID(scope.ID, false) } }>
+					<td>{ dhcpScopeTitle(scope) }</td>
+					<td><code>{ scope.Subnet }</code></td>
+					<td><code>{ dhcpScopeRange(scope) }</code></td>
+					<td><code>{ dhcpOr(scope.Router, "None") }</code></td>
+					<td class="muted-cell">{ dhcpOr(scope.Domain, "None") }</td>
+					<td class="muted-cell">{ dhcpOr(scope.Lease, "24h") }</td>
+					<td class="right-cell">@dhcpScopeActions(view, scope)</td>
+				</tr>
+			}
+		}
+	}
+}
+
+templ dhcpScopeActions(view DHCPPageView, scope DHCPScopeView) {
+	if view.CanConfigure {
+		<div class="row-actions">
+			<button class="icon-button" type="button" aria-label={ "Edit scope " + dhcpScopeTitle(scope) } data-dialog-open={ dhcpScopeDialogID(scope.ID, false) }>@Icon("pencil")</button>
+			<button class="icon-button danger" type="button" aria-label={ "Remove scope " + dhcpScopeTitle(scope) } { dhcpPost("/ui/dhcp/scopes/delete", "scopes", map[string]string{"id": scope.ID})... } hx-confirm={ dhcpScopeRemoveConfirm(scope) } data-confirm-title="Remove scope?" data-confirm-action="Remove Scope">@Icon("trash")</button>
+		</div>
+	}
+}
+
+// dhcpScopeDialog adds a scope or edits one. It shows the settings a home
+// network needs; the rest (options, routes, boot, flags) stay in sable.toml
+// and keep their values when the dialog saves.
+templ dhcpScopeDialog(scope DHCPScopeView, add bool) {
+	@components.Dialog(components.DialogProps{ID: dhcpScopeDialogID(scope.ID, add), Title: ifThen(add, "Add Scope", "Edit Scope"), Description: ifThen(add, "Hand out addresses on one network", dhcpScopeTitle(scope)+" · "+scope.Subnet), Class: "isotope-form-dialog dhcp-scope-dialog"}) {
+		<form hx-post="/ui/dhcp/scopes" hx-target="#dhcp-content" hx-swap="outerHTML">
+			<input type="hidden" name="tab" value="scopes"/>
+			<div class="isotope-dialog-body">
+				<div class="dhcp-form-notice" id={ DHCPScopeNoticeID(scope.ID, add) }></div>
+				if add {
+					<input type="hidden" name="new" value="1"/>
+					@components.Field(components.FieldProps{ID: "dhcp-scope-new-id", Label: "ID", Help: "A short, permanent key that leases refer to, like `lan`.", Input: templ.Attributes{"name": "id", "class": "mono-input", "placeholder": "lan", "pattern": "[a-z0-9][a-z0-9-]*", "maxlength": "32", "autocomplete": "off", "spellcheck": "false", "required": true}})
+				} else {
+					<input type="hidden" name="id" value={ scope.ID }/>
+				}
+				@dhcpScopeField(scope, add, "name", "Name", "", "LAN", "", templ.Attributes{"value": scope.Name, "maxlength": "64"})
+				@dhcpScopeField(scope, add, "subnet", "Subnet", "The network in CIDR form; this server needs an address in it.", "192.168.1.0/24", "mono-input", templ.Attributes{"value": scope.Subnet, "required": true})
+				<div class="record-field-grid two">
+					@dhcpScopeField(scope, add, "range_start", "Range Start", "", "192.168.1.100", "mono-input", templ.Attributes{"value": scope.RangeStart, "inputmode": "decimal"})
+					@dhcpScopeField(scope, add, "range_end", "Range End", "", "192.168.1.199", "mono-input", templ.Attributes{"value": scope.RangeEnd, "inputmode": "decimal"})
+				</div>
+				if scope.MoreRanges > 0 {
+					<p class="field-help">{ fmt.Sprintf("This scope has %d more %s in sable.toml; saving keeps %s.", scope.MoreRanges, ifThen(scope.MoreRanges == 1, "range", "ranges"), ifThen(scope.MoreRanges == 1, "it", "them")) }</p>
+				}
+				@dhcpScopeField(scope, add, "router", "Router", "Option 3, the gateway clients send traffic through.", "192.168.1.1", "mono-input", templ.Attributes{"value": scope.Router, "inputmode": "decimal"})
+				@dhcpScopeField(scope, add, "dns", "DNS Servers", "Option 6, comma separated. Leave empty to send this server's address.", "", "mono-input", templ.Attributes{"value": scope.DNS})
+				@dhcpScopeField(scope, add, "domain", "Domain", "Option 15, and the zone where device names register.", "home.example.com", "mono-input", templ.Attributes{"value": scope.Domain, "spellcheck": "false"})
+				@dhcpScopeField(scope, add, "lease", "Lease Time", "How long a device keeps its address, like `24h`; at least `2m`.", "24h", "mono-input", templ.Attributes{"value": scope.Lease})
+			</div>
+			@components.DialogFooter("Cancel") {
+				@components.Button(components.ButtonProps{Label: ifThen(add, "Add Scope", "Save Scope"), Icon: "check", Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
+			}
+		</form>
+	}
+}
+
+templ dhcpScopeField(scope DHCPScopeView, add bool, name, label, help, placeholder, class string, input templ.Attributes) {
+	@components.Field(components.FieldProps{ID: dhcpScopeDialogID(scope.ID, add) + "-" + strings.ReplaceAll(name, "_", "-"), Label: label, Help: help, Input: dhcpScopeInput(name, placeholder, class, input)})
+}
+
+func dhcpScopeInput(name, placeholder, class string, input templ.Attributes) templ.Attributes {
+	input["name"], input["autocomplete"] = name, "off"
+	if placeholder != "" {
+		input["placeholder"] = placeholder
+	}
+	if class != "" {
+		input["class"] = class
+	}
+	return input
+}
+
+func dhcpScopeTitle(scope DHCPScopeView) string {
+	return dhcpOr(scope.Name, scope.ID)
+}
+
+func dhcpScopeRange(scope DHCPScopeView) string {
+	if scope.RangeStart == "" {
+		return "Reservations only"
+	}
+	text := scope.RangeStart + " – " + scope.RangeEnd
+	if scope.MoreRanges > 0 {
+		text += fmt.Sprintf(" +%d", scope.MoreRanges)
+	}
+	return text
+}
+
+func dhcpScopeRemoveConfirm(scope DHCPScopeView) string {
+	return "Remove scope " + dhcpScopeTitle(scope) + " and its reservations? Devices keep their addresses until they next renew, then get no answer from this server."
+}
+
+func dhcpOr(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+// dhcpScopeDialogID is the scope's dialog; IDs are unique.
+func dhcpScopeDialogID(id string, add bool) string {
+	if add {
+		return "dhcp-scope-new"
+	}
+	return "dhcp-scope-" + id
+}
+
+// DHCPScopeNoticeID is where a scope form shows why it didn't save.
+func DHCPScopeNoticeID(id string, add bool) string {
+	return dhcpScopeDialogID(id, add) + "-notice"
+}

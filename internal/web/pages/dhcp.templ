@@ -19,8 +19,11 @@ type DHCPPageView struct {
 	// CanWrite says the viewer may reserve and remove, on a node that
 	// accepts changes.
 	CanWrite bool
-	Message  string
-	Error    string
+	// CanConfigure says the viewer may add and edit scopes, which also
+	// needs settings.write (D47).
+	CanConfigure bool
+	Message      string
+	Error        string
 }
 
 // DHCPStatusView is the server's state on this node.
@@ -40,8 +43,12 @@ type DHCPLeaseRow struct {
 
 // DHCPScopeView is one scope and its reservations.
 type DHCPScopeView struct {
-	ID, Name, Subnet string
-	Reservations     []DHCPReservationRow
+	ID, Name, Subnet, Router, Domain, DNS, Lease string
+	// RangeStart and RangeEnd are the first range, the one the scope
+	// dialog edits; MoreRanges counts the others, set in sable.toml.
+	RangeStart, RangeEnd string
+	MoreRanges           int
+	Reservations         []DHCPReservationRow
 }
 
 // DHCPReservationRow is one reservation, with the expiry of the lease its
@@ -54,6 +61,7 @@ type DHCPReservationRow struct {
 var dhcpTabs = []tabOption{
 	{Value: "leases", Label: "Leases"},
 	{Value: "reservations", Label: "Reservations"},
+	{Value: "scopes", Label: "Scopes"},
 }
 
 // DHCPTabs lists the page's tab values, for the handler to check ?tab=.
@@ -80,19 +88,29 @@ templ DHCPContent(view DHCPPageView) {
 		</div>
 		if len(view.Scopes) == 0 {
 			@components.Card(components.CardProps{Class: "isotope-data-card"}) {
-				@components.EmptyState(components.EmptyStateProps{Icon: "router", IconBox: true, Title: "DHCP isn't set up", Description: "Add a scope under [dhcp] in sable.toml to hand out addresses from this server."})
+				@dhcpSetupEmpty(view)
+			}
+			if view.CanConfigure {
+				@dhcpScopeDialog(DHCPScopeView{}, true)
 			}
 		} else {
 			@dhcpOverview(view)
 			@components.Tabs(components.TabsProps{Label: "DHCP sections", Class: "admin-tab-list", Active: view.ActiveTab, Tabs: dhcpTabList(view)})
 			<div class="isotope-tab-panel" role="tabpanel" data-isotope-panel="leases" hidden?={ view.ActiveTab != "leases" }>@dhcpLeasesPanel(view)</div>
 			<div class="isotope-tab-panel" role="tabpanel" data-isotope-panel="reservations" hidden?={ view.ActiveTab != "reservations" }>@dhcpReservationsPanel(view)</div>
+			<div class="isotope-tab-panel" role="tabpanel" data-isotope-panel="scopes" hidden?={ view.ActiveTab != "scopes" }>@dhcpScopesPanel(view)</div>
 			if view.CanWrite {
 				@dhcpReservationDialog(view, DHCPReservationRow{Scope: view.Scopes[0].ID}, true)
 				for _, scope := range view.Scopes {
 					for _, reservation := range scope.Reservations {
 						@dhcpReservationDialog(view, reservation, false)
 					}
+				}
+			}
+			if view.CanConfigure {
+				@dhcpScopeDialog(DHCPScopeView{}, true)
+				for _, scope := range view.Scopes {
+					@dhcpScopeDialog(scope, false)
 				}
 			}
 		}
@@ -145,7 +163,7 @@ func dhcpReservationCount(scopes []DHCPScopeView) int {
 }
 
 func dhcpTabList(view DHCPPageView) []components.Tab {
-	counts := map[string]int{"leases": len(view.Leases), "reservations": dhcpReservationCount(view.Scopes)}
+	counts := map[string]int{"leases": len(view.Leases), "reservations": dhcpReservationCount(view.Scopes), "scopes": len(view.Scopes)}
 	tabs := make([]components.Tab, 0, len(dhcpTabs))
 	for _, tab := range dhcpTabs {
 		tabs = append(tabs, components.Tab{Value: tab.Value, Label: tab.Label, Count: fmt.Sprint(counts[tab.Value])})

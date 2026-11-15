@@ -101,6 +101,7 @@ func (server *Server) dhcpPageView(request *http.Request) pages.DHCPPageView {
 	view.Status = pages.DHCPStatusView{Enabled: state.Status.Enabled || state.Settings.Enabled, Serving: state.Status.Serving,
 		Clustered: state.Status.Clustered || (server.cluster != nil && server.cluster.Snapshot().Initialized), Received: state.Status.Received, Replied: state.Status.Replied}
 	view.CanWrite = service.allowed(who, auth.PermissionDHCPWrite) == nil && !view.Console.ControlPlaneReadOnly
+	view.CanConfigure = view.CanWrite && service.allowed(who, auth.PermissionSettingsWrite) == nil
 	leases, err := service.Leases(request.Context(), who, "")
 	if err != nil {
 		server.logger.Warn("read DHCP leases for the console", "error", err)
@@ -113,7 +114,7 @@ func (server *Server) dhcpPageView(request *http.Request) pages.DHCPPageView {
 			Name: dhcpLeaseName(lease), Expires: lease.ExpiresAt, Reserved: lease.Reserved})
 	}
 	for _, scope := range state.Settings.Scopes {
-		scopeView := pages.DHCPScopeView{ID: scope.ID, Name: scope.Name, Subnet: scope.Subnet}
+		scopeView := dhcpScopeView(scope)
 		for _, reservation := range scope.Reservations {
 			row := pages.DHCPReservationRow{Scope: scope.ID, MAC: reservation.MAC, Address: reservation.Address, Name: reservation.Name, Comment: reservation.Comment}
 			if lease, ok := held[scope.ID+"|"+reservation.MAC]; ok {
@@ -140,4 +141,17 @@ func dhcpReservationName(reservation config.DHCPReservation) string {
 		return reservation.Name
 	}
 	return reservation.MAC
+}
+
+// dhcpScopeView is what the Scopes tab and scope dialog show of a scope.
+func dhcpScopeView(scope config.DHCPScope) pages.DHCPScopeView {
+	view := pages.DHCPScopeView{ID: scope.ID, Name: scope.Name, Subnet: scope.Subnet, Router: scope.Router,
+		Domain: scope.Domain, DNS: strings.Join(scope.DNS, ", ")}
+	if scope.Lease.Duration > 0 {
+		view.Lease = scope.Lease.String()
+	}
+	if len(scope.Ranges) > 0 {
+		view.RangeStart, view.RangeEnd, view.MoreRanges = scope.Ranges[0].Start, scope.Ranges[0].End, len(scope.Ranges)-1
+	}
+	return view
 }
