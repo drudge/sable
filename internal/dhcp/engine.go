@@ -241,21 +241,53 @@ func (engine *Engine) Handle(now time.Time, request Packet, meta Meta) Result {
 }
 
 // scopeFor finds the scope for the request's link: the relay's giaddr when
-// relayed (RFC 2131 §4.3.1), else the arrival interface's subnet. The server
-// identifier is this node's address on that link.
+// relayed (RFC 2131 §4.3.1); the scope holding ciaddr for a request routed
+// to this node by unicast; else the arrival interface's subnet. The server
+// identifier is this node's address on that link, or the one the client sent
+// to.
 func (engine *Engine) scopeFor(request Packet, meta Meta) (*scope, netip.Addr) {
-	relayed := request.GIAddr.Is4() && !request.GIAddr.IsUnspecified()
+	if request.GIAddr.Is4() && !request.GIAddr.IsUnspecified() {
+		return engine.relayedScope(request.GIAddr, meta)
+	}
+	if compiled, serverID := engine.routedScope(request, meta); compiled != nil {
+		return compiled, serverID
+	}
 	for _, compiled := range engine.scopes {
-		if relayed {
-			if serverID := firstIPv4(meta.Addrs); compiled.subnet.Contains(request.GIAddr) && serverID.IsValid() {
-				return compiled, serverID
-			}
-			continue
-		}
 		for _, local := range meta.Addrs {
 			if address := local.Addr().Unmap(); compiled.subnet.Contains(address) {
 				return compiled, address
 			}
+		}
+	}
+	return nil, netip.Addr{}
+}
+
+func (engine *Engine) relayedScope(giaddr netip.Addr, meta Meta) (*scope, netip.Addr) {
+	serverID := firstIPv4(meta.Addrs)
+	if !serverID.IsValid() {
+		return nil, netip.Addr{}
+	}
+	for _, compiled := range engine.scopes {
+		if compiled.subnet.Contains(giaddr) {
+			return compiled, serverID
+		}
+	}
+	return nil, netip.Addr{}
+}
+
+// routedScope is the scope holding ciaddr for a request that came to this
+// node by unicast with no relay: a RENEWING client trusts its ciaddr (RFC 2131
+// §4.3.2, §4.4.5), and a relay that forwards broadcasts only leaves its
+// renewals to routing (D106). A broadcast keeps the arrival link's scope, so
+// a client that moved links and rebinds with its old address is NAKed.
+func (engine *Engine) routedScope(request Packet, meta Meta) (*scope, netip.Addr) {
+	to, unicast := meta.unicast()
+	if !unicast || isZero(request.CIAddr) {
+		return nil, netip.Addr{}
+	}
+	for _, compiled := range engine.scopes {
+		if compiled.subnet.Contains(request.CIAddr) {
+			return compiled, to
 		}
 	}
 	return nil, netip.Addr{}
