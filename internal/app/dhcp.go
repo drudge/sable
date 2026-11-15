@@ -51,6 +51,10 @@ type dhcpService struct {
 	// serving is the settings the running server rebuilds from when it has
 	// to bind again, kept up to date by changes applied in place.
 	serving atomic.Pointer[config.DHCP]
+	// rebinding is held while supervise builds and binds the next server,
+	// and while a change is applied in place, so the change reaches the
+	// server that ends up on port 67 and not one about to be replaced.
+	rebinding sync.Mutex
 
 	mutex   sync.Mutex
 	active  config.DHCP
@@ -135,8 +139,10 @@ func (service *dhcpService) applyInPlace(settings config.DHCP) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("start DHCP engine: %w", err)
 	}
-	server.engine.Rescope(engine)
+	service.rebinding.Lock()
+	service.current.Load().engine.Rescope(engine)
 	service.serving.Store(&settings)
+	service.rebinding.Unlock()
 	service.active = settings
 	service.logger.Info("DHCP reservations applied")
 	service.notifyChanged()
@@ -215,11 +221,14 @@ func (service *dhcpService) supervise(ctx context.Context, server *dhcpServer, e
 		}
 		wait = min(2*wait, dhcpRetryMax)
 		// The engine was built from these settings before, so it builds again.
+		service.rebinding.Lock()
 		if server, err = service.prepare(*service.serving.Load()); err != nil {
+			service.rebinding.Unlock()
 			service.logger.Error("DHCP server not restarted", "error", err)
 			return
 		}
 		err = service.bind(ctx, server)
+		service.rebinding.Unlock()
 	}
 }
 
