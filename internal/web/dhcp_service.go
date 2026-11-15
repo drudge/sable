@@ -330,7 +330,7 @@ func (service dhcpService) update(ctx context.Context, who actor, action, messag
 		return refuse(http.StatusNotImplemented, "this configuration source is read-only")
 	}
 	err := editor.Update(ctx, func(configuration *config.Config) error {
-		settings := dhcpClone(configuration.DHCP)
+		settings := configuration.DHCP.Clone()
 		if err := mutate(&settings); err != nil {
 			return err
 		}
@@ -421,16 +421,6 @@ func dhcpScope(settings *config.DHCP, id string) (*config.DHCPScope, error) {
 		}
 	}
 	return nil, refuse(http.StatusNotFound, "there's no DHCP scope %q", id)
-}
-
-// dhcpClone copies settings deeply enough that a change to its scopes or
-// their reservations can't reach the snapshot it came from.
-func dhcpClone(settings config.DHCP) config.DHCP {
-	settings.Scopes = slices.Clone(settings.Scopes)
-	for index := range settings.Scopes {
-		settings.Scopes[index].Reservations = slices.Clone(settings.Scopes[index].Reservations)
-	}
-	return settings
 }
 
 // dhcpRowHolds reports whether a lease row holds its address at now: active

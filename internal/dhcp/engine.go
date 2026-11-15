@@ -105,15 +105,30 @@ func (engine *Engine) SetLabeler(labeler Labeler) {
 }
 
 // Load replaces the lease view: this node's leases and the other nodes'
-// mirrored ones.
+// mirrored ones. An address can have a row from more than one node after a
+// range takeover (the offline owner's and the new one's); the most recently
+// bound row wins whatever order they come in, so a node never forgets a
+// lease it granted (RFC 2131 §4.3.1: an address isn't offered while bound).
 func (engine *Engine) Load(leases []Lease) {
 	engine.mutex.Lock()
 	defer engine.mutex.Unlock()
 	engine.leases = make(map[netip.Addr]*Lease, len(leases))
 	engine.clients = make(map[clientRef]netip.Addr, len(leases))
 	for index := range leases {
+		if old := engine.leases[leases[index].Address]; old != nil && !newerLease(leases[index], *old) {
+			continue
+		}
 		engine.remember(leases[index])
 	}
+}
+
+// newerLease reports whether lease was bound after old, or at the same
+// moment but runs longer.
+func newerLease(lease, old Lease) bool {
+	if !lease.BoundAt.Equal(old.BoundAt) {
+		return lease.BoundAt.After(old.BoundAt)
+	}
+	return lease.ExpiresAt.After(old.ExpiresAt)
 }
 
 // Leases returns a copy of the lease view, to carry across a reload.
