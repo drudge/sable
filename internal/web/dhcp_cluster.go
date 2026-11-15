@@ -69,6 +69,10 @@ func (server *Server) dhcpTakeover(ctx context.Context, who actor, id string) (s
 		return "", refuse(http.StatusUnprocessableEntity, "This node already serves its own ranges")
 	case index < 0:
 		return "", refuse(http.StatusUnprocessableEntity, "%s isn't a member of this cluster", id)
+	case nodes[index].SyncState == cluster.SyncClock:
+		// It's up and serving but can't sync, so it would never learn it lost
+		// its ranges (D107).
+		return "", refuse(http.StatusUnprocessableEntity, "%s is up, but its clock is out of step, so it can't be told to stop serving its ranges; set its clock by NTP instead", nodes[index].Name)
 	case nodes[index].State == cluster.StateOnline:
 		return "", refuse(http.StatusUnprocessableEntity, "%s is online; take over its ranges only once it's offline", nodes[index].Name)
 	}

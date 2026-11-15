@@ -58,6 +58,9 @@ const (
 	SyncCurrent SyncState = "current"
 	// SyncBehind is an online member with generations still to apply.
 	SyncBehind SyncState = "behind"
+	// SyncClock is a member that is up but whose clock is too far from this
+	// node's for its heartbeats to be accepted, so it can't synchronize.
+	SyncClock SyncState = "clock"
 	// SyncConflict marks a node that claims the primary role in the same
 	// term as this one.
 	SyncConflict SyncState = "conflict"
@@ -134,6 +137,9 @@ type Node struct {
 	AppliedGeneration uint64    `json:"applied_generation"`
 	Lag               uint64    `json:"lag"`
 	SyncState         SyncState `json:"sync_state"`
+	// ClockOffsetSeconds is how far the member's clock is ahead of this
+	// node's (behind when negative), set while SyncState is clock.
+	ClockOffsetSeconds int64 `json:"clock_offset_seconds,omitempty"`
 }
 
 type State struct {
@@ -214,18 +220,23 @@ type Service struct {
 	replicator                     StateReplicator
 	joining                        bool
 	telemetry                      map[string]nodeTelemetry
-	monitorOnce                    sync.Once
-	monitorLifecycleMu             sync.Mutex
-	monitorCancel                  context.CancelFunc
-	monitorDone                    <-chan struct{}
-	monitorMu                      sync.Mutex
-	monitorError                   string
-	lastSuccessfulSync             time.Time
-	captureMu                      sync.Mutex
-	captureFlight                  *captureFlight
-	logger                         *slog.Logger
-	clientsMu                      sync.Mutex
-	memberClients                  map[string]*http.Client
+	// clockRefused is the last authentic heartbeat refused for its clock,
+	// by member; primaryClockRefusedAt is when the primary last refused this
+	// replica's for the same reason. Either keeps the node shown as up.
+	clockRefused          map[string]clockRefusal
+	primaryClockRefusedAt time.Time
+	monitorOnce           sync.Once
+	monitorLifecycleMu    sync.Mutex
+	monitorCancel         context.CancelFunc
+	monitorDone           <-chan struct{}
+	monitorMu             sync.Mutex
+	monitorError          string
+	lastSuccessfulSync    time.Time
+	captureMu             sync.Mutex
+	captureFlight         *captureFlight
+	logger                *slog.Logger
+	clientsMu             sync.Mutex
+	memberClients         map[string]*http.Client
 	// localAlerts gathers this node's own alerts while it is a replica, and
 	// alertReport keeps them for the heartbeat. alertPrimaryID names the
 	// primary that advertised it takes them.
@@ -325,7 +336,7 @@ func Open(options Options) (*Service, error) {
 		telemetry: make(map[string]nodeTelemetry), httpClient: baseHTTPClient,
 		baseHTTPClient: baseHTTPClient, memberClients: make(map[string]*http.Client), replicator: options.Replicator,
 		logger: options.Logger, reportedAlerts: make(map[string]reportedAlerts), reportedLookups: make(map[string]reportedLookups),
-		primaryClaims: make(map[string]primaryClaim), probeNow: make(chan struct{}, 1), replays: make(replayGuard),
+		primaryClaims: make(map[string]primaryClaim), probeNow: make(chan struct{}, 1), replays: make(replayGuard), clockRefused: make(map[string]clockRefusal),
 	}
 	if service.nodeName == "" {
 		service.nodeName = nodeID[:8]
@@ -408,6 +419,7 @@ func (service *Service) Snapshot() State {
 		state.Nodes = append(state.Nodes, node)
 	}
 	service.applyRemoteTelemetry(&state, now)
+	service.applyClockRefusals(&state, now)
 	if state.LocalRole == RoleReplica && !service.lastSuccessfulSync.IsZero() {
 		primaryCurrent := slices.ContainsFunc(state.Nodes, func(node Node) bool {
 			return node.ID == state.PrimaryID && node.State == StateOnline && node.SyncState == SyncCurrent

@@ -20,7 +20,10 @@ Prepare every node with:
 - one or more DNS service addresses that clients and operators can recognize;
 - synchronized system time. Cluster heartbeats outside a 30-second clock window
   are rejected. A clock that steps back or forward inside that window doesn't
-  interrupt synchronization.
+  interrupt synchronization. A node outside it stays up and keeps serving, but
+  can't synchronize: both Cluster pages show it as **Clock out of step**, both
+  logs name the clock, and its DHCP ranges can't be taken over until its clock
+  is set.
 - the primary's Sable version or a newer one. The primary refuses to enroll an
   older node and asks you to update it first; the enrollment token stays
   valid.
@@ -371,6 +374,7 @@ database overrides, and fresh-host recovery.
 | --- | --- |
 | Restart required | Complete the controlled restart before initializing or joining; the saved node identity is not active yet. |
 | Token rejected | Create a new token. The previous token may have expired, been consumed, or been entered against the wrong primary URL. |
+| Clock out of step | Set both clocks by NTP. The node synchronizes again within seconds once they agree within 30 seconds. |
 | Node offline | Test the advertised HTTPS URL from the other node, verify its certificate names and issuer, check both clocks, then inspect `journalctl -u sable`. |
 | Generation lag grows | Inspect the replica log for validation, disk, vault, or activation errors. The prior generation remains active until the whole candidate succeeds. |
 | Writes are refused | Confirm the local role. Cluster-scoped and RFC 2136 writes belong on the primary; follow the primary link from the Cluster page. |
