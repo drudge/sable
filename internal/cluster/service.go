@@ -250,6 +250,12 @@ type Service struct {
 	clientIdentities  ClientIdentities
 	identityShare     identitySharer
 	identityRecording identityRecorder
+	// leaseMirror reads and writes this node's DHCP lease table.
+	// leasePrimaryID names the primary that advertised it mirrors leases,
+	// and leaseAcknowledged is how far it last said it holds this node's.
+	leaseMirror       LeaseMirror
+	leasePrimaryID    string
+	leaseAcknowledged int64
 	// attachedNetworks reads this node's IPv6 networks and takes the lead's.
 	attachedNetworks AttachedNetworks
 	// primaryClaims is the latest claim to lead seen from each other node,
