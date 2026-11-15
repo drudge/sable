@@ -41,6 +41,7 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 		CanCheckUpdates:     server.updates != nil && !server.securityEnabled,
 		CheckUpdatesOnLogin: snapshot.Config.Updates.CheckOnLogin && !version.Current().Development(),
 		CanCluster:          !server.securityEnabled,
+		CanDHCP:             !server.securityEnabled,
 		CanWriteCluster:     !server.securityEnabled,
 		Database:            server.database,
 		DNSListeners:        strings.Join(snapshot.Config.Server.DNSListen, ", "),
@@ -73,6 +74,7 @@ func (server *Server) consoleView(request *http.Request) pages.DashboardView {
 		view.CanMetrics = auth.HasPermission(principal, auth.PermissionMetricsRead)
 		view.CanCheckUpdates = server.updates != nil && auth.HasPermission(principal, auth.PermissionUpdatesRead)
 		view.CanCluster = auth.HasPermission(principal, auth.PermissionClusterRead)
+		view.CanDHCP = auth.HasPermission(principal, auth.PermissionDHCPRead)
 		view.CanWriteCluster = auth.HasPermission(principal, auth.PermissionClusterWrite)
 	}
 	if server.cluster != nil {

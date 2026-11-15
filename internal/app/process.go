@@ -655,6 +655,9 @@ func (process *process) newWebServer() error {
 	webServer.SetCertificateController(process.certificateManager)
 	webServer.SetDynamicDNSController(process.dynamicDNS)
 	webServer.SetUniFiController(process.unifiSync)
+	if process.dhcp != nil {
+		webServer.SetDHCPController(process.dhcp)
+	}
 	webServer.SetAbuseCHKeyStore(process.abuseCHKey)
 	webServer.SetTSIGController(tsig.NewManager(process.configurationManager, process.tsigSecrets))
 	return nil

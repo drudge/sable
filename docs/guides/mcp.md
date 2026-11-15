@@ -35,6 +35,9 @@ You choose each tool in the first step of the setup wizard, and a token still ne
 | `get_dynamic_dns` | On | Your public addresses, the records Dynamic DNS keeps up to date, and its last error | `settings.read` |
 | `sync_dynamic_dns` | Off | Updates the Dynamic DNS records now | `settings.write` |
 | `get_cluster_status` | On | Which node leads, which are online and caught up, their versions and problems, and any rolling update | `cluster.read` |
+| `get_dhcp_status` | Off | Whether the DHCP server is on and answering, its counters, and its scopes and reservations | `dhcp.read` |
+| `list_dhcp_leases` | Off | The leases that hold an address now, optionally for one scope | `dhcp.read` |
+| `set_dhcp_reservation`, `remove_dhcp_reservation` | Off | Give a device a fixed address in a scope, or take it away | `dhcp.write` |
 
 `add_record` and `set_records` change nothing when repeated, so `set_records` is the safest way to point a name at a deployment. The tools change records through the same code as the console, so a name matches however it is typed: `www`, `WWW`, and `www.example.com.` are the same record. Only records in Primary and Forwarder zones can change, as in the console. The assistant cannot reconfigure zones, and it cannot touch the SOA record, DNSSEC records Sable manages, or records a UniFi or alias zone publishes. It can never pause or turn off blocking.
 

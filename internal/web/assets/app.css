@@ -1176,6 +1176,7 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .cache-card-body { display: grid; gap: var(--space-6); padding: var(--space-3) var(--space-6) var(--space-6); }
 .operational-metric-grid { display: grid; gap: .85rem; }
 .cache-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dhcp-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .operational-metric { display: flex; min-width: 0; min-height: 4.5rem; align-items: center; border: 1px solid; border-radius: var(--radius); padding: .8rem var(--space-4); }
 .operational-metric-row { display: flex; width: 100%; min-width: 0; min-height: 2.15rem; flex-wrap: wrap; align-items: center; justify-content: space-between; column-gap: var(--space-4); row-gap: .55rem; }
 .operational-metric-label { display: flex; min-width: 0; flex: 1 1 9rem; align-items: center; gap: .65rem; }
@@ -2179,7 +2180,7 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 	.record-ttl { min-width: 3.5rem; flex-basis: 3.5rem; }
 	.cache-card-header { padding: var(--space-5); }
 	.cache-card-body { padding: var(--space-4); }
-	.cache-stat-grid, .cache-actions, .cache-aside { grid-template-columns: 1fr; }
+	.cache-stat-grid, .dhcp-overview, .cache-actions, .cache-aside { grid-template-columns: 1fr; }
 	.cache-actions { margin-inline: -1rem; padding-inline: var(--space-4); }
 	.operational-metric { min-height: 4.5rem; padding: .8rem .9rem; }
 	.cache-actions p { min-height: 0; }
@@ -2665,6 +2666,8 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 .admin-mobile-user-meta > small { min-width: 0; flex: 0 1 auto; grid-column: auto; }
 .mobile-role-list { display: flex; min-width: 0; flex-wrap: wrap; gap: var(--space-1); color: var(--muted-foreground); }
 .admin-mobile-group-row > div.admin-mobile-group-copy { grid-template-columns: minmax(0, 1fr); gap: .35rem; }
+.dhcp-mobile-row > div.dhcp-mobile-copy { grid-template-columns: minmax(0, 1fr); gap: .35rem; }
+.dhcp-mobile-copy small.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 .admin-mobile-user-trailing, .admin-mobile-group-trailing { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-3); }
 .admin-mobile-user-statuses { display: flex; align-items: center; gap: .3rem; }
 .admin-mobile-user-statuses .sso-badge { margin-left: 0; }
@@ -4701,7 +4704,7 @@ button.insights-headline-subject:focus-visible { outline: 2px solid var(--ring);
 .rule-set-form { display: grid; gap: var(--space-4); }
 .rule-set-body { padding: 0; }
 /* A problem arrives as a toast that floats over the dialog, so its slot takes no room. */
-.rule-set-notice { display: contents; }
+.rule-set-notice, .dhcp-form-notice { display: contents; }
 .rule-set-list-choices { max-height: 12rem; overflow-y: auto; }
 .rule-set-lists:not(.rule-set-scope) > .rule-set-list-choices { margin-top: 0; border-top: 0; padding-top: 0; }
 .rule-set-list-choices span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

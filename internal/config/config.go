@@ -173,6 +173,7 @@ var MCPTools = []string{
 	"list_block_lists", "add_block_list", "remove_block_list", "refresh_block_lists",
 	"lookup", "purge_cache", "list_findings", "search_queries", "search_server_logs",
 	"get_version", "get_stats", "get_dynamic_dns", "sync_dynamic_dns", "get_cluster_status",
+	"get_dhcp_status", "list_dhcp_leases", "set_dhcp_reservation", "remove_dhcp_reservation",
 }
 
 // DefaultMCPTools are the tools offered until an operator chooses: records,
@@ -1446,7 +1447,7 @@ func (configuration *Config) normalize() {
 	configuration.MCP.Group = strings.TrimSpace(configuration.MCP.Group)
 	configuration.normalizeDynamicDNS()
 	configuration.normalizeUniFi()
-	configuration.DHCP.normalize()
+	configuration.DHCP.Normalize()
 	configuration.normalizeInsights()
 	configuration.Security.SecretKeyFile = strings.TrimSpace(configuration.Security.SecretKeyFile)
 	configuration.Cluster.DataDirectory = strings.TrimSpace(configuration.Cluster.DataDirectory)
