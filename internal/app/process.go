@@ -683,7 +683,7 @@ func (process *process) startAlerts() {
 		node: clusterAlertNode(clusterService, configurationManager), configuration: configurationManager,
 		certificates: process.certificateManager, zones: process.zoneRefresher, backups: process.scheduledBackups,
 		trustAnchors: process.trustAnchorManager, trustAnchorUpdates: process.handler.DNSSECTrustAnchorUpdatesEnabled,
-		auditLog: database, signIns: process.authentication != nil,
+		auditLog: database, signIns: process.authentication != nil, dhcp: process.dhcp,
 	}.alertSources()...)
 	alertDispatcher.Add(clusterAlertSources(clusterService)...)
 	watches := newWatchSource(database, process.current,
