@@ -97,11 +97,11 @@ type dhcpReadFailConn struct {
 	once sync.Once
 }
 
-func (conn *dhcpReadFailConn) ReadPacket(buffer []byte) (int, int, error) {
+func (conn *dhcpReadFailConn) ReadPacket(buffer []byte) (int, dhcpArrival, error) {
 	var failed bool
 	conn.once.Do(func() { failed = true })
 	if failed {
-		return 0, 0, errors.New("recvmsg: network is down")
+		return 0, dhcpArrival{}, errors.New("recvmsg: network is down")
 	}
 	return conn.dhcpConn.ReadPacket(buffer)
 }

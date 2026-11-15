@@ -60,22 +60,20 @@ func openDHCPSocket(ctx context.Context, port int, shared bool) (*udpDHCPConn, e
 		return nil, err
 	}
 	packet := ipv4.NewPacketConn(conn)
-	if err := packet.SetControlMessage(ipv4.FlagInterface, true); err != nil {
+	if err := packet.SetControlMessage(ipv4.FlagInterface|ipv4.FlagDst, true); err != nil {
 		_ = conn.Close()
-		return nil, fmt.Errorf("ask for the arrival interface: %w", err)
+		return nil, fmt.Errorf("ask for the arrival interface and destination: %w", err)
 	}
 	return &udpDHCPConn{conn: conn, packet: packet}, nil
 }
 
-func (conn *udpDHCPConn) ReadPacket(buffer []byte) (int, int, error) {
+func (conn *udpDHCPConn) ReadPacket(buffer []byte) (int, dhcpArrival, error) {
 	n, control, _, err := conn.packet.ReadFrom(buffer)
-	if err != nil {
-		return 0, 0, err
+	if err != nil || control == nil {
+		return n, dhcpArrival{}, err
 	}
-	if control == nil {
-		return n, 0, nil
-	}
-	return n, control.IfIndex, nil
+	to, _ := netip.AddrFromSlice(control.Dst)
+	return n, dhcpArrival{ifIndex: control.IfIndex, to: to.Unmap()}, nil
 }
 
 func (conn *udpDHCPConn) WritePacket(payload []byte, ifIndex int, source netip.Addr, destination netip.AddrPort) error {
@@ -108,12 +106,12 @@ func seekDHCP(ctx context.Context, link dhcpProbeLink, discover []byte, wait tim
 	var replies [][]byte
 	buffer := make([]byte, dhcpMaxPacket+1)
 	for {
-		n, ifIndex, err := conn.ReadPacket(buffer)
+		n, arrival, err := conn.ReadPacket(buffer)
 		if err != nil {
 			// The deadline ends every probe; it isn't a failure.
 			return replies, nil
 		}
-		if ifIndex == link.Index && n <= dhcpMaxPacket {
+		if arrival.ifIndex == link.Index && n <= dhcpMaxPacket {
 			replies = append(replies, bytes.Clone(buffer[:n]))
 		}
 	}
