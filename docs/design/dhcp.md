@@ -234,10 +234,22 @@ a host-network container. The namespace spike covers the protocol. This check co
     because the launcher is part of the image.
 - **Relays:** reply unicast to `giaddr:67`, echo option 82 unchanged, and accept
   a relayed request only when `giaddr` or the link selection is inside a configured scope.
-- **Off by default.** A scope's **Enable** action first probes for another DHCP server (a DISCOVER
-  from port 68, 3 s wait). A positive result blocks enabling unless the operator overrides it. After
-  that the probe runs every 5 minutes and raises an alert. It never gates process start: otherwise
-  any device that answers a DISCOVER could keep DHCP down across a restart.
+- **Off by default.** A scope's **Enable** action first probes for another DHCP server: a
+  broadcast-flag DISCOVER from port 68, a 4 s wait, and one retransmit with the same transaction ID
+  and another 4 s wait while nothing answers (RFC 2131 §4.1, §4.4.1). dnsmasq, ISC dhcpd, and
+  Windows ping an address before offering it; in the namespace harness dnsmasq's first OFFER came
+  3.00 to 3.32 s after the DISCOVER, so a 3 s wait missed it 6 times in 6 and a 4 s wait caught it
+  24 times in 24. A positive result blocks enabling unless the operator overrides it. After that
+  the probe runs every 5 minutes and raises an alert. It never gates process start: otherwise any
+  device that answers a DISCOVER could keep DHCP down across a restart.
+  - Port 68 is shared: the host's own DHCP client (systemd-networkd, dhclient, dhcpcd) already holds
+    it, so the probe's socket sets `SO_REUSEADDR`. Port 67 never is: with it, a second server binds
+    beside dnsmasq, dhcpd, or another Sable and both answer every DISCOVER.
+  - The server never answers its own probe. The DISCOVER loops back to this node's port 67 and is
+    dropped before the engine while its transaction ID is in flight, so it holds no pool address and
+    isn't counted. Only this process's probes are dropped: two standalone Sables on one link still
+    find each other. Slice 8 extends this to cluster peers, or two nodes alert on each other.
+  - A probe that can't open its socket warns once when that starts and once when it clears.
 
 ### 5. Console, API, and MCP
 
@@ -548,6 +560,8 @@ before it and passes after it, and the other checks that prove it.
    version gate, and the range split and takeover in the console and the promote flow.
    - Test first, in `internal/clustertest`: partition two nodes and assert no address is leased
      twice.
+   - The other-server probe treats cluster peers as this node (D36): a peer's OFFER isn't another
+     server, and a peer's probe isn't answered. Test that two nodes don't alert on each other.
    - Check: promote and assert names survive. Kill a node, take over its range, and assert every
      client renews on the address it holds. Restart a replica with the primary down and assert it
      still serves. A member on the previous release blocks enable. 5,000 lease names don't stall

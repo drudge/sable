@@ -26,6 +26,10 @@ const (
 	// up before a client's first retransmit at 4 s (RFC 2131 §4.1) and the
 	// requests behind it are still answered in time.
 	dhcpSaveTimeout = 2 * time.Second
+	// dhcpReloadInterval is the least time between reads of the store while
+	// the engine is stale. A store that stays down is then read once a second,
+	// not once per datagram with dhcpSaveTimeout behind each.
+	dhcpReloadInterval = time.Second
 )
 
 // dhcpConn is the server's socket: datagrams with the interface they
@@ -92,6 +96,12 @@ type dhcpServer struct {
 	// stale is set when a save failed and no reload has succeeded since.
 	// Only the serve goroutine touches it.
 	stale bool
+	// reloadedAt is when the last reload finished; only the serve goroutine
+	// touches it.
+	reloadedAt time.Time
+	// ownProbes is this node's probes for other DHCP servers in flight; their
+	// DISCOVERs loop back to this socket and aren't client requests (D36).
+	ownProbes *dhcpOwnProbes
 }
 
 // run serves until ctx ends or the socket fails, then closes the socket.
@@ -130,6 +140,9 @@ func (server *dhcpServer) read() error {
 			}
 			return fmt.Errorf("read DHCP socket: %w", err)
 		}
+		if server.ownProbes.sent(buffer[:n]) {
+			continue
+		}
 		server.stats.Received.Add(1)
 		if n > dhcpMaxPacket {
 			server.stats.Dropped.Add(1)
@@ -152,7 +165,7 @@ func (server *dhcpServer) serve(ctx context.Context) {
 // handleSafely answers one request. A panic loses that request only: the
 // client retransmits, and the server keeps serving the rest of the network.
 // The engine may have changed its view before the panic, so the next request
-// reloads it from the store first, as after a failed save (D25).
+// reloads it from the store first, as after a failed save (D27).
 func (server *dhcpServer) handleSafely(ctx context.Context, request dhcpRequest) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -165,7 +178,7 @@ func (server *dhcpServer) handleSafely(ctx context.Context, request dhcpRequest)
 }
 
 func (server *dhcpServer) handle(ctx context.Context, request dhcpRequest) {
-	if server.stale && !server.reload(ctx) {
+	if server.stale && !server.reloadStale(ctx) {
 		// Until the engine matches the store again, any answer may promise
 		// what the store doesn't hold; stay silent and let clients retransmit.
 		server.stats.Stale.Add(1)
@@ -212,7 +225,7 @@ func (server *dhcpServer) recordConflict(ctx context.Context, conflict dhcpConfl
 // commit writes the leases a request changed. The ACK promises the client
 // its lease, so it goes out only once the store has it (RFC 2131 §4.3.1).
 // The engine already changed its view, so a failed save reloads it from the
-// store rather than leave the two apart (D25).
+// store rather than leave the two apart (D27).
 func (server *dhcpServer) commit(ctx context.Context, leases []dhcp.Lease) bool {
 	saveCtx, cancel := context.WithTimeout(ctx, dhcpSaveTimeout)
 	err := server.save(saveCtx, leases)
@@ -227,9 +240,21 @@ func (server *dhcpServer) commit(ctx context.Context, leases []dhcp.Lease) bool 
 	return false
 }
 
+// reloadStale reloads a stale engine unless the last try was under
+// dhcpReloadInterval ago. A clock that went back counts as due.
+func (server *dhcpServer) reloadStale(ctx context.Context) bool {
+	if since := server.now().Sub(server.reloadedAt); since >= 0 && since < dhcpReloadInterval {
+		return false
+	}
+	return server.reload(ctx)
+}
+
 // reload replaces the engine's lease view with the store's and reports
-// whether it did. Pending offers live outside the view and survive.
+// whether it did. Pending offers live outside the view and survive. The
+// limit counts from when the read ends: a hanging store holds each read for
+// dhcpSaveTimeout, longer than dhcpReloadInterval (F34).
 func (server *dhcpServer) reload(ctx context.Context) bool {
+	defer func() { server.reloadedAt = server.now() }()
 	loadCtx, cancel := context.WithTimeout(ctx, dhcpSaveTimeout)
 	defer cancel()
 	leases, err := server.load(loadCtx)

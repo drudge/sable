@@ -71,3 +71,15 @@ func TestListenDHCPFailsWhenSableHoldsThePort(t *testing.T) {
 	}
 	_ = third.Close()
 }
+
+// The probe listens on port 68, which a DHCP client on this host (dhcpcd,
+// dhclient) holds with SO_REUSEADDR. The probe must bind beside it, or it
+// never runs on a host that also gets an address by DHCP.
+func TestListenDHCPClientSharesThePortWithADHCPClient(t *testing.T) {
+	_, port := reuseAddrSquatter(t)
+	conn, err := listenDHCPClient(context.Background(), port)
+	if err != nil {
+		t.Fatalf("listenDHCPClient beside a DHCP client: %v", err)
+	}
+	_ = conn.Close()
+}

@@ -35,7 +35,12 @@ type dhcpService struct {
 	listen func(context.Context, int) (dhcpConn, error)
 	link   func(int) (dhcp.Meta, error)
 	probe  dhcpProbe
-	port   int
+	// links and seek look for other DHCP servers every othersEvery while
+	// this one runs.
+	links       func() ([]dhcpProbeLink, error)
+	seek        dhcpSeek
+	othersEvery time.Duration
+	port        int
 	// retry is the first wait before binding again after a failure.
 	retry  time.Duration
 	logger *slog.Logger
@@ -47,6 +52,10 @@ type dhcpService struct {
 	mutex   sync.Mutex
 	active  config.DHCP
 	running *dhcpRunning
+
+	othersMutex sync.Mutex
+	others      []dhcpOtherServer
+	ownProbes   dhcpOwnProbes
 }
 
 // dhcpRunning is one started server and how to stop it.
@@ -64,6 +73,7 @@ func newDHCPService(leases dhcpLeaseStore, node func() string, role func() strin
 		leases: leases, node: node, role: role,
 		listen: func(ctx context.Context, port int) (dhcpConn, error) { return listenDHCP(ctx, port) },
 		link:   dhcpLink, probe: newDHCPProber(logger).probe, port: dhcpServerPort, retry: time.Second, logger: logger,
+		links: dhcpProbeLinks, seek: dhcpDefaultSeek, othersEvery: dhcpOthersInterval,
 	}
 }
 
@@ -127,20 +137,23 @@ func (service *dhcpService) prepare(settings config.DHCP) (*dhcpServer, error) {
 	engine.SetLabeler(dhcpLabel)
 	return &dhcpServer{
 		engine: engine, save: service.save, load: service.load, link: service.link, probe: service.probe,
-		now: time.Now, logger: service.logger, stats: &service.stats,
+		ownProbes: &service.ownProbes, now: time.Now, logger: service.logger, stats: &service.stats,
 	}, nil
 }
 
 // startLocked binds port 67 and reads the store's leases now, so the old
 // server has stopped and nothing it acknowledged is missed, then leaves the
-// server to supervise.
+// server to supervise and the probe for other servers to run beside it.
 func (service *dhcpService) startLocked(runtime context.Context, settings config.DHCP, server *dhcpServer) {
 	ctx, cancel := context.WithCancel(runtime)
 	running := &dhcpRunning{cancel: cancel, done: make(chan struct{})}
 	err := service.bind(ctx, server)
+	var group sync.WaitGroup
+	group.Go(func() { service.supervise(ctx, settings, server, err) })
+	group.Go(func() { service.watchOthers(ctx, settings) })
 	go func() {
-		defer close(running.done)
-		service.supervise(ctx, settings, server, err)
+		group.Wait()
+		close(running.done)
 	}()
 	service.running = running
 }
@@ -177,7 +190,7 @@ func (service *dhcpService) supervise(ctx context.Context, settings config.DHCP,
 }
 
 // bind gives server its socket and the store's leases. A failed read leaves
-// it silent until a reload works, as after a failed save (D25).
+// it silent until a reload works, as after a failed save (D27).
 func (service *dhcpService) bind(ctx context.Context, server *dhcpServer) error {
 	conn, err := service.listen(ctx, service.port)
 	if err != nil {
@@ -209,6 +222,7 @@ func (service *dhcpService) stopLocked() {
 	service.running.cancel()
 	<-service.running.done
 	service.running = nil
+	service.setOthers(nil)
 }
 
 func (service *dhcpService) save(ctx context.Context, leases []dhcp.Lease) error {
