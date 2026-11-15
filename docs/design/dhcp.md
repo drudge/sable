@@ -180,7 +180,11 @@ a host-network container. The namespace spike covers the protocol. This check co
   show a wipe once the node has leased as many since as it held before, so a counter that takes
   its first number also opens a recovery in `sable_dhcp_lease_recovery` (schema step 3): the node
   asks for its rows from the first until the primary has none left to send, then renumbers every
-  row past both counts.
+  row past both counts. A primary that lost rows takes them back the same way from the replicas'
+  mirrors (`LeaseReport.Wanted`), and ends only after every replica has none left to send. Its
+  recovery also opens when a replica holds a higher number of its rows than its counter has
+  reached, before the counter is raised to that number: a wiped primary hears from a replica
+  before it leases anything, and one restored from an older backup never takes a first number.
 - **What a node outage costs with no action.** Reserved clients: nothing. Dynamic clients of the
   dead node: nothing until their lease runs out. They retry the dead node from half the lease time,
   broadcast from 87.5%, and take a new address from a surviving range only at expiry. With a 24 h
