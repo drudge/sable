@@ -235,6 +235,9 @@ type InsightDeviceDrawerView struct {
 	Apps           []InsightAppView
 	// Blocking is the device's rule set and hold.
 	Blocking InsightDeviceBlockingView
+	// Lease is the device's DHCP lease, nil when it has none or the operator
+	// can't read DHCP.
+	Lease *InsightDeviceLeaseView
 }
 
 // InsightAppView is one app a device used and how much.
@@ -1723,6 +1726,7 @@ templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
 				@components.Fact(components.FactProps{Label: "First seen", Value: insightDeviceTime(view.Device.FirstSeen, view.TimeDisplay), Wide: true})
 				@components.Fact(components.FactProps{Label: "Last seen", Value: insightDeviceTime(view.Device.LastSeen, view.TimeDisplay), Wide: true})
 			}
+			@insightDeviceLease(view)
 			@insightDeviceType(view)
 			@insightDeviceBlocking(view)
 			<section class="query-detail-answer" aria-labelledby="insight-device-addresses">
