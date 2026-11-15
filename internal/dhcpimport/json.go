@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	"github.com/drudge/sable/internal/unifi"
 )
 
 // export holds every JSON shape Parse knows; whichever list is present
@@ -85,15 +87,21 @@ func technitiumResult(leases []technitiumLease) Result {
 	return result
 }
 
-// unifiResult keeps the clients with a fixed address, named by the host name
-// they sent: a controller alias is free text, like "Office AP", not a label.
+// unifiResult keeps the clients with a fixed address, named the way Sable's
+// UniFi sync names them (unifi.SanitizeLabel on the alias the operator gave
+// the client in the controller, then the host name it sent), so a device
+// keeps its name in DNS when its reservation moves to Sable.
 func unifiResult(users []unifiUser) Result {
 	result := Result{Format: FormatUniFi}
 	for index, user := range users {
 		if !user.UseFixedIP {
 			continue
 		}
-		result.add(index+1, user.MAC, user.FixedIP, user.Hostname, user.Note)
+		name := unifi.SanitizeLabel(user.Name)
+		if name == "" {
+			name = user.Hostname
+		}
+		result.add(index+1, user.MAC, user.FixedIP, name, user.Note)
 	}
 	return result
 }

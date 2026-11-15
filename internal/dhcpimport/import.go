@@ -7,11 +7,13 @@ package dhcpimport
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
 	"net/netip"
 	"strings"
+	"unicode/utf16"
 )
 
 // The formats Parse recognizes.
@@ -50,6 +52,7 @@ type Result struct {
 // Parse reads data as whichever supported export it is. It fails when data
 // is none of them or holds no reservation at all.
 func Parse(data []byte) (Result, error) {
+	data = decoded(data)
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 {
 		return Result{}, errors.New("the file is empty")
@@ -70,6 +73,28 @@ func Parse(data []byte) (Result, error) {
 		return Result{}, fmt.Errorf("found no reservations in the %s export", result.Format)
 	}
 	return result, nil
+}
+
+// decoded returns data as UTF-8 without a byte order mark. A file saved on
+// Windows often starts with one, and Windows PowerShell 5's ">" and Out-File
+// write UTF-16, which the mark gives away.
+func decoded(data []byte) []byte {
+	var order binary.ByteOrder
+	switch {
+	case bytes.HasPrefix(data, []byte{0xef, 0xbb, 0xbf}):
+		return data[3:]
+	case bytes.HasPrefix(data, []byte{0xff, 0xfe}):
+		order = binary.LittleEndian
+	case bytes.HasPrefix(data, []byte{0xfe, 0xff}):
+		order = binary.BigEndian
+	default:
+		return data
+	}
+	units := make([]uint16, 0, len(data)/2)
+	for index := 2; index+1 < len(data); index += 2 {
+		units = append(units, order.Uint16(data[index:]))
+	}
+	return []byte(string(utf16.Decode(units)))
 }
 
 // add appends the entry when its hardware and IPv4 addresses read, and a

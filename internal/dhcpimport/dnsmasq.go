@@ -11,21 +11,33 @@ import (
 // m, h, d or w, or "infinite" (dnsmasq(8), --dhcp-host).
 var leaseTime = regexp.MustCompile(`^(\d+[smhdw]?|infinite)$`)
 
-// parseDnsmasq reads every dhcp-host line. Fields can come in any order;
-// each is told apart by its shape the way dnsmasq does. Tags, client IDs,
-// IPv6 addresses and lease times aren't reservations' business in Sable and
-// are passed over.
+// parseDnsmasq reads every dhcp-host line, and every line of a
+// --dhcp-hostsfile, which is the same text without "dhcp-host=" (Pi-hole 6
+// keeps dhcp.hosts that way). dnsmasq allows white space around "=". Fields
+// can come in any order; each is told apart by its shape the way dnsmasq
+// does. Tags, client IDs, IPv6 addresses and lease times aren't reservations'
+// business in Sable and are passed over.
 func parseDnsmasq(text string) Result {
 	result := Result{Format: FormatDnsmasq}
 	for number, line := range strings.Split(text, "\n") {
 		line, _, _ = strings.Cut(line, "#")
-		value, ok := strings.CutPrefix(strings.TrimLeft(strings.TrimSpace(line), "-"), "dhcp-host=")
-		if !ok {
-			continue
+		line = strings.TrimSpace(line)
+		option, value, found := strings.Cut(line, "=")
+		switch {
+		case found && strings.TrimLeft(strings.TrimSpace(option), "-") == "dhcp-host":
+			parseDhcpHost(&result, number+1, value)
+		case !found && isHostsFileLine(line):
+			parseDhcpHost(&result, number+1, line)
 		}
-		parseDhcpHost(&result, number+1, value)
 	}
 	return result
+}
+
+// isHostsFileLine reports whether a line with no option name is a host: a
+// comma-separated list that starts with a hardware address.
+func isHostsFileLine(line string) bool {
+	first, _, found := strings.Cut(line, ",")
+	return found && isMAC(strings.TrimSpace(first))
 }
 
 func parseDhcpHost(result *Result, line int, value string) {

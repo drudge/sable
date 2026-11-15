@@ -52,7 +52,7 @@ func TestParseReadsEachServersReservations(t *testing.T) {
 			file:   "unifi-users.json",
 			format: FormatUniFi,
 			entries: []Entry{
-				{Line: 1, MAC: "00:11:22:33:44:50", Address: "10.0.7.50", Name: "uap", Comment: "closet"},
+				{Line: 1, MAC: "00:11:22:33:44:50", Address: "10.0.7.50", Name: "office-ap", Comment: "closet"},
 				{Line: 3, MAC: "00:11:22:33:44:52", Address: "10.0.7.52", Name: "sensor"},
 			},
 		},
