@@ -86,3 +86,48 @@ func TestLeaseMirrorRestoredPrimaryAsksEveryReplica(t *testing.T) {
 		t.Fatal("the recovery is still open after every replica sent what it held")
 	}
 }
+
+// A primary whose database was wiped and that has leased nothing since, the
+// usual case when a replica is up to send a heartbeat within two seconds of
+// the primary's start, still takes its own leases back from the replica's
+// mirror (docs/design/dhcp.md §3). The replica's first report lifts the
+// primary's counter, so no lease it grants afterward takes number 1.
+func TestLeaseMirrorWipedPrimaryThatLeasedNothingRecovers(t *testing.T) {
+	t.Parallel()
+	testRestoredPrimaryRecovers(t, 20, 0)
+}
+
+// A primary restored from an older backup holds some of its leases and a
+// counter that never starts over: it takes back the ones granted after the
+// backup was made.
+func TestLeaseMirrorPrimaryRestoredFromBackupRecovers(t *testing.T) {
+	t.Parallel()
+	primary, replica, lead, follower := mirroringCluster(t)
+	backup := newLeaseStore()
+	for index := range 20 {
+		address := fmt.Sprintf("10.0.0.%d", index+1)
+		lead.save(primary.nodeID, address, "before")
+		if index < 12 {
+			backup.save(primary.nodeID, address, "before")
+		}
+	}
+	delete(backup.recovery, primary.nodeID) // the backup was made long after the counter's first number
+	synchronize(t, replica, 4)
+	if got := len(follower.hostnames(primary.nodeID)); got != 20 {
+		t.Fatalf("the replica holds %d of the primary's leases, want 20", got)
+	}
+
+	primary.SetLeaseMirror(backup.mirror())
+	synchronize(t, replica, 6)
+
+	if got := len(backup.hostnames(primary.nodeID)); got != 20 {
+		t.Fatalf("the primary restored from a backup of 12 leases holds %d of its own, want the 20 the replica mirrors", got)
+	}
+	if _, open, _ := backup.Recovery(t.Context(), primary.nodeID); open {
+		t.Fatal("the recovery is still open after the primary took its leases back")
+	}
+	backup.save(primary.nodeID, "10.2.0.1", "next")
+	if seq := backup.seq(primary.nodeID, "10.2.0.1"); seq <= 20 {
+		t.Fatalf("the next lease took sequence %d, at or below the 20 the replica held", seq)
+	}
+}

@@ -36,6 +36,29 @@ ON CONFLICT (node_id) DO NOTHING`, nodeID, 0); err != nil {
 	return nil
 }
 
+// OpenDHCPLeaseRecoveryBelow opens a recovery for a node whose counter is
+// below seq, or missing: another node holds leases of it under numbers it
+// has never taken, so it lost them. A primary uses it before it raises its
+// counter to what a replica holds of it, since a counter raised first takes
+// no first number to open one. It reports whether the counter was behind.
+func (store *Store) OpenDHCPLeaseRecoveryBelow(ctx context.Context, nodeID string, seq int64) (bool, error) {
+	behind := false
+	err := store.withTx(ctx, "DHCP lease recovery", func(transaction *sql.Tx) error {
+		var counter int64
+		err := transaction.QueryRowContext(ctx,
+			"SELECT seq FROM sable_dhcp_lease_seqs WHERE node_id = "+store.placeholders(1), nodeID).Scan(&counter)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("read DHCP lease sequence: %w", err)
+		}
+		if counter >= seq {
+			return nil
+		}
+		behind = true
+		return store.openDHCPLeaseRecovery(ctx, transaction, nodeID)
+	})
+	return behind, err
+}
+
 // DHCPLeaseRecovery reports whether a node is taking its own leases back,
 // and through which number it has so far.
 func (store *Store) DHCPLeaseRecovery(ctx context.Context, nodeID string) (int64, bool, error) {
