@@ -134,6 +134,11 @@ type Server struct {
 	instanceID           string
 	demoLogin            devDemoAutoLoginState
 
+	// unusedConnections holds the connections that have asked nothing yet,
+	// and closing says Close has begun; see trackConnection.
+	unusedConnections sync.Map
+	closing           atomic.Bool
+
 	// mcpUse is the MCP call count, saved by flushMCPUse under mcpUseMu.
 	mcpUse       store.MCPUse
 	mcpUseLoaded bool
@@ -293,6 +298,7 @@ func New(
 		WriteTimeout:      webWriteTimeout,
 		IdleTimeout:       webIdleTimeout,
 		MaxHeaderBytes:    webMaximumHeaderBytes,
+		ConnState:         server.trackConnection,
 	}
 	return server, nil
 }

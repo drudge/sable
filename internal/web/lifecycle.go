@@ -104,6 +104,7 @@ func (server *Server) Close(ctx context.Context) error {
 	server.runtimeClosed = true
 	server.runtimeCancel()
 	server.runtimeLifecycleMu.Unlock()
+	server.closeUnusedConnections()
 	shutdownError := server.httpServer.Shutdown(ctx)
 	server.runtimeWaitOnce.Do(func() {
 		go func() {
@@ -128,6 +129,34 @@ func (server *Server) Close(ctx context.Context) error {
 		server.logger.Warn("persist query statistics", "error", err)
 	}
 	return shutdownError
+}
+
+// trackConnection remembers the connections that have not sent a request yet.
+// http.Server.Shutdown counts one of those as busy until it is five seconds
+// old, so a client's spare connection (a browser's preconnect, a cluster
+// peer's second dial) held every stop that long, and failed it under a
+// shutdown_timeout that short. Close drops them instead: nothing was asked
+// on them, and a client that had only begun to write a request retries it.
+func (server *Server) trackConnection(connection net.Conn, state http.ConnState) {
+	if state != http.StateNew {
+		server.unusedConnections.Delete(connection)
+		return
+	}
+	server.unusedConnections.Store(connection, struct{}{})
+	// Close may have swept before this one was stored.
+	if server.closing.Load() {
+		_ = connection.Close()
+	}
+}
+
+// closeUnusedConnections closes every connection that has asked nothing, and
+// has trackConnection close any that arrive before the listeners shut.
+func (server *Server) closeUnusedConnections() {
+	server.closing.Store(true)
+	server.unusedConnections.Range(func(connection, _ any) bool {
+		_ = connection.(net.Conn).Close()
+		return true
+	})
 }
 
 // goBackground runs work the console starts on its own, such as the reads that
