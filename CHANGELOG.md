@@ -35,6 +35,9 @@ on it.
 - The database gains a lease table on first start, which 1.8.2 ignores. To
   go back to 1.8.2, remove the `[dhcp]` section first; a backup taken with
   DHCP set up won't load on 1.8.2.
+- Cluster clocks must agree within 30 seconds. A replica on 1.8.2 with a
+  wrong clock shows as offline, as before, because it can't answer the
+  primary's clock check. Update every node first.
 - Nothing else is needed. Turning DHCP on is your choice; until then Sable
   answers DNS as before.
 
@@ -59,6 +62,9 @@ on it.
   suffix, and a lease never takes `wpad` or `isatap`.
 - Relayed requests are answered when the relay's address is inside a scope,
   and the relay agent information (option 82, RFC 3046) is echoed back.
+  A renewal a device sends straight to Sable takes the scope that holds its
+  address (RFC 2131 section 4.3.2), so it works behind a relay that passes
+  on broadcasts only, and on a node whose own address is a /31 or /32.
 - The **DHCP** page lists leases, reservations and scopes. **Reserve** turns
   a lease into a reservation, and reservation edits apply without a restart.
 - **Import** brings reservations from dnsmasq, Pi-hole 5 and 6, OpenWrt,
@@ -88,6 +94,10 @@ on it.
 - A node whose database is wiped or restored from a backup takes its leases
   back from the other nodes, including leases made or released since the
   backup.
+- A node whose clock is more than 30 seconds off keeps serving its own
+  ranges. Both **Cluster** pages show it as **Clock out of step** with the
+  offset, both logs name the clock, and its ranges can't be taken over until
+  its clock is set.
 
 ### Insights
 
@@ -102,10 +112,18 @@ on it.
 
 ### Known gaps in this beta
 
-- DHCPv6 is not included.
-- Not yet tried on real hardware: a DHCP relay, a node whose clock is off
-  or stepped back, and takeover on a cluster of three nodes or on
-  PostgreSQL.
+- DHCPv4 only. DHCPv6 is not included.
+- The scope for a relayed request comes from the relay's address (giaddr)
+  alone. Link selection (RFC 3527) and subnet selection (RFC 3011) aren't
+  built.
+- Relays tried: ISC dhcrelay 4.4.3 with option 82, and dnsmasq 2.91's relay.
+  No hardware router's relay has been tried.
+- Leases a node grants while its clock is out of step show as ended on the
+  primary until the device renews after the clock is set.
+- Not yet tried: Operator and Viewer sessions in the console, a live UniFi
+  controller, Safari and Firefox, two replicas restored at once, clock skew
+  on a PostgreSQL cluster, and promoting a replica whose clock is out of
+  step.
 
 ### Dependencies
 
