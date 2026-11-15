@@ -302,3 +302,20 @@ func TestDHCPDocumentedExampleDecodes(t *testing.T) {
 		t.Fatalf("documented example: %v", err)
 	}
 }
+
+// Clone shares no memory with the original.
+func TestDHCPCloneSharesNothing(t *testing.T) {
+	on, probe := true, Duration{Duration: time.Second}
+	original := DHCP{Enabled: true, Scopes: []DHCPScope{{ID: "lan", Enabled: &on, ConflictProbe: &probe, DNS: []string{"10.0.7.1"},
+		Ranges: []DHCPRange{{Start: "10.0.7.100", End: "10.0.7.199", Node: "node-b"}}, Reservations: []DHCPReservation{{MAC: "aa:00:00:00:00:01"}},
+		Options: []DHCPOption{{Code: 44, Value: []string{"10.0.7.5"}}}, Boot: &DHCPBoot{File: "pxelinux.0"}}}}
+	copied := original.Clone()
+	scope := &copied.Scopes[0]
+	*scope.Enabled, *scope.ConflictProbe, scope.DNS[0] = false, Duration{}, "x"
+	scope.Ranges[0].Node, scope.Reservations[0].MAC, scope.Options[0].Value[0], scope.Boot.File = "node-a", "x", "x", "x"
+	kept := original.Scopes[0]
+	if !*kept.Enabled || *kept.ConflictProbe != probe || kept.DNS[0] != "10.0.7.1" || kept.Ranges[0].Node != "node-b" ||
+		kept.Reservations[0].MAC != "aa:00:00:00:00:01" || kept.Options[0].Value[0] != "10.0.7.5" || kept.Boot.File != "pxelinux.0" {
+		t.Fatalf("editing the clone changed the original: %+v", kept)
+	}
+}

@@ -3,6 +3,7 @@ package config
 import (
 	"net"
 	"net/netip"
+	"slices"
 	"strings"
 	"time"
 
@@ -221,4 +222,42 @@ func canonicalName(value string) string {
 		return name
 	}
 	return strings.TrimSpace(value)
+}
+
+// Clone copies settings deeply: nothing in the copy shares memory with the
+// original, so an edit to the copy (a takeover repinning a range, an import
+// adding reservations) can't reach the settings the running server holds.
+func (settings DHCP) Clone() DHCP {
+	settings.Scopes = slices.Clone(settings.Scopes)
+	for index := range settings.Scopes {
+		settings.Scopes[index] = settings.Scopes[index].clone()
+	}
+	return settings
+}
+
+func (scope DHCPScope) clone() DHCPScope {
+	scope.Enabled = clonePointer(scope.Enabled)
+	scope.RegisterNames = clonePointer(scope.RegisterNames)
+	scope.Reverse = clonePointer(scope.Reverse)
+	scope.ConflictProbe = clonePointer(scope.ConflictProbe)
+	scope.Boot = clonePointer(scope.Boot)
+	scope.DNS = slices.Clone(scope.DNS)
+	scope.Search = slices.Clone(scope.Search)
+	scope.NTP = slices.Clone(scope.NTP)
+	scope.Routes = slices.Clone(scope.Routes)
+	scope.Ranges = slices.Clone(scope.Ranges)
+	scope.Reservations = slices.Clone(scope.Reservations)
+	scope.Options = slices.Clone(scope.Options)
+	for index := range scope.Options {
+		scope.Options[index].Value = slices.Clone(scope.Options[index].Value)
+	}
+	return scope
+}
+
+func clonePointer[T any](value *T) *T {
+	if value == nil {
+		return nil
+	}
+	copied := *value
+	return &copied
 }
