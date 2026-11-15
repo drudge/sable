@@ -477,6 +477,7 @@ func routeTable() []route {
 		{pattern: "DELETE /api/v1/dhcp/leases/{address}", handler: (*Server).removeDHCPLeaseAPI, perm: auth.PermissionDHCPWrite},
 		{pattern: "PUT /api/v1/dhcp/scopes/{scope}/reservations/{mac}", handler: (*Server).setDHCPReservationAPI, perm: auth.PermissionDHCPWrite},
 		{pattern: "DELETE /api/v1/dhcp/scopes/{scope}/reservations/{mac}", handler: (*Server).removeDHCPReservationAPI, perm: auth.PermissionDHCPWrite},
+		{pattern: "POST /api/v1/dhcp/import", handler: (*Server).importDHCPAPI, perm: auth.PermissionDHCPWrite, bodyLimit: dhcpSettingsLimit},
 		{pattern: "GET /api/v1/cluster", handler: (*Server).clusterAPI, perm: auth.PermissionClusterRead},
 		{pattern: "GET /api/v1/cluster/nodes/{node}", handler: (*Server).clusterNodeAPI, perm: auth.PermissionClusterRead},
 		{pattern: "POST /api/v1/cluster", handler: (*Server).initializeClusterAPI, perm: auth.PermissionClusterWrite},
