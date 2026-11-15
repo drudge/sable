@@ -3,10 +3,12 @@ package app
 import (
 	"context"
 	"log/slog"
+	"maps"
 	"slices"
 	"sync"
 	"time"
 
+	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/store"
 	"github.com/drudge/sable/internal/zone"
 )
@@ -37,7 +39,14 @@ type dhcpNamer struct {
 	skipped []string
 	// notifier tells a changed zone's secondaries to fetch it (RFC 1996).
 	// Nil skips it.
-	notifier  zoneNotifier
+	notifier zoneNotifier
+	// kick asks the UniFi sync to run now (unifiSyncer.SyncNow). The namer
+	// calls it when the names reservations publish change, so the sync
+	// yields or takes back those names at once. Nil skips it.
+	kick func()
+	// reserved is the last reconcile's dhcpReservedNames; nil before the
+	// first.
+	reserved  map[string]bool
 	notifying sync.WaitGroup
 	logger    *slog.Logger
 	now       func() time.Time
@@ -135,6 +144,7 @@ func (namer *dhcpNamer) reconcile(ctx context.Context) {
 		namer.logger.Warn("publish DHCP names", "error", err)
 		return
 	}
+	namer.kickOnReservedChange(settings)
 	if !slices.Equal(skipped, namer.skipped) {
 		namer.skipped = skipped
 		namer.logger.Info("DHCP names not published", "names", skipped)
@@ -147,4 +157,19 @@ func (namer *dhcpNamer) reconcile(ctx context.Context) {
 	namer.notifying.Go(func() {
 		notifyZones(notifyCtx, namer.notifier, zones, changed, namer.logger, "DHCP names")
 	})
+}
+
+// kickOnReservedChange runs the UniFi sync when the reserved names changed
+// since the last reconcile. The first reconcile only records them: the sync
+// runs on its own at start.
+func (namer *dhcpNamer) kickOnReservedChange(settings config.DHCP) {
+	reserved := dhcpReservedNames(settings)
+	first := namer.reserved == nil
+	if !first && maps.Equal(reserved, namer.reserved) {
+		return
+	}
+	namer.reserved = reserved
+	if !first && namer.kick != nil {
+		namer.kick()
+	}
 }

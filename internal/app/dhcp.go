@@ -124,6 +124,7 @@ func (service *dhcpService) prepare(settings config.DHCP) (*dhcpServer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("start DHCP engine: %w", err)
 	}
+	engine.SetLabeler(dhcpLabel)
 	return &dhcpServer{
 		engine: engine, save: service.save, load: service.load, link: service.link, probe: service.probe,
 		now: time.Now, logger: service.logger, stats: &service.stats,
@@ -281,6 +282,9 @@ func (process *process) startDHCP() {
 	names := newDHCPNamer(process.configurationManager, process.zoneManager, process.database.DHCPLeases, process.leading, process.logger)
 	names.role = process.dhcpRole
 	names.notifier = process.handler
+	if process.unifiSync != nil {
+		names.kick = process.unifiSync.SyncNow
+	}
 	process.dhcp.changed = names.Changed
 	process.runWorker(func(context.Context) { names.Run(process.zoneRefreshContext) })
 	if err := process.dhcp.Apply(process.runtimeContext, process.runtimeContext, process.current().DHCP); err != nil {

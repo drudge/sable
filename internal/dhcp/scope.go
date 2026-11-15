@@ -18,6 +18,11 @@ type scope struct {
 	ranges       []span                // this node's ranges only
 	reservations map[string]netip.Addr // lowercase MAC to address
 	reservedBy   map[netip.Addr]string // address to lowercase MAC
+	// reservedNames is each named reservation's name, by lowercase MAC.
+	reservedNames map[string]string
+	// domain is the zone lease names register in; empty when the scope
+	// registers none.
+	domain       string
 	lease        time.Duration
 	dns          []netip.Addr
 	routerSet    bool
@@ -49,12 +54,16 @@ func compileScope(settings config.DHCPScope, node string) (*scope, error) {
 	compiled := &scope{
 		id: settings.ID, subnet: subnet.Masked(), lease: settings.LeaseDuration(),
 		reservations: map[string]netip.Addr{}, reservedBy: map[netip.Addr]string{},
+		reservedNames: map[string]string{},
 		flags: scopeFlags{
 			reservedOnly: settings.ReservedOnly, ignoreClientID: settings.IgnoreClientID,
 			blockRandomMACs: settings.BlockRandomMACs,
 		},
 		offerDelay: settings.OfferDelay.Duration, probeTimeout: settings.ConflictProbeTimeout(),
 		routerSet: settings.Router != "",
+	}
+	if settings.RegistersNames() {
+		compiled.domain = strings.TrimSuffix(settings.Domain, ".")
 	}
 	for _, pool := range settings.Ranges {
 		if pool.Node != "" && pool.Node != node {
@@ -71,6 +80,9 @@ func compileScope(settings config.DHCPScope, node string) (*scope, error) {
 		address := netip.MustParseAddr(reservation.Address)
 		compiled.reservations[strings.ToLower(hardware.String())] = address
 		compiled.reservedBy[address] = strings.ToLower(hardware.String())
+		if reservation.Name != "" {
+			compiled.reservedNames[strings.ToLower(hardware.String())] = reservation.Name
+		}
 	}
 	if err := compiled.compileOptions(settings); err != nil {
 		return nil, fmt.Errorf("scope %s: %w", settings.ID, err)

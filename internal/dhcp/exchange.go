@@ -113,9 +113,7 @@ func (exchange *exchange) ack(address netip.Addr) Result {
 	if id, found := request.Option(optionClientID); found {
 		lease.ClientID = hex.EncodeToString(id)
 	}
-	if name, found := request.Option(optionHostname); found {
-		lease.Hostname = cleanText(name)
-	}
+	lease.Hostname = exchange.clientName()
 	if relay, found := request.Option(optionRelayInfo); found {
 		lease.Relay = hex.EncodeToString(relay)
 	}

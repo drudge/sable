@@ -126,7 +126,7 @@ func dhcpScopeNames(scope config.DHCPScope, leases []store.DHCPLease, now time.T
 			continue
 		}
 		reservedFor[address] = strings.ToLower(reservation.MAC)
-		label := unifi.SanitizeLabel(reservation.Name)
+		label := dhcpLabel(reservation.Name, true)
 		if label == "" {
 			continue
 		}
@@ -136,7 +136,7 @@ func dhcpScopeNames(scope config.DHCPScope, leases []store.DHCPLease, now time.T
 		names = append(names, name)
 	}
 	for _, lease := range leases {
-		label := unifi.SanitizeLabel(lease.Hostname)
+		label := dhcpLabel(lease.Hostname, false)
 		mac := strings.ToLower(lease.MAC)
 		owner, reserved := reservedFor[lease.Address]
 		if lease.ScopeID != scope.ID || label == "" || named[mac] || (reserved && owner != mac) ||
@@ -148,6 +148,24 @@ func dhcpScopeNames(scope config.DHCPScope, leases []store.DHCPLease, now time.T
 		names = append(names, name)
 	}
 	return names
+}
+
+// dhcpRefusedLeaseLabels are names a lease never takes (D39). A client
+// that calls itself wpad would become every browser's proxy auto-config host
+// (WPAD), and isatap every Windows host's IPv6 tunnel router; Microsoft DNS
+// blocks both by default (its global query block list). An operator can
+// still give either to a reservation.
+var dhcpRefusedLeaseLabels = map[string]bool{"wpad": true, "isatap": true}
+
+// dhcpLabel cleans a lease's host name, or a reservation's name when
+// reserved, to the one DNS label it publishes. Empty means it publishes
+// nothing. The engine answers the client FQDN option with the same rule.
+func dhcpLabel(name string, reserved bool) string {
+	label := unifi.SanitizeLabel(name)
+	if !reserved && dhcpRefusedLeaseLabels[label] {
+		return ""
+	}
+	return label
 }
 
 // dhcpLeaseHolds reports whether a lease is bound to its client at now.
