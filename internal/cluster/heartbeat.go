@@ -536,7 +536,7 @@ func (service *Service) acceptPrimaryProtocolsLocked(primaryID string, configura
 		service.lookupPrimaryID = primaryID
 	}
 	if service.leasePrimaryID != primaryID {
-		service.leaseAcknowledged, service.leaseRecovered = 0, 0
+		service.leaseAcknowledged, service.leaseRecovered, service.leaseWanted = 0, 0, nil
 	}
 	service.leasePrimaryID = ""
 	if configuration.LeaseProtocol == leaseProtocolVersion && configuration.PrimaryID == primaryID {
