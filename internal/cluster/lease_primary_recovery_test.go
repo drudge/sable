@@ -131,3 +131,37 @@ func TestLeaseMirrorPrimaryRestoredFromBackupRecovers(t *testing.T) {
 		t.Fatalf("the next lease took sequence %d, at or below the 20 the replica held", seq)
 	}
 }
+
+// A primary restored from an older backup holds rows from before it. An
+// address leased to another client since, which the replica mirrors, stays
+// that client's on both nodes: the backup's row for it neither survives the
+// recovery nor replaces the replica's (F73). The client told last holds the
+// address (RFC 2131 §4.3.1).
+func TestLeaseMirrorPrimaryRestoredFromBackupKeepsWhatWasLeasedSince(t *testing.T) {
+	t.Parallel()
+	primary, replica, lead, follower := mirroringCluster(t)
+	for index := range 3 {
+		lead.save(primary.nodeID, fmt.Sprintf("10.0.0.%d", index+1), "before")
+	}
+	backup := lead.copyOf()
+	lead.save(primary.nodeID, "10.0.0.2", "since")
+	lead.save(primary.nodeID, "10.0.0.9", "new")
+	synchronize(t, replica, 4)
+	want := []string{"before", "before", "new", "since"} // hostnames sorts them
+	if got := follower.hostnames(primary.nodeID); !slices.Equal(got, want) {
+		t.Fatalf("the replica mirrors %v of the primary, want %v", got, want)
+	}
+
+	primary.SetLeaseMirror(backup.mirror())
+	synchronize(t, replica, 6)
+
+	if got := backup.hostnames(primary.nodeID); !slices.Equal(got, want) {
+		t.Fatalf("the primary restored from the backup holds %v, want %v as before it", got, want)
+	}
+	if got := follower.hostnames(primary.nodeID); !slices.Equal(got, want) {
+		t.Fatalf("after the restore the replica mirrors %v of the primary, want %v still", got, want)
+	}
+	if _, open, _ := backup.Recovery(t.Context(), primary.nodeID); open {
+		t.Fatal("the recovery is still open after the primary took its leases back")
+	}
+}
