@@ -21,7 +21,7 @@ If the device runs a VPN or the browser chooses its own secure-DNS provider, dec
 
 ## 2. Advertise the address
 
-In your existing DHCP server or router, change the DNS server option for the intended network. Sable does not provide DHCP. Keep guest, management, and other network policies separate where your router supports that.
+In your existing DHCP server or router, change the DNS server option for the intended network. If you'd rather Sable hand out addresses too, see [Hand out addresses with DHCP](dhcp.md). Keep guest, management, and other network policies separate where your router supports that.
 
 Renew a test device's lease, reconnect it, or wait for the lease renewal. A changed router setting is not evidence that every client has picked it up.
 
