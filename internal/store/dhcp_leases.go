@@ -122,7 +122,7 @@ func (store *Store) SaveDHCPLeases(ctx context.Context, leases []DHCPLease) ([]D
 				return err
 			}
 			saved[index].Seq = seq
-			if err := store.upsertDHCPLease(ctx, transaction, saved[index]); err != nil {
+			if _, err := store.upsertDHCPLease(ctx, transaction, saved[index], false); err != nil {
 				return err
 			}
 		}
@@ -165,19 +165,142 @@ func validDHCPLease(lease DHCPLease) error {
 	return fmt.Errorf("DHCP lease state %q is not known", lease.State)
 }
 
-func (store *Store) upsertDHCPLease(ctx context.Context, transaction *sql.Tx, lease DHCPLease) error {
-	if _, err := transaction.ExecContext(ctx, `
+// upsertDHCPLease writes a lease under its own sequence number. With
+// onlyNewer it leaves a stored row alone unless its seq is lower, and returns
+// whether it wrote.
+func (store *Store) upsertDHCPLease(ctx context.Context, transaction *sql.Tx, lease DHCPLease, onlyNewer bool) (bool, error) {
+	guard := ""
+	if onlyNewer {
+		guard = "\nWHERE sable_dhcp_leases.seq < excluded.seq"
+	}
+	result, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_dhcp_leases (`+dhcpLeaseColumns+`)
 VALUES (`+store.placeholders(14)+`)
 ON CONFLICT (node_id, address) DO UPDATE SET
     scope_id = excluded.scope_id, client_key = excluded.client_key, mac = excluded.mac,
     client_id = excluded.client_id, hostname = excluded.hostname, label = excluded.label,
     state = excluded.state, bound_at_ns = excluded.bound_at_ns, expires_at_ns = excluded.expires_at_ns,
-    seq = excluded.seq, relay = excluded.relay, vendor_class = excluded.vendor_class`,
+    seq = excluded.seq, relay = excluded.relay, vendor_class = excluded.vendor_class`+guard,
 		lease.NodeID, lease.Address.String(), lease.ScopeID, lease.ClientKey, lease.MAC, lease.ClientID,
 		lease.Hostname, lease.Label, string(lease.State), unixNanos(lease.BoundAt), unixNanos(lease.ExpiresAt),
-		lease.Seq, lease.Relay, lease.VendorClass); err != nil {
-		return fmt.Errorf("save DHCP lease %s: %w", lease.Address, err)
+		lease.Seq, lease.Relay, lease.VendorClass)
+	if err != nil {
+		return false, fmt.Errorf("save DHCP lease %s: %w", lease.Address, err)
+	}
+	rows, err := result.RowsAffected()
+	return rows > 0, err
+}
+
+// MirrorDHCPLeases writes rows another node owns, each keeping the owner's
+// sequence number, and returns how many it wrote. A row only replaces one
+// with a lower seq, so an older or repeated row never undoes a newer one. It
+// leaves this node's own counters alone.
+func (store *Store) MirrorDHCPLeases(ctx context.Context, leases []DHCPLease) (int, error) {
+	for _, lease := range leases {
+		if err := validDHCPLease(lease); err != nil {
+			return 0, err
+		}
+		if lease.Seq <= 0 {
+			return 0, fmt.Errorf("DHCP lease %s has no sequence number", lease.Address)
+		}
+	}
+	written := 0
+	err := store.withTx(ctx, "DHCP lease mirror", func(transaction *sql.Tx) error {
+		written = 0
+		for _, lease := range leases {
+			wrote, err := store.upsertDHCPLease(ctx, transaction, lease, true)
+			if err != nil {
+				return err
+			}
+			if wrote {
+				written++
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return written, nil
+}
+
+// DHCPLeaseHeld returns, for each node whose leases the database holds, the
+// highest sequence number it has: what this node has already seen of it.
+func (store *Store) DHCPLeaseHeld(ctx context.Context) (map[string]int64, error) {
+	rows, err := store.database.QueryContext(ctx, "SELECT node_id, MAX(seq) FROM sable_dhcp_leases GROUP BY node_id")
+	if err != nil {
+		return nil, fmt.Errorf("read held DHCP lease sequences: %w", err)
+	}
+	defer rows.Close()
+	held := map[string]int64{}
+	for rows.Next() {
+		var nodeID string
+		var seq int64
+		if err := rows.Scan(&nodeID, &seq); err != nil {
+			return nil, fmt.Errorf("read held DHCP lease sequences: %w", err)
+		}
+		held[nodeID] = seq
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read held DHCP lease sequences: %w", err)
+	}
+	return held, nil
+}
+
+// RaiseDHCPLeaseSeq lifts a node's sequence counter to seq when it is lower
+// or missing, and then renumbers the node's rows above it in their order, so
+// they reach a primary that holds older rows under higher numbers, and the
+// node's next write takes the number after them. It reports whether it raised
+// the counter. A node whose database was wiped or restored uses it once the
+// primary shows it holds a higher sequence of that node's rows.
+func (store *Store) RaiseDHCPLeaseSeq(ctx context.Context, nodeID string, seq int64) (bool, error) {
+	raised := false
+	err := store.withTx(ctx, "DHCP lease sequence", func(transaction *sql.Tx) error {
+		result, err := transaction.ExecContext(ctx, `
+INSERT INTO sable_dhcp_lease_seqs (node_id, seq) VALUES (`+store.placeholders(2)+`)
+ON CONFLICT (node_id) DO UPDATE SET seq = excluded.seq
+WHERE sable_dhcp_lease_seqs.seq < excluded.seq`, nodeID, seq)
+		if err != nil {
+			return fmt.Errorf("raise DHCP lease sequence: %w", err)
+		}
+		if rows, err := result.RowsAffected(); err != nil || rows == 0 {
+			return err
+		}
+		raised = true
+		return store.renumberDHCPLeases(ctx, transaction, nodeID)
+	})
+	return raised, err
+}
+
+// renumberDHCPLeases gives each of a node's rows its next sequence number,
+// oldest first.
+func (store *Store) renumberDHCPLeases(ctx context.Context, transaction *sql.Tx, nodeID string) error {
+	rows, err := transaction.QueryContext(ctx, "SELECT address FROM sable_dhcp_leases WHERE node_id = "+
+		store.placeholder(1)+" ORDER BY seq", nodeID)
+	if err != nil {
+		return fmt.Errorf("read DHCP leases to renumber: %w", err)
+	}
+	var addresses []string
+	for rows.Next() {
+		var address string
+		if err := rows.Scan(&address); err != nil {
+			rows.Close()
+			return fmt.Errorf("read DHCP leases to renumber: %w", err)
+		}
+		addresses = append(addresses, address)
+	}
+	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+		return fmt.Errorf("read DHCP leases to renumber: %w", err)
+	}
+	for _, address := range addresses {
+		next, err := store.nextDHCPLeaseSeq(ctx, transaction, nodeID)
+		if err != nil {
+			return err
+		}
+		if _, err := transaction.ExecContext(ctx, "UPDATE sable_dhcp_leases SET seq = "+store.placeholder(1)+
+			" WHERE node_id = "+store.placeholder(2)+" AND address = "+store.placeholder(3), next, nodeID, address); err != nil {
+			return fmt.Errorf("renumber DHCP lease %s: %w", address, err)
+		}
 	}
 	return nil
 }

@@ -398,7 +398,7 @@ func TestDHCPServerLimitsStaleReloads(t *testing.T) {
 // and isn't counted; a client's DISCOVER behind it is still answered.
 func TestDHCPServerIgnoresItsOwnProbe(t *testing.T) {
 	harness := startDHCPServer(t, func(context.Context, []dhcp.Lease) error { return nil }, nil)
-	probe := dhcpProbeDiscover(dhcpTestMAC)
+	probe := dhcpProbeDiscover(dhcpTestMAC, nil)
 	done := harness.server.ownProbes.add(probe.XID)
 	harness.exchange(t, probe)
 	harness.exchange(t, dhcpTestPacket(dhcp.Discover))

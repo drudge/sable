@@ -318,6 +318,7 @@ func (server *Server) renderDeviceDrawer(writer http.ResponseWriter, request *ht
 	view.Blocking.CanEdit = console.CanWriteBlocking && !console.ControlPlaneReadOnly
 	view.Blocking.Editing = ifEditing(edit, view.Blocking.CanEdit)
 	view.Blocking.BlockingOff = !console.BlockingEnabled
+	view.Lease = server.deviceLease(request, console, view.Device)
 	// A device without a type of its own takes its network's, if the operator
 	// gave that one, rather than Sable's guess.
 	if message == typeReturnedMessage && device.NetworkType != "" {

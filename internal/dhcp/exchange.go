@@ -126,9 +126,11 @@ func (exchange *exchange) ack(address netip.Addr) Result {
 	return Result{Reply: exchange.reply(Ack, address), Destination: exchange.destination(), Save: save}
 }
 
-// releaseOthers ends the client's active leases other than address, so it
-// never holds two (D19). A reserved client's leases are found by MAC, since
-// one it took before the reservation is keyed by its client identifier (F13).
+// releaseOthers ends the client's active leases on this node other than
+// address, so it never holds two here (D19). A lease another node granted is
+// that node's to end: only the owner writes a row (design §3). A reserved
+// client's leases are found by MAC, since one it took before the reservation
+// is keyed by its client identifier (F13).
 func (exchange *exchange) releaseOthers(address netip.Addr) []Lease {
 	var held []*Lease
 	if previous, found := exchange.engine.clients[exchange.ref]; found {
@@ -143,7 +145,7 @@ func (exchange *exchange) releaseOthers(address netip.Addr) []Lease {
 	}
 	var save []Lease
 	for _, old := range held {
-		if old != nil && old.Address != address && exchange.owns(old) && old.State == LeaseActive {
+		if old != nil && old.NodeID == exchange.engine.node && old.Address != address && exchange.owns(old) && old.State == LeaseActive {
 			old.State, old.ExpiresAt = LeaseReleased, exchange.now
 			save = append(save, *old)
 		}

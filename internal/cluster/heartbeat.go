@@ -52,6 +52,10 @@ type Heartbeat struct {
 	// lately, when it last did, as a JSON object of Unix seconds. It is
 	// carried only to a primary that advertised it takes them.
 	Lookups json.RawMessage `json:"lookups,omitempty"`
+	// Leases is what the replica holds of every node's DHCP leases and its
+	// own leases the primary lacks, carried only to a primary that
+	// advertised it mirrors them.
+	Leases *LeaseReport `json:"leases,omitempty"`
 	// Primary is set only on a primary's probe of another member, and says
 	// the sender leads in that term. A member that does not know the field
 	// refuses the probe, which leaves its own role alone.
@@ -82,6 +86,11 @@ type SyncConfiguration struct {
 	// private recursion admits too. A replica that does not know the field
 	// passes over it.
 	AttachedNetworks json.RawMessage `json:"attached_networks,omitempty"`
+	// LeaseProtocol is set by a primary that mirrors DHCP leases, and
+	// Leases is its side of the mirror. A replica that does not know the
+	// fields passes over them.
+	LeaseProtocol int          `json:"lease_protocol,omitempty"`
+	Leases        *LeaseReport `json:"leases,omitempty"`
 }
 
 type nodeTelemetry struct {
@@ -122,12 +131,16 @@ func (service *Service) Synchronize(ctx context.Context, heartbeat Heartbeat, si
 		return SyncConfiguration{}, err
 	}
 	service.mu.Lock()
+	mirror := service.leaseMirror
 	defer func() {
 		service.mu.Unlock()
 		if resultErr == nil && heartbeat.Primary == nil {
 			result.UpdateCommand = service.updateCommand(heartbeat.NodeID)
 			if service.updates != nil {
 				result.UpdateProtocol = updateProtocolVersion
+			}
+			if result.LeaseProtocol == leaseProtocolVersion {
+				result.Leases = service.exchangeLeases(ctx, mirror, heartbeat.NodeID, heartbeat.Leases)
 			}
 		}
 	}()
@@ -195,7 +208,7 @@ func (service *Service) observeHeartbeatLocked(heartbeat Heartbeat, now time.Tim
 		service.recordReportedLookups(heartbeat.NodeID, heartbeat.Lookups, now)
 	}
 	observed := heartbeat
-	observed.Alerts, observed.Lookups = nil, nil
+	observed.Alerts, observed.Lookups, observed.Leases = nil, nil, nil
 	service.telemetry[heartbeat.NodeID] = nodeTelemetry{heartbeat: observed, received: now}
 	if service.logger != nil && (!previouslyObserved || previous.heartbeat.AppliedGeneration != heartbeat.AppliedGeneration) {
 		syncState := SyncBehind
@@ -232,6 +245,9 @@ func (service *Service) syncConfigurationLocked(nodeID, stateDigest string, now 
 		}
 		if service.attachedNetworks.Own != nil {
 			configuration.AttachedNetworks = encodeAttachedNetworks(service.attachedNetworks.Own())
+		}
+		if service.leaseMirror.enabled() {
+			configuration.LeaseProtocol = leaseProtocolVersion
 		}
 	}
 	return SyncConfiguration(configuration), nil
@@ -310,10 +326,12 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 			service.mu.Lock()
 			service.updatePrimaryID = ""
 			service.alertPrimaryID = ""
+			service.leasePrimaryID = ""
 			service.mu.Unlock()
 		}
 	}()
 	updateStatus := service.localUpdateStatus()
+	leases, leasesFor := service.leaseReportForPrimary(ctx)
 	service.mu.Lock()
 	service.pendingUpdate = nil
 	if service.manifest == nil {
@@ -331,6 +349,9 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 		updateStatus = nil
 	}
 	heartbeat, alertRevision, lookupRevision := service.primaryHeartbeatLocked(updateStatus, primary, found)
+	if found && leasesFor == primary.ID {
+		heartbeat.Leases = leases
+	}
 	statusKey := service.manifest.StatusKey
 	service.mu.Unlock()
 	if primaryURL == "" {
@@ -371,6 +392,9 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 	if configuration.PrimaryID == primary.ID {
 		service.recordSharedIdentities(ctx, configuration.ClientIdentities)
 		service.receiveAttachedNetworks(primary.Name, configuration.AttachedNetworks)
+		if configuration.LeaseProtocol == leaseProtocolVersion {
+			service.receiveLeases(ctx, configuration.Leases)
+		}
 	}
 	return service.adoptSyncConfiguration(ctx, primary, configuration)
 }
@@ -510,6 +534,13 @@ func (service *Service) acceptPrimaryProtocolsLocked(primaryID string, configura
 	service.lookupPrimaryID = ""
 	if configuration.LookupProtocol == lookupProtocolVersion && configuration.PrimaryID == primaryID {
 		service.lookupPrimaryID = primaryID
+	}
+	if service.leasePrimaryID != primaryID {
+		service.leaseAcknowledged = 0
+	}
+	service.leasePrimaryID = ""
+	if configuration.LeaseProtocol == leaseProtocolVersion && configuration.PrimaryID == primaryID {
+		service.leasePrimaryID = primaryID
 	}
 }
 

@@ -32,6 +32,10 @@ type ButtonProps struct {
 	// such as hx-post, data hooks, or download.
 	Class string
 	Attrs templ.Attributes
+	// Busy swaps the icon for a spinner and disables the button while its
+	// htmx request runs, so a slow action shows it's working and a second
+	// click sends nothing. The label stays, so the button keeps its name.
+	Busy bool
 }
 
 func (p ButtonProps) class() string {
@@ -55,18 +59,36 @@ func (p ButtonProps) buttonType() string {
 	return p.Type
 }
 
+// attrs are Attrs, with a Busy button disabling itself while its request
+// runs.
+func (p ButtonProps) attrs() templ.Attributes {
+	if !p.Busy {
+		return p.Attrs
+	}
+	attrs := templ.Attributes{"hx-disable": "this"}
+	for key, value := range p.Attrs {
+		attrs[key] = value
+	}
+	return attrs
+}
+
 // Button draws a console button, or a link that looks like one when Href is
 // set.
 templ Button(p ButtonProps) {
 	if p.Href != "" {
 		<a class={ p.class() } href={ p.Href } { p.Attrs... }>@buttonContent(p)</a>
 	} else {
-		<button class={ p.class() } type={ p.buttonType() } disabled?={ p.Disabled } { p.Attrs... }>@buttonContent(p)</button>
+		<button class={ p.class() } type={ p.buttonType() } disabled?={ p.Disabled } { p.attrs()... }>@buttonContent(p)</button>
 	}
 }
 
 templ buttonContent(p ButtonProps) {
-	if p.Icon != "" {
+	if p.Busy {
+		<span class="button-pending">@Icon("loader-circle")</span>
+		if p.Icon != "" {
+			<span class="button-idle">@Icon(p.Icon)</span>
+		}
+	} else if p.Icon != "" {
 		@Icon(p.Icon)
 	}
 	<span>{ p.Label }</span>

@@ -235,6 +235,9 @@ type InsightDeviceDrawerView struct {
 	Apps           []InsightAppView
 	// Blocking is the device's rule set and hold.
 	Blocking InsightDeviceBlockingView
+	// Lease is the device's DHCP lease, nil when it has none or the operator
+	// can't read DHCP.
+	Lease *InsightDeviceLeaseView
 }
 
 // InsightAppView is one app a device used and how much.
@@ -1485,7 +1488,7 @@ templ InsightDevices(view InsightsOverviewView) {
 				@components.Button(components.ButtonProps{Label: "Clear Filters", Variant: components.ButtonOutline, Compact: true, Attrs: templ.Attributes{"data-list-filter-clear": true}})
 			}
 			<footer class="insight-card-note">
-				<p>Sable names each device from the names you give it, then UniFi, local hosts, and reverse DNS, and uses the server's neighbor table and the hardware address inside some IPv6 addresses to keep a device's addresses together. A device with no name shows its hardware address, or its IP address when nothing ties it to hardware.</p>
+				<p>Sable names each device from the names you give it, then UniFi, its DHCP lease, local hosts, and reverse DNS, and uses the server's neighbor table and the hardware address inside some IPv6 addresses to keep a device's addresses together. A device with no name shows its hardware address, or its IP address when nothing ties it to hardware.</p>
 			</footer>
 		}
 	}
@@ -1723,6 +1726,7 @@ templ InsightDeviceDrawer(view InsightDeviceDrawerView) {
 				@components.Fact(components.FactProps{Label: "First seen", Value: insightDeviceTime(view.Device.FirstSeen, view.TimeDisplay), Wide: true})
 				@components.Fact(components.FactProps{Label: "Last seen", Value: insightDeviceTime(view.Device.LastSeen, view.TimeDisplay), Wide: true})
 			}
+			@insightDeviceLease(view)
 			@insightDeviceType(view)
 			@insightDeviceBlocking(view)
 			<section class="query-detail-answer" aria-labelledby="insight-device-addresses">

@@ -360,16 +360,20 @@ func TestDHCPNamesLeaseOutsideTheScopeSubnet(t *testing.T) {
 	assertRecords(t, harness.records("1.9.10.in-addr.arpa"))
 }
 
-// A cluster node accepts [dhcp] and doesn't serve it (D32), so it publishes
-// no DHCP names and removes the ones it had, as with DHCP off (D38).
+// A cluster primary publishes DHCP names like a standalone node (D61); a
+// node still joining holds [dhcp] without serving it (F30), so it publishes
+// none and removes the ones it had, as with DHCP off (D38).
 func TestDHCPNamesOnlyWhereDHCPIsServed(t *testing.T) {
 	harness := newNamesHarness(t)
 	harness.set(namesTestLease("10.9.0.100", "02:00:00:00:00:01", "laptop", namesTestTime))
-	harness.namer.reconcile(context.Background())
-	if records := harness.records("lan.example.com"); len(records) != 2 {
-		t.Fatalf("standalone node published %q", records)
+	for _, role := range []string{"", cluster.RolePrimary} {
+		harness.namer.role = func() string { return role }
+		harness.namer.reconcile(context.Background())
+		if records := harness.records("lan.example.com"); len(records) != 2 {
+			t.Fatalf("role %q published %q", role, records)
+		}
 	}
-	harness.namer.role = func() string { return cluster.RolePrimary }
+	harness.namer.role = func() string { return dhcpRoleJoining }
 	harness.namer.reconcile(context.Background())
 	assertRecords(t, harness.records("lan.example.com"))
 	assertRecords(t, harness.records("0.9.10.in-addr.arpa"))
@@ -381,7 +385,7 @@ func TestUniFiSyncYieldsReservedNamesOnlyWhereDHCPIsServed(t *testing.T) {
 	for _, test := range []struct {
 		role string
 		want string
-	}{{"", ""}, {cluster.RolePrimary, "192.168.1.10"}} {
+	}{{"", ""}, {cluster.RolePrimary, ""}, {dhcpRoleJoining, "192.168.1.10"}} {
 		editor := &stubZoneEditor{}
 		syncer := newTestSyncer(t, testSettings(mapping("net-lan", "Default", "clients.example.net")), editor, &stubReader{inventory: testInventory()})
 		syncer.configuration.(*stubConfiguration).dhcp = config.DHCP{Enabled: true, Scopes: []config.DHCPScope{{
