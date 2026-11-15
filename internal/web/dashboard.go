@@ -183,8 +183,8 @@ func dashboardClientSample(entries []querylog.Entry) int {
 }
 
 // dashboardClientNames labels client addresses in the order Insights names
-// devices: the name the operator gave the device, then UniFi's, then a
-// configured host override, then a PTR record from a zone this server answers
+// devices: the name the operator gave the device, then UniFi's, then the
+// name from its DHCP lease, then a configured host override, then a PTR record from a zone this server answers
 // for. Whatever is still unnamed is left for nameRankedClients to ask the
 // resolver about.
 func dashboardClientNames(clients map[string]uint64, given devices.GivenNames, hosts []config.HostOverride, zones []zonemodel.Zone) map[string]string {
