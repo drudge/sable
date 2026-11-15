@@ -11,6 +11,7 @@ import (
 
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dhcpimport"
+	"github.com/drudge/sable/internal/web/pages"
 )
 
 // dhcpImportResult is what an import added to a scope and what it passed
@@ -161,4 +162,73 @@ func (server *Server) importDHCPAPI(writer http.ResponseWriter, request *http.Re
 		return
 	}
 	writeJSON(writer, http.StatusOK, result)
+}
+
+// importDHCPConsole runs the Import Reservations dialog: a preview first, as
+// a dry run, then the import when the preview sends the same export back.
+func (server *Server) importDHCPConsole(writer http.ResponseWriter, request *http.Request) {
+	const notice = "#" + pages.DHCPImportNoticeID
+	text, err := readImportText(request, dhcpSettingsLimit, "import_text", "export")
+	if err != nil {
+		server.renderFormProblem(writer, request, notice, refuse(http.StatusBadRequest, "%s", err.Error()))
+		return
+	}
+	who, scope, step := requestActor(request, ""), request.FormValue("scope"), request.FormValue("step")
+	if step == "back" {
+		server.render(writer, request, pages.DHCPImportSource(pages.DHCPImportSourceView{Scopes: server.dhcpImportScopes(who), Scope: scope, Text: text}))
+		return
+	}
+	result, err := server.dhcpService().Import(request.Context(), who, scope, []byte(text), step != "apply")
+	if err != nil {
+		server.renderFormProblem(writer, request, notice, err)
+		return
+	}
+	if step == "apply" {
+		writer.Header().Set("HX-Retarget", "#dhcp-content")
+		server.renderDHCP(writer, request, dhcpImportMessage(result, server.dhcpImportPreview(who, result, "").ScopeLabel))
+		return
+	}
+	server.render(writer, request, pages.DHCPImportPreview(server.dhcpImportPreview(who, result, text)))
+}
+
+// dhcpImportScopes are the scopes the dialog offers, as the page lists them.
+func (server *Server) dhcpImportScopes(who actor) []pages.DHCPImportScope {
+	state, err := server.dhcpService().State(who)
+	if err != nil {
+		return nil
+	}
+	views := make([]pages.DHCPScopeView, 0, len(state.Settings.Scopes))
+	for _, scope := range state.Settings.Scopes {
+		views = append(views, dhcpScopeView(scope))
+	}
+	return pages.DHCPImportScopes(views)
+}
+
+func (server *Server) dhcpImportPreview(who actor, result dhcpImportResult, text string) pages.DHCPImportPreviewView {
+	view := pages.DHCPImportPreviewView{Scope: result.Scope, ScopeLabel: result.Scope, Format: result.Format, Text: text, Unchanged: result.Unchanged}
+	for _, scope := range server.dhcpImportScopes(who) {
+		if scope.ID == result.Scope {
+			view.ScopeLabel = scope.Label
+		}
+	}
+	for _, reservation := range result.Added {
+		view.Added = append(view.Added, pages.DHCPReservationRow{Scope: result.Scope, MAC: reservation.MAC, Address: reservation.Address, Name: reservation.Name})
+	}
+	notes := func(from []dhcpImportNote) []pages.DHCPImportNote {
+		converted := make([]pages.DHCPImportNote, 0, len(from))
+		for _, note := range from {
+			converted = append(converted, pages.DHCPImportNote{Line: note.Line, MAC: note.MAC, Address: note.Address, Text: sentence(note.Text)})
+		}
+		return converted
+	}
+	view.Skipped, view.Warnings = notes(result.Skipped), notes(result.Warnings)
+	return view
+}
+
+func dhcpImportMessage(result dhcpImportResult, scope string) string {
+	count := len(result.Added)
+	if count == 0 {
+		return "Nothing to import: every reservation in the export is already here or was skipped"
+	}
+	return fmt.Sprintf("Imported %d %s into %s", count, pluralize(count, "reservation", "reservations"), scope)
 }
