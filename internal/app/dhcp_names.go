@@ -83,8 +83,17 @@ func desiredDHCPRecords(settings config.DHCP, leases []store.DHCPLease, now time
 			}
 		}
 	}
+	// One PTR per address (D37): when two names still point at one address,
+	// the one that would win the name also wins the PTR, so the plan never
+	// holds two records for one owner and type and can't flap.
+	pointers := make(map[netip.Addr]dhcpName)
 	for _, name := range winners {
-		plan.add(name)
+		if held, found := pointers[name.address]; !found || name.beats(held) {
+			pointers[name.address] = name
+		}
+	}
+	for _, name := range winners {
+		plan.add(name, pointers[name.address].fqdn == name.fqdn)
 	}
 	for _, entry := range plan.zones {
 		slices.SortFunc(entry.records, compareZoneRecords)
@@ -94,21 +103,31 @@ func desiredDHCPRecords(settings config.DHCP, leases []store.DHCPLease, now time
 
 // dhcpScopeNames lists the names one scope asks for: each named reservation,
 // with or without a live lease, and each active lease with a usable label.
-// A lease from a MAC with a named reservation is left to the reservation.
+// A lease from a MAC with a named reservation is left to the reservation. A
+// lease on an address reserved for another MAC publishes nothing (D37): the
+// reservation owns the address, and the lease only lasts until its client
+// renews. A lease outside the scope's subnet, left over from a renumbered
+// scope, publishes nothing either: its PTR belongs to no zone this scope owns.
 func dhcpScopeNames(scope config.DHCPScope, leases []store.DHCPLease, now time.Time) []dhcpName {
-	if !scope.Serves() || !scope.RegistersNames() || scope.Domain == "" {
+	subnet, err := netip.ParsePrefix(scope.Subnet)
+	if err != nil || !scope.Serves() || !scope.RegistersNames() || scope.Domain == "" {
 		return nil
 	}
 	base := dhcpName{domain: scope.Domain, ttl: uint32(scope.RecordTTL() / time.Second)}
-	if subnet, err := netip.ParsePrefix(scope.Subnet); err == nil && scope.PublishesReverse() {
+	if scope.PublishesReverse() {
 		base.reverse, _ = dnsname.ReverseZone(subnet)
 	}
 	var names []dhcpName
 	named := make(map[string]bool)
+	reservedFor := make(map[netip.Addr]string)
 	for _, reservation := range scope.Reservations {
-		label := unifi.SanitizeLabel(reservation.Name)
 		address, err := netip.ParseAddr(reservation.Address)
-		if label == "" || err != nil {
+		if err != nil {
+			continue
+		}
+		reservedFor[address] = strings.ToLower(reservation.MAC)
+		label := unifi.SanitizeLabel(reservation.Name)
+		if label == "" {
 			continue
 		}
 		named[strings.ToLower(reservation.MAC)] = true
@@ -118,7 +137,10 @@ func dhcpScopeNames(scope config.DHCPScope, leases []store.DHCPLease, now time.T
 	}
 	for _, lease := range leases {
 		label := unifi.SanitizeLabel(lease.Hostname)
-		if lease.ScopeID != scope.ID || label == "" || named[strings.ToLower(lease.MAC)] || !dhcpLeaseHolds(lease, now) {
+		mac := strings.ToLower(lease.MAC)
+		owner, reserved := reservedFor[lease.Address]
+		if lease.ScopeID != scope.ID || label == "" || named[mac] || (reserved && owner != mac) ||
+			!subnet.Contains(lease.Address) || !dhcpLeaseHolds(lease, now) {
 			continue
 		}
 		name := base
@@ -133,9 +155,9 @@ func dhcpLeaseHolds(lease store.DHCPLease, now time.Time) bool {
 	return lease.State == store.DHCPLeaseActive && now.Before(lease.ExpiresAt)
 }
 
-// add puts a winning name's A record in its scope's zone, and its PTR in the
-// reverse zone when the scope publishes one (RFC 1035 §3.5).
-func (plan dhcpNamePlan) add(name dhcpName) {
+// add puts a winning name's A record in its scope's zone, and with pointer
+// its PTR in the reverse zone when the scope publishes one (RFC 1035 §3.5).
+func (plan dhcpNamePlan) add(name dhcpName, pointer bool) {
 	if name.reserved {
 		plan.reserved[name.fqdn] = true
 	}
@@ -144,7 +166,7 @@ func (plan dhcpNamePlan) add(name dhcpName) {
 		Name: unifi.RelativeOwner(name.fqdn, name.domain), Type: "A",
 		Value: name.address.String(), TTL: name.ttl, Source: zone.SourceDHCP,
 	})
-	if name.reverse == "" {
+	if !pointer || name.reverse == "" {
 		return
 	}
 	owner, err := dnsname.ReverseName(name.address)
@@ -235,6 +257,28 @@ func (wanted dhcpNamePlan) yieldToUniFi(target zone.Zone, records []zone.Record,
 		plan.Skipped = append(plan.Skipped, fqdn+" already has a UniFi record")
 		return true
 	})
+}
+
+// dhcpServed reports whether this node serves the DHCP settings, given its
+// cluster role for DHCP (dhcpClusterRole): enabled, and outside a cluster
+// (D32). DHCP's names publish, and the UniFi sync yields to them, only where
+// this holds (D38). Slice 8 changes only this predicate.
+func dhcpServed(settings config.DHCP, role string) bool {
+	return settings.Enabled && role == ""
+}
+
+// dhcpServedSettings returns the settings when this node serves them, and
+// DHCP turned off otherwise, so a node that doesn't serve DHCP removes its
+// names as it would with DHCP off.
+func dhcpServedSettings(settings config.DHCP, role func() string) config.DHCP {
+	current := ""
+	if role != nil {
+		current = role()
+	}
+	if !dhcpServed(settings, current) {
+		return config.DHCP{}
+	}
+	return settings
 }
 
 // dhcpReservedNames lists the FQDNs named reservations publish, for the UniFi

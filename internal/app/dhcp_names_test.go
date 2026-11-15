@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/store"
 	"github.com/drudge/sable/internal/zone"
@@ -298,5 +299,106 @@ func waitFor(t *testing.T, condition func() bool) {
 			t.Fatal("condition not met within 5s")
 		}
 		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// A lease left on an address the operator has since reserved for another
+// MAC publishes nothing (D37), named reservation or not, and reconciling the
+// same state again publishes no revision.
+func TestDHCPNamesLeaseOnAnotherMACsReservation(t *testing.T) {
+	for _, test := range []struct {
+		name, reservation string
+		forward, reverse  []string
+	}{
+		{"named", "Printer", []string{"printer A 10.9.0.10 dhcp"}, []string{"10 PTR printer.lan.example.com. dhcp"}},
+		{"unnamed", "", nil, nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			harness := newNamesHarness(t, primaryWith(t, "lan.example.com"), primaryWith(t, "0.9.10.in-addr.arpa"))
+			harness.config.dhcp.Scopes[0].Reservations[0].Name = test.reservation
+			harness.set(namesTestLease("10.9.0.10", "02:00:00:00:00:99", "phone", namesTestTime))
+			harness.namer.reconcile(context.Background())
+			assertRecords(t, harness.records("lan.example.com"), test.forward...)
+			assertRecords(t, harness.records("0.9.10.in-addr.arpa"), test.reverse...)
+			forward, reverse := harness.serial(t, "lan.example.com"), harness.serial(t, "0.9.10.in-addr.arpa")
+			harness.namer.reconcile(context.Background())
+			if harness.serial(t, "lan.example.com") != forward || harness.serial(t, "0.9.10.in-addr.arpa") != reverse {
+				t.Fatal("reconciling unchanged state advanced a serial")
+			}
+		})
+	}
+}
+
+// Two names on one address get one PTR, the name's winner's, so the plan
+// never holds two records for one owner and type (D37).
+func TestDHCPNamesOnePTRPerAddress(t *testing.T) {
+	settings := namesTestDHCP()
+	settings.Scopes[0].Reservations = nil
+	plan := desiredDHCPRecords(settings, []store.DHCPLease{
+		namesTestLease("10.9.0.100", "02:00:00:00:00:01", "old", namesTestTime.Add(-time.Hour)),
+		namesTestLease("10.9.0.100", "02:00:00:00:00:02", "new", namesTestTime),
+	}, namesTestTime)
+	var pointers []string
+	for _, record := range plan.zones["0.9.10.in-addr.arpa"].records {
+		pointers = append(pointers, record.Name+" "+record.Value)
+	}
+	if !slices.Equal(pointers, []string{"100 new.lan.example.com."}) {
+		t.Fatalf("PTRs %q, want only the newest binding's", pointers)
+	}
+}
+
+// A lease left from before its scope was renumbered publishes nothing: its
+// PTR belongs to no reverse zone the scope owns.
+func TestDHCPNamesLeaseOutsideTheScopeSubnet(t *testing.T) {
+	harness := newNamesHarness(t)
+	harness.config.dhcp.Scopes[0].Subnet = "10.9.1.0/24"
+	harness.config.dhcp.Scopes[0].Ranges = []config.DHCPRange{{Start: "10.9.1.100", End: "10.9.1.199"}}
+	harness.config.dhcp.Scopes[0].Reservations = nil
+	harness.set(namesTestLease("10.9.0.100", "02:00:00:00:00:01", "laptop", namesTestTime))
+	harness.namer.reconcile(context.Background())
+	assertRecords(t, harness.records("lan.example.com"))
+	assertRecords(t, harness.records("1.9.10.in-addr.arpa"))
+}
+
+// A cluster node accepts [dhcp] and doesn't serve it (D32), so it publishes
+// no DHCP names and removes the ones it had, as with DHCP off (D38).
+func TestDHCPNamesOnlyWhereDHCPIsServed(t *testing.T) {
+	harness := newNamesHarness(t)
+	harness.set(namesTestLease("10.9.0.100", "02:00:00:00:00:01", "laptop", namesTestTime))
+	harness.namer.reconcile(context.Background())
+	if records := harness.records("lan.example.com"); len(records) != 2 {
+		t.Fatalf("standalone node published %q", records)
+	}
+	harness.namer.role = func() string { return cluster.RolePrimary }
+	harness.namer.reconcile(context.Background())
+	assertRecords(t, harness.records("lan.example.com"))
+	assertRecords(t, harness.records("0.9.10.in-addr.arpa"))
+}
+
+// The UniFi sync keeps its record for a reserved name on a node that
+// doesn't serve DHCP (D38), and yields it on one that does.
+func TestUniFiSyncYieldsReservedNamesOnlyWhereDHCPIsServed(t *testing.T) {
+	for _, test := range []struct {
+		role string
+		want string
+	}{{"", ""}, {cluster.RolePrimary, "192.168.1.10"}} {
+		editor := &stubZoneEditor{}
+		syncer := newTestSyncer(t, testSettings(mapping("net-lan", "Default", "clients.example.net")), editor, &stubReader{inventory: testInventory()})
+		syncer.configuration.(*stubConfiguration).dhcp = config.DHCP{Enabled: true, Scopes: []config.DHCPScope{{
+			ID: "lan", Name: "LAN", Subnet: "192.168.1.0/24", Domain: "default.clients.example.net",
+			Ranges:       []config.DHCPRange{{Start: "192.168.1.100", End: "192.168.1.199"}},
+			Reservations: []config.DHCPReservation{{MAC: "aa:01", Address: "192.168.1.10", Name: "printer"}},
+		}}}
+		syncer.dhcpRole = func() string { return test.role }
+		syncer.runOnce(t.Context())
+		got := ""
+		for _, record := range editor.zone(t, "clients.example.net").Records {
+			if record.Name == "printer.default" && record.Type == "A" && record.Source == zone.SourceUniFi {
+				got = record.Value
+			}
+		}
+		if got != test.want {
+			t.Errorf("role %q: UniFi printer A = %q, want %q", test.role, got, test.want)
+		}
 	}
 }

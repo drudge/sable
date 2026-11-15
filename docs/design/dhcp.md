@@ -129,6 +129,15 @@ a host-network container. The namespace spike covers the protocol. This check co
   reported its leases. An offline node keeps its names until it reports.
 - PTR records are written only when the scope has `reverse = true`, like a UniFi mapping. The record
   TTL is the scope's `ttl`.
+- **One PTR per address.** A reserved address publishes only its reservation: a lease another MAC
+  still holds on it publishes neither A nor PTR until it ends. When two names still point at one
+  address, the name's winner also takes the PTR. A lease outside its scope's subnet (left over from
+  a renumbered scope) publishes nothing.
+- **Names follow serving.** DHCP's names publish, and the UniFi sync yields reserved names to them,
+  only on a node that serves DHCP. A cluster node accepts `[dhcp]` and doesn't serve it until slice
+  8, so it publishes no DHCP names. Slice 8 changes the one predicate that decides this.
+- A name that can't publish (its zone is a secondary or stub, or a hand-authored record holds it) is
+  logged at Info when the list changes; slice 6 shows it per lease.
 - The FQDN option in the reply says the server did the update (S=1), says so when it overrode the
   client (O=1), and carries the name that was registered.
 - **Removal policy:** release, expiry, decline, a host name change, and turning DHCP off all remove

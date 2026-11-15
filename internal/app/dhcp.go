@@ -265,6 +265,11 @@ func dhcpClusterRole(state cluster.State) string {
 	return ""
 }
 
+// dhcpRole is this node's cluster role for DHCP now.
+func (process *process) dhcpRole() string {
+	return dhcpClusterRole(process.clusterService.Snapshot())
+}
+
 // startDHCP starts the DHCP server with the configuration. A failure leaves
 // DNS running and is logged: port 67 taken or a cluster shouldn't keep the
 // rest of Sable down.
@@ -272,9 +277,9 @@ func (process *process) startDHCP() {
 	clusterService := process.clusterService
 	process.dhcp = newDHCPService(process.database,
 		func() string { return clusterService.Snapshot().NodeID },
-		func() string { return dhcpClusterRole(clusterService.Snapshot()) },
-		process.logger)
+		process.dhcpRole, process.logger)
 	names := newDHCPNamer(process.configurationManager, process.zoneManager, process.database.DHCPLeases, process.leading, process.logger)
+	names.role = process.dhcpRole
 	names.notifier = process.handler
 	process.dhcp.changed = names.Changed
 	process.runWorker(func(context.Context) { names.Run(process.zoneRefreshContext) })

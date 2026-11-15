@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -28,6 +29,12 @@ type dhcpNamer struct {
 	zones         unifiZoneEditor
 	leases        func(context.Context) ([]store.DHCPLease, error)
 	writable      func() bool
+	// role is the node's cluster role for DHCP (dhcpClusterRole). Nil means
+	// outside a cluster.
+	role func() string
+	// skipped is the last reconcile's list of names that didn't publish,
+	// logged when it changes.
+	skipped []string
 	// notifier tells a changed zone's secondaries to fetch it (RFC 1996).
 	// Nil skips it.
 	notifier  zoneNotifier
@@ -115,17 +122,22 @@ func (namer *dhcpNamer) reconcile(ctx context.Context) {
 		return
 	}
 	now := namer.now()
-	wanted := desiredDHCPRecords(namer.configuration.Current().Config.DHCP, leases, now)
-	var changed []string
+	settings := dhcpServedSettings(namer.configuration.Current().Config.DHCP, namer.role)
+	wanted := desiredDHCPRecords(settings, leases, now)
+	var changed, skipped []string
 	err = namer.zones.UpdateZones(ctx, func(zones *[]zone.Zone) error {
 		before := zoneSerials(*zones)
-		planDHCPZones(zones, wanted, now)
+		skipped = planDHCPZones(zones, wanted, now).Skipped
 		changed = advancedZones(before, *zones)
 		return nil
 	})
 	if err != nil {
 		namer.logger.Warn("publish DHCP names", "error", err)
 		return
+	}
+	if !slices.Equal(skipped, namer.skipped) {
+		namer.skipped = skipped
+		namer.logger.Info("DHCP names not published", "names", skipped)
 	}
 	if namer.notifier == nil || len(changed) == 0 {
 		return

@@ -73,6 +73,10 @@ type unifiSyncer struct {
 	notifying sync.WaitGroup
 
 	wake chan struct{}
+	// dhcpRole is the node's cluster role for DHCP (dhcpClusterRole); nil
+	// means outside a cluster. Reserved names yield only where DHCP is
+	// served (D38).
+	dhcpRole func() string
 
 	mu     sync.Mutex
 	status unifi.Status
@@ -311,7 +315,7 @@ func (syncer *unifiSyncer) synchronize(ctx context.Context, settings config.UniF
 	if err != nil {
 		return unifi.Plan{}, 0, err
 	}
-	skipped = append(skipped, leaveDHCPReservations(desired, dhcpReservedNames(syncer.configuration.Current().Config.DHCP))...)
+	skipped = append(skipped, leaveDHCPReservations(desired, dhcpReservedNames(dhcpServedSettings(syncer.configuration.Current().Config.DHCP, syncer.dhcpRole)))...)
 	// With no network mapped the sync only finds devices, and must not touch
 	// a zone: retiring records is for a mapping that stopped producing them.
 	if !settings.Publishes() {
