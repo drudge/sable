@@ -123,7 +123,7 @@ templ DHCPContent(view DHCPPageView) {
 // dhcpOverview says whether this node serves and how much it holds.
 templ dhcpOverview(view DHCPPageView) {
 	<div class="operational-metric-grid dhcp-overview">
-		@OperationalMetricCard("router", "Server", dhcpState(view.Status), dhcpStateDetail(view.Status), ifThen(view.Status.Serving, "green", "amber"))
+		@OperationalMetricCard("router", "Server", dhcpState(view.Status), dhcpStateDetail(view.Status, view.CanConfigure), ifThen(view.Status.Serving, "green", "amber"))
 		@OperationalMetricCard("laptop", "Active Leases", formatNumber(uint64(len(view.Leases))), "Devices holding an address now", "blue")
 		@OperationalMetricCard("key-round", "Reservations", formatNumber(uint64(dhcpReservationCount(view.Scopes))), "Addresses kept for one device", "purple")
 	</div>
@@ -142,7 +142,7 @@ func dhcpState(status DHCPStatusView) string {
 	}
 }
 
-func dhcpStateDetail(status DHCPStatusView) string {
+func dhcpStateDetail(status DHCPStatusView, canConfigure bool) string {
 	switch {
 	case status.Serving:
 		return fmt.Sprintf("Answered %s of %s requests", formatNumber(status.Replied), formatNumber(status.Received))
@@ -152,8 +152,10 @@ func dhcpStateDetail(status DHCPStatusView) string {
 		return "Cluster nodes can't serve DHCP yet"
 	case status.Enabled:
 		return "Not answering on port 67; check the server logs"
+	case canConfigure:
+		return "Turn it on with the button above"
 	default:
-		return "Turn it on with enabled = true under [dhcp]"
+		return "An administrator can turn it on"
 	}
 }
 

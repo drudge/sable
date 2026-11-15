@@ -262,11 +262,15 @@ func (server *dhcpServer) removeLease(ctx context.Context, address netip.Addr) d
 	return dhcpRemoved{lease: lease}
 }
 
-// openQueue makes the request queue; closeQueue closes it, and submit after
-// that reports false instead of sending on a closed channel.
+// openQueue makes the request queue unless it's already open; closeQueue
+// closes it, and submit after that reports false instead of sending on a
+// closed channel.
 func (server *dhcpServer) openQueue() {
 	server.gate.Lock()
 	defer server.gate.Unlock()
+	if server.queue != nil && !server.closed {
+		return
+	}
 	server.queue, server.closed = make(chan dhcpRequest, dhcpQueueSize), false
 }
 

@@ -2,7 +2,6 @@ package pages
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/drudge/sable/internal/web/pages/components"
 )
@@ -12,7 +11,7 @@ import (
 templ dhcpSetupEmpty(view DHCPPageView) {
 	if view.CanConfigure {
 		@components.EmptyState(components.EmptyStateProps{Icon: "router", IconBox: true, Title: "DHCP isn't set up", Description: "Add a scope to hand out addresses on one network and name each device in DNS.", Class: "dhcp-setup-empty"}) {
-			@components.Button(components.ButtonProps{Label: "Add Scope", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "dhcp-scope-new", "data-replica-primary-action": true}})
+			@components.Button(components.ButtonProps{Label: "Add Scope", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": dhcpScopeDialogID("", true), "data-replica-primary-action": true}})
 		}
 	} else {
 		@components.EmptyState(components.EmptyStateProps{Icon: "router", IconBox: true, Title: "DHCP isn't set up", Description: "An administrator can add a scope to hand out addresses from this server.", Class: "dhcp-setup-empty"})
@@ -44,7 +43,7 @@ templ dhcpScopesPanel(view DHCPPageView) {
 	@components.Card(components.CardProps{Class: "isotope-data-card"}) {
 		@components.CardHeader(components.CardHeaderProps{Title: "Scopes", Description: "Each network this server hands out addresses on", DescriptionClass: "desktop-only", Class: "isotope-data-header"}) {
 			if view.CanConfigure {
-				@components.Button(components.ButtonProps{Label: "Add Scope", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "dhcp-scope-new", "data-replica-primary-action": true}})
+				@components.Button(components.ButtonProps{Label: "Add Scope", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": dhcpScopeDialogID("", true), "data-replica-primary-action": true}})
 			}
 		}
 		<div class="admin-mobile-list">
@@ -91,7 +90,7 @@ templ dhcpScopeDialog(scope DHCPScopeView, add bool) {
 				<div class="dhcp-form-notice" id={ DHCPScopeNoticeID(scope.ID, add) }></div>
 				if add {
 					<input type="hidden" name="new" value="1"/>
-					@components.Field(components.FieldProps{ID: "dhcp-scope-new-id", Label: "ID", Help: "A short, permanent key that leases refer to, like `lan`.", Input: templ.Attributes{"name": "id", "class": "mono-input", "placeholder": "lan", "pattern": "[a-z0-9][a-z0-9-]*", "maxlength": "32", "autocomplete": "off", "spellcheck": "false", "required": true}})
+					@components.Field(components.FieldProps{ID: dhcpScopeDialogID("", true) + "__id", Label: "ID", Help: "A short, permanent key that leases refer to, like `lan`.", Input: templ.Attributes{"name": "id", "class": "mono-input", "placeholder": "lan", "pattern": "[a-z0-9][a-z0-9-]*", "maxlength": "32", "autocomplete": "off", "spellcheck": "false", "required": true}})
 				} else {
 					<input type="hidden" name="id" value={ scope.ID }/>
 				}
@@ -117,7 +116,7 @@ templ dhcpScopeDialog(scope DHCPScopeView, add bool) {
 }
 
 templ dhcpScopeField(scope DHCPScopeView, add bool, name, label, help, placeholder, class string, input templ.Attributes) {
-	@components.Field(components.FieldProps{ID: dhcpScopeDialogID(scope.ID, add) + "-" + strings.ReplaceAll(name, "_", "-"), Label: label, Help: help, Input: dhcpScopeInput(name, placeholder, class, input)})
+	@components.Field(components.FieldProps{ID: dhcpScopeDialogID(scope.ID, add) + "__" + name, Label: label, Help: help, Input: dhcpScopeInput(name, placeholder, class, input)})
 }
 
 func dhcpScopeInput(name, placeholder, class string, input templ.Attributes) templ.Attributes {
@@ -157,15 +156,17 @@ func dhcpOr(value, fallback string) string {
 	return value
 }
 
-// dhcpScopeDialogID is the scope's dialog; IDs are unique.
+// dhcpScopeDialogID is the scope's dialog. Scope IDs are unique and can't
+// hold "_", so the Add dialog's id, which isn't under dhcp-scope-, and its
+// parts after "__" never meet another dialog's.
 func dhcpScopeDialogID(id string, add bool) string {
 	if add {
-		return "dhcp-scope-new"
+		return "dhcp-add-scope"
 	}
 	return "dhcp-scope-" + id
 }
 
 // DHCPScopeNoticeID is where a scope form shows why it didn't save.
 func DHCPScopeNoticeID(id string, add bool) string {
-	return dhcpScopeDialogID(id, add) + "-notice"
+	return dhcpScopeDialogID(id, add) + "__notice"
 }
