@@ -40,13 +40,22 @@ func TestDHCPConsoleSetupOffersHostNetworks(t *testing.T) {
 	}
 }
 
+// The suggested range leaves out the server's own address, taking the larger
+// side of it, and is never empty or inverted.
 func TestDHCPSuggestedScopeAvoidsTheServersAddress(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct{ prefix, address, gateway, start, end, router string }{
 		{"192.0.2.0/24", "192.0.2.10", "192.0.2.1", "192.0.2.100", "192.0.2.199", "192.0.2.1"},
-		{"192.0.2.0/24", "192.0.2.150", "", "192.0.2.151", "192.0.2.199", ""},
+		{"192.0.2.0/24", "192.0.2.150", "", "192.0.2.100", "192.0.2.149", ""},
+		{"192.0.2.0/24", "192.0.2.120", "", "192.0.2.121", "192.0.2.199", ""},
 		{"10.0.0.0/16", "10.0.0.2", "10.0.0.1", "10.0.0.100", "10.0.0.199", "10.0.0.1"},
 		{"192.0.2.0/26", "192.0.2.1", "198.51.100.1", "192.0.2.32", "192.0.2.62", ""},
+		// On a tiny network the server may hold all of the half the range
+		// comes from, and the range goes to its other hosts (F46).
+		{"10.0.0.0/30", "10.0.0.2", "", "10.0.0.1", "10.0.0.1", ""},
+		{"10.0.0.0/30", "10.0.0.1", "", "10.0.0.2", "10.0.0.2", ""},
+		{"10.0.0.0/29", "10.0.0.6", "", "10.0.0.4", "10.0.0.5", ""},
+		{"10.0.0.0/29", "10.0.0.4", "", "10.0.0.5", "10.0.0.6", ""},
 	} {
 		bits := netip.MustParsePrefix(test.prefix).Bits()
 		network := DHCPNetwork{Interface: "eth0", Prefix: netip.PrefixFrom(netip.MustParseAddr(test.address), bits)}

@@ -156,12 +156,11 @@ func dhcpSuggestedScope(network DHCPNetwork, id string) config.DHCPScope {
 	if size < 256 {
 		start, end = first+size/2, first+size-2
 	}
-	if own := dhcpUint32(network.Prefix.Addr()); own >= start && own <= end {
-		if own < end {
-			start = own + 1
-		} else {
-			end = own - 1
-		}
+	own := dhcpUint32(network.Prefix.Addr())
+	start, end = dhcpRangeAround(start, end, own)
+	if start > end {
+		// A tiny network's half held only the server: use its other hosts.
+		start, end = dhcpRangeAround(first+1, first+size-2, own)
 	}
 	scope := config.DHCPScope{ID: id, Name: strings.ToUpper(id), Subnet: subnet.String(),
 		Ranges: []config.DHCPRange{{Start: dhcpAddr(start).String(), End: dhcpAddr(end).String()}}}
@@ -169,6 +168,19 @@ func dhcpSuggestedScope(network DHCPNetwork, id string) config.DHCPScope {
 		scope.Router = network.Gateway.String()
 	}
 	return scope
+}
+
+// dhcpRangeAround is start-end without own: the larger side of it when own
+// falls inside. The range comes back empty (start > end) when own was all
+// of it.
+func dhcpRangeAround(start, end, own uint32) (uint32, uint32) {
+	if own < start || own > end {
+		return start, end
+	}
+	if end-own >= own-start {
+		return own + 1, end
+	}
+	return start, own - 1
 }
 
 func dhcpUint32(address netip.Addr) uint32 {
