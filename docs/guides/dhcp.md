@@ -56,7 +56,7 @@ Keep the old DHCP server's settings until Sable has served the network for a ful
 
 1. **Shorten the old server's lease time** to an hour a day ahead, so devices come back to ask sooner. Wait out the old lease time.
 2. **Turn the old server's DHCP off.** Leave its DNS and routing alone.
-3. In Sable, select **Turn On**. Sable first listens 8 seconds for another DHCP server on each of the scope's networks. If one answers, it names it and doesn't turn on. Turn the other server off, or select **Turn On Anyway** only if you know why it answers.
+3. In Sable, select **Turn On**. Sable first listens up to 8 seconds for another DHCP server on each of the scope's networks. If one answers, it names it and doesn't turn on. Turn the other server off, or select **Turn On Anyway** only if you know why it answers.
 4. **Renew a test device's lease**, or reconnect it to Wi-Fi. Check it gets an address from the pool, the right router, and Sable as its DNS server, and that its name resolves in your zone. Its lease shows on the **DHCP** page.
 5. Renew the rest as they come back on their own. A device asks again at half its lease time.
 

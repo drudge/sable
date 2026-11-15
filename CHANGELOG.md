@@ -19,18 +19,17 @@ on it.
 
 ### Upgrading from 1.8.2
 
-- Update every node in a cluster before you set up DHCP. A node on 1.8.2
-  can't load a configuration with a `[dhcp]` section, so it stops following
-  the primary once a scope is saved. Turn DHCP off before you create or join
-  a cluster.
+- Update every node in a cluster first. Sable won't turn DHCP on while a
+  member runs an older release, because 1.8.2 can't load a configuration
+  with a `[dhcp]` section.
 - Port 67 needs the right to bind a low port and to see broadcasts. The
   systemd service already has `CAP_NET_BIND_SERVICE`. In Docker, use host
   networking with the new `compose.dhcp.yaml`, which keeps only
   `NET_BIND_SERVICE`; Docker's bridge doesn't pass broadcasts. A web update
   can't add the image's new file capability to an older container: pull the
   1.9.0-beta.1 image.
-- The Operator role now has `dhcp.read` and `dhcp.write`, and Auditor has
-  `dhcp.read`. `dhcp.read` lists every lease with the device's hardware
+- The DNS Administrator and Operator roles now have `dhcp.read` and
+  `dhcp.write`, and Auditor has `dhcp.read`. `dhcp.read` lists every lease with the device's hardware
   address. Check API tokens and users with those roles.
 - The database gains a lease table on first start, which 1.8.2 ignores. To
   go back to 1.8.2, remove the `[dhcp]` section first; a backup taken with
@@ -51,7 +50,7 @@ on it.
   PXE boot settings, IPv6-only preferred (option 108, RFC 8925) and custom
   options.
 - Before an offer, Sable pings the address to check nothing already uses it
-  (RFC 2131 section 2.2). Before **Turn On**, it listens 8 seconds for
+  (RFC 2131 section 2.2). Before **Turn On**, it listens up to 8 seconds for
   another DHCP server on each of the scope's networks and names the one that
   answers.
 - Each lease's name is published as an A record and, with **Reverse** on, a
@@ -73,13 +72,14 @@ on it.
   `POST /api/v1/dhcp/import`, with `dry_run=true` to preview.
 - The JSON API covers scopes, reservations, leases and takeover. New MCP
   tools `get_dhcp_status`, `list_dhcp_leases`, `set_dhcp_reservation` and
-  `remove_dhcp_reservation` need the new `dhcp.read` and `dhcp.write`
-  permissions.
+  `remove_dhcp_reservation` are off until you add them to the MCP tools,
+  and a token needs the new `dhcp.read` or `dhcp.write` permission as well.
 - The **DHCP** guide walks through moving from a router or another server,
   with a test device first and a way back.
 
 ### Clustering
 
+- Turn DHCP off before you create or join a cluster.
 - Each node leases only from its own slice of every range, so two nodes that
   lose touch never hand out the same address. Every node answers every
   reservation. The scope dialog splits a range evenly across nodes and warns
@@ -118,12 +118,19 @@ on it.
   built.
 - Relays tried: ISC dhcrelay 4.4.3 with option 82, and dnsmasq 2.91's relay.
   No hardware router's relay has been tried.
-- Leases a node grants while its clock is out of step show as ended on the
-  primary until the device renews after the clock is set.
-- Not yet tried: Operator and Viewer sessions in the console, a live UniFi
+- While a node's clock is out of step, the primary doesn't publish names for
+  the leases it grants. Once the clock is set, a lease it granted while
+  behind shows as ended until the device renews.
+- Not yet tried: Operator, Auditor and DNS Administrator sessions in the console, a live UniFi
   controller, Safari and Firefox, two replicas restored at once, clock skew
   on a PostgreSQL cluster, and promoting a replica whose clock is out of
   step.
+
+### Fixed
+
+- Stopping Sable no longer waits up to five seconds on idle connections.
+- SQLite writes from one process queue for the write lock instead of failing
+  with `SQLITE_BUSY` under load.
 
 ### Dependencies
 
