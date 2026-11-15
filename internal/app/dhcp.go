@@ -357,8 +357,12 @@ func (process *process) startDHCP() {
 	if process.unifiSync != nil {
 		names.kick = process.unifiSync.SyncNow
 	}
-	process.dhcp.changed = names.Changed
+	identities := newDHCPIdentities(process.insightsEnabled, process.database.DHCPLeases,
+		func() string { return clusterService.Snapshot().NodeID },
+		process.deviceAddresses.Record(process.database.RecordClientIdentities), process.logger)
+	process.dhcp.changed = func() { names.Changed(); identities.Changed() }
 	process.runWorker(func(context.Context) { names.Run(process.zoneRefreshContext) })
+	process.runWorker(func(context.Context) { identities.Run(process.runtimeContext) })
 	if err := process.dhcp.Apply(process.runtimeContext, process.runtimeContext, process.current().DHCP); err != nil {
 		process.logger.Error("DHCP server not started", "error", err)
 	}

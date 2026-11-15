@@ -24,6 +24,7 @@ import (
 const (
 	SourceOperator = "Your name"
 	SourceUniFi    = "UniFi"
+	SourceDHCP     = "DHCP"
 	SourceLocal    = "Local host"
 	SourceReverse  = "Reverse DNS"
 )
@@ -32,6 +33,9 @@ const (
 const (
 	identityUniFi    = "unifi"
 	identityNeighbor = "neighbor"
+	// identityDHCP is a lease from Sable's own DHCP server; its name is the
+	// one the lease registered in DNS.
+	identityDHCP = "dhcp"
 	// identityUniFiTyped starts the source of a sighting of Ubiquiti hardware
 	// whose type the controller vouches for, followed by that type, as in
 	// "unifi-network" or "unifi-storage".
@@ -139,24 +143,26 @@ type DiscoveredName struct {
 }
 
 // GivenNames are the names a device was given rather than discovered: the one
-// the operator set in Sable, then the one its UniFi controller reports. Both
-// follow the device's hardware address, so they hold while its IP addresses
+// the operator set in Sable, then the one its UniFi controller reports, then
+// the one its DHCP lease carries. All follow the device's hardware address, so they hold while its IP addresses
 // change and outrank any name discovered for one address.
 type GivenNames struct {
 	identities map[string]querylog.ClientIdentity
 	operator   operatorNames
 	unifi      map[string]string
+	dhcp       map[string]string
 	types      map[string]string
 	guesses    map[string]querylog.ClientIdentity
 }
 
-// NewGivenNames reads the operator's names and the UniFi names among the
-// hardware sightings.
+// NewGivenNames reads the operator's names and the UniFi and DHCP names among
+// the hardware sightings.
 func NewGivenNames(identities []querylog.ClientIdentity, clients []config.Client) GivenNames {
 	return GivenNames{
 		identities: latestIdentities(identities),
 		operator:   newOperatorNames(clients),
-		unifi:      unifiNames(identities),
+		unifi:      sourceNames(identities, fromUniFi),
+		dhcp:       sourceNames(identities, fromDHCP),
 		types:      unifiTypes(identities),
 		guesses:    unifiGuesses(identities),
 	}
@@ -368,16 +374,19 @@ func unifiTypes(identities []querylog.ClientIdentity) map[string]string {
 	return types
 }
 
-// unifiNames keeps the name each hardware address had in its most recent UniFi
-// sighting. It is keyed by hardware address rather than read from an
-// address's latest sighting because the neighbor table is sampled more often
-// than the controller and carries no name, so the latest sighting is usually
-// one without it.
-func unifiNames(identities []querylog.ClientIdentity) map[string]string {
+// fromDHCP reports an identity from a lease Sable's DHCP server handed out.
+func fromDHCP(source string) bool { return source == identityDHCP }
+
+// sourceNames keeps the name each hardware address had in its most recent
+// sighting from the sources from accepts. It is keyed by hardware address
+// rather than read from an address's latest sighting because the neighbor
+// table is sampled more often than UniFi or DHCP and carries no name, so the
+// latest sighting is usually one without it.
+func sourceNames(identities []querylog.ClientIdentity, from func(string) bool) map[string]string {
 	names := make(map[string]string)
 	seen := make(map[string]time.Time)
 	for _, identity := range identities {
-		if !fromUniFi(identity.Source) || identity.MAC == "" || identity.Hostname == "" {
+		if !from(identity.Source) || identity.MAC == "" || identity.Hostname == "" {
 			continue
 		}
 		if last, found := seen[identity.MAC]; found && !identity.LastSeen.After(last) {
@@ -478,6 +487,9 @@ func chooseName(device Device, given GivenNames, discovered map[string]Discovere
 	}
 	if name := given.unifi[device.MAC]; name != "" {
 		return name, SourceUniFi, ""
+	}
+	if name := given.dhcp[device.MAC]; name != "" {
+		return name, SourceDHCP, ""
 	}
 	for _, address := range device.Addresses {
 		if name := discovered[address.Address]; name.Name != "" {

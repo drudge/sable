@@ -33,7 +33,7 @@ Insights reports:
 
 ## Devices
 
-The **Devices** tab lists every device that sent queries in the range. Sable keeps a device's addresses together through the names you give it, UniFi, and the server's neighbor table, so a laptop's IPv4 and changing IPv6 addresses count as one device. An address a device gave itself because DHCP hadn't answered yet, such as `169.254.203.47`, is counted with its device when Sable can tie it to a hardware address, and otherwise left out: it's a few seconds of a computer waking up, not a new device. Its lookups stay in the query log.
+The **Devices** tab lists every device that sent queries in the range. Sable keeps a device's addresses together through the names you give it, UniFi, [Sable's DHCP leases](../configuration.md#dhcp-server), and the server's neighbor table, so a laptop's IPv4 and changing IPv6 addresses count as one device. An address a device gave itself because DHCP hadn't answered yet, such as `169.254.203.47`, is counted with its device when Sable can tie it to a hardware address, and otherwise left out: it's a few seconds of a computer waking up, not a new device. Its lookups stay in the query log.
 
 The machine Sable runs on is marked **This server**, and the rest of its cluster **Sable node**. What Sable looks up for itself on a timer, such as its dynamic DNS updates, UniFi sync, and block list downloads, never counts as a check-in.
 
@@ -53,7 +53,7 @@ Search the list by name, hardware or IP address, maker, or type. The filters bes
 
 Use the pencil beside the device's name. A name follows the hardware address when Sable knows it, so it survives IP changes.
 
-When a device has more than one name, Sable uses yours first, then the name UniFi reports, then a [local host override](../configuration.md#local-host-overrides), then reverse DNS. The badge beside the name says which one it is. The dashboard's client rankings use the same order.
+When a device has more than one name, Sable uses yours first, then the name UniFi reports, then the name on its [DHCP lease](../configuration.md#dhcp-server), then a [local host override](../configuration.md#local-host-overrides), then reverse DNS. The badge beside the name says which one it is. The dashboard's client rankings use the same order.
 
 ### What a device is
 
@@ -141,7 +141,7 @@ The bell beside **Settings** shows whether Insights alerts are **On**, **Paused*
 Insights keeps a few things beyond the query log, all in Sable's own database on this server:
 
 - **When each device was first and last seen,** overall and for each name it looked up.
-- **The hardware behind each address,** read once a minute from the server's neighbor table and, when [UniFi](unifi.md) is set up, from the controller. With a cluster, the node that leads hands these to the other nodes.
+- **The hardware behind each address,** read once a minute from the server's neighbor table and, when [UniFi](unifi.md) is set up, from the controller. When Sable is the [DHCP server](../configuration.md#dhcp-server), each active lease is recorded too, after it changes and once a minute. With a cluster, the node that leads hands these to the other nodes.
 - **The findings you hid or snoozed.**
 
 It does not touch the query log itself (that is **Settings > Logging**), the numbers on the dashboard, the names and types you gave devices, or the records UniFi publishes.
@@ -152,7 +152,7 @@ Turn off **Insights** in **Settings > General** to stop all of it. Sable asks on
 
 - Sable stops recording which devices it sees and what hardware they are, and stops looking for findings.
 - Insights leaves the sidebar and the command palette, and the Insights alerts in **Settings > Alerts** fold away.
-- The dashboard names clients only from the names you gave them, local hosts, and reverse DNS. Names from UniFi and the neighbor table go away.
+- The dashboard names clients only from the names you gave them, local hosts, and reverse DNS. Names from UniFi, DHCP leases, and the neighbor table go away.
 - The MCP `list_findings` tool says Insights is off.
 - In a cluster, every node follows the primary, and each deletes its own copy when the primary does.
 
