@@ -72,6 +72,10 @@ type clusterOutage struct {
 	// declaredAt is when the outage grew long enough to alert. It is zero
 	// until then.
 	declaredAt time.Time
+	// clock marks a node that still checks in but whose clock is too far
+	// from the lead's to sync. Its check-ins keep coming, so its outage runs
+	// from when the lead first saw the clock, not from its last contact.
+	clock bool
 }
 
 // follow carries an outage forward one round. A node heard from since the
@@ -128,19 +132,7 @@ func (source *nodeOutageSource) Alerts(_ context.Context, now time.Time) ([]aler
 			continue
 		}
 		present[node.ID] = true
-		outage, tracked := source.outages[node.ID]
-		if node.State == cluster.StateOnline {
-			if tracked && !outage.declaredAt.IsZero() {
-				source.events = appendEvent(source.events, nodeBackUpAlert(node, lead, outage, now))
-			}
-			delete(source.outages, node.ID)
-			continue
-		}
-		outage = outage.follow(tracked, node.LastContact, now)
-		if outage.due(now) {
-			outage.declaredAt = now
-		}
-		source.outages[node.ID] = outage
+		source.track(node, lead, now)
 	}
 	// A node removed from the cluster is not coming back, so its outage ends
 	// without an all-clear.
@@ -148,10 +140,39 @@ func (source *nodeOutageSource) Alerts(_ context.Context, now time.Time) ([]aler
 	found := slices.Clone(source.events)
 	for _, node := range state.Nodes {
 		if outage, tracked := source.outages[node.ID]; tracked && !outage.declaredAt.IsZero() {
-			found = append(found, nodeDownAlert(node, lead, outage, now))
+			found = append(found, outageAlert(node, lead, outage, now))
 		}
 	}
 	return found, nil
+}
+
+// track carries one node's outage forward a round. A node is out of touch
+// when it has stopped checking in, or when it checks in with a clock too far
+// off for the lead to accept what it sends, so it has stopped syncing. Each
+// kind of outage ends with its own all-clear, and one turning into the other
+// ends the first.
+func (source *nodeOutageSource) track(node cluster.Node, lead string, now time.Time) {
+	outage, tracked := source.outages[node.ID]
+	clock := node.State == cluster.StateOnline && node.SyncState == cluster.SyncClock
+	if tracked && (node.State == cluster.StateOnline && !clock || outage.clock != clock) {
+		if !outage.declaredAt.IsZero() {
+			source.events = appendEvent(source.events, outageEndedAlert(node, lead, outage, now))
+		}
+		delete(source.outages, node.ID)
+		tracked = false
+	}
+	switch {
+	case node.State == cluster.StateOnline && !clock:
+		return
+	case clock && !tracked:
+		outage = clusterOutage{since: now, clock: true}
+	case !clock:
+		outage = outage.follow(tracked, node.LastContact, now)
+	}
+	if outage.due(now) {
+		outage.declaredAt = now
+	}
+	source.outages[node.ID] = outage
 }
 
 // rolloutAlertSource runs on the lead and tells when a rolling update starts,
@@ -282,6 +303,58 @@ func clusterMemberName(state cluster.State, id string) string {
 		return node.Name
 	}
 	return "this node"
+}
+
+// outageAlert is the alert a declared outage holds while it lasts.
+func outageAlert(node cluster.Node, lead string, outage clusterOutage, now time.Time) alerts.Alert {
+	if outage.clock {
+		return nodeClockAlert(node, lead, outage, now)
+	}
+	return nodeDownAlert(node, lead, outage, now)
+}
+
+// outageEndedAlert is the all-clear for a declared outage.
+func outageEndedAlert(node cluster.Node, lead string, outage clusterOutage, now time.Time) alerts.Alert {
+	if outage.clock {
+		return nodeClockBackAlert(node, lead, outage, now)
+	}
+	return nodeBackUpAlert(node, lead, outage, now)
+}
+
+func nodeClockAlert(node cluster.Node, lead string, outage clusterOutage, now time.Time) alerts.Alert {
+	reasons := []string{"Clock " + clockOffsetWords(node.ClockOffsetSeconds) + " " + lead + "'s"}
+	if len(node.Addresses) > 0 {
+		reasons = append(reasons, "DNS at "+strings.Join(node.Addresses, ", "))
+	}
+	return alerts.Alert{
+		ID:    fmt.Sprintf("cluster.node-clock:%s:%d", node.ID, outage.since.Unix()),
+		Group: config.AlertGroupCluster, Kind: "cluster.node-clock", Problem: true, Tone: alerts.ToneAttention,
+		Title: "Node clock out of step", Subject: node.Name, Headline: node.Name + " stopped syncing",
+		Summary: fmt.Sprintf("%s is up, but its clock is too far from %s's for its check-ins to be trusted, so it has not synced for %s. Set both nodes to use NTP.",
+			node.Name, lead, spokenDuration(now.Sub(outage.since))),
+		Reasons: reasons, Path: clusterPath, PathLabel: clusterPathLabel, ObservedAt: outage.declaredAt,
+	}
+}
+
+func nodeClockBackAlert(node cluster.Node, lead string, outage clusterOutage, now time.Time) alerts.Alert {
+	away := spokenDuration(now.Sub(outage.since))
+	return alerts.Alert{
+		ID:    fmt.Sprintf("cluster.node-clock-ok:%s:%d", node.ID, outage.since.Unix()),
+		Group: config.AlertGroupCluster, Kind: "cluster.node-clock-ok", Tone: alerts.TonePositive,
+		Title: "Node clock back in step", Subject: node.Name, Headline: node.Name + " is syncing again",
+		Summary: fmt.Sprintf("%s's clock is close enough to %s's again after %s out of step.", node.Name, lead, away),
+		Reasons: []string{"Out of step for " + away}, Path: clusterPath, PathLabel: clusterPathLabel, ObservedAt: now,
+	}
+}
+
+// clockOffsetWords says how far a member's clock is from the lead's, ahead
+// when positive.
+func clockOffsetWords(seconds int64) string {
+	offset := time.Duration(seconds) * time.Second
+	if offset < 0 {
+		return spokenDuration(-offset) + " behind"
+	}
+	return spokenDuration(offset) + " ahead of"
 }
 
 func nodeDownAlert(node cluster.Node, lead string, outage clusterOutage, now time.Time) alerts.Alert {

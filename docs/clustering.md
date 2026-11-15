@@ -186,6 +186,10 @@ almost everything:
   minutes, such as one restarting for an update, alerts nothing. After the lead
   restarts or takes over, each node gets five minutes to check in before it can
   count as down.
+- **Node clock out of step** when a node keeps checking in but its clock has
+  been too far from the lead's for five minutes, so the lead can't accept what
+  it sends and it has stopped syncing. **Node clock back in step** follows once
+  the clocks agree again.
 - **Rolling update started**, **finished**, **failed**, or **stopped**. A
   failed rollout names the release and, when one node was to blame, that node.
   Each stays news for a day, so a lead that restarts to finish a rollout still
