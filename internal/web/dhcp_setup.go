@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strings"
 
 	"github.com/drudge/sable/internal/auth"
@@ -146,8 +147,9 @@ func dhcpSuggestedID(device string, taken map[string]bool) string {
 
 // dhcpSuggestedScope hands out .100 to .199 on a /24 or larger, like a home
 // router, and the top half of a smaller network, leaving out the server's
-// own address. The router is the interface's default gateway when it's on
-// the network.
+// own address and the router's. The router is the interface's default
+// gateway when it's on the network. A network with no host left to hand out
+// gets no range, and the dialog asks for one.
 func dhcpSuggestedScope(network DHCPNetwork, id string) config.DHCPScope {
 	subnet := network.Prefix.Masked()
 	first := dhcpUint32(subnet.Addr())
@@ -156,31 +158,45 @@ func dhcpSuggestedScope(network DHCPNetwork, id string) config.DHCPScope {
 	if size < 256 {
 		start, end = first+size/2, first+size-2
 	}
-	own := dhcpUint32(network.Prefix.Addr())
-	start, end = dhcpRangeAround(start, end, own)
-	if start > end {
-		// A tiny network's half held only the server: use its other hosts.
-		start, end = dhcpRangeAround(first+1, first+size-2, own)
-	}
-	scope := config.DHCPScope{ID: id, Name: strings.ToUpper(id), Subnet: subnet.String(),
-		Ranges: []config.DHCPRange{{Start: dhcpAddr(start).String(), End: dhcpAddr(end).String()}}}
+	scope := config.DHCPScope{ID: id, Name: strings.ToUpper(id), Subnet: subnet.String()}
+	taken := []uint32{dhcpUint32(network.Prefix.Addr())}
 	if network.Gateway.IsValid() && subnet.Contains(network.Gateway) && network.Gateway != network.Prefix.Addr() {
 		scope.Router = network.Gateway.String()
+		taken = append(taken, dhcpUint32(network.Gateway))
+	}
+	low, high, ok := dhcpLongestRun(start, end, taken)
+	if !ok {
+		// A tiny network's half held only taken addresses: use its other hosts.
+		low, high, ok = dhcpLongestRun(first+1, first+size-2, taken)
+	}
+	if ok {
+		scope.Ranges = []config.DHCPRange{{Start: dhcpAddr(low).String(), End: dhcpAddr(high).String()}}
 	}
 	return scope
 }
 
-// dhcpRangeAround is start-end without own: the larger side of it when own
-// falls inside. The range comes back empty (start > end) when own was all
-// of it.
-func dhcpRangeAround(start, end, own uint32) (uint32, uint32) {
-	if own < start || own > end {
-		return start, end
+// dhcpLongestRun is the longest run of start-end once the taken addresses
+// are cut out of it, the upper one on a tie. ok is false when taken covers
+// all of it (F46, F47).
+func dhcpLongestRun(start, end uint32, taken []uint32) (low, high uint32, ok bool) {
+	taken = slices.Sorted(slices.Values(taken))
+	keep := func(from, to uint32) {
+		if from <= to && (!ok || to-from >= high-low) {
+			low, high, ok = from, to, true
+		}
 	}
-	if end-own >= own-start {
-		return own + 1, end
+	from := start
+	for _, address := range taken {
+		if address < from || address > end {
+			continue
+		}
+		if address > from {
+			keep(from, address-1)
+		}
+		from = address + 1
 	}
-	return start, own - 1
+	keep(from, end)
+	return low, high, ok
 }
 
 func dhcpUint32(address netip.Addr) uint32 {

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 
@@ -41,7 +42,7 @@ func TestDHCPConsoleSetupOffersHostNetworks(t *testing.T) {
 }
 
 // The suggested range leaves out the server's own address, taking the larger
-// side of it, and is never empty or inverted.
+// side of it, and is never inverted; with no host left there is none.
 func TestDHCPSuggestedScopeAvoidsTheServersAddress(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct{ prefix, address, gateway, start, end, router string }{
@@ -56,6 +57,10 @@ func TestDHCPSuggestedScopeAvoidsTheServersAddress(t *testing.T) {
 		{"10.0.0.0/30", "10.0.0.1", "", "10.0.0.2", "10.0.0.2", ""},
 		{"10.0.0.0/29", "10.0.0.6", "", "10.0.0.4", "10.0.0.5", ""},
 		{"10.0.0.0/29", "10.0.0.4", "", "10.0.0.5", "10.0.0.6", ""},
+		// The router's address is cut out too, keeping the longer side (F47).
+		{"10.0.0.0/24", "10.0.0.2", "10.0.0.138", "10.0.0.139", "10.0.0.199", "10.0.0.138"},
+		{"10.0.0.0/27", "10.0.0.2", "10.0.0.30", "10.0.0.16", "10.0.0.29", "10.0.0.30"},
+		{"10.0.0.0/30", "10.0.0.2", "10.0.0.1", "", "", "10.0.0.1"},
 	} {
 		bits := netip.MustParsePrefix(test.prefix).Bits()
 		network := DHCPNetwork{Interface: "eth0", Prefix: netip.PrefixFrom(netip.MustParseAddr(test.address), bits)}
@@ -63,8 +68,11 @@ func TestDHCPSuggestedScopeAvoidsTheServersAddress(t *testing.T) {
 			network.Gateway = netip.MustParseAddr(test.gateway)
 		}
 		scope := dhcpSuggestedScope(network, "lan")
-		if scope.Subnet != network.Prefix.Masked().String() || len(scope.Ranges) != 1 ||
-			scope.Ranges[0] != (config.DHCPRange{Start: test.start, End: test.end}) || scope.Router != test.router {
+		var want []config.DHCPRange
+		if test.start != "" {
+			want = []config.DHCPRange{{Start: test.start, End: test.end}}
+		}
+		if scope.Subnet != network.Prefix.Masked().String() || !slices.Equal(scope.Ranges, want) || scope.Router != test.router {
 			t.Errorf("dhcpSuggestedScope(%s, %s) = %+v", test.prefix, test.address, scope)
 		}
 	}

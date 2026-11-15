@@ -146,7 +146,7 @@ func dhcpPowerAction(view DHCPPageView) templ.Component {
 		ctx = templ.ClearChildren(ctx)
 		if view.CanConfigure && len(view.Scopes) > 0 {
 			if view.ProbeRefused && !view.Status.On {
-				templ_7745c5c3_Err = components.Button(components.ButtonProps{Label: "Turn On Anyway", Icon: "power", Variant: components.ButtonOutline, Compact: true, Attrs: dhcpForceOnPost(view)}).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = components.Button(components.ButtonProps{Label: "Turn On Anyway", Icon: "power", Pending: "Turning On…", Variant: components.ButtonOutline, Compact: true, Attrs: dhcpForceOnPost(view)}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -156,7 +156,7 @@ func dhcpPowerAction(view DHCPPageView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = components.Button(components.ButtonProps{Label: "Turn On", Icon: "power", Compact: true, Attrs: dhcpPowerPost(view, true)}).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = components.Button(components.ButtonProps{Label: "Turn On", Icon: "power", Pending: "Checking Network…", Compact: true, Attrs: dhcpPowerPost(view, true)}).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

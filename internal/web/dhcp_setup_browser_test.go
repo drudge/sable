@@ -8,12 +8,14 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 )
 
 // The setup flow, in a browser: pick the host's network, add the scope it
 // suggests, and turn DHCP on past another server the probe found.
 func TestBrowserDHCPSetup(t *testing.T) {
 	app, configuration, controller := newDHCPSetupServer(t)
+	controller.probeTime = 1500 * time.Millisecond
 	controller.others = []DHCPOtherServer{{Interface: "eth0", Server: netip.MustParseAddr("192.0.2.1"), Offered: netip.MustParseAddr("192.0.2.57")}}
 	server := httptest.NewServer(app.httpServer.Handler)
 	defer server.Close()

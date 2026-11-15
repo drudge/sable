@@ -40,11 +40,11 @@ templ dhcpSetupEmpty(view DHCPPageView) {
 templ dhcpPowerAction(view DHCPPageView) {
 	if view.CanConfigure && len(view.Scopes) > 0 {
 		if view.ProbeRefused && !view.Status.On {
-			@components.Button(components.ButtonProps{Label: "Turn On Anyway", Icon: "power", Variant: components.ButtonOutline, Compact: true, Attrs: dhcpForceOnPost(view)})
+			@components.Button(components.ButtonProps{Label: "Turn On Anyway", Icon: "power", Pending: "Turning On…", Variant: components.ButtonOutline, Compact: true, Attrs: dhcpForceOnPost(view)})
 		} else if view.Status.On {
 			@components.Button(components.ButtonProps{Label: "Turn Off", Icon: "power", Variant: components.ButtonOutline, Compact: true, Attrs: dhcpPowerPost(view, false)})
 		} else {
-			@components.Button(components.ButtonProps{Label: "Turn On", Icon: "power", Compact: true, Attrs: dhcpPowerPost(view, true)})
+			@components.Button(components.ButtonProps{Label: "Turn On", Icon: "power", Pending: "Checking Network…", Compact: true, Attrs: dhcpPowerPost(view, true)})
 		}
 	}
 }

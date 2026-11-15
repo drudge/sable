@@ -24,13 +24,20 @@ type testDHCPController struct {
 	networks []DHCPNetwork
 	others   []DHCPOtherServer
 	probes   int
+	// probeTime is how long FindOthers listens, like the real probe's wait.
+	probeTime time.Duration
 }
 
 func (controller *testDHCPController) Networks() ([]DHCPNetwork, error) {
 	return controller.networks, nil
 }
 
-func (controller *testDHCPController) FindOthers(context.Context, config.DHCP) ([]DHCPOtherServer, error) {
+func (controller *testDHCPController) FindOthers(ctx context.Context, _ config.DHCP) ([]DHCPOtherServer, error) {
+	select {
+	case <-time.After(controller.probeTime):
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 	controller.mutex.Lock()
 	defer controller.mutex.Unlock()
 	controller.probes++
