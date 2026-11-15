@@ -112,6 +112,8 @@ func (server *Server) takeOverDHCPRangesAPI(writer http.ResponseWriter, request 
 // split it has, so an edit doesn't undo a takeover. Ranges set by hand with a
 // gap between them keep it: the dialog moves only the outer edges, since an
 // even re-split would lease the addresses the operator kept out of the pool.
+// A range whose node has left the cluster is split again, or, with a gap,
+// pinned to a member.
 func dhcpFormRanges(ranges []config.DHCPRange, start, end string, nodes []cluster.Node) ([]config.DHCPRange, error) {
 	if len(nodes) == 0 {
 		return dhcpFirstRange(ranges, start, end), nil
@@ -119,16 +121,22 @@ func dhcpFormRanges(ranges []config.DHCPRange, start, end string, nodes []cluste
 	if start == "" && end == "" {
 		return nil, nil
 	}
-	if first, last := dhcpRangeEnvelope(ranges); first == start && last == end &&
-		!slices.ContainsFunc(ranges, func(pool config.DHCPRange) bool { return pool.Node == "" }) {
-		return ranges, nil
-	}
-	if gap, ok := dhcpRangeGap(ranges); ok {
-		return dhcpMoveRangeEdges(ranges, gap, start, end)
-	}
 	ids := make([]string, len(nodes))
 	for index, node := range nodes {
 		ids[index] = node.ID
+	}
+	// A range with no node, or one whose node has left the cluster, has
+	// nobody leasing from it, so the same range doesn't keep it as it is.
+	orphaned := slices.ContainsFunc(ranges, func(pool config.DHCPRange) bool { return !slices.Contains(ids, pool.Node) })
+	if first, last := dhcpRangeEnvelope(ranges); first == start && last == end && !orphaned {
+		return ranges, nil
+	}
+	if gap, ok := dhcpRangeGap(ranges); ok {
+		moved, err := dhcpMoveRangeEdges(ranges, gap, start, end)
+		if err != nil {
+			return nil, err
+		}
+		return dhcpAdoptOrphanRanges(moved, ids), nil
 	}
 	split, err := config.SplitDHCPRange(start, end, ids)
 	if err != nil {
@@ -185,6 +193,28 @@ func dhcpMoveRangeEdges(ranges []config.DHCPRange, gap, start, end string) ([]co
 	}
 	low.Start, high.End = start, end
 	return moved, nil
+}
+
+// dhcpAdoptOrphanRanges pins each range whose node isn't a member to a
+// member, those holding no range first, and leaves the ranges' bounds, and so
+// any gap between them, as they are.
+func dhcpAdoptOrphanRanges(ranges []config.DHCPRange, members []string) []config.DHCPRange {
+	idle := slices.DeleteFunc(slices.Clone(members), func(member string) bool {
+		return slices.ContainsFunc(ranges, func(pool config.DHCPRange) bool { return pool.Node == member })
+	})
+	next := 0
+	for index := range ranges {
+		if slices.Contains(members, ranges[index].Node) {
+			continue
+		}
+		if len(idle) > 0 {
+			ranges[index].Node, idle = idle[0], idle[1:]
+			continue
+		}
+		ranges[index].Node = members[next%len(members)]
+		next++
+	}
+	return ranges
 }
 
 // dhcpRangeStart is the start of pool, or the zero address when it doesn't
