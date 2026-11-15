@@ -109,6 +109,18 @@ func (store *leaseStore) Raise(_ context.Context, nodeID string, seq int64) (boo
 	return true, nil
 }
 
+func (store *leaseStore) Behind(_ context.Context, nodeID string, seq int64) (bool, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.counter[nodeID] >= seq {
+		return false, nil
+	}
+	if _, open := store.recovery[nodeID]; !open {
+		store.recovery[nodeID] = 0
+	}
+	return true, nil
+}
+
 func (store *leaseStore) Recovery(_ context.Context, nodeID string) (int64, bool, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
@@ -135,7 +147,7 @@ func (store *leaseStore) Changed() {
 
 func (store *leaseStore) mirror() LeaseMirror {
 	return LeaseMirror{Held: store.Held, Since: store.Since, Mirror: store.Mirror, Raise: store.Raise,
-		Recover: store.Recover, Recovery: store.Recovery, Recovered: store.Recovered, Changed: store.Changed}
+		Recover: store.Recover, Behind: store.Behind, Recovery: store.Recovery, Recovered: store.Recovered, Changed: store.Changed}
 }
 
 func (store *leaseStore) hostnames(nodeID string) []string {
