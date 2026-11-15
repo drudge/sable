@@ -30,7 +30,7 @@ Selected-zone grants use stable zone IDs. Do not assume that a similarly named r
 
 ## Grant DHCP
 
-`dhcp.read` shows the DHCP settings and every lease, which names each device on the network with its hardware address. `dhcp.write` changes scopes and reservations and removes leases. DNS Administrator and Operator have both; Auditor has `dhcp.read`.
+`dhcp.read` shows the DHCP settings and every lease, which names each device on the network with its hardware address. `dhcp.write` changes reservations and removes leases; changing the server's settings or its scopes takes `settings.write` as well. DNS Administrator has all three, Operator has both DHCP permissions and so manages reservations and leases, and Auditor has `dhcp.read`.
 
 ## Treat recovery capabilities separately
 

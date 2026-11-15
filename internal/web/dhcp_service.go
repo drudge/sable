@@ -114,7 +114,13 @@ func (service dhcpService) Leases(ctx context.Context, who actor, scope string) 
 }
 
 // Save replaces the [dhcp] settings.
+//
+// Saving needs settings.write as well as dhcp.write (D47): a scope's domain
+// creates a Primary zone, and its router and resolvers go to every client.
 func (service dhcpService) Save(ctx context.Context, who actor, settings config.DHCP) error {
+	if err := service.allowed(who, auth.PermissionSettingsWrite); err != nil {
+		return err
+	}
 	return service.update(ctx, who, "dhcp.settings.update", "DHCP settings saved", func(current *config.DHCP) error {
 		*current = settings
 		return nil

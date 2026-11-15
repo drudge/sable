@@ -244,7 +244,7 @@ func (service *dhcpService) load(ctx context.Context) ([]dhcp.Lease, error) {
 func dhcpLeaseToStore(lease dhcp.Lease) store.DHCPLease {
 	return store.DHCPLease{
 		NodeID: lease.NodeID, Address: lease.Address, ScopeID: lease.ScopeID, ClientKey: lease.ClientKey,
-		MAC: lease.MAC, ClientID: lease.ClientID, Hostname: lease.Hostname,
+		MAC: lease.MAC, ClientID: lease.ClientID, Hostname: lease.Hostname, Label: dhcpLabel(lease.Hostname, false),
 		State: store.DHCPLeaseState(lease.State), BoundAt: lease.BoundAt, ExpiresAt: lease.ExpiresAt,
 		Relay: lease.Relay, VendorClass: lease.VendorClass,
 	}
