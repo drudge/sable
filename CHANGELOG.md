@@ -8,7 +8,7 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
-## [1.9.0-beta.1] - Unreleased
+## [1.9.0-beta.1] - 2026-11-15
 
 Sable 1.9.0-beta.1 adds a DHCPv4 server. It hands out addresses, keeps
 reservations, and publishes each device's name in a zone Sable serves, so a
@@ -98,7 +98,8 @@ on it.
 - A node whose clock is more than 30 seconds off keeps serving its own
   ranges. Both **Cluster** pages show it as **Clock out of step** with the
   offset, both logs name the clock, and its ranges can't be taken over until
-  its clock is set.
+  its clock is set. After 5 minutes out of step, alerts send **Node clock out
+  of step**, and **Node clock back in step** once it syncs again.
 
 ### Insights
 
