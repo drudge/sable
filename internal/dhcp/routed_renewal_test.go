@@ -104,3 +104,30 @@ func TestBroadcastRebindWithAnotherScopesCiaddrIsNaked(t *testing.T) {
 		}
 	}
 }
+
+// A node whose own address is a /32 or a /31 (a cloud VM, a point-to-point
+// link) has no directed broadcast there (RFC 3021): a renewal routed to that
+// address is unicast, even though it is the prefix's last address.
+func TestRoutedRenewalToANodeOnAHostPrefix(t *testing.T) {
+	for _, prefix := range []string{"192.168.50.2/32", "192.168.50.3/31", "192.168.50.2/31"} {
+		link := Meta{Interface: "eth0", Addrs: []netip.Prefix{netip.MustParsePrefix(prefix)}}
+		engine := routedEngine(t, false)
+		discover := clientPacket(Discover, testMAC)
+		discover.GIAddr = netip.MustParseAddr("10.0.7.1")
+		offer := engine.Handle(testNow, discover, link)
+		if offer.Reply == nil {
+			t.Fatalf("%s: no relayed OFFER: %s", prefix, offer.Drop)
+		}
+		id, _ := offer.Reply.Option(optionServerID)
+		request := clientPacket(Request, testMAC, Option{Code: optionServerID, Data: id}, addrOption(optionRequestedIP, offer.Reply.YIAddr.String()))
+		request.GIAddr = discover.GIAddr
+		if ack := engine.Handle(testNow, request, link); ack.Reply == nil || ack.Reply.MessageType() != Ack {
+			t.Fatalf("%s: no relayed ACK: %+v", prefix, ack)
+		}
+		link.To = netip.AddrFrom4([4]byte(id))
+		result := engine.Handle(testNow.Add(30*time.Minute), renewal(offer.Reply.YIAddr), link)
+		if result.Reply == nil || result.Reply.MessageType() != Ack {
+			t.Fatalf("%s: routed renewal sent to %s = %+v (%s); want an ACK", prefix, link.To, result.Reply, result.Drop)
+		}
+	}
+}

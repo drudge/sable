@@ -127,14 +127,15 @@ type Meta struct {
 
 // unicast reports the address a request was sent to when it came to this
 // node by unicast: not the limited broadcast, nor a directed broadcast of the
-// arrival link (RFC 919 §7, RFC 922 §7).
+// arrival link (RFC 919 §7, RFC 922 §7). A /31 or /32 has no directed
+// broadcast (RFC 3021): its last address is a host, often this node.
 func (meta Meta) unicast() (netip.Addr, bool) {
 	to := meta.To.Unmap()
 	if !to.Is4() || to.IsUnspecified() || to.IsMulticast() || to == netip.AddrFrom4([4]byte{255, 255, 255, 255}) {
 		return netip.Addr{}, false
 	}
 	for _, local := range meta.Addrs {
-		if local.Addr().Unmap().Is4() && to == lastAddress(local) {
+		if local.Addr().Unmap().Is4() && local.Bits() < 31 && to == lastAddress(local) {
 			return netip.Addr{}, false
 		}
 	}
