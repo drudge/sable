@@ -225,18 +225,21 @@ type Service struct {
 	// replica's for the same reason. Either keeps the node shown as up.
 	clockRefused          map[string]clockRefusal
 	primaryClockRefusedAt time.Time
-	monitorOnce           sync.Once
-	monitorLifecycleMu    sync.Mutex
-	monitorCancel         context.CancelFunc
-	monitorDone           <-chan struct{}
-	monitorMu             sync.Mutex
-	monitorError          string
-	lastSuccessfulSync    time.Time
-	captureMu             sync.Mutex
-	captureFlight         *captureFlight
-	logger                *slog.Logger
-	clientsMu             sync.Mutex
-	memberClients         map[string]*http.Client
+	// clockChallenge is the primary clockChallengeFor's challenge from its
+	// last refusal for the clock, for this replica's next heartbeat (D109).
+	clockChallenge, clockChallengeFor string
+	monitorOnce                       sync.Once
+	monitorLifecycleMu                sync.Mutex
+	monitorCancel                     context.CancelFunc
+	monitorDone                       <-chan struct{}
+	monitorMu                         sync.Mutex
+	monitorError                      string
+	lastSuccessfulSync                time.Time
+	captureMu                         sync.Mutex
+	captureFlight                     *captureFlight
+	logger                            *slog.Logger
+	clientsMu                         sync.Mutex
+	memberClients                     map[string]*http.Client
 	// localAlerts gathers this node's own alerts while it is a replica, and
 	// alertReport keeps them for the heartbeat. alertPrimaryID names the
 	// primary that advertised it takes them.

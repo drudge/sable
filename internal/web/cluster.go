@@ -618,6 +618,10 @@ func (server *Server) clusterSyncAPI(writer http.ResponseWriter, request *http.R
 			apiError(writer, http.StatusGone, err.Error())
 			return
 		}
+		if challenge := cluster.ClockChallenge(err); challenge != "" {
+			writeJSON(writer, http.StatusUnauthorized, map[string]string{"error": err.Error(), "clock_challenge": challenge})
+			return
+		}
 		apiError(writer, http.StatusUnauthorized, err.Error())
 		return
 	}

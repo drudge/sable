@@ -23,7 +23,10 @@ Prepare every node with:
   interrupt synchronization. A node outside it stays up and keeps serving, but
   can't synchronize: both Cluster pages show it as **Clock out of step**, both
   logs name the clock, and its DHCP ranges can't be taken over until its clock
-  is set.
+  is set. The primary counts such a node as up only when it answers a one-time
+  challenge, so a replayed heartbeat can't make a stopped node look up. A
+  replica older than the primary can't answer it and shows as offline, so
+  update every node first.
 - the primary's Sable version or a newer one. The primary refuses to enroll an
   older node and asks you to update it first; the enrollment token stays
   valid.

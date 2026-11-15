@@ -60,6 +60,11 @@ type Heartbeat struct {
 	// the sender leads in that term. A member that does not know the field
 	// refuses the probe, which leaves its own role alone.
 	Primary *PrimaryClaim `json:"primary,omitempty"`
+	// ClockChallenge answers the challenge a primary sent with its last
+	// refusal of this member for its clock. It is signed with the rest, so
+	// the primary knows the member is up now and not replayed (D109). It is
+	// sent only to a primary that issued one.
+	ClockChallenge string `json:"clock_challenge,omitempty"`
 }
 
 type SyncConfiguration struct {
@@ -376,7 +381,7 @@ func (service *Service) syncFromPrimary(ctx context.Context) (syncErr error) {
 		return nil
 	}
 	if response.StatusCode != http.StatusOK {
-		return service.primaryRefusal(response)
+		return service.primaryRefusal(primary.ID, response)
 	}
 	if heartbeat.Alerts != nil {
 		// The primary kept the list once it accepted the heartbeat, whatever
@@ -414,6 +419,12 @@ func (service *Service) primaryHeartbeatLocked(updateStatus *NodeUpdateStatus, p
 		AppliedGeneration: service.manifest.Generation,
 		StateDigest:       service.manifest.StateDigest,
 		UpSince:           service.startedAt, SentAt: service.clock(),
+	}
+	if found {
+		if service.clockChallengeFor == primary.ID {
+			heartbeat.ClockChallenge = service.clockChallenge
+		}
+		service.clockChallenge, service.clockChallengeFor = "", ""
 	}
 	var alertRevision, lookupRevision uint64
 	if found && service.alertPrimaryID == primary.ID {
@@ -495,6 +506,7 @@ func (service *Service) adoptSyncConfiguration(ctx context.Context, primary memb
 	firstSuccessfulSync := service.lastSuccessfulSync.IsZero()
 	service.lastSuccessfulSync = service.clock()
 	service.primaryClockRefusedAt = time.Time{}
+	service.clockChallenge, service.clockChallengeFor = "", ""
 	service.acceptPrimaryProtocolsLocked(primary.ID, configuration)
 	service.telemetry[candidate.PrimaryID] = nodeTelemetry{
 		heartbeat: Heartbeat{
