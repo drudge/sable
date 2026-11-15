@@ -64,6 +64,9 @@ type dhcpRequest struct {
 	ifIndex  int
 	conflict *dhcpConflict
 	remove   *dhcpRemoval
+	// reload replaces the engine's view with the store's, after rows this
+	// node owns were written outside the serve goroutine.
+	reload bool
 }
 
 // dhcpRemoval is an operator removing a lease. It runs in the serve goroutine
@@ -199,6 +202,10 @@ func (server *dhcpServer) handleSafely(ctx context.Context, request dhcpRequest)
 func (server *dhcpServer) handle(ctx context.Context, request dhcpRequest) {
 	if request.remove != nil {
 		request.remove.done <- server.removeLease(ctx, request.remove.address)
+		return
+	}
+	if request.reload {
+		server.reload(ctx)
 		return
 	}
 	if server.stale && !server.reloadStale(ctx) {

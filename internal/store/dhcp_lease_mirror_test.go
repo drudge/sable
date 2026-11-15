@@ -47,6 +47,42 @@ func TestDHCPLeaseRaiseSeqPostgres(t *testing.T) {
 	testDHCPLeaseRaiseSeq(t, openPostgresTestStore(t, dsn))
 }
 
+func TestDHCPLeaseRecoverSQLite(t *testing.T) {
+	t.Parallel()
+	testDHCPLeaseRecover(t, openIdentityStore(t))
+}
+
+func TestDHCPLeaseRecoverPostgres(t *testing.T) {
+	dsn := os.Getenv("SABLE_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("SABLE_TEST_POSTGRES_DSN is not set")
+	}
+	testDHCPLeaseRecover(t, openPostgresTestStore(t, dsn))
+}
+
+// A wiped node's rows come back from the mirror with their seqs, but a row it
+// wrote since the wipe keeps its address, even under a lower seq.
+func testDHCPLeaseRecover(t *testing.T, storage *Store) {
+	t.Helper()
+	ctx := context.Background()
+	fresh := mustSaveDHCPLease(t, storage, mirrorTestLease("node-r", "10.0.8.1", "fresh", 0))
+	count, err := storage.RecoverDHCPLeases(ctx, []DHCPLease{
+		mirrorTestLease("node-r", "10.0.8.1", "old", 40), mirrorTestLease("node-r", "10.0.8.2", "kept", 41)})
+	if err != nil || count != 1 {
+		t.Fatalf("recover = %d, %v; want 1", count, err)
+	}
+	leases, err := storage.DHCPLeasesSince(ctx, "node-r", 0, 10)
+	if err != nil || len(leases) != 2 {
+		t.Fatalf("leases = %v, %v; want 2", leases, err)
+	}
+	if leases[0].ClientKey != "fresh" || leases[0].Seq != fresh.Seq {
+		t.Fatalf("the lease written since the wipe became %+v", leases[0])
+	}
+	if leases[1].ClientKey != "kept" || leases[1].Seq != 41 {
+		t.Fatalf("the recovered lease is %+v; want client kept at seq 41", leases[1])
+	}
+}
+
 func mirrorTestLease(node, address, client string, seq int64) DHCPLease {
 	lease := testDHCPLease(node, address, client, DHCPLeaseActive, time.Date(2026, 11, 14, 13, 0, 0, 0, time.UTC))
 	lease.Seq = seq
