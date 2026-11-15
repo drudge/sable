@@ -20,7 +20,7 @@ func TestDHCPConsoleListsScopes(t *testing.T) {
 		t.Fatalf("GET /dhcp?tab=scopes = %d: %s", response.Code, body)
 	}
 	for _, want := range []string{`data-isotope-panel="scopes"`, "192.0.2.0/24", "192.0.2.100 – 192.0.2.199", "home.test",
-		`data-dialog-open="dhcp-scope-new"`, `id="dhcp-scope-lan"`} {
+		`data-dialog-open="dhcp-add-scope"`, `id="dhcp-scope-lan"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("Scopes tab lacks %q", want)
 		}

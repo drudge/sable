@@ -32,7 +32,7 @@ func TestDHCPConsoleSetupOffersHostNetworks(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("GET /dhcp = %d: %s", response.Code, body)
 	}
-	for _, want := range []string{"eth0", "192.0.2.10", `data-dialog-open="dhcp-scope-new-1"`, `id="dhcp-scope-new-1"`,
+	for _, want := range []string{"eth0", "192.0.2.10", `data-dialog-open="dhcp-add-scope-1"`, `id="dhcp-add-scope-1"`,
 		`value="192.0.2.0/24"`, `value="192.0.2.100"`, `value="192.0.2.199"`, `value="192.0.2.1"`, `value="lan"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("setup lacks %q", want)
