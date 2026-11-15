@@ -37,7 +37,7 @@ func dhcpLeases(now time.Time) []store.DHCPLease {
 	leases := []demoLease{
 		{"10.20.50.10", "00:1b:a9:50:10:01", "lab-printer", 3 * time.Hour},
 		{"10.20.50.11", "00:0d:56:50:10:02", "spectrometer", 20 * time.Minute},
-		{"10.20.50.104", "3c:22:fb:50:20:04", "elaine-macbook", 2 * time.Hour},
+		{"10.20.50.104", "3c:22:fb:11:04:a3", "elaine-macbook", 2 * time.Hour}, // roams in from Corporate, so its Insights drawer has a lease
 		{"10.20.50.117", "a4:83:e7:50:20:17", "kramer-iphone", 5 * time.Hour},
 		{"10.20.50.121", "f0:18:98:50:20:21", "george-thinkpad", 40 * time.Minute},
 		{"10.20.50.133", "dc:a6:32:50:20:33", "", 7 * time.Hour},

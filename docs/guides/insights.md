@@ -41,6 +41,8 @@ The machine Sable runs on is marked **This server**, and the rest of its cluster
 
 Open a device to see its maker, apps, busiest domains, and first-time domains.
 
+When Sable is the [DHCP server](../configuration.md#dhcp-server), a device with a lease shows it under **DHCP Lease**: the address, its scope, and when the lease ends. **Reserve Address** keeps that address for the device's hardware address from then on, the same as **Reserve** on the DHCP page, and the lease's name comes with it. It needs `dhcp.write`; without `dhcp.read` the section isn't shown.
+
 Its **Blocking** section names the rule set the device uses and what put it there, with the pencil to change it. Below that, each of the rule set's schedules shows whether it's on or paused and when it next starts or ends. **Block Everything** blocks every domain but the allowed ones for the device for a while; see [Blocking everything for a device](../configuration.md#blocking-everything-for-a-device).
 
 ### Find a device
