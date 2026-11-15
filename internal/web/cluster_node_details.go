@@ -32,6 +32,7 @@ func (server *Server) clusterNodeDrawerView(request *http.Request, key string) p
 	state := server.cluster.Snapshot()
 	page := pages.ClusterPageView{Console: pages.DashboardView{TimeDisplay: requestTimeDisplay(request)}}
 	populateClusterStateView(&page, state)
+	server.annotateClusterDHCP(&page)
 	index := slices.IndexFunc(page.Nodes, func(node pages.ClusterNodeView) bool { return node.ID == key })
 	if index < 0 {
 		index = slices.IndexFunc(page.Nodes, func(node pages.ClusterNodeView) bool { return node.Name == key })

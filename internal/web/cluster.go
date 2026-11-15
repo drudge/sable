@@ -454,7 +454,16 @@ func (server *Server) promoteClusterNode(writer http.ResponseWriter, request *ht
 	}
 	server.logger.Warn("cluster replica promoted for recovery", "node_id", nodeID, "client", requestClientIP(request))
 	server.recordControlPlaneAudit(request, "cluster.node.promote", fmt.Sprintf("promoted local replica %s for recovery", nodeID))
-	server.renderClusterMutation(writer, request, http.StatusOK, "This node is now the cluster primary", "")
+	message, problem := "This node is now the cluster primary", ""
+	if from := strings.TrimSpace(request.FormValue("dhcp_takeover")); from != "" {
+		took, err := server.dhcpTakeover(request.Context(), requestActor(request, ""), from)
+		if err != nil {
+			problem = "Its DHCP ranges weren't taken over: " + err.Error()
+		} else {
+			message += " and " + took
+		}
+	}
+	server.renderClusterMutation(writer, request, http.StatusOK, message, problem)
 }
 
 func (server *Server) removeClusterNode(writer http.ResponseWriter, request *http.Request) {
@@ -718,6 +727,7 @@ func (server *Server) clusterView(request *http.Request, message, errorMessage s
 	}
 	view.RestartRequired = clusterRestartRequired(active, configuration, baseDirectory, view.NodeName, view.AdvertiseURL)
 	populateClusterStateView(&view, state)
+	server.annotateClusterDHCP(&view)
 	return view
 }
 

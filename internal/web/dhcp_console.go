@@ -114,8 +114,13 @@ func (server *Server) dhcpPageView(request *http.Request) pages.DHCPPageView {
 		view.Leases = append(view.Leases, pages.DHCPLeaseRow{Address: lease.Address, Scope: lease.Scope, MAC: lease.MAC,
 			Name: dhcpLeaseName(lease), Expires: lease.ExpiresAt, Reserved: lease.Reserved})
 	}
+	nodes, active := service.clusterNodes(), dhcpActiveLeases(leases)
+	view.ClusterNodes = len(nodes)
 	for _, scope := range state.Settings.Scopes {
 		scopeView := dhcpScopeView(scope)
+		if len(nodes) > 0 {
+			dhcpClusterScopeView(&scopeView, scope, nodes, active[scope.ID])
+		}
 		for _, reservation := range scope.Reservations {
 			row := pages.DHCPReservationRow{Scope: scope.ID, MAC: reservation.MAC, Address: reservation.Address, Name: reservation.Name, Comment: reservation.Comment}
 			if lease, ok := held[scope.ID+"|"+reservation.MAC]; ok {
@@ -127,6 +132,9 @@ func (server *Server) dhcpPageView(request *http.Request) pages.DHCPPageView {
 	}
 	if len(view.Scopes) == 0 && view.CanConfigure {
 		view.Networks = server.dhcpNetworkViews(who)
+		for index := range view.Networks {
+			view.Networks[index].Scope.SplitNodes = len(nodes)
+		}
 	}
 	return view
 }

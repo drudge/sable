@@ -20,8 +20,8 @@ type DHCPStatus struct {
 	Enabled bool `json:"enabled"`
 	// Serving is true while the server holds port 67 and answers.
 	Serving bool `json:"serving"`
-	// Clustered is true when DHCP is enabled on a cluster node, which holds
-	// the settings and doesn't serve them yet.
+	// Clustered is true when DHCP is enabled on a cluster node, which serves
+	// only the ranges pinned to it and the reservations.
 	Clustered   bool   `json:"clustered"`
 	Received    uint64 `json:"received"`
 	Replied     uint64 `json:"replied"`

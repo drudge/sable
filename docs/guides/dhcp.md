@@ -9,7 +9,7 @@ Run one DHCP server per network. Two servers on one link both answer every reque
 - **Give Sable a static address** on every network it serves. A DHCP server can't lease its own address.
 - **Port 67 must be free.** Sable binds it without sharing, so another DHCP server on the same host, including the dnsmasq that libvirt or Incus runs for a bridge, stops Sable's from starting. Sable logs the error and keeps retrying.
 - **Sable needs to see the network's broadcasts.** On Linux with the systemd service this works as is: the service already has `CAP_NET_BIND_SERVICE`, which covers port 67. In Docker, use host networking with [compose.dhcp.yaml](../../compose.dhcp.yaml) ([Run with Docker](install-docker.md) has the steps); Docker's bridge doesn't pass broadcasts. In a Proxmox LXC, give the container one interface on each network it serves, or use a relay (see [Many networks](#many-networks-and-vlans)).
-- **Clusters aren't supported yet.** Sable refuses to turn DHCP on for a cluster node. Use a standalone server for now.
+- **On a cluster, upgrade every node first** and turn DHCP off before you create or join one. Each node serves its own slice of every scope; see [On a cluster](#on-a-cluster).
 
 Before Sable offers an address, it pings it to check nothing already uses it (RFC 2131 §2.2). That needs unprivileged ping. If the host doesn't allow it, Sable logs a warning naming `net.ipv4.ping_group_range` and checks only the neighbor table, which misses a device that hasn't sent anything lately.
 
@@ -80,6 +80,15 @@ Sable owns both the DHCP server and the zone, so it doesn't use DHCID records (R
 ## Many networks and VLANs
 
 Sable serves every network it has an address on. For networks it isn't on, point the router's DHCP relay at Sable's address and add a scope for each network. Sable answers a relayed request when the relay's address (`giaddr`) is inside one of its scopes, replies to the relay, and echoes the relay agent information (option 82, RFC 3046) back unchanged.
+
+## On a cluster
+
+Every node of a cluster serves DHCP. Each scope's range is split into one slice per node, and a node leases only from its own slice, so two nodes that lose touch with each other never hand out the same address. Every node answers every reservation, since a reserved address can't conflict. Leases are shared on the cluster heartbeat, so each node holds all of them and the primary publishes every device's name.
+
+- **The split.** On a cluster the scope dialog edits the scope's whole range and splits it evenly across the nodes when you change it, listing each node's slice. Saving the same range keeps the split it has. Make the range big enough that each slice could carry the whole network alone: the dialog warns beside a slice smaller than the scope's active leases. To split it some other way, set `node` on each range in `sable.toml` ([DHCP configuration](../configuration.md#dhcp-server)).
+- **A node goes down.** Its devices keep their addresses and renew with it until their leases run out (RFC 2131 §4.4.5): with the default 24 hour lease, that's at least 12 hours before any of them notices. New devices get addresses from the other slices at once. If the node will be down longer than that, take over its ranges.
+- **Take over a node's ranges.** On the primary, open **Cluster**, then the offline node, and select **Take Over DHCP Ranges**. The primary serves those ranges from then on, and their devices renew on the addresses they already hold, since it has their leases. Do this only when the node is offline. If it comes back, it sees it no longer owns those ranges and stops serving them. The API is `POST /api/v1/dhcp/takeover` with a body of `{"node": "<node ID>"}`.
+- **The primary goes down.** Promote a replica on **Cluster** with **Promote This Replica**. When the old primary had DHCP ranges, the promotion takes them over in the same step.
 
 ## When it doesn't work
 
