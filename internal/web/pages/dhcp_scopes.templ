@@ -138,6 +138,9 @@ templ dhcpScopeDialog(scope DHCPScopeView, add bool) {
 					@dhcpScopeField(scope, add, "range_start", "Range Start", "", "192.168.1.100", "mono-input", templ.Attributes{"value": scope.RangeStart, "inputmode": "decimal"})
 					@dhcpScopeField(scope, add, "range_end", "Range End", "", "192.168.1.199", "mono-input", templ.Attributes{"value": scope.RangeEnd, "inputmode": "decimal"})
 				</div>
+				if scope.SplitNodes > 0 {
+					@dhcpRangeSplit(scope)
+				}
 				if scope.MoreRanges > 0 {
 					<p class="field-help">{ fmt.Sprintf("This scope has %d more %s in sable.toml; saving keeps %s.", scope.MoreRanges, ifThen(scope.MoreRanges == 1, "range", "ranges"), ifThen(scope.MoreRanges == 1, "it", "them")) }</p>
 				}
@@ -216,4 +219,26 @@ func dhcpScopeFormID(scope DHCPScopeView, add bool) string {
 // DHCPScopeNoticeID is where a scope form shows why it didn't save.
 func DHCPScopeNoticeID(id, suggest string, add bool) string {
 	return dhcpScopeFormID(DHCPScopeView{ID: id, Suggest: suggest}, add) + "__notice"
+}
+
+// dhcpRangeSplit is how a cluster's scope range is split across its nodes:
+// evenly when the range changes, each node leasing only from its slice.
+templ dhcpRangeSplit(scope DHCPScopeView) {
+	<p class="field-help">{ fmt.Sprintf("Split evenly across the %d cluster nodes when the range changes; each node leases only from its own slice.", scope.SplitNodes) }</p>
+	if len(scope.Split) > 0 {
+		<div class="dhcp-network-list" role="list" aria-label="Range split">
+			for _, split := range scope.Split {
+				<article class="dhcp-network-row dhcp-range-split-row" role="listitem">
+					<span class="dhcp-network-icon">@Icon("server")</span>
+					<div>
+						<strong>{ split.Range }</strong>
+						<small>{ split.Node }</small>
+						if split.Warning != "" {
+							<small class="tsig-key-warning">@Icon("alert-triangle")<span>{ split.Warning }</span></small>
+						}
+					</div>
+				</article>
+			}
+		</div>
+	}
 }

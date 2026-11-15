@@ -12,8 +12,8 @@ import (
 
 // dhcpFixture is the lab network Vandelay hands addresses out on with Sable
 // instead of UniFi: a few reserved instruments and the rest from the pool.
-// Cluster nodes can't serve DHCP yet, so it stays off with the leases it
-// handed out before.
+// It stays off, so the demo never answers on a real network, with the leases
+// it handed out before.
 func dhcpFixture() config.DHCP {
 	return config.DHCP{Scopes: []config.DHCPScope{{
 		ID: "lab", Name: "Lab", Subnet: "10.20.50.0/24", Router: "10.20.50.1", Domain: "corp.vandelay.com",

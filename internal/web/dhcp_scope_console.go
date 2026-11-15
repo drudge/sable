@@ -78,8 +78,8 @@ func dhcpScopeFromForm(service dhcpService, who actor, id string, add bool, requ
 			return config.DHCPScope{}, refuse(http.StatusUnprocessableEntity, "Lease time must be a duration like 24h")
 		}
 	}
-	scope.Ranges = dhcpFirstRange(scope.Ranges, field("range_start"), field("range_end"))
-	return scope, nil
+	scope.Ranges, err = dhcpFormRanges(scope.Ranges, field("range_start"), field("range_end"), service.clusterNodes())
+	return scope, err
 }
 
 // dhcpFirstRange sets the scope's first range, the one the dialog edits, and
