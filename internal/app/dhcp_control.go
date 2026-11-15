@@ -36,6 +36,15 @@ func (service *dhcpService) Leases(ctx context.Context) ([]store.DHCPLease, erro
 	return service.leases.DHCPLeases(ctx)
 }
 
+// ReloadLeases has a running server read its leases from the store again, in
+// its serve goroutine, after this node's own rows came back from a mirror. A
+// stopped server reads them when it starts.
+func (service *dhcpService) ReloadLeases(ctx context.Context) {
+	if server := service.current.Load(); server != nil {
+		server.submit(ctx, dhcpRequest{reload: true})
+	}
+}
+
 // RemoveLease ends this node's lease on address and reports whether there
 // was one. A running server removes it in its serve goroutine; a stopped one
 // has no engine to disagree with, so the store row is written directly.

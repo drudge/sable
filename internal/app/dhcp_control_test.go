@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/drudge/sable/internal/cluster"
 	"github.com/drudge/sable/internal/dhcp"
 	"github.com/drudge/sable/internal/store"
 )
@@ -64,6 +65,31 @@ func TestDHCPServiceRemovesLeaseWhileServing(t *testing.T) {
 	}
 	if removed, err := service.RemoveLease(ctx, netip.MustParseAddr("10.0.7.250")); removed || err != nil {
 		t.Fatalf("removing an address with no lease = %v, %v; want false, nil", removed, err)
+	}
+}
+
+// A wiped node's leases recovered from the primary's mirror reach the
+// running engine, not just the store: the server can remove one, so it
+// knows the address is held.
+func TestDHCPServiceServesLeasesRecoveredFromTheMirror(t *testing.T) {
+	service, _, database := newTestDHCPService(t, "")
+	ctx := context.Background()
+	if err := service.Apply(ctx, ctx, dhcpTestSettings(t)); err != nil {
+		t.Fatal(err)
+	}
+	address := netip.MustParseAddr("10.0.7.120")
+	mirror := dhcpLeaseMirror(database, nil, service.ReloadLeases)
+	written, err := mirror.Recover(ctx, []cluster.SharedLease{{
+		NodeID: "node-a", Address: address.String(), ScopeID: "lan", ClientKey: "01:02:aa:bb:cc:dd:02",
+		MAC: "02:aa:bb:cc:dd:02", State: string(store.DHCPLeaseActive), BoundAt: time.Now().UTC(),
+		ExpiresAt: time.Now().Add(time.Hour).UTC(), Seq: 40,
+	}})
+	if err != nil || written != 1 {
+		t.Fatalf("recover = %d, %v; want 1", written, err)
+	}
+	removed, err := service.RemoveLease(ctx, address)
+	if err != nil || !removed {
+		t.Fatalf("RemoveLease(%s) = %v, %v; want the recovered lease removed", address, removed, err)
 	}
 }
 
