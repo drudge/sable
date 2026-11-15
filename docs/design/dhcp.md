@@ -176,7 +176,9 @@ a host-network container. The namespace spike covers the protocol. This check co
   beat (`LeaseReport.Recovered` says how far it has got), keeping their sequence numbers. A row
   replaces a stored one for its address only when it was bound later: what the node wrote since a
   wipe stays, and a row put back from an older backup gives way to the lease or renewal the mirror
-  saw after it. It reloads them into the running
+  saw after it. A release keeps the bound time and brings the end forward (RFC 2131 §4.3.4), so at
+  the same bound time the row that ends sooner wins and a lease released since the backup stays
+  released. It reloads them into the running
   server, so a client keeps the address it was told it holds (RFC 2131 §4.3.1). Then it raises its
   counter past that number and resends every row, so a number is never used twice. A count can't
   show a wipe once the node has leased as many since as it held before, so a counter that takes
