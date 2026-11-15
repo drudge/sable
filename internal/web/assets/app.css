@@ -3918,6 +3918,8 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
    the interface and address, and Set Up. */
 .dhcp-network-row { grid-template-columns: 1.5rem minmax(0, 1fr) auto; }
 .dhcp-setup-networks { display: grid; gap: var(--space-3); padding: 0 var(--space-6) var(--space-6); }
+.dhcp-range-split-row { grid-template-columns: 1.5rem minmax(0, 1fr); padding-block: var(--space-2); }
+.dhcp-scope-dialog .dhcp-network-list { margin-top: calc(var(--space-2) * -1); }
 .dhcp-setup-networks > h4 { font-size: .8rem; font-weight: 500; color: var(--muted-foreground); }
 
 /* Motion preferences cover every interaction, including swapped fragments and
