@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"reflect"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -47,6 +48,9 @@ type dhcpService struct {
 
 	// current is the server that last bound port 67, for removals.
 	current atomic.Pointer[dhcpServer]
+	// serving is the settings the running server rebuilds from when it has
+	// to bind again, kept up to date by changes applied in place.
+	serving atomic.Pointer[config.DHCP]
 
 	mutex   sync.Mutex
 	active  config.DHCP
@@ -96,6 +100,9 @@ func (service *dhcpService) Apply(ctx context.Context, runtime context.Context, 
 	if err := service.Check(settings); err != nil {
 		return err
 	}
+	if applied, err := service.applyInPlace(settings); applied || err != nil {
+		return err
+	}
 	var server *dhcpServer
 	if settings.Enabled && service.role() != "" {
 		service.logger.Info("DHCP settings kept from the primary; a cluster doesn't serve DHCP yet")
@@ -113,6 +120,41 @@ func (service *dhcpService) Apply(ctx context.Context, runtime context.Context, 
 	service.active = settings
 	service.notifyChanged()
 	return nil
+}
+
+// applyInPlace moves a running server to settings that differ from the
+// active ones only in reservations, without closing port 67: a restart
+// drops every client mid-exchange and every pending offer (D48). It
+// reports false when the change needs a new server.
+func (service *dhcpService) applyInPlace(settings config.DHCP) (bool, error) {
+	server := service.current.Load()
+	if service.running == nil || server == nil || service.role() != "" || !dhcpReservationsOnly(service.active, settings) {
+		return false, nil
+	}
+	engine, err := dhcp.New(settings, service.node())
+	if err != nil {
+		return false, fmt.Errorf("start DHCP engine: %w", err)
+	}
+	server.engine.Rescope(engine)
+	service.serving.Store(&settings)
+	service.active = settings
+	service.logger.Info("DHCP reservations applied")
+	service.notifyChanged()
+	return true, nil
+}
+
+// dhcpReservationsOnly reports whether two enabled configurations differ
+// only in their scopes' reservations.
+func dhcpReservationsOnly(active, next config.DHCP) bool {
+	if !active.Enabled || !next.Enabled || len(active.Scopes) != len(next.Scopes) {
+		return false
+	}
+	active.Scopes, next.Scopes = slices.Clone(active.Scopes), slices.Clone(next.Scopes)
+	for index := range active.Scopes {
+		active.Scopes[index].Reservations = nil
+		next.Scopes[index].Reservations = nil
+	}
+	return reflect.DeepEqual(active, next)
 }
 
 func (service *dhcpService) notifyChanged() {
@@ -141,18 +183,19 @@ func (service *dhcpService) prepare(settings config.DHCP) (*dhcpServer, error) {
 func (service *dhcpService) startLocked(runtime context.Context, settings config.DHCP, server *dhcpServer) {
 	ctx, cancel := context.WithCancel(runtime)
 	running := &dhcpRunning{cancel: cancel, done: make(chan struct{})}
+	service.serving.Store(&settings)
 	err := service.bind(ctx, server)
 	go func() {
 		defer close(running.done)
-		service.supervise(ctx, settings, server, err)
+		service.supervise(ctx, server, err)
 	}()
 	service.running = running
 }
 
 // supervise serves until ctx ends. A bind that failed (err) or a socket that
 // stops is tried again, waiting service.retry at first and twice as long
-// each time after, up to dhcpRetryMax.
-func (service *dhcpService) supervise(ctx context.Context, settings config.DHCP, server *dhcpServer, err error) {
+// each time after, up to dhcpRetryMax, from the settings it serves now.
+func (service *dhcpService) supervise(ctx context.Context, server *dhcpServer, err error) {
 	wait := service.retry
 	for {
 		if err == nil {
@@ -172,7 +215,7 @@ func (service *dhcpService) supervise(ctx context.Context, settings config.DHCP,
 		}
 		wait = min(2*wait, dhcpRetryMax)
 		// The engine was built from these settings before, so it builds again.
-		if server, err = service.prepare(settings); err != nil {
+		if server, err = service.prepare(*service.serving.Load()); err != nil {
 			service.logger.Error("DHCP server not restarted", "error", err)
 			return
 		}
