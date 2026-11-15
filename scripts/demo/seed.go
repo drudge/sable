@@ -68,6 +68,9 @@ func seedTraffic(ctx context.Context, dsn string, policy *demoBlockPolicy) error
 	if err := seedUniFiTraffic(ctx, backing); err != nil {
 		return err
 	}
+	if err := seedDHCPLeases(ctx, backing, now); err != nil {
+		return err
+	}
 	buckets, totals := seedChartHistory(random, now)
 	if err := backing.RecordQueryStats(ctx, buckets, totals); err != nil {
 		return fmt.Errorf("write demo chart history: %w", err)
