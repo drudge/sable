@@ -46,6 +46,8 @@ type DashboardView struct {
 	CanCheckUpdates      bool
 	CheckUpdatesOnLogin bool
 	CanCluster           bool
+	// CanDHCP opens the DHCP page.
+	CanDHCP bool
 	CanWriteCluster      bool
 	ControlPlaneReadOnly bool
 	PrimaryURL           string
@@ -435,6 +437,9 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 								if view.CanZones {
 									@NavItem("Zones", "/zones", "globe", activePage == "zones", false)
 								}
+								if view.CanDHCP {
+									@NavItem("DHCP", "/dhcp", "router", activePage == "dhcp", false)
+								}
 								if view.CanSettings {
 									@NavItem("Cache", "/cache", "database", activePage == "cache", false)
 								}
@@ -598,6 +603,9 @@ templ CommandPalette(view DashboardView) {
 					@CommandOption("command-page-block-lists", "Block Lists", "Curated and custom DNS block lists", "list", "Page", "block blocklist lists sources filters", "/blocked?tab=lists", "", "", "", "")
 					@CommandOption("command-page-allowed", "Allowed Domains", "Domains exempt from blocking", "shield-check", "Page", "allow permit whitelist exceptions", "/blocked?tab=allowed", "", "", "", "")
 					@CommandOption("command-page-blocked", "Blocked Domains", "Custom blocked-domain policy", "shield-x", "Page", "block deny blacklist policy", "/blocked?tab=domains", "", "", "", "")
+				}
+				if view.CanDHCP {
+					@CommandOption("command-page-dhcp", "DHCP", "Leases and reservations", "router", "Page", "dhcp leases reservations addresses ip mac", "/dhcp", "", "", "", "")
 				}
 				@CommandOption("command-page-dns-client", "DNS Client", "Resolve and diagnose DNS queries", "terminal", "Page", "query dig nslookup lookup resolver", "/dns-client", "", "", "", "")
 				if view.CanLogs {

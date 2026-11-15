@@ -19,6 +19,7 @@ func applyPrimaryFixture(configuration *config.Config, controllerURL string) {
 	configuration.Blocking = blockingFixture()
 	configuration.Clients = slices.Clone(ruleSetClients)
 	configuration.UniFi = unifiFixture(controllerURL)
+	configuration.DHCP = dhcpFixture()
 }
 
 func blockingFixture() config.Blocking {

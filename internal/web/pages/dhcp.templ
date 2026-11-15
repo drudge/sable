@@ -1,0 +1,342 @@
+package pages
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/drudge/sable/internal/web/pages/components"
+)
+
+// DHCPPageView is the DHCP page: how the server is doing, the leases that
+// hold an address now, and each scope's reservations.
+type DHCPPageView struct {
+	Console   DashboardView
+	ActiveTab string
+	Status    DHCPStatusView
+	Leases    []DHCPLeaseRow
+	Scopes    []DHCPScopeView
+	// CanWrite says the viewer may reserve and remove, on a node that
+	// accepts changes.
+	CanWrite bool
+	Message  string
+	Error    string
+}
+
+// DHCPStatusView is the server's state on this node.
+type DHCPStatusView struct {
+	Enabled, Serving bool
+	// Clustered says this node is in a cluster, which doesn't serve DHCP.
+	Clustered bool
+	Received, Replied           uint64
+}
+
+// DHCPLeaseRow is one lease that holds its address.
+type DHCPLeaseRow struct {
+	Address, Scope, MAC, Name string
+	Expires                   time.Time
+	Reserved                  bool
+}
+
+// DHCPScopeView is one scope and its reservations.
+type DHCPScopeView struct {
+	ID, Name, Subnet string
+	Reservations     []DHCPReservationRow
+}
+
+// DHCPReservationRow is one reservation, with the expiry of the lease its
+// client holds now, zero when it holds none.
+type DHCPReservationRow struct {
+	Scope, MAC, Address, Name, Comment string
+	LeaseExpires                       time.Time
+}
+
+var dhcpTabs = []tabOption{
+	{Value: "leases", Label: "Leases"},
+	{Value: "reservations", Label: "Reservations"},
+}
+
+// DHCPTabs lists the page's tab values, for the handler to check ?tab=.
+func DHCPTabs() []string {
+	values := make([]string, 0, len(dhcpTabs))
+	for _, tab := range dhcpTabs {
+		values = append(values, tab.Value)
+	}
+	return values
+}
+
+templ DHCPPage(view DHCPPageView) {
+	@AppDocument(view.Console, documentTitle(tabLabel(dhcpTabs, view.ActiveTab), "DHCP"), "dhcp", DHCPContent(view))
+}
+
+templ DHCPContent(view DHCPPageView) {
+	<div class="dhcp-page page-stack isotope-control-page" id="dhcp-content" data-isotope-tabs data-active-tab={ view.ActiveTab } data-tab-param="tab" data-title-base="DHCP">
+		@components.PageHeader(components.PageHeaderProps{Title: "DHCP", Description: "Hand out addresses on your network and name each device in DNS"})
+		@Toast(view.Message, "success")
+		<div id="dhcp-notice">
+			if view.Error != "" {
+				@ToastSticky(view.Error, "error")
+			}
+		</div>
+		if len(view.Scopes) == 0 {
+			@components.Card(components.CardProps{Class: "isotope-data-card"}) {
+				@components.EmptyState(components.EmptyStateProps{Icon: "router", IconBox: true, Title: "DHCP isn't set up", Description: "Add a scope under [dhcp] in sable.toml to hand out addresses from this server."})
+			}
+		} else {
+			@dhcpOverview(view)
+			@components.Tabs(components.TabsProps{Label: "DHCP sections", Class: "admin-tab-list", Active: view.ActiveTab, Tabs: dhcpTabList(view)})
+			<div class="isotope-tab-panel" role="tabpanel" data-isotope-panel="leases" hidden?={ view.ActiveTab != "leases" }>@dhcpLeasesPanel(view)</div>
+			<div class="isotope-tab-panel" role="tabpanel" data-isotope-panel="reservations" hidden?={ view.ActiveTab != "reservations" }>@dhcpReservationsPanel(view)</div>
+			if view.CanWrite {
+				@dhcpReservationDialog(view, DHCPReservationRow{Scope: view.Scopes[0].ID}, true)
+				for _, scope := range view.Scopes {
+					for _, reservation := range scope.Reservations {
+						@dhcpReservationDialog(view, reservation, false)
+					}
+				}
+			}
+		}
+	</div>
+}
+
+// dhcpOverview says whether this node serves and how much it holds.
+templ dhcpOverview(view DHCPPageView) {
+	<div class="operational-metric-grid dhcp-overview">
+		@OperationalMetricCard("router", "Server", dhcpState(view.Status), dhcpStateDetail(view.Status), ifThen(view.Status.Serving, "green", "amber"))
+		@OperationalMetricCard("laptop", "Active Leases", formatNumber(uint64(len(view.Leases))), "Devices holding an address now", "blue")
+		@OperationalMetricCard("key-round", "Reservations", formatNumber(uint64(dhcpReservationCount(view.Scopes))), "Addresses kept for one device", "purple")
+	</div>
+}
+
+func dhcpState(status DHCPStatusView) string {
+	switch {
+	case status.Serving:
+		return "Serving"
+	case status.Clustered && status.Enabled:
+		return "Held"
+	case status.Enabled:
+		return "Starting"
+	default:
+		return "Off"
+	}
+}
+
+func dhcpStateDetail(status DHCPStatusView) string {
+	switch {
+	case status.Serving:
+		return fmt.Sprintf("Answered %s of %s requests", formatNumber(status.Replied), formatNumber(status.Received))
+	case status.Clustered && status.Enabled:
+		return "This cluster node keeps the settings without serving them"
+	case status.Clustered:
+		return "Cluster nodes can't serve DHCP yet"
+	case status.Enabled:
+		return "Not answering on port 67; check the server logs"
+	default:
+		return "Turn it on with enabled = true under [dhcp]"
+	}
+}
+
+func dhcpReservationCount(scopes []DHCPScopeView) int {
+	count := 0
+	for _, scope := range scopes {
+		count += len(scope.Reservations)
+	}
+	return count
+}
+
+func dhcpTabList(view DHCPPageView) []components.Tab {
+	counts := map[string]int{"leases": len(view.Leases), "reservations": dhcpReservationCount(view.Scopes)}
+	tabs := make([]components.Tab, 0, len(dhcpTabs))
+	for _, tab := range dhcpTabs {
+		tabs = append(tabs, components.Tab{Value: tab.Value, Label: tab.Label, Count: fmt.Sprint(counts[tab.Value])})
+	}
+	return tabs
+}
+
+templ dhcpLeasesPanel(view DHCPPageView) {
+	@components.Card(components.CardProps{Class: "isotope-data-card"}) {
+		@components.CardHeader(components.CardHeaderProps{Title: "Leases", Description: "Addresses handed out and not yet expired", DescriptionClass: "desktop-only", Class: "isotope-data-header"})
+		if len(view.Leases) == 0 {
+			@AdminEmpty("No leases yet. Devices show up here when they ask for an address.")
+		} else {
+			<div class="admin-mobile-list">
+				for _, lease := range view.Leases {
+					<article class="admin-mobile-row static dhcp-mobile-row">
+						<div class="dhcp-mobile-copy"><strong>{ dhcpDisplayName(lease.Name) }</strong><small class="mono">{ lease.Address }</small><small class="mono">{ lease.MAC }</small><small>{ "Expires " + FormatShortDateTime(lease.Expires, view.Console.TimeDisplay, false) }</small></div>
+						@dhcpLeaseActions(view, lease)
+					</article>
+				}
+			</div>
+			@components.DataTable(components.DataTableProps{Caption: "Leases", Columns: []components.DataTableColumn{{Label: "Address"}, {Label: "Name"}, {Label: "MAC Address"}, {Label: "Scope"}, {Label: "Expires"}, {Label: "Actions", Class: "right-cell"}}}) {
+				for _, lease := range view.Leases {
+					<tr>
+						<td><code>{ lease.Address }</code></td>
+						<td>{ dhcpDisplayName(lease.Name) }</td>
+						<td><code>{ lease.MAC }</code></td>
+						<td class="muted-cell">{ dhcpScopeName(view.Scopes, lease.Scope) }</td>
+						<td class="muted-cell">{ FormatShortDateTime(lease.Expires, view.Console.TimeDisplay, false) }</td>
+						<td class="right-cell">@dhcpLeaseActions(view, lease)</td>
+					</tr>
+				}
+			}
+		}
+	}
+}
+
+// dhcpLeaseActions reserves a lease's address for its device, or removes the
+// lease so the device asks again when it next renews (RFC 2131 §4.4.5).
+templ dhcpLeaseActions(view DHCPPageView, lease DHCPLeaseRow) {
+	<div class="row-actions">
+		if lease.Reserved {
+			@components.Badge(components.BadgeProps{Label: "Reserved", Tone: components.BadgeSuccess})
+		} else if view.CanWrite {
+			<button class="icon-button" type="button" aria-label={ "Reserve " + lease.Address } title="Reserve this address" data-dhcp-reserve={ lease.Address } { dhcpPost("/ui/dhcp/leases/reserve", "leases", map[string]string{"address": lease.Address})... }>@Icon("key-round")</button>
+		}
+		if view.CanWrite {
+			<button class="icon-button danger" type="button" aria-label={ "Remove the lease on " + lease.Address } title="Remove lease" { dhcpPost("/ui/dhcp/leases/remove", "leases", map[string]string{"address": lease.Address})... } hx-confirm={ "Remove the lease on " + lease.Address + "? The device keeps the address until it next renews, then asks for one again." } data-confirm-title="Remove lease?" data-confirm-action="Remove Lease">@Icon("trash")</button>
+		}
+	</div>
+}
+
+templ dhcpReservationsPanel(view DHCPPageView) {
+	@components.Card(components.CardProps{Class: "isotope-data-card"}) {
+		@components.CardHeader(components.CardHeaderProps{Title: "Reservations", Description: "Addresses kept for one device, by its MAC address", DescriptionClass: "desktop-only", Class: "isotope-data-header"}) {
+			if view.CanWrite {
+				@components.Button(components.ButtonProps{Label: "Add Reservation", Icon: "plus", Compact: true, Attrs: templ.Attributes{"data-dialog-open": "dhcp-reservation-new", "data-replica-primary-action": true}})
+			}
+		}
+		if dhcpReservationCount(view.Scopes) == 0 {
+			@AdminEmpty("No reservations. Reserve a lease to keep its address for that device.")
+		} else {
+			<div class="admin-mobile-list">
+				for _, scope := range view.Scopes {
+					for _, reservation := range scope.Reservations {
+						@dhcpReservationMobileRow(view, reservation)
+					}
+				}
+			</div>
+			@components.DataTable(components.DataTableProps{Caption: "Reservations", Columns: []components.DataTableColumn{{Label: "Name"}, {Label: "Address"}, {Label: "MAC Address"}, {Label: "Lease"}, {Label: "Comment"}, {Label: "Actions", Class: "right-cell"}}}) {
+				for _, scope := range view.Scopes {
+					for _, reservation := range scope.Reservations {
+						<tr if view.CanWrite { data-dialog-open={ dhcpReservationDialogID(reservation) } }>
+							<td>{ dhcpDisplayName(reservation.Name) }</td>
+							<td><code>{ reservation.Address }</code></td>
+							<td><code>{ reservation.MAC }</code></td>
+							<td class="muted-cell">{ dhcpReservationLease(view, reservation) }</td>
+							<td class="muted-cell">{ reservation.Comment }</td>
+							<td class="right-cell">@dhcpReservationActions(view, reservation)</td>
+						</tr>
+					}
+				}
+			}
+		}
+	}
+}
+
+templ dhcpReservationMobileRow(view DHCPPageView, reservation DHCPReservationRow) {
+	<article class="admin-mobile-row static dhcp-mobile-row">
+		<div class="dhcp-mobile-copy"><strong>{ dhcpDisplayName(reservation.Name) }</strong><small class="mono">{ reservation.Address }</small><small class="mono">{ reservation.MAC }</small><small>{ ifThen(reservation.LeaseExpires.IsZero(), "No lease now", "Leased until " + FormatShortDateTime(reservation.LeaseExpires, view.Console.TimeDisplay, false)) }</small></div>
+		@dhcpReservationActions(view, reservation)
+	</article>
+}
+
+templ dhcpReservationActions(view DHCPPageView, reservation DHCPReservationRow) {
+	if view.CanWrite {
+		<div class="row-actions">
+			<button class="icon-button" type="button" aria-label={ "Edit the reservation for " + dhcpReservationLabel(reservation) } data-dialog-open={ dhcpReservationDialogID(reservation) }>@Icon("pencil")</button>
+			<button class="icon-button danger" type="button" aria-label={ "Remove the reservation for " + dhcpReservationLabel(reservation) } { dhcpPost("/ui/dhcp/reservations/delete", "reservations", map[string]string{"scope": reservation.Scope, "mac": reservation.MAC})... } hx-confirm={ "Remove the reservation for " + dhcpReservationLabel(reservation) + "? " + reservation.Address + " goes back to the pool once its lease ends." } data-confirm-title="Remove reservation?" data-confirm-action="Remove Reservation">@Icon("trash")</button>
+		</div>
+	}
+}
+
+// dhcpReservationDialog adds a reservation, or edits one: its MAC address is
+// what the reservation is keyed by, so editing keeps it.
+templ dhcpReservationDialog(view DHCPPageView, reservation DHCPReservationRow, add bool) {
+	@components.Dialog(components.DialogProps{ID: ifThen(add, "dhcp-reservation-new", dhcpReservationDialogID(reservation)), Title: ifThen(add, "Add Reservation", "Edit Reservation"), Description: ifThen(add, "Keep an address for one device", dhcpReservationLabel(reservation)+" · "+reservation.MAC), Class: "isotope-form-dialog dhcp-reservation-dialog"}) {
+		<form hx-post="/ui/dhcp/reservations" hx-target="#dhcp-content" hx-swap="outerHTML">
+			<input type="hidden" name="tab" value="reservations"/>
+			<div class="isotope-dialog-body">
+				<div class="dhcp-form-notice" id={ DHCPReservationNoticeID(reservation.Scope, reservation.MAC, add) }></div>
+				if add && len(view.Scopes) > 1 {
+					<label><span>Scope</span><select name="scope">
+						for _, scope := range view.Scopes {
+							<option value={ scope.ID }>{ scope.Name + " (" + scope.Subnet + ")" }</option>
+						}
+					</select></label>
+				} else {
+					<input type="hidden" name="scope" value={ reservation.Scope }/>
+				}
+				if add {
+					<input type="hidden" name="new" value="1"/>
+					@components.Field(components.FieldProps{ID: "dhcp-reservation-new-mac", Label: "MAC Address", Input: templ.Attributes{"name": "mac", "class": "mono-input", "placeholder": "00:11:22:33:44:55", "autocomplete": "off", "spellcheck": "false", "required": true}})
+				} else {
+					<input type="hidden" name="mac" value={ reservation.MAC }/>
+				}
+				@components.Field(components.FieldProps{ID: dhcpReservationDialogID(reservation) + "-address", Label: "Address", Help: "An address in the scope's subnet that no other device has reserved.", Input: templ.Attributes{"name": "address", "value": reservation.Address, "class": "mono-input", "placeholder": "192.168.1.20", "inputmode": "decimal", "autocomplete": "off", "required": true}})
+				@components.Field(components.FieldProps{ID: dhcpReservationDialogID(reservation) + "-name", Label: "Name", Help: "Registered in DNS in the scope's domain; leave empty to use the name the device sends.", Input: templ.Attributes{"name": "name", "value": reservation.Name, "class": "mono-input", "placeholder": "printer", "maxlength": "63", "autocomplete": "off", "spellcheck": "false"}})
+				@components.Field(components.FieldProps{ID: dhcpReservationDialogID(reservation) + "-comment", Label: "Comment", Input: templ.Attributes{"name": "comment", "value": reservation.Comment, "maxlength": "256", "autocomplete": "off"}})
+			</div>
+			@components.DialogFooter("Cancel") {
+				@components.Button(components.ButtonProps{Label: ifThen(add, "Add Reservation", "Save Reservation"), Icon: "check", Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
+			}
+		</form>
+	}
+}
+
+// dhcpPost posts values from a row button and swaps the page in, keeping the
+// tab it was pressed on.
+func dhcpPost(path, tab string, values map[string]string) templ.Attributes {
+	fields := []string{fmt.Sprintf("%q:%q", "tab", tab)}
+	for key, value := range values {
+		fields = append(fields, fmt.Sprintf("%q:%q", key, value))
+	}
+	return templ.Attributes{
+		"hx-post": path, "hx-vals": "{" + strings.Join(fields, ",") + "}",
+		"hx-target": "#dhcp-content", "hx-swap": "outerHTML", "data-replica-primary-action": true,
+	}
+}
+
+func dhcpDisplayName(name string) string {
+	if name == "" {
+		return "Unnamed device"
+	}
+	return name
+}
+
+func dhcpReservationLabel(reservation DHCPReservationRow) string {
+	if reservation.Name != "" {
+		return reservation.Name
+	}
+	return reservation.MAC
+}
+
+func dhcpReservationLease(view DHCPPageView, reservation DHCPReservationRow) string {
+	if reservation.LeaseExpires.IsZero() {
+		return "No lease now"
+	}
+	return "Until " + FormatShortDateTime(reservation.LeaseExpires, view.Console.TimeDisplay, false)
+}
+
+func dhcpScopeName(scopes []DHCPScopeView, id string) string {
+	for _, scope := range scopes {
+		if scope.ID == id && scope.Name != "" {
+			return scope.Name
+		}
+	}
+	return id
+}
+
+// dhcpReservationDialogID is unique per reservation: a MAC address is unique
+// within its scope.
+func dhcpReservationDialogID(reservation DHCPReservationRow) string {
+	return "dhcp-reservation-" + reservation.Scope + "-" + strings.ReplaceAll(reservation.MAC, ":", "")
+}
+
+// DHCPReservationNoticeID is where a reservation form shows why it didn't
+// save.
+func DHCPReservationNoticeID(scope, mac string, add bool) string {
+	if add {
+		return "dhcp-reservation-new-notice"
+	}
+	return dhcpReservationDialogID(DHCPReservationRow{Scope: scope, MAC: mac}) + "-notice"
+}
