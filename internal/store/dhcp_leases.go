@@ -122,7 +122,7 @@ func (store *Store) SaveDHCPLeases(ctx context.Context, leases []DHCPLease) ([]D
 				return err
 			}
 			saved[index].Seq = seq
-			if _, err := store.upsertDHCPLease(ctx, transaction, saved[index], false); err != nil {
+			if _, err := store.upsertDHCPLease(ctx, transaction, saved[index], dhcpLeaseReplace); err != nil {
 				return err
 			}
 		}
@@ -165,22 +165,37 @@ func validDHCPLease(lease DHCPLease) error {
 	return fmt.Errorf("DHCP lease state %q is not known", lease.State)
 }
 
-// upsertDHCPLease writes a lease under its own sequence number. With
-// onlyNewer it leaves a stored row alone unless its seq is lower, and returns
-// whether it wrote.
-func (store *Store) upsertDHCPLease(ctx context.Context, transaction *sql.Tx, lease DHCPLease, onlyNewer bool) (bool, error) {
-	guard := ""
-	if onlyNewer {
-		guard = "\nWHERE sable_dhcp_leases.seq < excluded.seq"
+// dhcpLeaseWrite is what a write does to a stored row for the same address.
+type dhcpLeaseWrite int
+
+const (
+	// dhcpLeaseReplace always replaces it: this node's own new write.
+	dhcpLeaseReplace dhcpLeaseWrite = iota
+	// dhcpLeaseIfNewer replaces it only when its seq is lower: a mirror.
+	dhcpLeaseIfNewer
+	// dhcpLeaseIfAbsent never replaces it: this node's rows recovered from
+	// a mirror, where what it wrote since a wipe wins.
+	dhcpLeaseIfAbsent
+)
+
+// upsertDHCPLease writes a lease under its own sequence number, treating a
+// stored row for the address as write says, and returns whether it wrote.
+func (store *Store) upsertDHCPLease(ctx context.Context, transaction *sql.Tx, lease DHCPLease, write dhcpLeaseWrite) (bool, error) {
+	conflict := `DO UPDATE SET
+    scope_id = excluded.scope_id, client_key = excluded.client_key, mac = excluded.mac,
+    client_id = excluded.client_id, hostname = excluded.hostname, label = excluded.label,
+    state = excluded.state, bound_at_ns = excluded.bound_at_ns, expires_at_ns = excluded.expires_at_ns,
+    seq = excluded.seq, relay = excluded.relay, vendor_class = excluded.vendor_class`
+	switch write {
+	case dhcpLeaseIfNewer:
+		conflict += "\nWHERE sable_dhcp_leases.seq < excluded.seq"
+	case dhcpLeaseIfAbsent:
+		conflict = "DO NOTHING"
 	}
 	result, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_dhcp_leases (`+dhcpLeaseColumns+`)
 VALUES (`+store.placeholders(14)+`)
-ON CONFLICT (node_id, address) DO UPDATE SET
-    scope_id = excluded.scope_id, client_key = excluded.client_key, mac = excluded.mac,
-    client_id = excluded.client_id, hostname = excluded.hostname, label = excluded.label,
-    state = excluded.state, bound_at_ns = excluded.bound_at_ns, expires_at_ns = excluded.expires_at_ns,
-    seq = excluded.seq, relay = excluded.relay, vendor_class = excluded.vendor_class`+guard,
+ON CONFLICT (node_id, address) `+conflict,
 		lease.NodeID, lease.Address.String(), lease.ScopeID, lease.ClientKey, lease.MAC, lease.ClientID,
 		lease.Hostname, lease.Label, string(lease.State), unixNanos(lease.BoundAt), unixNanos(lease.ExpiresAt),
 		lease.Seq, lease.Relay, lease.VendorClass)
@@ -196,6 +211,21 @@ ON CONFLICT (node_id, address) DO UPDATE SET
 // with a lower seq, so an older or repeated row never undoes a newer one. It
 // leaves this node's own counters alone.
 func (store *Store) MirrorDHCPLeases(ctx context.Context, leases []DHCPLease) (int, error) {
+	return store.writeSequencedDHCPLeases(ctx, leases, dhcpLeaseIfNewer)
+}
+
+// RecoverDHCPLeases writes back this node's own rows from a primary's mirror
+// after its database was wiped, each keeping its seq, and returns how many it
+// wrote. It never replaces a stored row: a lease written since the wipe is
+// the newer truth for its address. The caller raises the counter past them
+// once the recovery is done (RaiseDHCPLeaseSeq).
+func (store *Store) RecoverDHCPLeases(ctx context.Context, leases []DHCPLease) (int, error) {
+	return store.writeSequencedDHCPLeases(ctx, leases, dhcpLeaseIfAbsent)
+}
+
+// writeSequencedDHCPLeases writes rows that carry their owner's seq in one
+// transaction, as write says, and returns how many it wrote.
+func (store *Store) writeSequencedDHCPLeases(ctx context.Context, leases []DHCPLease, write dhcpLeaseWrite) (int, error) {
 	for _, lease := range leases {
 		if err := validDHCPLease(lease); err != nil {
 			return 0, err
@@ -208,7 +238,7 @@ func (store *Store) MirrorDHCPLeases(ctx context.Context, leases []DHCPLease) (i
 	err := store.withTx(ctx, "DHCP lease mirror", func(transaction *sql.Tx) error {
 		written = 0
 		for _, lease := range leases {
-			wrote, err := store.upsertDHCPLease(ctx, transaction, lease, true)
+			wrote, err := store.upsertDHCPLease(ctx, transaction, lease, write)
 			if err != nil {
 				return err
 			}

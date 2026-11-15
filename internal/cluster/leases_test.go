@@ -70,6 +70,23 @@ func (store *leaseStore) Mirror(_ context.Context, rows []SharedLease) (int, err
 	return written, nil
 }
 
+// Recover writes this node's own rows back, keeping their numbers, where no
+// row holds the address yet.
+func (store *leaseStore) Recover(_ context.Context, rows []SharedLease) (int, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	written := 0
+	for _, row := range rows {
+		key := [2]string{row.NodeID, row.Address}
+		if _, ok := store.rows[key]; ok {
+			continue
+		}
+		store.rows[key] = row
+		written++
+	}
+	return written, nil
+}
+
 func (store *leaseStore) Raise(_ context.Context, nodeID string, seq int64) (bool, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
@@ -94,7 +111,8 @@ func (store *leaseStore) Changed() {
 }
 
 func (store *leaseStore) mirror() LeaseMirror {
-	return LeaseMirror{Held: store.Held, Since: store.Since, Mirror: store.Mirror, Raise: store.Raise, Changed: store.Changed}
+	return LeaseMirror{Held: store.Held, Since: store.Since, Mirror: store.Mirror, Raise: store.Raise,
+		Recover: store.Recover, Changed: store.Changed}
 }
 
 func (store *leaseStore) hostnames(nodeID string) []string {
@@ -231,6 +249,43 @@ func TestLeaseMirrorWipedReplicaRaisesItsCounterPastThePrimary(t *testing.T) {
 		t.Fatalf("the primary holds %v; the lease written after the wipe never reached it", got)
 	}
 	_ = primary
+}
+
+// A replica whose database was wiped gets its own leases back from the
+// primary's mirror, batch by batch, before it raises its counter: a lease it
+// wrote since the wipe keeps the address, and the next one it writes is
+// numbered past everything the primary holds (docs/design/dhcp.md §3).
+func TestLeaseMirrorWipedReplicaRecoversItsOwnLeases(t *testing.T) {
+	t.Parallel()
+	_, replica, lead, follower := mirroringCluster(t)
+	total := leaseBatchLimit + 20
+	for index := range total {
+		follower.save(replica.nodeID, fmt.Sprintf("10.0.%d.%d", index/250, index%250+1), "before")
+	}
+	synchronize(t, replica, 3)
+	if got := len(lead.hostnames(replica.nodeID)); got != total {
+		t.Fatalf("the primary holds %d of the replica's leases, want %d", got, total)
+	}
+
+	wiped := newLeaseStore()
+	wiped.save(replica.nodeID, "10.0.0.1", "after-wipe")
+	replica.SetLeaseMirror(wiped.mirror())
+	synchronize(t, replica, 4)
+
+	got := wiped.hostnames(replica.nodeID)
+	if len(got) != total {
+		t.Fatalf("the wiped replica holds %d of its own leases, want %d", len(got), total)
+	}
+	if !slices.Contains(got, "after-wipe") {
+		t.Fatal("a recovered lease replaced the one written after the wipe")
+	}
+	if names := lead.hostnames(replica.nodeID); !slices.Contains(names, "after-wipe") {
+		t.Fatal("the lease written after the wipe never reached the primary")
+	}
+	wiped.save(replica.nodeID, "10.0.9.9", "next")
+	if seq := wiped.seq(replica.nodeID, "10.0.9.9"); seq <= int64(total) {
+		t.Fatalf("the next lease took sequence %d, at or below the primary's %d", seq, total)
+	}
 }
 
 // Without a mirror on either side nothing about leases crosses, and an older
