@@ -15,11 +15,8 @@ import (
 	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/dhcp"
 	"github.com/drudge/sable/internal/store"
+	"github.com/drudge/sable/internal/version"
 )
-
-// errDHCPOnCluster refuses DHCP on a cluster until ranges are pinned to
-// nodes and leases mirrored; there is no half-working state.
-var errDHCPOnCluster = errors.New("DHCP can't be enabled on a cluster yet")
 
 // dhcpLeaseStore is the part of the store the DHCP server uses.
 type dhcpLeaseStore interface {
@@ -32,11 +29,15 @@ type dhcpLeaseStore interface {
 type dhcpService struct {
 	leases dhcpLeaseStore
 	node   func() string
-	// role is this node's cluster role: empty when it isn't in a cluster.
-	role   func() string
-	listen func(context.Context, int) (dhcpConn, error)
-	link   func(int) (dhcp.Meta, error)
-	probe  dhcpProbe
+	// role is this node's cluster role for DHCP (dhcpClusterRole): empty
+	// when it isn't in a cluster.
+	role func() string
+	// cluster is this node's cluster state, for the members a range may name
+	// and their releases. Nil is outside a cluster.
+	cluster func() cluster.State
+	listen  func(context.Context, int) (dhcpConn, error)
+	link    func(int) (dhcp.Meta, error)
+	probe   dhcpProbe
 	// links and seek look for other DHCP servers every othersEvery while
 	// this one runs.
 	links       func() ([]dhcpProbeLink, error)
@@ -89,15 +90,34 @@ func newDHCPService(leases dhcpLeaseStore, node func() string, role func() strin
 	}
 }
 
-// Check refuses a configuration the service can't run. A replica takes
-// [dhcp] from its primary and only holds it, so refusing it there would stop
+// Check refuses a configuration the service can't run (checkDHCPCluster). A
+// replica takes [dhcp] from its primary, so refusing it there would stop
 // every later synchronization (F29); the refusal belongs to the node whose
 // sable.toml is edited.
 func (service *dhcpService) Check(settings config.DHCP) error {
-	if settings.Enabled && service.role() != "" && service.role() != cluster.RoleReplica {
-		return errDHCPOnCluster
+	role := service.role()
+	if !settings.Enabled || role == cluster.RoleReplica || role == dhcpRoleJoining {
+		return nil
 	}
-	return nil
+	return checkDHCPCluster(settings, service.clusterState(), version.Release)
+}
+
+// clusterState is this node's cluster state; zero outside a cluster.
+func (service *dhcpService) clusterState() cluster.State {
+	if service.cluster == nil {
+		return cluster.State{}
+	}
+	return service.cluster()
+}
+
+// newEngine compiles what this node serves of settings (dhcpNodeSettings).
+func (service *dhcpService) newEngine(settings config.DHCP) (*dhcp.Engine, error) {
+	clustered := service.role != nil && service.role() != ""
+	engine, err := dhcp.New(dhcpNodeSettings(settings, clustered), service.node())
+	if err != nil {
+		return nil, fmt.Errorf("start DHCP engine: %w", err)
+	}
+	return engine, nil
 }
 
 // Apply moves the server to settings: unchanged settings keep it running,
@@ -118,9 +138,12 @@ func (service *dhcpService) Apply(ctx context.Context, runtime context.Context, 
 		return err
 	}
 	var server *dhcpServer
-	if settings.Enabled && service.role() != "" {
-		service.logger.Info("DHCP settings kept from the primary; a cluster doesn't serve DHCP yet")
-	} else if settings.Enabled {
+	switch {
+	case settings.Enabled && service.role() == dhcpRoleJoining:
+		service.logger.Info("DHCP settings kept until this node finishes joining the cluster")
+	case settings.Enabled && service.role() != "" && !dhcpServesAnything(dhcpNodeSettings(settings, true), service.node()):
+		service.logger.Info("DHCP settings kept; no range is pinned to this node and no scope has reservations")
+	case settings.Enabled:
 		prepared, err := service.prepare(settings)
 		if err != nil {
 			return err
@@ -142,12 +165,12 @@ func (service *dhcpService) Apply(ctx context.Context, runtime context.Context, 
 // reports false when the change needs a new server.
 func (service *dhcpService) applyInPlace(settings config.DHCP) (bool, error) {
 	server := service.current.Load()
-	if service.running == nil || server == nil || service.role() != "" || !dhcpReservationsOnly(service.active, settings) {
+	if service.running == nil || server == nil || service.role() == dhcpRoleJoining || !dhcpReservationsOnly(service.active, settings) {
 		return false, nil
 	}
-	engine, err := dhcp.New(settings, service.node())
+	engine, err := service.newEngine(settings)
 	if err != nil {
-		return false, fmt.Errorf("start DHCP engine: %w", err)
+		return false, err
 	}
 	service.rebinding.Lock()
 	service.current.Load().engine.Rescope(engine)
@@ -182,9 +205,9 @@ func (service *dhcpService) notifyChanged() {
 // prepare builds a server with an engine for settings. Its leases are read
 // once the old server has stopped, so none it acknowledges are missed.
 func (service *dhcpService) prepare(settings config.DHCP) (*dhcpServer, error) {
-	engine, err := dhcp.New(settings, service.node())
+	engine, err := service.newEngine(settings)
 	if err != nil {
-		return nil, fmt.Errorf("start DHCP engine: %w", err)
+		return nil, err
 	}
 	engine.SetLabeler(dhcpLabel)
 	return &dhcpServer{
@@ -325,15 +348,15 @@ func dhcpLeaseFromStore(row store.DHCPLease) dhcp.Lease {
 	}
 }
 
-// dhcpClusterRole is the node's role for DHCP: none outside a cluster, and a
-// replica's while a join applies the primary's state, so the primary's
+// dhcpClusterRole is the node's role for DHCP: none outside a cluster, and
+// dhcpRoleJoining while a join applies the primary's state, so the primary's
 // [dhcp] is held and not served before the join completes (F30).
 func dhcpClusterRole(state cluster.State) string {
 	switch {
 	case state.Initialized:
 		return state.LocalRole
 	case state.Joining:
-		return cluster.RoleReplica
+		return dhcpRoleJoining
 	}
 	return ""
 }
@@ -351,6 +374,8 @@ func (process *process) startDHCP() {
 	process.dhcp = newDHCPService(process.database,
 		func() string { return clusterService.Snapshot().NodeID },
 		process.dhcpRole, process.logger)
+	process.dhcp.cluster = clusterService.Snapshot
+	process.dhcp.ownProbes.cluster = func() string { return clusterService.Snapshot().ClusterID }
 	names := newDHCPNamer(process.configurationManager, process.zoneManager, process.database.DHCPLeases, process.leading, process.logger)
 	names.role = process.dhcpRole
 	names.notifier = process.handler

@@ -278,11 +278,12 @@ func (wanted dhcpNamePlan) yieldToUniFi(target zone.Zone, records []zone.Record,
 }
 
 // dhcpServed reports whether this node serves the DHCP settings, given its
-// cluster role for DHCP (dhcpClusterRole): enabled, and outside a cluster
-// (D32). DHCP's names publish, and the UniFi sync yields to them, only where
-// this holds (D38). Slice 8 changes only this predicate.
+// cluster role for DHCP (dhcpClusterRole): enabled, and not still joining a
+// cluster (F30). DHCP's names publish, and the UniFi sync yields to them,
+// only where this holds (D38); on a cluster the primary publishes every
+// node's mirrored leases (D61).
 func dhcpServed(settings config.DHCP, role string) bool {
-	return settings.Enabled && role == ""
+	return settings.Enabled && role != dhcpRoleJoining
 }
 
 // dhcpServedSettings returns the settings when this node serves them, and

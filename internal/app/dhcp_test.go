@@ -128,13 +128,14 @@ func TestDHCPServiceFollowsConfiguration(t *testing.T) {
 	waitDHCPEvents(t, listens, []string{"listen", "close", "listen", "close"})
 }
 
-// Until leases are mirrored between nodes, a cluster refuses DHCP rather
-// than lease one address from two nodes.
-func TestDHCPServiceRefusesCluster(t *testing.T) {
+// A primary refuses a range without a node: every node would lease from it
+// at once (design §3).
+func TestDHCPServiceRefusesUnpinnedRangeOnCluster(t *testing.T) {
 	service, listens, _ := newTestDHCPService(t, cluster.RolePrimary)
+	service.cluster = testDHCPCluster("node-a", "node-b")
 	ctx := context.Background()
-	if err := service.Apply(ctx, ctx, dhcpTestSettings(t)); !errors.Is(err, errDHCPOnCluster) {
-		t.Fatalf("Apply on a cluster = %v; want errDHCPOnCluster", err)
+	if err := service.Apply(ctx, ctx, dhcpTestSettings(t)); !errors.Is(err, errDHCPRangeUnpinned) {
+		t.Fatalf("Apply on a cluster = %v; want errDHCPRangeUnpinned", err)
 	}
 	if err := service.Apply(ctx, ctx, config.DHCP{}); err != nil {
 		t.Fatalf("Apply with DHCP off on a cluster = %v", err)
@@ -266,15 +267,15 @@ func TestDHCPServiceReplicaHoldsPrimarySettings(t *testing.T) {
 	waitDHCPEvents(t, listens, nil)
 }
 
-// A join that is still applying the primary's state counts as a replica, so
-// the primary's [dhcp] isn't served before the join completes (F30).
+// A join that is still applying the primary's state holds the primary's
+// [dhcp] without serving it until the join completes (F30).
 func TestDHCPClusterRole(t *testing.T) {
 	for _, test := range []struct {
 		state cluster.State
 		want  string
 	}{
 		{cluster.State{}, ""},
-		{cluster.State{Joining: true}, cluster.RoleReplica},
+		{cluster.State{Joining: true}, dhcpRoleJoining},
 		{cluster.State{Initialized: true, LocalRole: cluster.RolePrimary}, cluster.RolePrimary},
 	} {
 		if got := dhcpClusterRole(test.state); got != test.want {
