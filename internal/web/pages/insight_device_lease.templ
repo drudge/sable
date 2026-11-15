@@ -1,0 +1,62 @@
+package pages
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/drudge/sable/internal/web/pages/components"
+)
+
+// InsightDeviceLeaseView is the DHCP lease a device holds now.
+type InsightDeviceLeaseView struct {
+	Address string
+	// Scope is the scope's name, or its ID when it has none.
+	Scope     string
+	ExpiresAt time.Time
+	// Reserved says the device's hardware address has a reservation in the
+	// scope, so the address is its own already.
+	Reserved bool
+	// CanReserve offers Reserve: the operator has dhcp.write and the lease
+	// isn't reserved yet.
+	CanReserve bool
+}
+
+templ insightDeviceLease(view InsightDeviceDrawerView) {
+	if lease := view.Lease; lease != nil {
+		<section class="query-detail-answer insight-device-lease" id="insight-device-lease" aria-labelledby="insight-device-lease-title">
+			<h3 id="insight-device-lease-title">DHCP Lease</h3>
+			<div class="insight-blocking-row">
+				<span class="insight-blocking-icon">@Icon("router")</span>
+				<div class="insight-blocking-detail">
+					<strong>{ lease.Address }</strong>
+					<small>{ insightLeaseDetail(*lease, view.TimeDisplay) }</small>
+				</div>
+				if lease.Reserved {
+					@components.Badge(components.BadgeProps{Label: "Reserved", Tone: components.BadgeSuccess})
+				}
+			</div>
+			if lease.CanReserve {
+				<div class="insight-hold-actions">
+					@components.Button(components.ButtonProps{Label: "Reserve Address", Icon: "key-round", Variant: components.ButtonOutline, Compact: true, Attrs: insightReserveAttrs(view)})
+				</div>
+			}
+		</section>
+	}
+}
+
+func insightLeaseDetail(lease InsightDeviceLeaseView, display TimeDisplay) string {
+	if lease.Reserved {
+		return lease.Scope + " · reserved for this device"
+	}
+	return lease.Scope + " · lease ends " + insightDeviceTime(lease.ExpiresAt, display)
+}
+
+// insightReserveAttrs posts Reserve for the device's lease.
+func insightReserveAttrs(view InsightDeviceDrawerView) templ.Attributes {
+	values := fmt.Sprintf(`{"key":%q,"range":%q,"address":%q}`, view.Device.Key, view.Range, view.Lease.Address)
+	return templ.Attributes{
+		"hx-post": "/ui/insights/devices/reserve", "hx-vals": values, "data-device-reserve": view.Lease.Address,
+		"hx-target": "#insight-device-content", "hx-swap": "innerHTML", "hx-disable": "#insight-device-lease button",
+		"aria-label": "Reserve " + view.Lease.Address + " for " + view.Device.Label, "data-replica-primary-action": true,
+	}
+}
