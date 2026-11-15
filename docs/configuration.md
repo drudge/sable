@@ -1460,7 +1460,11 @@ Non-expiring tokens remain valid until explicitly revoked. Token secrets are
 displayed only once when created.
 
 The embedded console uses `HttpOnly`, `SameSite=Strict` session cookies and a
-per-session CSRF token for every mutation. Login attempts are throttled by
+per-session CSRF token for every mutation. Whether security is on or off, a
+browser request that changes something is refused with 403 when the browser
+reports that another site started it (`Sec-Fetch-Site`, or an `Origin` that
+doesn't match the host). API clients that send neither header are unaffected.
+Login attempts are throttled by
 username and source address, and concurrent password hashing is bounded to
 protect resolver memory. Setup, login, logout, failed login, and token creation
 produce persistent audit events. A failed password sign-in records the username

@@ -33,6 +33,13 @@ type principalContextKey struct{}
 // itself and reports false when the caller may not continue; otherwise it
 // returns the request carrying the signed-in principal.
 func (server *Server) authorizeRoute(writer http.ResponseWriter, request *http.Request, current *route) (*http.Request, bool) {
+	// Browsers say where a request comes from. Refusing unsafe requests that
+	// another site started covers installs with security off, which have no
+	// session or CSRF token to check. Public routes give their own message.
+	if !current.public && !safeMethod(request.Method) && !server.requestOriginAllowed(request) {
+		server.authenticationFailure(writer, request, http.StatusForbidden, "")
+		return nil, false
+	}
 	if !server.securityEnabled || current.public {
 		return request, true
 	}
@@ -60,10 +67,6 @@ func (server *Server) authorizeRoute(writer http.ResponseWriter, request *http.R
 	if !safeMethod(request.Method) {
 		csrfToken := request.Header.Get("X-CSRF-Token")
 		if csrfToken == "" && nativeProfileRequest(request) {
-			if !server.requestOriginAllowed(request) {
-				server.authenticationFailure(writer, request, http.StatusForbidden, "")
-				return nil, false
-			}
 			var ok bool
 			csrfToken, ok = nativeProfileCSRFToken(request)
 			if !ok {
