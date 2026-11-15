@@ -75,6 +75,12 @@ func Parse(data []byte) (Result, error) {
 	return result, nil
 }
 
+// Text returns an export as UTF-8 text without a byte order mark, however it
+// was saved, for a caller that has to carry it as text before importing it.
+func Text(data []byte) string {
+	return string(decoded(data))
+}
+
 // decoded returns data as UTF-8 without a byte order mark. A file saved on
 // Windows often starts with one, and Windows PowerShell 5's ">" and Out-File
 // write UTF-16, which the mark gives away.
