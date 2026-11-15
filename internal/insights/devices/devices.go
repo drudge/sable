@@ -1,10 +1,11 @@
 // Package devices turns client addresses into devices and reports what changed
 // about them. An address is tied to a device through the names an operator
-// gave it, a UniFi controller's inventory, the host's neighbor table, or the
-// hardware address an IPv6 address was built from, so a laptop's IPv4 and
-// rotating IPv6 addresses count as one device. When nothing ties an address
-// to hardware, the address stands on its own and every sentence about it says
-// "address" rather than claiming a device.
+// gave it, a UniFi controller's inventory, a lease from Sable's DHCP server,
+// the host's neighbor table, or the hardware address an IPv6 address was
+// built from, so a laptop's IPv4 and rotating IPv6 addresses count as one
+// device. When nothing ties an address to hardware, the address stands on its
+// own and every sentence about it says "address" rather than claiming a
+// device.
 package devices
 
 import (
@@ -33,8 +34,10 @@ const (
 const (
 	identityUniFi    = "unifi"
 	identityNeighbor = "neighbor"
-	// identityDHCP is a lease from Sable's own DHCP server; its name is the
-	// one the lease registered in DNS.
+	// identityDHCP is a lease from Sable's own DHCP server, named by its
+	// client's named reservation, else the label it registered in DNS, else
+	// the host name the client sent (wpad, isatap, or a name with no usable
+	// label shows as sent, though DNS has no record for it).
 	identityDHCP = "dhcp"
 	// identityUniFiTyped starts the source of a sighting of Ubiquiti hardware
 	// whose type the controller vouches for, followed by that type, as in

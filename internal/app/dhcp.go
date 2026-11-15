@@ -359,6 +359,7 @@ func (process *process) startDHCP() {
 	}
 	identities := newDHCPIdentities(process.insightsEnabled, process.database.DHCPLeases,
 		func() string { return clusterService.Snapshot().NodeID },
+		func() config.DHCP { return process.current().DHCP },
 		process.deviceAddresses.Record(process.database.RecordClientIdentities), process.logger)
 	process.dhcp.changed = func() { names.Changed(); identities.Changed() }
 	process.runWorker(func(context.Context) { names.Run(process.zoneRefreshContext) })

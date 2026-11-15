@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/drudge/sable/internal/config"
 	"github.com/drudge/sable/internal/querylog"
 	"github.com/drudge/sable/internal/store"
 )
@@ -30,13 +31,13 @@ func TestDHCPIdentitiesRecordOnlyThisNodesActiveLeases(t *testing.T) {
 	record := func(_ context.Context, identities []querylog.ClientIdentity) error { recorded = identities; return nil }
 	read := func(context.Context) ([]store.DHCPLease, error) { return leases, nil }
 
-	if err := recordDHCPIdentities(context.Background(), func() bool { return false }, read, func() string { return "a" }, record, now); err != nil {
+	if err := recordDHCPIdentities(context.Background(), func() bool { return false }, read, func() string { return "a" }, func() config.DHCP { return config.DHCP{} }, record, now); err != nil {
 		t.Fatal(err)
 	}
 	if recorded != nil {
 		t.Fatalf("Insights off recorded %+v", recorded)
 	}
-	if err := recordDHCPIdentities(context.Background(), func() bool { return true }, read, func() string { return "a" }, record, now); err != nil {
+	if err := recordDHCPIdentities(context.Background(), func() bool { return true }, read, func() string { return "a" }, func() config.DHCP { return config.DHCP{} }, record, now); err != nil {
 		t.Fatal(err)
 	}
 	want := []querylog.ClientIdentity{

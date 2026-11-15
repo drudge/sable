@@ -53,7 +53,7 @@ Search the list by name, hardware or IP address, maker, or type. The filters bes
 
 Use the pencil beside the device's name. A name follows the hardware address when Sable knows it, so it survives IP changes.
 
-When a device has more than one name, Sable uses yours first, then the name UniFi reports, then the name on its [DHCP lease](../configuration.md#dhcp-server), then a [local host override](../configuration.md#local-host-overrides), then reverse DNS. The badge beside the name says which one it is. The dashboard's client rankings use the same order.
+When a device has more than one name, Sable uses yours first, then the name UniFi reports, then the name on its [DHCP lease](../configuration.md#dhcp-server) (its reservation's name, when the reservation has one), then a [local host override](../configuration.md#local-host-overrides), then reverse DNS. The badge beside the name says which one it is. The dashboard's client rankings use the same order.
 
 ### What a device is
 
