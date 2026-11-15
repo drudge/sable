@@ -94,6 +94,10 @@ type JoinConfiguration struct {
 	// AttachedNetworks is set only on synchronization, by a primary handing a
 	// replica its IPv6 networks.
 	AttachedNetworks json.RawMessage `json:"attached_networks,omitempty"`
+	// LeaseProtocol and Leases are set only on synchronization, by a primary
+	// that mirrors DHCP leases.
+	LeaseProtocol int          `json:"lease_protocol,omitempty"`
+	Leases        *LeaseReport `json:"leases,omitempty"`
 }
 
 type storedEnrollmentToken struct {

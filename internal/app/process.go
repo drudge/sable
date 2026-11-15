@@ -701,6 +701,9 @@ func (process *process) startAlerts() {
 		Read: database.ClientIdentities, Record: process.deviceAddresses.Record(database.RecordClientIdentities), Lookback: devices.Lookback,
 		Enabled: process.insightsEnabled,
 	})
+	// Every node holds every node's DHCP leases, a few seconds stale at most,
+	// so a range can be taken over and the lead can name a replica's leases.
+	clusterService.SetLeaseMirror(dhcpLeaseMirror(database, process.dhcp.notifyChanged))
 	// A replica in a container can't see the LAN it serves, so the lead hands
 	// it the networks private recursion should admit.
 	clusterService.SetAttachedNetworks(cluster.AttachedNetworks{Own: process.attachedNetworks.Own, Lead: process.attachedNetworks.SetLead})
