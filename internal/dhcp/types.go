@@ -57,6 +57,7 @@ const (
 	optionClientID      = 61
 	optionTFTPServer    = 66
 	optionBootFile      = 67
+	optionClientFQDN    = 81
 	optionRelayInfo     = 82
 	optionV6OnlyPrefer  = 108
 	optionSearch        = 119

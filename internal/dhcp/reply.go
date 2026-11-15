@@ -38,6 +38,9 @@ func (exchange *exchange) reply(kind MessageType, yiaddr netip.Addr) *Packet {
 	exchange.addBoot(reply)
 	if !isZero(yiaddr) {
 		required = append(required, leaseOptions(exchange.scope)...)
+		if fqdn, found := parseClientFQDN(request); found {
+			required = append(required, fqdn.reply(exchange.registeredName()))
+		}
 	}
 	if exchange.v6Only() {
 		// RFC 8925 §3.3: a MUST when the client asked, so it never yields
