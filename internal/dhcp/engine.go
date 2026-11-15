@@ -102,8 +102,9 @@ func (engine *Engine) remember(lease Lease) *Lease {
 }
 
 // Conflict takes an address out of the pool for an hour after a probe found
-// another holder, and returns the lease to save.
-func (engine *Engine) Conflict(now time.Time, address netip.Addr) *Lease {
+// another holder, and returns the lease to save. holder names what answered:
+// "echo", or the hardware address the neighbor table showed.
+func (engine *Engine) Conflict(now time.Time, address netip.Addr, holder string) *Lease {
 	engine.mutex.Lock()
 	defer engine.mutex.Unlock()
 	for _, compiled := range engine.scopes {
@@ -113,7 +114,7 @@ func (engine *Engine) Conflict(now time.Time, address netip.Addr) *Lease {
 					delete(engine.offers, ref)
 				}
 			}
-			return engine.decline(now, compiled, address, "conflict")
+			return engine.decline(now, compiled, address, "conflict:"+holder)
 		}
 	}
 	return nil

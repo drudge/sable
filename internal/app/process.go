@@ -92,6 +92,7 @@ type process struct {
 	stateReplicator  *clusterStateReplicator
 	scheduledBackups *scheduledBackupService
 	unifiSync        *unifiSyncer
+	dhcp             *dhcpService
 	dynamicDNS       *dynamicdns.Manager
 	updateManager    *update.Manager
 	webServer        *web.Server
@@ -402,6 +403,10 @@ func (process *process) applyConfiguration(reloadContext context.Context, active
 			return err
 		}
 	}
+	dhcpChanged, err := process.checkDHCP(active.DHCP, candidate.DHCP)
+	if err != nil {
+		return err
+	}
 	clusterRestartRequired := active.Cluster != candidate.Cluster
 	if err := process.activateConfiguration(reloadContext, candidate); err != nil {
 		return err
@@ -411,6 +416,11 @@ func (process *process) applyConfiguration(reloadContext context.Context, active
 	}
 	// After the recorder settings, so turning Insights off empties the table.
 	process.deviceAddresses.SetConfiguration(candidate)
+	if dhcpChanged {
+		if err := process.dhcp.Apply(reloadContext, process.runtimeContext, candidate.DHCP); err != nil {
+			return err
+		}
+	}
 	if clusterRestartRequired {
 		process.logger.Info("cluster bootstrap settings staged", "restart_required", true)
 	}
@@ -554,6 +564,7 @@ func (process *process) startIntegrations() {
 		backfillAppRollups(process.runtimeContext, database.BackfillAppRollups, process.logger)
 		compactQueryLogRollups(process.runtimeContext, database.CompactQueryLogRollups, rollupCompactionInterval, process.logger)
 	})
+	process.startDHCP()
 	process.dynamicDNS = dynamicdns.New(process.configurationManager, process.dnsProviderCredentials, database, process.leading, process.logger)
 	process.runWorker(func(context.Context) { process.dynamicDNS.Run(process.zoneRefreshContext) })
 	process.updateManager = newUpdateManager(update.Options{
@@ -636,7 +647,10 @@ func (process *process) newWebServer() error {
 	}
 	process.webServer = webServer
 	webServer.SetDNSSECController(process.dnssec)
-	webServer.SetClusterController(process.clusterService)
+	webServer.SetClusterController(dhcpClusterGuard{
+		Service:     process.clusterService,
+		dhcpEnabled: func() bool { return process.current().DHCP.Enabled },
+	})
 	webServer.SetCertificateController(process.certificateManager)
 	webServer.SetDynamicDNSController(process.dynamicDNS)
 	webServer.SetUniFiController(process.unifiSync)
@@ -779,6 +793,9 @@ func (process *process) shutdown(restartRequested bool) error {
 		logger.Info("Sable stopping")
 	}
 	process.stopRuntime()
+	// Before anything else lets go of the store, and so a restarted or
+	// web-updated process can bind port 67.
+	process.dhcp.Stop()
 	webError := process.webServer.Close(shutdownContext)
 	listenerError := process.listeners.Close(shutdownContext)
 	workerError := waitRuntimeWorkers(shutdownContext, &process.runtimeWorkers)

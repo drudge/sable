@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"slices"
 	"time"
 )
 
@@ -94,22 +95,43 @@ func (store *Store) migrateDHCPLeases(ctx context.Context) error {
 }
 
 // SaveDHCPLease writes a lease this node owns, in place of the one it held
-// for that address, and returns it with the node's next sequence number. The
-// server calls it before it sends the ACK, so a lease a client was told it
-// holds is never lost.
+// for that address, and returns it with the node's next sequence number.
 func (store *Store) SaveDHCPLease(ctx context.Context, lease DHCPLease) (DHCPLease, error) {
-	if err := validDHCPLease(lease); err != nil {
+	saved, err := store.SaveDHCPLeases(ctx, []DHCPLease{lease})
+	if err != nil {
 		return lease, err
 	}
-	err := store.withTx(ctx, "DHCP lease", func(transaction *sql.Tx) error {
-		seq, err := store.nextDHCPLeaseSeq(ctx, transaction, lease.NodeID)
-		if err != nil {
-			return err
+	return saved[0], nil
+}
+
+// SaveDHCPLeases writes leases in order in one transaction, each with the
+// node's next sequence number. The server calls it before it sends the ACK,
+// so a lease a client was told it holds is never lost, and a client that
+// moves never leaves its old lease active beside the new one.
+func (store *Store) SaveDHCPLeases(ctx context.Context, leases []DHCPLease) ([]DHCPLease, error) {
+	for _, lease := range leases {
+		if err := validDHCPLease(lease); err != nil {
+			return nil, err
 		}
-		lease.Seq = seq
-		return store.upsertDHCPLease(ctx, transaction, lease)
+	}
+	saved := slices.Clone(leases)
+	err := store.withTx(ctx, "DHCP leases", func(transaction *sql.Tx) error {
+		for index := range saved {
+			seq, err := store.nextDHCPLeaseSeq(ctx, transaction, saved[index].NodeID)
+			if err != nil {
+				return err
+			}
+			saved[index].Seq = seq
+			if err := store.upsertDHCPLease(ctx, transaction, saved[index]); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
-	return lease, err
+	if err != nil {
+		return nil, err
+	}
+	return saved, nil
 }
 
 // nextDHCPLeaseSeq takes the node's next sequence number. The counter only

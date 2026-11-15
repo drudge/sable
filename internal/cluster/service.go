@@ -137,7 +137,10 @@ type Node struct {
 }
 
 type State struct {
-	Initialized   bool      `json:"initialized"`
+	Initialized bool `json:"initialized"`
+	// Joining is set while this node joins a cluster and applies its
+	// primary's state, before the join completes and Initialized is set.
+	Joining       bool      `json:"joining,omitempty"`
 	NetworkReady  bool      `json:"network_ready"`
 	NodeID        string    `json:"node_id"`
 	ClusterID     string    `json:"cluster_id,omitempty"`
@@ -351,6 +354,7 @@ func (service *Service) Snapshot() State {
 		Mode: "not-configured", ObservedAt: now, Nodes: []Node{},
 	}
 	if service.manifest == nil {
+		state.Joining = service.joining
 		return state
 	}
 	state.Initialized = true

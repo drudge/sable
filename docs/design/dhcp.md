@@ -180,6 +180,10 @@ a host-network container. The namespace spike covers the protocol. This check co
   address always goes to the limited broadcast address. Conflict detection uses an unprivileged ICMP
   socket and the neighbor table. If that socket can't open, DHCP still runs, and the console says
   probing is off and names `net.ipv4.ping_group_range`.
+- **Port 67 isn't shared.** The socket is bound without `SO_REUSEADDR`. Another DHCP server on the
+  host makes the bind fail, and that includes the dnsmasq that libvirt or Incus runs for one bridge.
+  DHCP logs the error and retries with backoff. It never binds beside the other server, where both
+  would answer every broadcast.
 - **A scope is a subnet, not an interface.** A node serves a scope on whichever local interface has
   an address in it, and for relayed requests whose `giaddr` or link selection falls in it. Interface
   names differ per node. The configuration is shared by the cluster.

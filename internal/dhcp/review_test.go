@@ -314,7 +314,7 @@ func TestReview618ConcurrentHandle(t *testing.T) {
 					engine.Handle(testNow, clientPacket(Request, mac, ourServerID(), addrOption(optionRequestedIP, offer.Reply.YIAddr.String())), testLink)
 				}
 				engine.Leases()
-				engine.Conflict(testNow, netip.MustParseAddr("10.0.7.119"))
+				engine.Conflict(testNow, netip.MustParseAddr("10.0.7.119"), "echo")
 			}
 		}()
 	}
