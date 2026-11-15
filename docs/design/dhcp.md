@@ -173,8 +173,10 @@ a host-network container. The namespace spike covers the protocol. This check co
   lease, a few seconds stale at most. A new primary acknowledges 0 and gets a full resend. A node
   whose own counter is below the sequence the primary acknowledges (its database was wiped or
   restored) first takes its own rows back from the primary's mirror, from the first, a batch a
-  beat (`LeaseReport.Recovered` says how far it has got), keeping their sequence numbers and any
-  address it wrote since the wipe, and reloads them into the running
+  beat (`LeaseReport.Recovered` says how far it has got), keeping their sequence numbers. A row
+  replaces a stored one for its address only when it was bound later: what the node wrote since a
+  wipe stays, and a row put back from an older backup gives way to the lease or renewal the mirror
+  saw after it. It reloads them into the running
   server, so a client keeps the address it was told it holds (RFC 2131 §4.3.1). Then it raises its
   counter past that number and resends every row, so a number is never used twice. A count can't
   show a wipe once the node has leased as many since as it held before, so a counter that takes
@@ -185,6 +187,9 @@ a host-network container. The namespace spike covers the protocol. This check co
   recovery also opens when a replica holds a higher number of its rows than its counter has
   reached, before the counter is raised to that number: a wiped primary hears from a replica
   before it leases anything, and one restored from an older backup never takes a first number.
+  While its recovery is open the primary lifts its counter without renumbering its rows: a row
+  from the backup under a new number would replace, on every replica, the lease or renewal made
+  since, before the primary has asked for it. Ending the recovery renumbers them all.
 - **What a node outage costs with no action.** Reserved clients: nothing. Dynamic clients of the
   dead node: nothing until their lease runs out. They retry the dead node from half the lease time,
   broadcast from 87.5%, and take a new address from a surviving range only at expiry. With a 24 h

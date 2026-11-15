@@ -75,10 +75,11 @@ type LeaseReport struct {
 // LeaseMirror reads and writes this node's lease table for the mirror.
 // Mirror writes rows another node owns, keeping their sequence numbers and
 // passing over any not newer than what it holds. Raise lifts a node's counter
-// to a number and renumbers its rows above it, reporting whether it did.
+// to a number and renumbers its rows above it, reporting whether it did;
+// Lift, when set, lifts the counter and leaves the rows' numbers alone.
 // Recover, when set, writes this node's own rows back from the primary's
-// mirror after a wipe, keeping their numbers and passing over any address it
-// already holds. Recovery, when set, reports whether the node's counter
+// mirror after a wipe or a restore, keeping their numbers and passing over
+// any address it holds a row for that wasn't bound earlier. Recovery, when set, reports whether the node's counter
 // started over and how far it has taken its rows back since, which its count
 // can't show once it has leased as many since as it held before; Recovered
 // moves that on, or ends it when done. Behind, when set, opens that recovery
@@ -91,6 +92,7 @@ type LeaseMirror struct {
 	Since     func(ctx context.Context, nodeID string, seq int64, limit int) ([]SharedLease, error)
 	Mirror    func(context.Context, []SharedLease) (int, error)
 	Raise     func(ctx context.Context, nodeID string, seq int64) (bool, error)
+	Lift      func(ctx context.Context, nodeID string, seq int64) (bool, error)
 	Recover   func(context.Context, []SharedLease) (int, error)
 	Behind    func(ctx context.Context, nodeID string, seq int64) (bool, error)
 	Recovery  func(ctx context.Context, nodeID string) (seq int64, open bool, err error)
@@ -187,14 +189,23 @@ func (service *Service) exchangeLeases(ctx context.Context, mirror LeaseMirror, 
 		// takes no first number, and with the replicas up a wiped primary
 		// hears from one before it leases anything. A recovery this report
 		// opens has asked the sender for nothing yet, so it takes none of
-		// the rows the report carries.
+		// the rows the report carries. While the recovery is open the
+		// counter is lifted without renumbering: a row put back from a
+		// backup would otherwise go out under a new number and replace the
+		// lease or renewal a replica mirrored since, before the primary
+		// has asked for it. Ending the recovery renumbers every row
+		// (raiseLeaseCounter).
 		_, asked := service.storedLeaseRecovery(ctx, mirror)
 		if held := report.Held[service.nodeID]; held > 0 && mirror.Behind != nil {
 			if _, err := mirror.Behind(ctx, service.nodeID, held); err != nil {
 				service.warnLeaseMirror("open the DHCP lease recovery", err)
 			}
 		}
-		if _, err := mirror.Raise(ctx, service.nodeID, report.Held[service.nodeID]); err != nil {
+		raise := mirror.Raise
+		if _, open := service.storedLeaseRecovery(ctx, mirror); open && mirror.Lift != nil {
+			raise = mirror.Lift
+		}
+		if _, err := raise(ctx, service.nodeID, report.Held[service.nodeID]); err != nil {
 			service.warnLeaseMirror("raise the DHCP lease counter", err)
 		}
 		wanted = service.recoverOwnLeases(ctx, mirror, from, report, asked)
