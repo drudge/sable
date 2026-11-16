@@ -764,12 +764,6 @@ func AppDocument(view DashboardView, pageTitle string, activePage string, page t
 				return templ_7745c5c3_Err
 			}
 		}
-		if view.CanDHCP {
-			templ_7745c5c3_Err = NavItem("DHCP", "/dhcp", "router", activePage == "dhcp", false).Render(ctx, templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-		}
 		if view.CanSettings {
 			templ_7745c5c3_Err = NavItem("Cache", "/cache", "database", activePage == "cache", false).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
@@ -808,6 +802,12 @@ func AppDocument(view DashboardView, pageTitle string, activePage string, page t
 		}
 		if view.CanCluster {
 			templ_7745c5c3_Err = NavItem("Cluster", "/cluster", "cluster", activePage == "cluster", false).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		if view.CanDHCP {
+			templ_7745c5c3_Err = NavItem("DHCP", "/dhcp", "router", activePage == "dhcp", false).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1178,12 +1178,6 @@ func CommandPalette(view DashboardView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		if view.CanDHCP {
-			templ_7745c5c3_Err = CommandOption("command-page-dhcp", "DHCP", "Leases and reservations", "router", "Page", "dhcp leases reservations addresses ip mac", "/dhcp", "", "", "", "").Render(ctx, templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-		}
 		templ_7745c5c3_Err = CommandOption("command-page-dns-client", "DNS Client", "Resolve and diagnose DNS queries", "terminal", "Page", "query dig nslookup lookup resolver", "/dns-client", "", "", "", "").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -1206,6 +1200,12 @@ func CommandPalette(view DashboardView) templ.Component {
 		}
 		if view.CanCluster {
 			templ_7745c5c3_Err = CommandOption("command-page-cluster", "Cluster", "Members, certificates, and replication", "cluster", "Page", "nodes primary replica sync", "/cluster", "", "", "", "").Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		if view.CanDHCP {
+			templ_7745c5c3_Err = CommandOption("command-page-dhcp", "DHCP", "Leases and reservations", "router", "Page", "dhcp leases reservations addresses ip mac", "/dhcp", "", "", "", "").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
