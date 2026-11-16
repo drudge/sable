@@ -36,8 +36,15 @@ const (
 // dhcpConn is the server's socket: datagrams with the interface they
 // arrived on, and replies sent out of a chosen interface from a chosen
 // source address.
+// dhcpArrival is where a datagram came in: the interface, and the address it
+// was sent to (a broadcast, or this node's own for a unicast renewal).
+type dhcpArrival struct {
+	ifIndex int
+	to      netip.Addr
+}
+
 type dhcpConn interface {
-	ReadPacket(buffer []byte) (n int, ifIndex int, err error)
+	ReadPacket(buffer []byte) (n int, arrival dhcpArrival, err error)
 	WritePacket(payload []byte, ifIndex int, source netip.Addr, destination netip.AddrPort) error
 	Close() error
 }
@@ -62,6 +69,7 @@ type dhcpStats struct {
 type dhcpRequest struct {
 	payload  []byte
 	ifIndex  int
+	to       netip.Addr
 	conflict *dhcpConflict
 	remove   *dhcpRemoval
 	// reload replaces the engine's view with the store's, after rows this
@@ -155,7 +163,7 @@ func (server *dhcpServer) read() error {
 		// One byte spare tells a datagram over dhcpMaxPacket from one that
 		// fits, so an oversize one is dropped instead of parsed truncated.
 		buffer := make([]byte, dhcpMaxPacket+1)
-		n, ifIndex, err := server.conn.ReadPacket(buffer)
+		n, arrival, err := server.conn.ReadPacket(buffer)
 		if err != nil {
 			if errors.Is(err, net.ErrClosed) {
 				return nil
@@ -171,7 +179,7 @@ func (server *dhcpServer) read() error {
 			continue
 		}
 		select {
-		case server.queue <- dhcpRequest{payload: buffer[:n], ifIndex: ifIndex}:
+		case server.queue <- dhcpRequest{payload: buffer[:n], ifIndex: arrival.ifIndex, to: arrival.to}:
 		default:
 			server.stats.QueueFull.Add(1)
 		}
@@ -228,6 +236,7 @@ func (server *dhcpServer) handle(ctx context.Context, request dhcpRequest) {
 		server.stats.Dropped.Add(1)
 		return
 	}
+	meta.To = request.to
 	result := server.engine.Handle(server.now(), packet, meta)
 	if len(result.Save) > 0 && !server.commit(ctx, result.Save) {
 		return

@@ -178,9 +178,16 @@ const (
 	dhcpLeaseReplace dhcpLeaseWrite = iota
 	// dhcpLeaseIfNewer replaces it only when its seq is lower: a mirror.
 	dhcpLeaseIfNewer
-	// dhcpLeaseIfAbsent never replaces it: this node's rows recovered from
-	// a mirror, where what it wrote since a wipe wins.
-	dhcpLeaseIfAbsent
+	// dhcpLeaseIfBoundLater replaces it only when the row was bound later,
+	// or bound at the same moment and ends sooner: this node's rows
+	// recovered from a mirror. What it wrote since a wipe was bound after
+	// anything the mirror holds and stays; a row put back from an older copy
+	// was bound before what the mirror saw since and goes (the row bound
+	// last is the record for an address). A release keeps the bound time and
+	// only ever brings the end forward (RFC 2131 §4.3.4), so at the same
+	// bound time the row that ends sooner is the later one. Seqs can't break
+	// the tie: a wiped node's counter starts over.
+	dhcpLeaseIfBoundLater
 )
 
 // upsertDHCPLease writes a lease under its own sequence number, treating a
@@ -194,8 +201,9 @@ func (store *Store) upsertDHCPLease(ctx context.Context, transaction *sql.Tx, le
 	switch write {
 	case dhcpLeaseIfNewer:
 		conflict += "\nWHERE sable_dhcp_leases.seq < excluded.seq"
-	case dhcpLeaseIfAbsent:
-		conflict = "DO NOTHING"
+	case dhcpLeaseIfBoundLater:
+		conflict += "\nWHERE sable_dhcp_leases.bound_at_ns < excluded.bound_at_ns" +
+			"\n   OR (sable_dhcp_leases.bound_at_ns = excluded.bound_at_ns AND sable_dhcp_leases.expires_at_ns > excluded.expires_at_ns)"
 	}
 	result, err := transaction.ExecContext(ctx, `
 INSERT INTO sable_dhcp_leases (`+dhcpLeaseColumns+`)
@@ -220,12 +228,18 @@ func (store *Store) MirrorDHCPLeases(ctx context.Context, leases []DHCPLease) (i
 }
 
 // RecoverDHCPLeases writes back this node's own rows from a primary's mirror
-// after its database was wiped, each keeping its seq, and returns how many it
-// wrote. It never replaces a stored row: a lease written since the wipe is
-// the newer truth for its address. The caller raises the counter past them
-// once the recovery is done (RaiseDHCPLeaseSeq).
+// after its database was wiped or put back from an older copy, each keeping
+// its seq, and returns how many it wrote. A row replaces a stored one for
+// its address only when it was bound later: a lease written since a wipe is
+// the newer truth and stays, and a row from the copy gives way to the lease
+// or renewal the mirror saw after it, so the client that was told last keeps
+// its address (RFC 2131 §4.3.1); a release made since, bound at the same
+// moment and ending sooner, ends the copy's lease (§4.3.4). Both times are
+// this node's own clock. The
+// caller raises the counter past them once the recovery is done
+// (RaiseDHCPLeaseSeq).
 func (store *Store) RecoverDHCPLeases(ctx context.Context, leases []DHCPLease) (int, error) {
-	return store.writeSequencedDHCPLeases(ctx, leases, dhcpLeaseIfAbsent)
+	return store.writeSequencedDHCPLeases(ctx, leases, dhcpLeaseIfBoundLater)
 }
 
 // writeSequencedDHCPLeases writes rows that carry their owner's seq in one
@@ -289,6 +303,20 @@ func (store *Store) DHCPLeaseHeld(ctx context.Context) (map[string]int64, error)
 // the counter. A node whose database was wiped or restored uses it once the
 // primary shows it holds a higher sequence of that node's rows.
 func (store *Store) RaiseDHCPLeaseSeq(ctx context.Context, nodeID string, seq int64) (bool, error) {
+	return store.raiseDHCPLeaseSeq(ctx, nodeID, seq, true)
+}
+
+// LiftDHCPLeaseSeq lifts a node's sequence counter to seq when it is lower
+// or missing and leaves its rows' numbers alone, so its next write takes the
+// number after seq. It reports whether it lifted the counter. A node that has
+// yet to take its own rows back from a mirror uses it: a new number on a row
+// it holds from before would carry that row over the newer one the mirror
+// holds for the address, before the node has asked for it.
+func (store *Store) LiftDHCPLeaseSeq(ctx context.Context, nodeID string, seq int64) (bool, error) {
+	return store.raiseDHCPLeaseSeq(ctx, nodeID, seq, false)
+}
+
+func (store *Store) raiseDHCPLeaseSeq(ctx context.Context, nodeID string, seq int64, renumber bool) (bool, error) {
 	raised := false
 	err := store.withTx(ctx, "DHCP lease sequence", func(transaction *sql.Tx) error {
 		result, err := transaction.ExecContext(ctx, `
@@ -302,6 +330,9 @@ WHERE sable_dhcp_lease_seqs.seq < excluded.seq`, nodeID, seq)
 			return err
 		}
 		raised = true
+		if !renumber {
+			return nil
+		}
 		return store.renumberDHCPLeases(ctx, transaction, nodeID)
 	})
 	return raised, err

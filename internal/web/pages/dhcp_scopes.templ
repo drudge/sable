@@ -115,11 +115,13 @@ templ dhcpScopeActions(view DHCPPageView, scope DHCPScopeView) {
 }
 
 // dhcpScopeDialog adds a scope or edits one. It shows the settings a home
-// network needs; the rest (options, routes, boot, flags) stay in sable.toml
-// and keep their values when the dialog saves.
+// network needs, with the ones most networks leave alone under Advanced
+// Options; the rest (options, routes, boot, flags) stay in sable.toml and
+// keep their values when the dialog saves. An add leaves the ID empty and
+// the server makes it from the name.
 templ dhcpScopeDialog(scope DHCPScopeView, add bool) {
 	@components.Dialog(components.DialogProps{ID: dhcpScopeFormID(scope, add), Title: ifThen(add, "Add Scope", "Edit Scope"), Description: ifThen(add, "Hand out addresses on one network", dhcpScopeTitle(scope)+" · "+scope.Subnet), Class: "isotope-form-dialog dhcp-scope-dialog"}) {
-		<form hx-post="/ui/dhcp/scopes" hx-target="#dhcp-content" hx-swap="outerHTML">
+		<form hx-post="/ui/dhcp/scopes" hx-target="#dhcp-content" hx-swap="outerHTML" data-dhcp-scope-form>
 			<input type="hidden" name="tab" value="scopes"/>
 			<div class="isotope-dialog-body">
 				<div class="dhcp-form-notice" id={ DHCPScopeNoticeID(scope.ID, scope.Suggest, add) }></div>
@@ -128,32 +130,46 @@ templ dhcpScopeDialog(scope DHCPScopeView, add bool) {
 					if scope.Suggest != "" {
 						<input type="hidden" name="suggest" value={ scope.Suggest }/>
 					}
-					@components.Field(components.FieldProps{ID: dhcpScopeFormID(scope, add) + "__id", Label: "ID", Help: "A short, permanent key that leases refer to, like `lan`.", Input: templ.Attributes{"name": "id", "value": scope.ID, "class": "mono-input", "placeholder": "lan", "pattern": "[a-z0-9][a-z0-9\\-]*", "maxlength": "32", "autocomplete": "off", "spellcheck": "false", "required": true}})
 				} else {
 					<input type="hidden" name="id" value={ scope.ID }/>
 				}
-				@dhcpScopeField(scope, add, "name", "Name", "", "LAN", "", templ.Attributes{"value": scope.Name, "maxlength": "64"})
-				@dhcpScopeField(scope, add, "subnet", "Subnet", "The network in CIDR form; this server needs an address in it.", "192.168.1.0/24", "mono-input", templ.Attributes{"value": scope.Subnet, "required": true})
 				<div class="record-field-grid two">
-					@dhcpScopeField(scope, add, "range_start", "Range Start", "", "192.168.1.100", "mono-input", templ.Attributes{"value": scope.RangeStart, "inputmode": "decimal"})
-					@dhcpScopeField(scope, add, "range_end", "Range End", "", "192.168.1.199", "mono-input", templ.Attributes{"value": scope.RangeEnd, "inputmode": "decimal"})
+					@dhcpScopeField(scope, add, "name", "Name", "", "LAN", "", templ.Attributes{"value": scope.Name, "maxlength": "64", "required": true, "data-dhcp-scope-name": true})
+					@dhcpScopeField(scope, add, "subnet", "Subnet", "", "192.168.1.0/24", "mono-input", templ.Attributes{"value": scope.Subnet, "required": true, "spellcheck": "false", "data-dhcp-scope-subnet": true})
+				</div>
+				<div class="record-field-grid two">
+					@dhcpScopeField(scope, add, "range_start", "Range Start", "", "192.168.1.100", "mono-input", templ.Attributes{"value": scope.RangeStart, "inputmode": "decimal", "aria-describedby": dhcpScopeRangeHelpID(scope, add), "data-dhcp-scope-fill": "range_start"})
+					@dhcpScopeField(scope, add, "range_end", "Range End", "", "192.168.1.199", "mono-input", templ.Attributes{"value": scope.RangeEnd, "inputmode": "decimal", "aria-describedby": dhcpScopeRangeHelpID(scope, add), "data-dhcp-scope-fill": "range_end"})
 				</div>
 				if scope.SplitNodes > 0 {
-					@dhcpRangeSplit(scope)
+					@dhcpRangeSplit(scope, dhcpScopeRangeHelpID(scope, add))
+				} else {
+					<p class="field-help" id={ dhcpScopeRangeHelpID(scope, add) }>Devices get an address from this range.</p>
 				}
 				if scope.MoreRanges > 0 {
 					<p class="field-help">{ fmt.Sprintf("This scope has %d more %s in sable.toml; saving keeps %s.", scope.MoreRanges, ifThen(scope.MoreRanges == 1, "range", "ranges"), ifThen(scope.MoreRanges == 1, "it", "them")) }</p>
 				}
-				@dhcpScopeField(scope, add, "router", "Router", "Option 3, the gateway clients send traffic through.", "192.168.1.1", "mono-input", templ.Attributes{"value": scope.Router, "inputmode": "decimal"})
-				@dhcpScopeField(scope, add, "dns", "DNS Servers", "Option 6, comma separated. Leave empty to send this server's address.", "", "mono-input", templ.Attributes{"value": scope.DNS})
-				@dhcpScopeField(scope, add, "domain", "Domain", "Option 15, and the zone where device names register.", "home.example.com", "mono-input", templ.Attributes{"value": scope.Domain, "spellcheck": "false"})
-				@dhcpScopeField(scope, add, "lease", "Lease Time", "How long a device keeps its address, like `24h`; at least `2m`.", "24h", "mono-input", templ.Attributes{"value": scope.Lease})
+				@dhcpScopeField(scope, add, "router", "Router", "The gateway devices use to reach the internet.", "192.168.1.1", "mono-input", templ.Attributes{"value": scope.Router, "inputmode": "decimal", "data-dhcp-scope-fill": "router"})
+				@dhcpScopeField(scope, add, "domain", "Domain", "Each device's name is added to this zone, like `laptop.home.arpa`.", "home.arpa", "mono-input", templ.Attributes{"value": scope.Domain, "spellcheck": "false"})
+				@components.AdvancedOptions() {
+					@dhcpScopeField(scope, add, "dns", "DNS Servers", "Leave empty to point devices at this server; separate several with commas.", "", "mono-input", templ.Attributes{"value": scope.DNS, "spellcheck": "false"})
+					@dhcpScopeField(scope, add, "lease", "Lease Time", "How long a device keeps its address before renewing, like `24h`.", "24h", "mono-input", templ.Attributes{"value": scope.Lease})
+					if add {
+						@components.Field(components.FieldProps{ID: dhcpScopeFormID(scope, add) + "__id", Label: "ID", Help: "Made from the name when left empty. It can't change later.", Input: templ.Attributes{"name": "id", "class": "mono-input", "placeholder": dhcpOr(scope.ID, "lan"), "pattern": "[a-z0-9][a-z0-9\\-]*", "maxlength": "32", "autocomplete": "off", "spellcheck": "false", "data-dhcp-scope-id": true}})
+					}
+				}
 			</div>
 			@components.DialogFooter("Cancel") {
 				@components.Button(components.ButtonProps{Label: ifThen(add, "Add Scope", "Save Scope"), Icon: "check", Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
 			}
 		</form>
 	}
+}
+
+// dhcpScopeRangeHelpID is the line under the range, which both range fields
+// point at.
+func dhcpScopeRangeHelpID(scope DHCPScopeView, add bool) string {
+	return dhcpScopeFormID(scope, add) + "__range-help"
 }
 
 templ dhcpScopeField(scope DHCPScopeView, add bool, name, label, help, placeholder, class string, input templ.Attributes) {
@@ -223,8 +239,8 @@ func DHCPScopeNoticeID(id, suggest string, add bool) string {
 
 // dhcpRangeSplit is how a cluster's scope range is split across its nodes:
 // evenly when the range changes, each node leasing only from its slice.
-templ dhcpRangeSplit(scope DHCPScopeView) {
-	<p class="field-help">{ fmt.Sprintf("Split evenly across the %d cluster nodes when the range changes; each node leases only from its own slice.", scope.SplitNodes) }</p>
+templ dhcpRangeSplit(scope DHCPScopeView, helpID string) {
+	<p class="field-help" id={ helpID }>{ fmt.Sprintf("Split evenly across the %d cluster nodes; each node leases only from its own slice.", scope.SplitNodes) }</p>
 	if len(scope.Split) > 0 {
 		<div class="dhcp-network-list" role="list" aria-label="Range split">
 			for _, split := range scope.Split {

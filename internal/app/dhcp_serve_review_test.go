@@ -154,8 +154,8 @@ func reviewSocketMoveAfterFault(t *testing.T, arm func(*reviewSocketStore)) {
 // reviewSocketErrConn fails its first read with a real socket error.
 type reviewSocketErrConn struct{ closed atomic.Bool }
 
-func (conn *reviewSocketErrConn) ReadPacket([]byte) (int, int, error) {
-	return 0, 0, errors.New("recvmsg: network is down")
+func (conn *reviewSocketErrConn) ReadPacket([]byte) (int, dhcpArrival, error) {
+	return 0, dhcpArrival{}, errors.New("recvmsg: network is down")
 }
 func (conn *reviewSocketErrConn) WritePacket([]byte, int, netip.Addr, netip.AddrPort) error {
 	return nil

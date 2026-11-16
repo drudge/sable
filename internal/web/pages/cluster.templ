@@ -70,6 +70,9 @@ type ClusterNodeView struct {
 	Version string
 	UpSince string
 	SyncState string
+	// ClockOffset is how far the node's clock is ahead of this one's, while
+	// SyncState is clock; zero when only the primary's refusal says so.
+	ClockOffset time.Duration
 	CurrentGeneration uint64
 	AppliedGeneration uint64
 	Lag uint64
@@ -439,11 +442,23 @@ func clusterNodeEndpoint(node ClusterNodeView) string { if node.AdvertiseURL != 
 func clusterNodeAvatar(node ClusterNodeView) string { return "cluster-node-icon " + ifThen(node.State == "online", "online", ifThen(node.State == "unreachable", "unreachable", "unknown")) + ifThen(node.Local, " local", "") }
 func nodeStateLabel(state string) string { if state == "online" { return "Online" }; if state == "unreachable" { return "Unreachable" }; return "Unknown" }
 func nodeSyncBadge(state string) string { return "cluster-sync-badge " + state }
-func syncStateLabel(state string) string { switch state { case "current": return "In sync"; case "behind": return "Behind"; case "unverified": return "Sync unverified"; case "conflict": return "Also primary"; default: return "Sync unknown" } }
+func syncStateLabel(state string) string { switch state { case "current": return "In sync"; case "behind": return "Behind"; case "unverified": return "Sync unverified"; case "conflict": return "Also primary"; case "clock": return "Clock out of step"; default: return "Sync unknown" } }
 func syncProgressMaximum(generation uint64) uint64 { if generation == 0 { return 1 }; return generation }
-func syncProgressLabel(node ClusterNodeView) string { if node.SyncState == "conflict" { return "Accepting changes as primary" }; if node.SyncState == "current" { return "Fully synchronized" }; if node.SyncState == "unverified" { return "Awaiting primary verification" }; if node.Lag > 0 { return fmt.Sprintf("%d generations behind", node.Lag) }; return "Synchronization unavailable" }
+func syncProgressLabel(node ClusterNodeView) string { if node.SyncState == "clock" { return clockStepLabel(node.ClockOffset) }; if node.SyncState == "conflict" { return "Accepting changes as primary" }; if node.SyncState == "current" { return "Fully synchronized" }; if node.SyncState == "unverified" { return "Awaiting primary verification" }; if node.Lag > 0 { return fmt.Sprintf("%d generations behind", node.Lag) }; return "Synchronization unavailable" }
 func nodeUptimeLabel(node ClusterNodeView) string { if node.UpSince == "" { return "Uptime unavailable" }; if node.State == "unreachable" { return "Last reported up " + node.UpSince }; return "Up " + node.UpSince }
-func nodeLagLabel(node ClusterNodeView) string { if node.SyncState == "unknown" || node.SyncState == "unverified" || node.SyncState == "conflict" { return "Unknown" }; return lagLabel(node.Lag) }
+func nodeLagLabel(node ClusterNodeView) string { if node.SyncState == "unknown" || node.SyncState == "unverified" || node.SyncState == "conflict" || node.SyncState == "clock" { return "Unknown" }; return lagLabel(node.Lag) }
+
+// clockStepLabel says why a node that is up can't sync: its clock is more than
+// 30 seconds from this node's, outside the heartbeat window (D107).
+func clockStepLabel(offset time.Duration) string {
+	switch {
+	case offset > 0:
+		return "Clock " + offset.Round(time.Second).String() + " ahead; set it by NTP to sync"
+	case offset < 0:
+		return "Clock " + (-offset).Round(time.Second).String() + " behind; set it by NTP to sync"
+	}
+	return "Clock out of step with the primary; set it by NTP to sync"
+}
 func lagLabel(lag uint64) string { if lag == 0 { return "No lag" }; if lag == 1 { return "1 generation" }; return fmt.Sprintf("%d generations", lag) }
 
 // ClusterNodeRoute is where a node's details panel lives. Each node's address

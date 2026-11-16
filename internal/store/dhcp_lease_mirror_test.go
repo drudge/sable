@@ -61,7 +61,8 @@ func TestDHCPLeaseRecoverPostgres(t *testing.T) {
 }
 
 // A wiped node's rows come back from the mirror with their seqs, but a row it
-// wrote since the wipe keeps its address, even under a lower seq.
+// wrote since the wipe keeps its address, even under a lower seq: the mirror's
+// row for it was not bound later.
 func testDHCPLeaseRecover(t *testing.T, storage *Store) {
 	t.Helper()
 	ctx := context.Background()
@@ -80,6 +81,129 @@ func testDHCPLeaseRecover(t *testing.T, storage *Store) {
 	}
 	if leases[1].ClientKey != "kept" || leases[1].Seq != 41 {
 		t.Fatalf("the recovered lease is %+v; want client kept at seq 41", leases[1])
+	}
+}
+
+func TestDHCPLeaseLiftSeqSQLite(t *testing.T) {
+	t.Parallel()
+	testDHCPLeaseLiftSeq(t, openIdentityStore(t))
+}
+
+func TestDHCPLeaseLiftSeqPostgres(t *testing.T) {
+	dsn := os.Getenv("SABLE_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("SABLE_TEST_POSTGRES_DSN is not set")
+	}
+	testDHCPLeaseLiftSeq(t, openPostgresTestStore(t, dsn))
+}
+
+// LiftDHCPLeaseSeq lifts a counter that is behind without giving the node's
+// rows new numbers, so a row from before a restore isn't sent out as newer
+// than the one a mirror holds (F73), and the next write takes the number
+// after. It never lowers a counter.
+func testDHCPLeaseLiftSeq(t *testing.T, storage *Store) {
+	t.Helper()
+	ctx := context.Background()
+	first := mustSaveDHCPLease(t, storage, mirrorTestLease("node-l", "10.0.7.1", "a", 0))
+	second := mustSaveDHCPLease(t, storage, mirrorTestLease("node-l", "10.0.7.2", "b", 0))
+	if lifted, err := storage.LiftDHCPLeaseSeq(ctx, "node-l", 7); err != nil || !lifted {
+		t.Fatalf("lift to 7 = %v, %v; want true", lifted, err)
+	}
+	leases, err := storage.DHCPLeasesSince(ctx, "node-l", 0, 10)
+	if err != nil || len(leases) != 2 || leases[0].Seq != first.Seq || leases[1].Seq != second.Seq {
+		t.Fatalf("after the lift the rows are %+v, %v; want them at %d and %d still", leases, err, first.Seq, second.Seq)
+	}
+	if saved := mustSaveDHCPLease(t, storage, mirrorTestLease("node-l", "10.0.7.3", "c", 0)); saved.Seq != 8 {
+		t.Fatalf("the write after a lift to 7 took seq %d; want 8", saved.Seq)
+	}
+	if lifted, err := storage.LiftDHCPLeaseSeq(ctx, "node-l", 5); err != nil || lifted {
+		t.Fatalf("lift to 5 under a counter at 8 = %v, %v; want false", lifted, err)
+	}
+}
+
+func TestDHCPLeaseRecoverTakesTheRowBoundLaterSQLite(t *testing.T) {
+	t.Parallel()
+	testDHCPLeaseRecoverTakesTheRowBoundLater(t, openIdentityStore(t))
+}
+
+func TestDHCPLeaseRecoverTakesTheRowBoundLaterPostgres(t *testing.T) {
+	dsn := os.Getenv("SABLE_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("SABLE_TEST_POSTGRES_DSN is not set")
+	}
+	testDHCPLeaseRecoverTakesTheRowBoundLater(t, openPostgresTestStore(t, dsn))
+}
+
+// A node put back from an older copy holds rows from before the copy. Where
+// its mirror shows the address leased to another client since, or the same
+// client renewed, that row was bound later and replaces the copy's (F73); a
+// row bound earlier than the stored one never does.
+func testDHCPLeaseRecoverTakesTheRowBoundLater(t *testing.T, storage *Store) {
+	t.Helper()
+	ctx := context.Background()
+	moved := mustSaveDHCPLease(t, storage, mirrorTestLease("node-rb", "10.0.8.21", "tablet", 0))
+	renewed := mustSaveDHCPLease(t, storage, mirrorTestLease("node-rb", "10.0.8.22", "laptop", 0))
+	since := func(address, client string, seq int64, after time.Duration) DHCPLease {
+		lease := mirrorTestLease("node-rb", address, client, seq)
+		lease.BoundAt, lease.ExpiresAt = lease.BoundAt.Add(after), lease.ExpiresAt.Add(after)
+		return lease
+	}
+	count, err := storage.RecoverDHCPLeases(ctx, []DHCPLease{
+		since("10.0.8.21", "phone", 7, time.Hour), since("10.0.8.22", "laptop", 8, 2*time.Hour)})
+	if err != nil || count != 2 {
+		t.Fatalf("recover = %d, %v; want 2: both rows were bound after the stored ones", count, err)
+	}
+	leases, err := storage.DHCPLeasesSince(ctx, "node-rb", 0, 10)
+	if err != nil || len(leases) != 2 {
+		t.Fatalf("leases = %v, %v; want 2", leases, err)
+	}
+	if leases[0].ClientKey != "phone" || leases[0].Seq != 7 {
+		t.Fatalf("the address leased to phone since the copy is %+v; want client phone at seq 7", leases[0])
+	}
+	if want := renewed.ExpiresAt.Add(2 * time.Hour); leases[1].Seq != 8 || !leases[1].ExpiresAt.Equal(want) {
+		t.Fatalf("the lease renewed since the copy is seq %d ending %v; want seq 8 ending %v", leases[1].Seq, leases[1].ExpiresAt, want)
+	}
+	if count, err = storage.RecoverDHCPLeases(ctx, []DHCPLease{since("10.0.8.21", "tablet", 9, -time.Hour)}); err != nil || count != 0 {
+		t.Fatalf("recovering a row bound before the stored one = %d, %v; want 0", count, err)
+	}
+	_ = moved
+}
+
+func TestDHCPLeaseRecoverTakesTheReleaseSQLite(t *testing.T) {
+	t.Parallel()
+	testDHCPLeaseRecoverTakesTheRelease(t, openIdentityStore(t))
+}
+
+func TestDHCPLeaseRecoverTakesTheReleasePostgres(t *testing.T) {
+	dsn := os.Getenv("SABLE_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("SABLE_TEST_POSTGRES_DSN is not set")
+	}
+	testDHCPLeaseRecoverTakesTheRelease(t, openPostgresTestStore(t, dsn))
+}
+
+// A release keeps the lease's bound time and ends it early (RFC 2131
+// §4.3.4). A node put back from a copy taken before the release holds the
+// lease active; the mirror's released row, bound at the same moment and
+// ending sooner, replaces it. The copy's row never replaces the release.
+func testDHCPLeaseRecoverTakesTheRelease(t *testing.T, storage *Store) {
+	t.Helper()
+	ctx := context.Background()
+	held := mustSaveDHCPLease(t, storage, mirrorTestLease("node-rl", "10.0.8.31", "printer", 0))
+	released := held
+	released.Seq, released.State, released.ExpiresAt = held.Seq+4, DHCPLeaseReleased, held.BoundAt.Add(time.Minute)
+	if count, err := storage.RecoverDHCPLeases(ctx, []DHCPLease{released}); err != nil || count != 1 {
+		t.Fatalf("recover the release = %d, %v; want 1: it ends sooner than the copy's row", count, err)
+	}
+	if count, err := storage.RecoverDHCPLeases(ctx, []DHCPLease{held}); err != nil || count != 0 {
+		t.Fatalf("recover the copy's row over the release = %d, %v; want 0", count, err)
+	}
+	leases, err := storage.DHCPLeasesSince(ctx, "node-rl", 0, 10)
+	if err != nil || len(leases) != 1 {
+		t.Fatalf("leases = %v, %v; want 1", leases, err)
+	}
+	if got := leases[0]; got.State != DHCPLeaseReleased || got.Seq != released.Seq || !got.ExpiresAt.Equal(released.ExpiresAt) {
+		t.Fatalf("the lease released since the copy is %+v; want released at seq %d ending %v", got, released.Seq, released.ExpiresAt)
 	}
 }
 

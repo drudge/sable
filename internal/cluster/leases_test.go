@@ -3,8 +3,10 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -34,7 +36,22 @@ func (store *leaseStore) save(nodeID, address, hostname string) {
 	}
 	store.rows[[2]string{nodeID, address}] = SharedLease{NodeID: nodeID, Address: address, ScopeID: "lan",
 		ClientKey: "01:" + address, Hostname: hostname, State: "active", Seq: store.counter[nodeID],
+		BoundAt:   leaseTestEpoch.Add(time.Duration(leaseTestTick.Add(1)) * time.Second),
 		ExpiresAt: time.Now().Add(time.Hour).UTC().Truncate(time.Second)}
+}
+
+// leaseTestTick orders the leases every test store saves, as one node's
+// clock orders what it binds.
+var (
+	leaseTestTick  atomic.Int64
+	leaseTestEpoch = time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
+)
+
+// copyOf is the store as a backup of it made now would restore it.
+func (store *leaseStore) copyOf() *leaseStore {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	return &leaseStore{rows: maps.Clone(store.rows), counter: maps.Clone(store.counter), recovery: map[string]int64{}}
 }
 
 func (store *leaseStore) Held(context.Context) (map[string]int64, error) {
@@ -76,20 +93,30 @@ func (store *leaseStore) Mirror(_ context.Context, rows []SharedLease) (int, err
 }
 
 // Recover writes this node's own rows back, keeping their numbers, where no
-// row holds the address yet.
+// row holds the address yet or the one that does was bound earlier.
 func (store *leaseStore) Recover(_ context.Context, rows []SharedLease) (int, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	written := 0
 	for _, row := range rows {
 		key := [2]string{row.NodeID, row.Address}
-		if _, ok := store.rows[key]; ok {
+		if held, ok := store.rows[key]; ok && !row.BoundAt.After(held.BoundAt) {
 			continue
 		}
 		store.rows[key] = row
 		written++
 	}
 	return written, nil
+}
+
+func (store *leaseStore) Lift(_ context.Context, nodeID string, seq int64) (bool, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.counter[nodeID] >= seq {
+		return false, nil
+	}
+	store.counter[nodeID] = seq
+	return true, nil
 }
 
 func (store *leaseStore) Raise(_ context.Context, nodeID string, seq int64) (bool, error) {
@@ -146,7 +173,7 @@ func (store *leaseStore) Changed() {
 }
 
 func (store *leaseStore) mirror() LeaseMirror {
-	return LeaseMirror{Held: store.Held, Since: store.Since, Mirror: store.Mirror, Raise: store.Raise,
+	return LeaseMirror{Held: store.Held, Since: store.Since, Mirror: store.Mirror, Raise: store.Raise, Lift: store.Lift,
 		Recover: store.Recover, Behind: store.Behind, Recovery: store.Recovery, Recovered: store.Recovered, Changed: store.Changed}
 }
 

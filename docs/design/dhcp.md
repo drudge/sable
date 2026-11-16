@@ -96,8 +96,10 @@ a host-network container. The namespace spike covers the protocol. This check co
 ### 1. Protocol scope
 
 - **DHCPv4 only.** RFC 2131 and 2132, client identifier echo (RFC 6842), relay information echo
-  (RFC 3046), link and subnet selection (RFC 3527, RFC 3011), classless routes (RFC 3442), the FQDN
-  option (RFC 4702), and IPv6-only preferred (RFC 8925) when the client asks and the scope sets it.
+  (RFC 3046), classless routes (RFC 3442), the FQDN option (RFC 4702), and IPv6-only preferred
+  (RFC 8925) when the client asks and the scope sets it. Link and subnet selection (RFC 3527,
+  RFC 3011) aren't built: the scope comes from `giaddr` alone (D108). They'd be one more step in
+  `scopeFor`, ahead of `giaddr`.
 - **DHCPv6: not in this design.** Reopen it for a concrete request, and then start with stateless
   DHCPv6, which hands out DNS servers only.
 - **Router advertisements: never.** Sable isn't the router. A DNS server that sends RAs can take a
@@ -173,8 +175,12 @@ a host-network container. The namespace spike covers the protocol. This check co
   lease, a few seconds stale at most. A new primary acknowledges 0 and gets a full resend. A node
   whose own counter is below the sequence the primary acknowledges (its database was wiped or
   restored) first takes its own rows back from the primary's mirror, from the first, a batch a
-  beat (`LeaseReport.Recovered` says how far it has got), keeping their sequence numbers and any
-  address it wrote since the wipe, and reloads them into the running
+  beat (`LeaseReport.Recovered` says how far it has got), keeping their sequence numbers. A row
+  replaces a stored one for its address only when it was bound later: what the node wrote since a
+  wipe stays, and a row put back from an older backup gives way to the lease or renewal the mirror
+  saw after it. A release keeps the bound time and brings the end forward (RFC 2131 §4.3.4), so at
+  the same bound time the row that ends sooner wins and a lease released since the backup stays
+  released. It reloads them into the running
   server, so a client keeps the address it was told it holds (RFC 2131 §4.3.1). Then it raises its
   counter past that number and resends every row, so a number is never used twice. A count can't
   show a wipe once the node has leased as many since as it held before, so a counter that takes
@@ -185,6 +191,9 @@ a host-network container. The namespace spike covers the protocol. This check co
   recovery also opens when a replica holds a higher number of its rows than its counter has
   reached, before the counter is raised to that number: a wiped primary hears from a replica
   before it leases anything, and one restored from an older backup never takes a first number.
+  While its recovery is open the primary lifts its counter without renumbering its rows: a row
+  from the backup under a new number would replace, on every replica, the lease or renewal made
+  since, before the primary has asked for it. Ending the recovery renumbers them all.
 - **What a node outage costs with no action.** Reserved clients: nothing. Dynamic clients of the
   dead node: nothing until their lease runs out. They retry the dead node from half the lease time,
   broadcast from 87.5%, and take a new address from a surviving range only at expiry. With a 24 h
@@ -217,7 +226,8 @@ a host-network container. The namespace spike covers the protocol. This check co
   DHCP logs the error and retries with backoff. It never binds beside the other server, where both
   would answer every broadcast.
 - **A scope is a subnet, not an interface.** A node serves a scope on whichever local interface has
-  an address in it, and for relayed requests whose `giaddr` or link selection falls in it. Interface
+  an address in it, for relayed requests whose `giaddr` falls in it, and for unicast renewals routed
+  to the node whose `ciaddr` falls in it (RFC 2131 §4.3.2, D106). Interface
   names differ per node. The configuration is shared by the cluster.
 - **Unprivileged LXC on Proxmox:** works on the container's bridge interface. Use one interface per
   VLAN, or point the router's DHCP relay at Sable. The relay is the answer for many VLANs.
@@ -244,7 +254,10 @@ a host-network container. The namespace spike covers the protocol. This check co
     set, or the image is older than the file capability. A web update can't fix an old image,
     because the launcher is part of the image.
 - **Relays:** reply unicast to `giaddr:67`, echo option 82 unchanged, and accept
-  a relayed request only when `giaddr` or the link selection is inside a configured scope.
+  a relayed request only when `giaddr` is inside a configured scope. A renewal behind a relay
+  that forwards broadcasts only comes straight to the node, unicast with `giaddr` zero; it takes
+  the scope holding `ciaddr`. A broadcast keeps the arrival link's scope, so a client that moved
+  links is still NAKed.
 - **Off by default.** A scope's **Enable** action first probes for another DHCP server: a
   broadcast-flag DISCOVER from port 68, a 4 s wait, and one retransmit with the same transaction ID
   and another 4 s wait while nothing answers (RFC 2131 §4.1, §4.4.1). dnsmasq, ISC dhcpd, and

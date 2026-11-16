@@ -2372,7 +2372,7 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 .cluster-remove-node .nav-icon { width: .9rem; height: .9rem; }
 .cluster-sync-badge { display: inline-flex; width: fit-content; align-items: center; border-radius: 999px; background: var(--muted); padding: .2rem .6rem; color: var(--muted-foreground); font-size: .68rem; font-weight: 600; line-height: 1.4; }
 .cluster-sync-badge.current { background: rgb(6 182 212 / .13); color: #0891b2; }
-.cluster-sync-badge.unverified { background: rgb(245 158 11 / .13); color: var(--warning-strong); }
+.cluster-sync-badge.unverified, .cluster-sync-badge.clock { background: rgb(245 158 11 / .13); color: var(--warning-strong); }
 .cluster-sync-badge.behind { background: rgb(239 68 68 / .13); color: var(--danger); }
 .cluster-sync-badge.conflict { background: rgb(239 68 68 / .13); color: var(--danger); }
 .cluster-conflict-warning { margin: var(--space-6) var(--space-6) 0; }

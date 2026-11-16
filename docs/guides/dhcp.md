@@ -23,7 +23,9 @@ A scope is one network: its subnet, the pool of addresses to hand out, and the o
 4. Set **Domain** to a zone for device names, such as `lan.example.com`. Sable creates it as a Primary zone if it doesn't exist, and the reverse zone too.
 5. Save the scope. It stays off until you turn DHCP on.
 
-You can also add a scope with **Add Scope**, with the API (`PUT /api/v1/dhcp/scopes/{scope}`), or in the `[dhcp]` section of `sable.toml`. [DHCP configuration](../configuration.md#dhcp-server) lists every setting, including PXE boot, static routes (option 121, RFC 3442), and custom options.
+You can also add a scope with **Add Scope**. Typing a subnet fills in a pool, such as `.100` to `.199` on a `/24`, and the router at `.1`, without changing anything you've typed. **DNS Servers**, **Lease Time**, and the scope's **ID** wait under **Advanced Options**. Leave the ID empty and Sable makes one from the name, such as `guest-wi-fi` for Guest Wi-Fi; it can't change later.
+
+Scopes can also come from the API (`PUT /api/v1/dhcp/scopes/{scope}`) or the `[dhcp]` section of `sable.toml`. [DHCP configuration](../configuration.md#dhcp-server) lists every setting, including PXE boot, static routes (option 121, RFC 3442), and custom options.
 
 ## Move your reservations
 
@@ -56,7 +58,7 @@ Keep the old DHCP server's settings until Sable has served the network for a ful
 
 1. **Shorten the old server's lease time** to an hour a day ahead, so devices come back to ask sooner. Wait out the old lease time.
 2. **Turn the old server's DHCP off.** Leave its DNS and routing alone.
-3. In Sable, select **Turn On**. Sable first listens 8 seconds for another DHCP server on each of the scope's networks. If one answers, it names it and doesn't turn on. Turn the other server off, or select **Turn On Anyway** only if you know why it answers.
+3. In Sable, select **Turn On**. Sable first listens up to 8 seconds for another DHCP server on each of the scope's networks. If one answers, it names it and doesn't turn on. Turn the other server off, or select **Turn On Anyway** only if you know why it answers.
 4. **Renew a test device's lease**, or reconnect it to Wi-Fi. Check it gets an address from the pool, the right router, and Sable as its DNS server, and that its name resolves in your zone. Its lease shows on the **DHCP** page.
 5. Renew the rest as they come back on their own. A device asks again at half its lease time.
 

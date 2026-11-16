@@ -587,8 +587,10 @@ func dhcpScopeActions(view DHCPPageView, scope DHCPScopeView) templ.Component {
 }
 
 // dhcpScopeDialog adds a scope or edits one. It shows the settings a home
-// network needs; the rest (options, routes, boot, flags) stay in sable.toml
-// and keep their values when the dialog saves.
+// network needs, with the ones most networks leave alone under Advanced
+// Options; the rest (options, routes, boot, flags) stay in sable.toml and
+// keep their values when the dialog saves. An add leaves the ID empty and
+// the server makes it from the name.
 func dhcpScopeDialog(scope DHCPScopeView, add bool) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -618,14 +620,14 @@ func dhcpScopeDialog(scope DHCPScopeView, add bool) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "<form hx-post=\"/ui/dhcp/scopes\" hx-target=\"#dhcp-content\" hx-swap=\"outerHTML\"><input type=\"hidden\" name=\"tab\" value=\"scopes\"><div class=\"isotope-dialog-body\"><div class=\"dhcp-form-notice\" id=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "<form hx-post=\"/ui/dhcp/scopes\" hx-target=\"#dhcp-content\" hx-swap=\"outerHTML\" data-dhcp-scope-form><input type=\"hidden\" name=\"tab\" value=\"scopes\"><div class=\"isotope-dialog-body\"><div class=\"dhcp-form-notice\" id=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var28 string
 			templ_7745c5c3_Var28, templ_7745c5c3_Err = templruntime.NewAttributeExpression(DHCPScopeNoticeID(scope.ID, scope.Suggest, add)).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 125, Col: 86}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 127, Col: 86}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var28)
 			if templ_7745c5c3_Err != nil {
@@ -648,7 +650,7 @@ func dhcpScopeDialog(scope DHCPScopeView, add bool) templ.Component {
 					var templ_7745c5c3_Var29 string
 					templ_7745c5c3_Var29, templ_7745c5c3_Err = templruntime.NewAttributeExpression(scope.Suggest).Resolve(ctx)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 129, Col: 63}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 131, Col: 63}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var29)
 					if templ_7745c5c3_Err != nil {
@@ -659,50 +661,46 @@ func dhcpScopeDialog(scope DHCPScopeView, add bool) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, " ")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = components.Field(components.FieldProps{ID: dhcpScopeFormID(scope, add) + "__id", Label: "ID", Help: "A short, permanent key that leases refer to, like `lan`.", Input: templ.Attributes{"name": "id", "value": scope.ID, "class": "mono-input", "placeholder": "lan", "pattern": "[a-z0-9][a-z0-9\\-]*", "maxlength": "32", "autocomplete": "off", "spellcheck": "false", "required": true}}).Render(ctx, templ_7745c5c3_Buffer)
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "<input type=\"hidden\" name=\"id\" value=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "<input type=\"hidden\" name=\"id\" value=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var30 string
 				templ_7745c5c3_Var30, templ_7745c5c3_Err = templruntime.NewAttributeExpression(scope.ID).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 133, Col: 52}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 134, Col: 52}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var30)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = dhcpScopeField(scope, add, "name", "Name", "", "LAN", "", templ.Attributes{"value": scope.Name, "maxlength": "64"}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "<div class=\"record-field-grid two\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = dhcpScopeField(scope, add, "subnet", "Subnet", "The network in CIDR form; this server needs an address in it.", "192.168.1.0/24", "mono-input", templ.Attributes{"value": scope.Subnet, "required": true}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = dhcpScopeField(scope, add, "name", "Name", "", "LAN", "", templ.Attributes{"value": scope.Name, "maxlength": "64", "required": true, "data-dhcp-scope-name": true}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "<div class=\"record-field-grid two\">")
+			templ_7745c5c3_Err = dhcpScopeField(scope, add, "subnet", "Subnet", "", "192.168.1.0/24", "mono-input", templ.Attributes{"value": scope.Subnet, "required": true, "spellcheck": "false", "data-dhcp-scope-subnet": true}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = dhcpScopeField(scope, add, "range_start", "Range Start", "", "192.168.1.100", "mono-input", templ.Attributes{"value": scope.RangeStart, "inputmode": "decimal"}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "</div><div class=\"record-field-grid two\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = dhcpScopeField(scope, add, "range_end", "Range End", "", "192.168.1.199", "mono-input", templ.Attributes{"value": scope.RangeEnd, "inputmode": "decimal"}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = dhcpScopeField(scope, add, "range_start", "Range Start", "", "192.168.1.100", "mono-input", templ.Attributes{"value": scope.RangeStart, "inputmode": "decimal", "aria-describedby": dhcpScopeRangeHelpID(scope, add), "data-dhcp-scope-fill": "range_start"}).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = dhcpScopeField(scope, add, "range_end", "Range End", "", "192.168.1.199", "mono-input", templ.Attributes{"value": scope.RangeEnd, "inputmode": "decimal", "aria-describedby": dhcpScopeRangeHelpID(scope, add), "data-dhcp-scope-fill": "range_end"}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -711,51 +709,93 @@ func dhcpScopeDialog(scope DHCPScopeView, add bool) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if scope.SplitNodes > 0 {
-				templ_7745c5c3_Err = dhcpRangeSplit(scope).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = dhcpRangeSplit(scope, dhcpScopeRangeHelpID(scope, add)).Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			} else {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "<p class=\"field-help\" id=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var31 string
+				templ_7745c5c3_Var31, templ_7745c5c3_Err = templruntime.NewAttributeExpression(dhcpScopeRangeHelpID(scope, add)).Resolve(ctx)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 147, Col: 64}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var31)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "\">Devices get an address from this range.</p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
 			if scope.MoreRanges > 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "<p class=\"field-help\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "<p class=\"field-help\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var31 string
-				templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("This scope has %d more %s in sable.toml; saving keeps %s.", scope.MoreRanges, ifThen(scope.MoreRanges == 1, "range", "ranges"), ifThen(scope.MoreRanges == 1, "it", "them")))
+				var templ_7745c5c3_Var32 string
+				templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("This scope has %d more %s in sable.toml; saving keeps %s.", scope.MoreRanges, ifThen(scope.MoreRanges == 1, "range", "ranges"), ifThen(scope.MoreRanges == 1, "it", "them")))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 145, Col: 214}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 150, Col: 214}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "</p>")
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "</p>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
 			}
-			templ_7745c5c3_Err = dhcpScopeField(scope, add, "router", "Router", "Option 3, the gateway clients send traffic through.", "192.168.1.1", "mono-input", templ.Attributes{"value": scope.Router, "inputmode": "decimal"}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = dhcpScopeField(scope, add, "router", "Router", "The gateway devices use to reach the internet.", "192.168.1.1", "mono-input", templ.Attributes{"value": scope.Router, "inputmode": "decimal", "data-dhcp-scope-fill": "router"}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = dhcpScopeField(scope, add, "dns", "DNS Servers", "Option 6, comma separated. Leave empty to send this server's address.", "", "mono-input", templ.Attributes{"value": scope.DNS}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = dhcpScopeField(scope, add, "domain", "Domain", "Each device's name is added to this zone, like `laptop.home.arpa`.", "home.arpa", "mono-input", templ.Attributes{"value": scope.Domain, "spellcheck": "false"}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = dhcpScopeField(scope, add, "domain", "Domain", "Option 15, and the zone where device names register.", "home.example.com", "mono-input", templ.Attributes{"value": scope.Domain, "spellcheck": "false"}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Var33 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+				templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+				templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+				if !templ_7745c5c3_IsBuffer {
+					defer func() {
+						templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+						if templ_7745c5c3_Err == nil {
+							templ_7745c5c3_Err = templ_7745c5c3_BufErr
+						}
+					}()
+				}
+				ctx = templ.InitializeContext(ctx)
+				templ_7745c5c3_Err = dhcpScopeField(scope, add, "dns", "DNS Servers", "Leave empty to point devices at this server; separate several with commas.", "", "mono-input", templ.Attributes{"value": scope.DNS, "spellcheck": "false"}).Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = dhcpScopeField(scope, add, "lease", "Lease Time", "How long a device keeps its address before renewing, like `24h`.", "24h", "mono-input", templ.Attributes{"value": scope.Lease}).Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				if add {
+					templ_7745c5c3_Err = components.Field(components.FieldProps{ID: dhcpScopeFormID(scope, add) + "__id", Label: "ID", Help: "Made from the name when left empty. It can't change later.", Input: templ.Attributes{"name": "id", "class": "mono-input", "placeholder": dhcpOr(scope.ID, "lan"), "pattern": "[a-z0-9][a-z0-9\\-]*", "maxlength": "32", "autocomplete": "off", "spellcheck": "false", "data-dhcp-scope-id": true}}).Render(ctx, templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				return nil
+			})
+			templ_7745c5c3_Err = components.AdvancedOptions().Render(templ.WithChildren(ctx, templ_7745c5c3_Var33), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = dhcpScopeField(scope, add, "lease", "Lease Time", "How long a device keeps its address, like `24h`; at least `2m`.", "24h", "mono-input", templ.Attributes{"value": scope.Lease}).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "</div>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Var32 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_Var34 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 				templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 				templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 				if !templ_7745c5c3_IsBuffer {
@@ -773,11 +813,11 @@ func dhcpScopeDialog(scope DHCPScopeView, add bool) templ.Component {
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = components.DialogFooter("Cancel").Render(templ.WithChildren(ctx, templ_7745c5c3_Var32), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = components.DialogFooter("Cancel").Render(templ.WithChildren(ctx, templ_7745c5c3_Var34), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "</form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "</form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -789,6 +829,12 @@ func dhcpScopeDialog(scope DHCPScopeView, add bool) templ.Component {
 		}
 		return nil
 	})
+}
+
+// dhcpScopeRangeHelpID is the line under the range, which both range fields
+// point at.
+func dhcpScopeRangeHelpID(scope DHCPScopeView, add bool) string {
+	return dhcpScopeFormID(scope, add) + "__range-help"
 }
 
 func dhcpScopeField(scope DHCPScopeView, add bool, name, label, help, placeholder, class string, input templ.Attributes) templ.Component {
@@ -879,7 +925,7 @@ func DHCPScopeNoticeID(id, suggest string, add bool) string {
 
 // dhcpRangeSplit is how a cluster's scope range is split across its nodes:
 // evenly when the range changes, each node leasing only from its slice.
-func dhcpRangeSplit(scope DHCPScopeView) templ.Component {
+func dhcpRangeSplit(scope DHCPScopeView, helpID string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -896,30 +942,43 @@ func dhcpRangeSplit(scope DHCPScopeView) templ.Component {
 		}
 		ctx = templ.InitializeContext(ctx)
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "<p class=\"field-help\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "<p class=\"field-help\" id=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var35 string
-		templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("Split evenly across the %d cluster nodes when the range changes; each node leases only from its own slice.", scope.SplitNodes))
+		var templ_7745c5c3_Var37 string
+		templ_7745c5c3_Var37, templ_7745c5c3_Err = templruntime.NewAttributeExpression(helpID).Resolve(ctx)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 227, Col: 164}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 243, Col: 34}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var37)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "</p>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var38 string
+		templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("Split evenly across the %d cluster nodes; each node leases only from its own slice.", scope.SplitNodes))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 243, Col: 155}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "</p>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if len(scope.Split) > 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "<div class=\"dhcp-network-list\" role=\"list\" aria-label=\"Range split\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "<div class=\"dhcp-network-list\" role=\"list\" aria-label=\"Range split\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			for _, split := range scope.Split {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "<article class=\"dhcp-network-row dhcp-range-split-row\" role=\"listitem\"><span class=\"dhcp-network-icon\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 57, "<article class=\"dhcp-network-row dhcp-range-split-row\" role=\"listitem\"><span class=\"dhcp-network-icon\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -927,38 +986,38 @@ func dhcpRangeSplit(scope DHCPScopeView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "</span><div><strong>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 58, "</span><div><strong>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var36 string
-				templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(split.Range)
+				var templ_7745c5c3_Var39 string
+				templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(split.Range)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 234, Col: 27}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 250, Col: 27}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "</strong> <small>")
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var37 string
-				templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(split.Node)
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 235, Col: 25}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "</strong> <small>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 57, "</small> ")
+				var templ_7745c5c3_Var40 string
+				templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(split.Node)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 251, Col: 25}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "</small> ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if split.Warning != "" {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 58, "<small class=\"tsig-key-warning\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "<small class=\"tsig-key-warning\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -966,30 +1025,30 @@ func dhcpRangeSplit(scope DHCPScopeView) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "<span>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "<span>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var38 string
-					templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(split.Warning)
+					var templ_7745c5c3_Var41 string
+					templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(split.Warning)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 237, Col: 83}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp_scopes.templ`, Line: 253, Col: 83}
 					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "</span></small>")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "</span></small>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "</div></article>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "</div></article>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
