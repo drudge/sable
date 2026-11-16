@@ -532,12 +532,12 @@ func TestConnectedDevicesDisplaceStaleReservations(t *testing.T) {
 // lands on it.
 func TestInventoryKeepsLegacyNetworkIDsFromNetwork11(t *testing.T) {
 	const network11Fixture = `{"meta":{"rc":"ok"},"data":[
-		{"_id":"c1190369-cc1e-4dbd-a4cc-ce3fa2c6482f","legacy_id":"64129bb0e14f6b12d072c296","external_id":"0b6b7a5e-34f1-4f0e-9d0e-8c1f5b2b3a11","name":"Default","purpose":"corporate","enabled":true,"ip_subnet":"10.0.7.1/24"},
-		{"_id":"2f556257-9806-43f5-8158-448614905ad8","legacy_id":"69322f0364d14e5583b08def","name":"Putman","purpose":"corporate","enabled":true,"ip_subnet":"10.0.69.1/24"}
+		{"_id":"11111111-1111-4111-8111-111111111111","legacy_id":"5f0000000000000000000001","external_id":"33333333-3333-4333-8333-333333333333","name":"Default","purpose":"corporate","enabled":true,"ip_subnet":"192.168.1.1/24"},
+		{"_id":"22222222-2222-4222-8222-222222222222","legacy_id":"5f0000000000000000000002","name":"IoT","purpose":"corporate","enabled":true,"ip_subnet":"192.168.30.1/24"}
 	]}`
 	const network11ActiveFixture = `{"data":[
-		{"mac":"aa:bb:cc:dd:ee:21","hostname":"desk","ip":"10.0.7.40","network_id":"c1190369-cc1e-4dbd-a4cc-ce3fa2c6482f"},
-		{"mac":"aa:bb:cc:dd:ee:22","hostname":"work-laptop","ip":"10.0.69.6","network_id":"69322f0364d14e5583b08def"}
+		{"mac":"aa:bb:cc:dd:ee:21","hostname":"desk","ip":"192.168.1.40","network_id":"11111111-1111-4111-8111-111111111111"},
+		{"mac":"aa:bb:cc:dd:ee:22","hostname":"thermostat","ip":"192.168.30.6","network_id":"5f0000000000000000000002"}
 	]}`
 	mux := http.NewServeMux()
 	serve := func(body string) http.HandlerFunc {
@@ -557,10 +557,10 @@ func TestInventoryKeepsLegacyNetworkIDsFromNetwork11(t *testing.T) {
 		t.Fatalf("Inventory: %v", err)
 	}
 	for _, testCase := range []struct{ lookup, want string }{
-		{"64129bb0e14f6b12d072c296", "64129bb0e14f6b12d072c296"},
-		{"c1190369-cc1e-4dbd-a4cc-ce3fa2c6482f", "64129bb0e14f6b12d072c296"},
-		{"0b6b7a5e-34f1-4f0e-9d0e-8c1f5b2b3a11", "64129bb0e14f6b12d072c296"},
-		{"2f556257-9806-43f5-8158-448614905ad8", "69322f0364d14e5583b08def"},
+		{"5f0000000000000000000001", "5f0000000000000000000001"},
+		{"11111111-1111-4111-8111-111111111111", "5f0000000000000000000001"},
+		{"33333333-3333-4333-8333-333333333333", "5f0000000000000000000001"},
+		{"22222222-2222-4222-8222-222222222222", "5f0000000000000000000002"},
 	} {
 		network, found := inventory.NetworkByID(testCase.lookup)
 		if !found || network.ID != testCase.want {
@@ -568,7 +568,7 @@ func TestInventoryKeepsLegacyNetworkIDsFromNetwork11(t *testing.T) {
 		}
 	}
 	counts := inventory.HostCounts()
-	if counts["64129bb0e14f6b12d072c296"] != 1 || counts["69322f0364d14e5583b08def"] != 1 {
+	if counts["5f0000000000000000000001"] != 1 || counts["5f0000000000000000000002"] != 1 {
 		t.Fatalf("host counts = %v, want one host on each network under its legacy ID", counts)
 	}
 }
