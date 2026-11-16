@@ -8,6 +8,79 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.9.0-beta.2] - 2026-11-16
+
+Sable 1.9.0-beta.2 tidies the DHCP dialogs and moves DHCP into the
+sidebar's System group. It gets UniFi Host Sync working again after the
+UniFi Network 11 upgrade, stops a node without working upstream DNS from
+flooding its log with trust anchor failures, and keeps a slow request from
+spending the whole shutdown budget.
+
+### Upgrading from 1.9.0-beta.1
+
+- Nothing is needed. Settings, scopes, leases and saved states are
+  unchanged.
+
+### DHCP
+
+- The scope dialog is shorter. Name sits beside Subnet and Range Start
+  beside Range End, and DNS Servers, Lease Time and the scope ID sit under
+  **Advanced Options**, closed by default. Hints say what a field does
+  instead of naming DHCP option numbers.
+- Typing a subnet fills in the range and router, without overwriting
+  anything you already typed. A new scope with no ID takes one from its
+  name.
+- Errors in the scope and reservation dialogs now name the field in the
+  form's words instead of a settings path. The API still returns the path.
+- The reservation and import dialogs use the console's scope picker and pair
+  the hardware address with its IP address. The **Server** card on a
+  cluster node that has DHCP on but isn't serving reads **Standby** instead
+  of **Held**.
+- **DHCP** now sits in the sidebar's **System** group, between **Cluster**
+  and **Integrations**, and in the same place in the command palette.
+
+### Integrations
+
+- UniFi Host Sync works again after a gateway updates to UniFi Network 11.
+  Network 11 gave every network a new ID and kept the old one as
+  `legacy_id`, so existing mappings matched nothing and the sync published
+  no hosts. Mappings now match either ID. A mapping whose network the
+  controller no longer reports shows **Missing** on the UniFi page.
+
+### Clustering
+
+- The primary's log now names the clock of a replica on 1.8.2 that is out
+  of step, as the 1.9.0-beta.1 notes said it would. A heartbeat that leaves
+  the clock check unanswered logs a separate line, at most every five
+  minutes per member, saying it comes from an older release or a replay.
+- A clock warning is logged once per out-of-step episode, and never for a
+  replayed heartbeat from a stopped member.
+- A node that goes down while its clock is out of step keeps its real last
+  check-in, so the node-down alert counts from then.
+
+### Diagnostics
+
+- `GET /api/v1/debug/pprof/{profile}` returns this node's `heap`, `allocs`,
+  `goroutine` or `threadcreate` profile for `go tool pprof`, or as text with
+  `debug=1` or `debug=2`. `gc=1` collects garbage before a heap profile. It
+  needs `metrics.read`, like `/metrics`.
+
+### Fixed
+
+- A node that started without working upstream DNS retried its DNSSEC trust
+  anchor refresh at once, logging thousands of failures a second and holding
+  shutdown for the whole `shutdown_timeout`. It now waits between failures,
+  from 5 seconds doubling to 5 minutes, and stops as soon as Sable does.
+- A request still running at shutdown, such as a backup download to a slow
+  client, now gets at most half of the remaining shutdown budget before it
+  is closed and logged. Before, it could use all of it, so the DNS
+  listeners stopped late and the DNS cache wasn't saved.
+
+### Dependencies
+
+- Updated templ to 0.3.1118, pgx to 5.13.0, modernc.org/sqlite to 1.62.0,
+  and golang.org/x/crypto, mod, sys and term.
+
 ## [1.9.0-beta.1] - 2026-11-15
 
 Sable 1.9.0-beta.1 adds a DHCPv4 server. It hands out addresses, keeps
