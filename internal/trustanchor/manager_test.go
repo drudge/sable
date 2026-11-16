@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto"
 	"fmt"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
@@ -314,4 +315,157 @@ func (manager *Manager) ActiveAnchorStatesForTest() []Anchor {
 		}
 	}
 	return states
+}
+
+// fakeRun drives Run against a fake clock: each wait advances the clock at
+// once, and Run stops once the clock passes until.
+type fakeRun struct {
+	mu       sync.Mutex
+	clock    time.Time
+	until    time.Time
+	attempts []time.Time
+	cancel   context.CancelFunc
+}
+
+func (run *fakeRun) now() time.Time {
+	run.mu.Lock()
+	defer run.mu.Unlock()
+	return run.clock
+}
+
+func (run *fakeRun) wait(_ context.Context, duration time.Duration) bool {
+	run.mu.Lock()
+	defer run.mu.Unlock()
+	run.clock = run.clock.Add(duration)
+	if !run.clock.Before(run.until) {
+		run.cancel()
+		return false
+	}
+	return true
+}
+
+func (run *fakeRun) attemptsBefore(limit time.Time) int {
+	run.mu.Lock()
+	defer run.mu.Unlock()
+	count := 0
+	for _, attempt := range run.attempts {
+		if attempt.Before(limit) {
+			count++
+		}
+	}
+	return count
+}
+
+func TestRunBacksOffWhileTheTrustPointHasNeverRefreshed(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2026, 11, 16, 9, 0, 0, 0, time.UTC)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	run := &fakeRun{clock: start, until: start.Add(time.Hour), cancel: cancel}
+	manager, err := New(ctx, &memoryStore{}, func(context.Context, string, uint16) (*dns.Msg, error) {
+		run.mu.Lock()
+		run.attempts = append(run.attempts, run.clock)
+		run.mu.Unlock()
+		return nil, fmt.Errorf("dial udp: connect: network is unreachable")
+	}, Options{Now: run.now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager.wait = run.wait
+	manager.Run(ctx, slog.New(slog.DiscardHandler))
+
+	// Tries at 0s, 5s, 15s and 35s, then 75s, 155s, 315s and every five
+	// minutes after that.
+	if got := run.attemptsBefore(start.Add(time.Minute)); got != 4 {
+		t.Fatalf("attempts in the first minute = %d, want 4 (%v)", got, run.attempts)
+	}
+	if got := run.attemptsBefore(start.Add(time.Hour)); got > 20 {
+		t.Fatalf("attempts in the first hour = %d, want at most 20", got)
+	}
+	if manager.Status().Initialized {
+		t.Fatal("trust point initialized without a successful refresh")
+	}
+}
+
+func TestRunWaitsForTheRetryIntervalAfterAnInitializedFailure(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2026, 11, 16, 9, 0, 0, 0, time.UTC)
+	key := newTestKey(t, ".")
+	response := signedDNSKEYResponse(t, start, []*testKey{key}, key)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	run := &fakeRun{clock: start, until: start.Add(24 * time.Hour), cancel: cancel}
+	manager, err := New(ctx, &memoryStore{}, func(context.Context, string, uint16) (*dns.Msg, error) {
+		run.mu.Lock()
+		run.attempts = append(run.attempts, run.clock)
+		first := len(run.attempts) == 1
+		run.mu.Unlock()
+		if first {
+			return response.Copy(), nil
+		}
+		return nil, context.DeadlineExceeded
+	}, Options{Bootstrap: []string{dnskeyAnchor(key.key)}, Now: run.now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager.wait = run.wait
+	manager.Run(ctx, slog.New(slog.DiscardHandler))
+
+	// The key set's TTL is two hours, so refreshes are due hourly and a
+	// failure waits the one-hour RFC 5011 retry floor: no more than one try
+	// an hour.
+	if got := run.attemptsBefore(start.Add(24 * time.Hour)); got < 2 || got > 25 {
+		t.Fatalf("attempts in a day = %d, want 2 to 25 (%v)", got, run.attempts)
+	}
+	if !manager.Status().Initialized {
+		t.Fatal("first refresh did not initialize the trust point")
+	}
+}
+
+func TestRunReturnsPromptlyWhenCancelled(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	var mu sync.Mutex
+	calls := 0
+	manager, err := New(ctx, &memoryStore{}, func(ctx context.Context, _ string, _ uint16) (*dns.Msg, error) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		// Like a forwarder that only times out: hold until cancelled.
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() {
+		manager.Run(ctx, slog.New(slog.DiscardHandler))
+		close(done)
+	}()
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Run did not return within a second of cancel")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if calls != 1 {
+		t.Fatalf("refresh attempts = %d, want 1", calls)
+	}
+}
+
+func TestRetryBackoffDoublesUpToTheCap(t *testing.T) {
+	t.Parallel()
+	want := []time.Duration{5 * time.Second, 10 * time.Second, 20 * time.Second, 40 * time.Second, 80 * time.Second, 160 * time.Second, 5 * time.Minute, 5 * time.Minute}
+	for index, expected := range want {
+		if got := retryBackoff(index + 1); got != expected {
+			t.Fatalf("retryBackoff(%d) = %s, want %s", index+1, got, expected)
+		}
+	}
+	if got := retryBackoff(1 << 20); got != retryBackoffMax {
+		t.Fatalf("retryBackoff(large) = %s, want %s", got, retryBackoffMax)
+	}
 }

@@ -105,7 +105,7 @@ func (server *Server) Close(ctx context.Context) error {
 	server.runtimeCancel()
 	server.runtimeLifecycleMu.Unlock()
 	server.closeUnusedConnections()
-	shutdownError := server.httpServer.Shutdown(ctx)
+	shutdownError := server.shutdownHTTP(ctx)
 	server.runtimeWaitOnce.Do(func() {
 		go func() {
 			server.runtimeWG.Wait()
@@ -129,6 +129,32 @@ func (server *Server) Close(ctx context.Context) error {
 		server.logger.Warn("persist query statistics", "error", err)
 	}
 	return shutdownError
+}
+
+// shutdownHTTP lets running requests finish for at most half of what is left
+// of ctx, then closes whatever is still open. The process stops the DNS
+// listeners, the workers and the cache snapshot on the same budget after the
+// console, so one slow request, such as a backup download to a slow client,
+// must not spend all of it. Requests cut off that way are logged, not
+// returned: the console did stop, and returning an error would also skip the
+// DNS cache snapshot.
+func (server *Server) shutdownHTTP(ctx context.Context) error {
+	graceContext := ctx
+	if deadline, ok := ctx.Deadline(); ok {
+		var cancel context.CancelFunc
+		graceContext, cancel = context.WithDeadline(ctx, time.Now().Add(time.Until(deadline)/2))
+		defer cancel()
+	}
+	shutdownError := server.httpServer.Shutdown(graceContext)
+	if shutdownError == nil {
+		return nil
+	}
+	closeError := server.httpServer.Close()
+	if ctx.Err() != nil {
+		return errors.Join(shutdownError, closeError)
+	}
+	server.logger.Warn("web console closed requests still running at shutdown", "error", shutdownError)
+	return closeError
 }
 
 // trackConnection remembers the connections that have not sent a request yet.
