@@ -1,0 +1,16 @@
+package components
+
+// AdvancedOptions folds a form's rarely changed fields under an Advanced
+// Options disclosure, closed until the operator opens it. Children are the
+// fields.
+templ AdvancedOptions() {
+	<details class="record-advanced">
+		<summary>
+			@Icon("settings-2")
+			<span>Advanced Options</span><span class="record-advanced-chevron" aria-hidden="true"></span>
+		</summary>
+		<div class="record-advanced-content">
+			{ children... }
+		</div>
+	</details>
+}

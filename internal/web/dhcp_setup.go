@@ -133,12 +133,7 @@ func dhcpSuggestedID(device string, taken map[string]bool) string {
 	if !taken["lan"] {
 		return "lan"
 	}
-	id := strings.Trim(strings.Map(func(r rune) rune {
-		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
-			return r
-		}
-		return '-'
-	}, strings.ToLower(device)), "-")
+	id := config.DHCPScopeID(device)
 	for suffix := 2; id == "" || taken[id]; suffix++ {
 		id = fmt.Sprintf("lan%d", suffix)
 	}

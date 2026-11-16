@@ -1087,13 +1087,10 @@ templ EditZoneRecordDialog(zone ZoneView, record ZoneRecordView, id string) {
 }
 
 templ RecordAdvancedOptions(prefix string, ttl, expiryTTL uint32, comments string, hideComments bool) {
-	<details class="record-advanced">
-		<summary>@Icon("settings-2")<span>Advanced Options</span><span class="record-advanced-chevron" aria-hidden="true"></span></summary>
-		<div class="record-advanced-content">
-			<div class="record-advanced-grid"><label class="record-field"><span>TTL (seconds)</span><input name={ prefix + "ttl" } type="number" min="1" max="4294967295" value={ fmt.Sprint(ttl) } required/></label><label class="record-field"><span>Auto-expire (seconds)</span><input name={ prefix + "expiry_ttl" } type="number" min="0" max="4294967295" value={ fmt.Sprint(expiryTTL) } placeholder="0 = never"/></label></div>
-			<label class="record-field" data-record-comments hidden?={ hideComments }><span>Comments</span><input name={ prefix + "comments" } value={ comments } placeholder="Optional notes about this record" disabled?={ hideComments }/></label>
-		</div>
-	</details>
+	@components.AdvancedOptions() {
+		<div class="record-advanced-grid"><label class="record-field"><span>TTL (seconds)</span><input name={ prefix + "ttl" } type="number" min="1" max="4294967295" value={ fmt.Sprint(ttl) } required/></label><label class="record-field"><span>Auto-expire (seconds)</span><input name={ prefix + "expiry_ttl" } type="number" min="0" max="4294967295" value={ fmt.Sprint(expiryTTL) } placeholder="0 = never"/></label></div>
+		<label class="record-field" data-record-comments hidden?={ hideComments }><span>Comments</span><input name={ prefix + "comments" } value={ comments } placeholder="Optional notes about this record" disabled?={ hideComments }/></label>
+	}
 }
 
 templ ZoneRecordFields(recordType, prefix, value, glue string, disabled bool) {

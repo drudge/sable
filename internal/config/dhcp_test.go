@@ -319,3 +319,20 @@ func TestDHCPCloneSharesNothing(t *testing.T) {
 		t.Fatalf("editing the clone changed the original: %+v", kept)
 	}
 }
+
+func TestDHCPScopeIDFromName(t *testing.T) {
+	t.Parallel()
+	for text, want := range map[string]string{
+		"LAN":                                "lan",
+		"Guest Wi-Fi":                        "guest-wi-fi",
+		"  IoT -- Devices!  ":                "iot-devices",
+		"br-lan":                             "br-lan",
+		"日本":                                 "",
+		"a very long scope name for the lab": "a-very-long-scope-name-for-the-l",
+		"thirty one characters here okay x":  "thirty-one-characters-here-okay",
+	} {
+		if got := DHCPScopeID(text); got != want {
+			t.Errorf("DHCPScopeID(%q) = %q, want %q", text, got, want)
+		}
+	}
+}
