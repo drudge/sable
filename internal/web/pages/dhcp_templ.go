@@ -1274,14 +1274,14 @@ func dhcpReservationDialog(view DHCPPageView, reservation DHCPReservationRow, ad
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 77, "<form hx-post=\"/ui/dhcp/reservations\" hx-target=\"#dhcp-content\" hx-swap=\"outerHTML\"><input type=\"hidden\" name=\"tab\" value=\"reservations\"><div class=\"isotope-dialog-body\"><div class=\"dhcp-form-notice\" id=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 77, "<form class=\"blocking-dialog-form\" hx-post=\"/ui/dhcp/reservations\" hx-target=\"#dhcp-content\" hx-swap=\"outerHTML\"><input type=\"hidden\" name=\"tab\" value=\"reservations\"><div class=\"dhcp-form-notice\" id=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var45 string
 			templ_7745c5c3_Var45, templ_7745c5c3_Err = templruntime.NewAttributeExpression(DHCPReservationNoticeID(reservation.Scope, reservation.MAC, add)).Resolve(ctx)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 317, Col: 103}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 316, Col: 102}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var45)
 			if templ_7745c5c3_Err != nil {
@@ -1304,7 +1304,7 @@ func dhcpReservationDialog(view DHCPPageView, reservation DHCPReservationRow, ad
 				var templ_7745c5c3_Var46 string
 				templ_7745c5c3_Var46, templ_7745c5c3_Err = templruntime.NewAttributeExpression(reservation.Scope).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 321, Col: 64}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 320, Col: 63}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var46)
 				if templ_7745c5c3_Err != nil {
@@ -1328,7 +1328,7 @@ func dhcpReservationDialog(view DHCPPageView, reservation DHCPReservationRow, ad
 				var templ_7745c5c3_Var47 string
 				templ_7745c5c3_Var47, templ_7745c5c3_Err = templruntime.NewAttributeExpression(reservation.MAC).Resolve(ctx)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 326, Col: 60}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `dhcp.templ`, Line: 325, Col: 59}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var47)
 				if templ_7745c5c3_Err != nil {
@@ -1401,10 +1401,6 @@ func dhcpReservationDialog(view DHCPPageView, reservation DHCPReservationRow, ad
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 88, "</div>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
 			templ_7745c5c3_Var50 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 				templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 				templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
@@ -1427,7 +1423,7 @@ func dhcpReservationDialog(view DHCPPageView, reservation DHCPReservationRow, ad
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 89, "</form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 88, "</form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
