@@ -1820,8 +1820,10 @@ button.top-stats-row { width: 100%; border-width: 0 0 1px; background: none; col
 .record-enabled { display: flex !important; margin-left: auto; align-items: center; grid-template-columns: auto auto !important; gap: var(--space-2) !important; cursor: pointer; }
 .record-enabled b { font-size: .75rem; font-weight: 400; }
 .record-enabled .switch input:checked + span { background: var(--primary); }
+/* The summary's hover pill hangs out to the left so its icon lines up with the
+   field labels above it. */
 .record-advanced { min-width: 0; }
-.record-advanced > summary { display: inline-flex; height: 2.25rem; align-items: center; gap: var(--space-2); border-radius: calc(var(--radius) - 2px); padding: 0 var(--space-3); color: var(--muted-foreground); font-size: .8rem; font-weight: 500; list-style: none; cursor: pointer; }
+.record-advanced > summary { display: inline-flex; height: 2.25rem; margin-left: calc(var(--space-3) * -1); align-items: center; gap: var(--space-2); border-radius: calc(var(--radius) - 2px); padding: 0 var(--space-3); color: var(--muted-foreground); font-size: .8rem; font-weight: 500; list-style: none; cursor: pointer; }
 .record-advanced > summary::-webkit-details-marker { display: none; }
 .record-advanced > summary:hover { background: var(--accent); color: var(--foreground); }
 .record-advanced > summary .nav-icon { width: 1rem; height: 1rem; }
