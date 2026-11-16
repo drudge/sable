@@ -14,7 +14,10 @@ import (
 // Network is a UniFi LAN or VLAN. The identifier is stable across renames, so
 // Sable keys zone mappings on it rather than on the display name.
 type Network struct {
-	ID      string
+	ID string
+	// Aliases are the controller's other IDs for the network, such as the
+	// UUID _id Network 11 introduced when ID is the legacy ObjectID.
+	Aliases []string
 	Name    string
 	Slug    string
 	Purpose string
@@ -167,14 +170,32 @@ type Inventory struct {
 	Stations []Station
 }
 
-// NetworkByID returns the named network, if the controller reported it.
+// Identifies reports whether id is one of the network's IDs.
+func (network Network) Identifies(id string) bool {
+	return id != "" && (network.ID == id || slices.Contains(network.Aliases, id))
+}
+
+// NetworkByID returns the network with that ID or alias, if the controller
+// reported it.
 func (inventory Inventory) NetworkByID(id string) (Network, bool) {
 	for _, network := range inventory.Networks {
-		if network.ID == id {
+		if network.Identifies(id) {
 			return network, true
 		}
 	}
 	return Network{}, false
+}
+
+// networksByID indexes networks by every ID the controller uses for them.
+func networksByID(networks []Network) map[string]Network {
+	byID := make(map[string]Network, len(networks))
+	for _, network := range networks {
+		byID[network.ID] = network
+		for _, alias := range network.Aliases {
+			byID[alias] = network
+		}
+	}
+	return byID
 }
 
 // HostCounts totals the hosts belonging to each network, which the setup
@@ -266,12 +287,10 @@ func withoutDisplacedReservations(hosts []Host, connected []Station) []Host {
 // subnet keeps whatever the controller said, which may be nothing, so it is
 // counted nowhere rather than counted wrongly.
 func placeHosts(networks []Network, hosts []Host) []Host {
-	byID := make(map[string]Network, len(networks))
-	for _, network := range networks {
-		byID[network.ID] = network
-	}
+	byID := networksByID(networks)
 	for index, host := range hosts {
 		if declared, known := byID[host.NetworkID]; known && declared.Contains(host.Address) {
+			hosts[index].NetworkID = declared.ID
 			continue
 		}
 		if id, found := networkForAddress(networks, host.Address); found {
@@ -298,12 +317,10 @@ func networkForAddress(networks []Network, address netip.Addr) (string, bool) {
 // placeStations settles which network each connected client is on, the way
 // placeHosts does for hosts.
 func placeStations(networks []Network, stations []Station) []Station {
-	byID := make(map[string]Network, len(networks))
-	for _, network := range networks {
-		byID[network.ID] = network
-	}
+	byID := networksByID(networks)
 	for index, station := range stations {
 		if declared, known := byID[station.NetworkID]; known && declared.Contains(station.Address) {
+			stations[index].NetworkID = declared.ID
 			continue
 		}
 		if id, found := networkForAddress(networks, station.Address); found {

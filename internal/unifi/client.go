@@ -162,13 +162,17 @@ func (client *Client) Inventory(ctx context.Context) (Inventory, error) {
 }
 
 type networkPayload struct {
-	ID      string `json:"_id"`
-	AltID   string `json:"id"`
-	Name    string `json:"name"`
-	Purpose string `json:"purpose"`
-	Enabled *bool  `json:"enabled"`
-	Subnet  string `json:"ip_subnet"`
-	Subnet6 string `json:"ipv6_subnet"`
+	ID    string `json:"_id"`
+	AltID string `json:"id"`
+	// LegacyID is the MongoDB ObjectID that Network 11 moved out of _id when
+	// it switched _id to a UUID, and ExternalID is another UUID it added.
+	LegacyID   string `json:"legacy_id"`
+	ExternalID string `json:"external_id"`
+	Name       string `json:"name"`
+	Purpose    string `json:"purpose"`
+	Enabled    *bool  `json:"enabled"`
+	Subnet     string `json:"ip_subnet"`
+	Subnet6    string `json:"ipv6_subnet"`
 	// DHCPEnabled is whether the controller runs the network's DHCP server,
 	// and DNSEnabled whether it hands out the DNS servers listed after it
 	// rather than the gateway.
@@ -195,6 +199,26 @@ func (payload networkPayload) dns() []netip.Addr {
 	return servers
 }
 
+// identity picks the ID a network is known by, and the other IDs the
+// controller also uses for it. Network 11 changed _id from an ObjectID to a
+// UUID and kept the old value in legacy_id, so the legacy ID wins: it is what
+// every mapping saved before the upgrade holds, and it is still reported. The
+// rest are aliases, because clients and new mappings can name the network by
+// any of them.
+func (payload networkPayload) identity() (id string, aliases []string) {
+	for _, candidate := range []string{payload.LegacyID, payload.ID, payload.AltID, payload.ExternalID} {
+		candidate = strings.TrimSpace(candidate)
+		switch {
+		case candidate == "":
+		case id == "":
+			id = candidate
+		case candidate != id && !slices.Contains(aliases, candidate):
+			aliases = append(aliases, candidate)
+		}
+	}
+	return id, aliases
+}
+
 func (client *Client) networks(ctx context.Context) ([]Network, error) {
 	var payload struct {
 		Data []networkPayload `json:"data"`
@@ -204,10 +228,7 @@ func (client *Client) networks(ctx context.Context) ([]Network, error) {
 	}
 	networks := make([]Network, 0, len(payload.Data))
 	for _, entry := range payload.Data {
-		id := entry.ID
-		if id == "" {
-			id = entry.AltID
-		}
+		id, aliases := entry.identity()
 		if id == "" || entry.Name == "" {
 			continue
 		}
@@ -215,7 +236,7 @@ func (client *Client) networks(ctx context.Context) ([]Network, error) {
 			continue
 		}
 		network := Network{
-			ID: id, Name: entry.Name, Slug: SanitizeLabel(entry.Name), Purpose: entry.Purpose,
+			ID: id, Aliases: aliases, Name: entry.Name, Slug: SanitizeLabel(entry.Name), Purpose: entry.Purpose,
 			DHCP: entry.DHCPEnabled, DHCPDNS: entry.dns(),
 		}
 		for _, candidate := range []string{entry.Subnet, entry.Subnet6} {

@@ -525,3 +525,50 @@ func TestConnectedDevicesDisplaceStaleReservations(t *testing.T) {
 		t.Fatalf("hosts = %s", got)
 	}
 }
+
+// Network 11 moved each network's ObjectID from _id to legacy_id and made _id a
+// UUID. Mappings saved before the upgrade hold the ObjectID, so it stays the
+// network's ID, and a client that names the network by its new UUID still
+// lands on it.
+func TestInventoryKeepsLegacyNetworkIDsFromNetwork11(t *testing.T) {
+	const network11Fixture = `{"meta":{"rc":"ok"},"data":[
+		{"_id":"c1190369-cc1e-4dbd-a4cc-ce3fa2c6482f","legacy_id":"64129bb0e14f6b12d072c296","external_id":"0b6b7a5e-34f1-4f0e-9d0e-8c1f5b2b3a11","name":"Default","purpose":"corporate","enabled":true,"ip_subnet":"10.0.7.1/24"},
+		{"_id":"2f556257-9806-43f5-8158-448614905ad8","legacy_id":"69322f0364d14e5583b08def","name":"Putman","purpose":"corporate","enabled":true,"ip_subnet":"10.0.69.1/24"}
+	]}`
+	const network11ActiveFixture = `{"data":[
+		{"mac":"aa:bb:cc:dd:ee:21","hostname":"desk","ip":"10.0.7.40","network_id":"c1190369-cc1e-4dbd-a4cc-ce3fa2c6482f"},
+		{"mac":"aa:bb:cc:dd:ee:22","hostname":"work-laptop","ip":"10.0.69.6","network_id":"69322f0364d14e5583b08def"}
+	]}`
+	mux := http.NewServeMux()
+	serve := func(body string) http.HandlerFunc {
+		return func(writer http.ResponseWriter, _ *http.Request) {
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(body))
+		}
+	}
+	mux.Handle("GET /proxy/network/api/s/default/rest/networkconf", serve(network11Fixture))
+	mux.Handle("GET /proxy/network/api/s/default/rest/user", serve(`{"data":[]}`))
+	mux.Handle("GET /proxy/network/api/s/default/stat/sta", serve(network11ActiveFixture))
+	server := httptest.NewTLSServer(mux)
+	defer server.Close()
+
+	inventory, err := newTestClient(t, server, Credentials{APIKey: "secret-key"}).Inventory(t.Context())
+	if err != nil {
+		t.Fatalf("Inventory: %v", err)
+	}
+	for _, testCase := range []struct{ lookup, want string }{
+		{"64129bb0e14f6b12d072c296", "64129bb0e14f6b12d072c296"},
+		{"c1190369-cc1e-4dbd-a4cc-ce3fa2c6482f", "64129bb0e14f6b12d072c296"},
+		{"0b6b7a5e-34f1-4f0e-9d0e-8c1f5b2b3a11", "64129bb0e14f6b12d072c296"},
+		{"2f556257-9806-43f5-8158-448614905ad8", "69322f0364d14e5583b08def"},
+	} {
+		network, found := inventory.NetworkByID(testCase.lookup)
+		if !found || network.ID != testCase.want {
+			t.Errorf("NetworkByID(%q) = %q, %v; want %q", testCase.lookup, network.ID, found, testCase.want)
+		}
+	}
+	counts := inventory.HostCounts()
+	if counts["64129bb0e14f6b12d072c296"] != 1 || counts["69322f0364d14e5583b08def"] != 1 {
+		t.Fatalf("host counts = %v, want one host on each network under its legacy ID", counts)
+	}
+}

@@ -1120,6 +1120,36 @@ func TestUniFiStatusReflectsRunningSynchronization(t *testing.T) {
 	}
 }
 
+// A mapping whose network the controller stopped reporting publishes nothing,
+// so the table must not call it Active.
+func TestUniFiMappingTableMarksMissingNetworks(t *testing.T) {
+	t.Parallel()
+	controller := &testUniFiController{status: unifi.Status{
+		HostsByNetwork: map[string]int{"net-lan": 5}, MissingNetworks: []string{"net-gone"},
+	}}
+	server, configuration := newIntegrationsTestServer(t, controller)
+	candidate := configuration.snapshot.Config
+	candidate.UniFi = config.UniFi{
+		Enabled: true, ControllerURL: "https://192.168.1.1", Site: "default",
+		Interval: config.Duration{Duration: 2 * time.Minute}, Sources: []string{"active"},
+		Networks: []config.UniFiNetwork{
+			{ID: "net-lan", Name: "Default", Zone: "clients.example.test", HostnameTemplate: unifi.DefaultHostnameTemplate, TTL: 300, Enabled: true},
+			{ID: "net-gone", Name: "Removed", Zone: "clients.example.test", HostnameTemplate: unifi.DefaultHostnameTemplate, TTL: 300, Enabled: true},
+		},
+	}
+	configuration.snapshot.Config = candidate
+
+	body := serveRequest(server, http.MethodGet, "/integrations").Body.String()
+	table := body[strings.Index(body, `id="unifi-mapping-table"`):]
+
+	if strings.Count(table, ">Missing<") != 1 {
+		t.Error("the network the controller no longer reports was not marked Missing")
+	}
+	if !strings.Contains(table, ">Active<") {
+		t.Error("the network the controller still reports lost its Active state")
+	}
+}
+
 // A per-network host count only means something once a synchronization has
 // reported one, so before that the column says so rather than claiming zero.
 func TestUniFiMappingTableCountsHostsPerNetwork(t *testing.T) {

@@ -504,6 +504,30 @@ func TestUniFiSyncReportsSkippedEntries(t *testing.T) {
 	}
 }
 
+// A mapping the controller stopped reporting is listed as missing, so the
+// console can stop calling it Active, and a mapping saved under an alias of a
+// network's ID still finds the network and its hosts.
+func TestUniFiSyncReportsMissingNetworksAndMatchesAliases(t *testing.T) {
+	editor := &stubZoneEditor{}
+	inventory := testInventory()
+	inventory.Networks[0].Aliases = []string{"uuid-lan"}
+	settings := testSettings(mapping("uuid-lan", "Default", "clients.example.net"), mapping("net-gone", "Removed", "old.example.net"))
+	syncer := newTestSyncer(t, settings, editor, &stubReader{inventory: inventory})
+
+	syncer.runOnce(t.Context())
+
+	status := syncer.Status()
+	if !slices.Equal(status.MissingNetworks, []string{"net-gone"}) {
+		t.Fatalf("missing networks = %v, want only net-gone", status.MissingNetworks)
+	}
+	if status.Hosts != 1 || status.HostsByNetwork["uuid-lan"] != 1 {
+		t.Fatalf("hosts = %d, by network %v; want the one host on the aliased network", status.Hosts, status.HostsByNetwork)
+	}
+	if got := recordValue(t, editor.zone(t, "clients.example.net"), "printer.default", "A"); got != "192.168.1.10" {
+		t.Fatalf("printer A = %q, want the aliased mapping to publish its host", got)
+	}
+}
+
 // Two devices with the same sanitized name on one network must not produce a
 // round-robin the operator never asked for.
 func TestUniFiSyncCollapsesDuplicateNames(t *testing.T) {
