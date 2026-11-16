@@ -147,6 +147,8 @@ func validClockChallenge(challenge string) bool {
 // applyClockRefusals shows a node refused for its clock in the last
 // heartbeatFreshness as up with its clock out of step: on the primary, the
 // member it refused; on a replica, the primary that refused it, and itself.
+// A counted refusal stays the node's last contact once it goes stale, so a
+// node that dies while out of step is down from its last check-in (F81).
 func (service *Service) applyClockRefusals(state *State, now time.Time) {
 	for index := range state.Nodes {
 		node := &state.Nodes[index]
@@ -156,15 +158,19 @@ func (service *Service) applyClockRefusals(state *State, now time.Time) {
 				markClockOutOfStep(state, node, 0)
 			}
 		case node.ID == state.PrimaryID && state.LocalRole == RoleReplica:
-			if now.Sub(service.primaryClockRefusedAt) <= heartbeatFreshness {
+			if service.primaryClockRefusedAt.After(node.LastContact) {
 				node.LastContact = service.primaryClockRefusedAt
-				markClockOutOfStep(state, node, 0)
+				if now.Sub(service.primaryClockRefusedAt) <= heartbeatFreshness {
+					markClockOutOfStep(state, node, 0)
+				}
 			}
 		default:
 			refusal, found := service.clockRefused[node.ID]
-			if found && now.Sub(refusal.received) <= heartbeatFreshness && refusal.received.After(node.LastContact) {
+			if found && refusal.received.After(node.LastContact) {
 				node.LastContact = refusal.received
-				markClockOutOfStep(state, node, refusal.offset)
+				if now.Sub(refusal.received) <= heartbeatFreshness {
+					markClockOutOfStep(state, node, refusal.offset)
+				}
 			}
 		}
 	}
