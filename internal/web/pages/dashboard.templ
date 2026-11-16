@@ -437,9 +437,6 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 								if view.CanZones {
 									@NavItem("Zones", "/zones", "globe", activePage == "zones", false)
 								}
-								if view.CanDHCP {
-									@NavItem("DHCP", "/dhcp", "router", activePage == "dhcp", false)
-								}
 								if view.CanSettings {
 									@NavItem("Cache", "/cache", "database", activePage == "cache", false)
 								}
@@ -459,6 +456,9 @@ templ AppDocument(view DashboardView, pageTitle string, activePage string, page 
 								}
 								if view.CanCluster {
 									@NavItem("Cluster", "/cluster", "cluster", activePage == "cluster", false)
+								}
+								if view.CanDHCP {
+									@NavItem("DHCP", "/dhcp", "router", activePage == "dhcp", false)
 								}
 								if view.CanSettings {
 									@NavItem("Integrations", "/integrations", "plug", activePage == "integrations", false)
@@ -604,9 +604,6 @@ templ CommandPalette(view DashboardView) {
 					@CommandOption("command-page-allowed", "Allowed Domains", "Domains exempt from blocking", "shield-check", "Page", "allow permit whitelist exceptions", "/blocked?tab=allowed", "", "", "", "")
 					@CommandOption("command-page-blocked", "Blocked Domains", "Custom blocked-domain policy", "shield-x", "Page", "block deny blacklist policy", "/blocked?tab=domains", "", "", "", "")
 				}
-				if view.CanDHCP {
-					@CommandOption("command-page-dhcp", "DHCP", "Leases and reservations", "router", "Page", "dhcp leases reservations addresses ip mac", "/dhcp", "", "", "", "")
-				}
 				@CommandOption("command-page-dns-client", "DNS Client", "Resolve and diagnose DNS queries", "terminal", "Page", "query dig nslookup lookup resolver", "/dns-client", "", "", "", "")
 				if view.CanLogs {
 					@CommandOption("command-page-server-logs", "Server Logs", "Runtime events and diagnostics", "logs", "Page", "runtime debug errors diagnostics", "/logs", "", "", "", "")
@@ -617,6 +614,9 @@ templ CommandPalette(view DashboardView) {
 				}
 				if view.CanCluster {
 					@CommandOption("command-page-cluster", "Cluster", "Members, certificates, and replication", "cluster", "Page", "nodes primary replica sync", "/cluster", "", "", "", "")
+				}
+				if view.CanDHCP {
+					@CommandOption("command-page-dhcp", "DHCP", "Leases and reservations", "router", "Page", "dhcp leases reservations addresses ip mac", "/dhcp", "", "", "", "")
 				}
 				if view.CanSettings {
 					@CommandOption("command-page-integrations", "Integrations", "Dynamic DNS, UniFi, and single sign-on", "plug", "Page", "dynamic dns ddns unifi sso oidc", "/integrations", "", "", "", "")

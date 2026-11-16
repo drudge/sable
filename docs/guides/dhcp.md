@@ -17,7 +17,7 @@ Before Sable offers an address, it pings it to check nothing already uses it (RF
 
 A scope is one network: its subnet, the pool of addresses to hand out, and the options every device gets. Sable serves a scope on whichever of its interfaces has an address in that subnet.
 
-1. Open **DHCP** from the sidebar. Sable lists the networks it has an address on.
+1. Open **DHCP** under **System** in the sidebar. Sable lists the networks it has an address on.
 2. Select **Set Up** beside the network. The scope dialog opens filled in: the subnet, the router Sable found, a pool that leaves out Sable's own address and the router's, and Sable as the DNS server.
 3. Check the pool doesn't overlap addresses you've set by hand on printers, cameras, or servers. Split it into more than one range to leave a gap.
 4. Set **Domain** to a zone for device names, such as `lan.example.com`. Sable creates it as a Primary zone if it doesn't exist, and the reverse zone too.
