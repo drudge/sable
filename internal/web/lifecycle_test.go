@@ -89,3 +89,50 @@ func TestCloseDoesNotWaitForAConnectionThatSentNothing(t *testing.T) {
 		t.Fatalf("read on the unused connection after Close = %v, want EOF", err)
 	}
 }
+
+// A request still running when Close begins gets half of the shutdown budget,
+// then the console closes it, so the DNS listeners and the cache snapshot that
+// shut down after the console keep the rest.
+func TestCloseCutsOffARequestThatOutlastsHalfTheBudget(t *testing.T) {
+	server, _ := newMCPTestServer(t)
+	started := make(chan struct{})
+	server.httpServer.Handler = http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		close(started)
+		<-request.Context().Done()
+	})
+	if err := server.Start("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	requestDone := make(chan error, 1)
+	go func() {
+		response, err := http.Get("http://" + server.listener.Addr().String() + "/slow")
+		if err == nil {
+			response.Body.Close()
+		}
+		requestDone <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("slow request did not reach the handler")
+	}
+
+	const budget = 2 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	defer cancel()
+	began := time.Now()
+	if err := server.Close(ctx); err != nil {
+		t.Fatalf("Close with a slow request running = %v after %s", err, time.Since(began).Round(time.Millisecond))
+	}
+	if took := time.Since(began); took < budget/2-100*time.Millisecond || took > budget*3/4 {
+		t.Fatalf("Close took %s, want about half of the %s budget", took.Round(time.Millisecond), budget)
+	}
+	select {
+	case err := <-requestDone:
+		if err == nil {
+			t.Fatal("the slow request finished normally, want it cut off")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the slow request was still open after Close")
+	}
+}
