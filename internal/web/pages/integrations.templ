@@ -259,6 +259,9 @@ type UniFiMappingView struct {
 	// counted" instead of showing a misleading zero.
 	Hosts      int
 	HostsKnown bool
+	// Missing is true when the last synchronization found no network with this
+	// ID on the controller, so the mapping publishes nothing until it is fixed.
+	Missing bool
 }
 
 type UniFiStatusView struct {
@@ -1144,9 +1147,22 @@ templ UniFiMappingTable(view UniFiAppView, outOfBand bool) {
 				<td><code class="muted-cell">{ mapping.Preview }</code></td>
 				<td>{ fmt.Sprint(mapping.TTL) }</td>
 				<td>{ ifThen(mapping.Reverse, "Yes", "No") }</td>
-				<td>@components.Badge(components.BadgeProps{Label: ifThen(mapping.Enabled, "Active", "Paused"), Tone: ifThen(mapping.Enabled, components.BadgeSuccess, components.BadgeNeutral)})</td>
+				<td>@UniFiMappingState(mapping)</td>
 			</tr>
 		}
+	}
+}
+
+// UniFiMappingState badges a mapping: Paused when the operator turned it off,
+// Missing when the controller stopped reporting its network, Active otherwise.
+templ UniFiMappingState(mapping UniFiMappingView) {
+	switch {
+		case !mapping.Enabled:
+			@components.Badge(components.BadgeProps{Label: "Paused", Tone: components.BadgeNeutral})
+		case mapping.Missing:
+			@components.Badge(components.BadgeProps{Label: "Missing", Tone: components.BadgeWarning, Title: "The controller no longer reports this network, so nothing is published for it."})
+		default:
+			@components.Badge(components.BadgeProps{Label: "Active", Tone: components.BadgeSuccess})
 	}
 }
 

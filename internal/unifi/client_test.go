@@ -525,3 +525,50 @@ func TestConnectedDevicesDisplaceStaleReservations(t *testing.T) {
 		t.Fatalf("hosts = %s", got)
 	}
 }
+
+// Network 11 moved each network's ObjectID from _id to legacy_id and made _id a
+// UUID. Mappings saved before the upgrade hold the ObjectID, so it stays the
+// network's ID, and a client that names the network by its new UUID still
+// lands on it.
+func TestInventoryKeepsLegacyNetworkIDsFromNetwork11(t *testing.T) {
+	const network11Fixture = `{"meta":{"rc":"ok"},"data":[
+		{"_id":"11111111-1111-4111-8111-111111111111","legacy_id":"5f0000000000000000000001","external_id":"33333333-3333-4333-8333-333333333333","name":"Default","purpose":"corporate","enabled":true,"ip_subnet":"192.168.1.1/24"},
+		{"_id":"22222222-2222-4222-8222-222222222222","legacy_id":"5f0000000000000000000002","name":"IoT","purpose":"corporate","enabled":true,"ip_subnet":"192.168.30.1/24"}
+	]}`
+	const network11ActiveFixture = `{"data":[
+		{"mac":"aa:bb:cc:dd:ee:21","hostname":"desk","ip":"192.168.1.40","network_id":"11111111-1111-4111-8111-111111111111"},
+		{"mac":"aa:bb:cc:dd:ee:22","hostname":"thermostat","ip":"192.168.30.6","network_id":"5f0000000000000000000002"}
+	]}`
+	mux := http.NewServeMux()
+	serve := func(body string) http.HandlerFunc {
+		return func(writer http.ResponseWriter, _ *http.Request) {
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(body))
+		}
+	}
+	mux.Handle("GET /proxy/network/api/s/default/rest/networkconf", serve(network11Fixture))
+	mux.Handle("GET /proxy/network/api/s/default/rest/user", serve(`{"data":[]}`))
+	mux.Handle("GET /proxy/network/api/s/default/stat/sta", serve(network11ActiveFixture))
+	server := httptest.NewTLSServer(mux)
+	defer server.Close()
+
+	inventory, err := newTestClient(t, server, Credentials{APIKey: "secret-key"}).Inventory(t.Context())
+	if err != nil {
+		t.Fatalf("Inventory: %v", err)
+	}
+	for _, testCase := range []struct{ lookup, want string }{
+		{"5f0000000000000000000001", "5f0000000000000000000001"},
+		{"11111111-1111-4111-8111-111111111111", "5f0000000000000000000001"},
+		{"33333333-3333-4333-8333-333333333333", "5f0000000000000000000001"},
+		{"22222222-2222-4222-8222-222222222222", "5f0000000000000000000002"},
+	} {
+		network, found := inventory.NetworkByID(testCase.lookup)
+		if !found || network.ID != testCase.want {
+			t.Errorf("NetworkByID(%q) = %q, %v; want %q", testCase.lookup, network.ID, found, testCase.want)
+		}
+	}
+	counts := inventory.HostCounts()
+	if counts["5f0000000000000000000001"] != 1 || counts["5f0000000000000000000002"] != 1 {
+		t.Fatalf("host counts = %v, want one host on each network under its legacy ID", counts)
+	}
+}

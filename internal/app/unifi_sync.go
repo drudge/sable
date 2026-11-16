@@ -263,6 +263,7 @@ func (syncer *unifiSyncer) finishAttempt(started time.Time, interval time.Durati
 	syncer.status.Succeed(started, finished.Add(interval))
 	syncer.status.Hosts = hosts
 	syncer.status.HostsByNetwork = plan.HostsByNetwork
+	syncer.status.MissingNetworks = plan.MissingNetworks
 	syncer.status.ZonesCreated = len(plan.CreatedZones)
 	syncer.status.Added = len(plan.Added)
 	syncer.status.Updated = len(plan.Updated)
@@ -319,13 +320,14 @@ func (syncer *unifiSyncer) synchronize(ctx context.Context, settings config.UniF
 	// With no network mapped the sync only finds devices, and must not touch
 	// a zone: retiring records is for a mapping that stopped producing them.
 	if !settings.Publishes() {
-		return unifi.Plan{Skipped: skipped, HostsByNetwork: inventory.HostCounts()}, 0, nil
+		return unifi.Plan{Skipped: skipped, HostsByNetwork: mappedHostCounts(settings, inventory), MissingNetworks: missingUniFiNetworks(settings, inventory)}, 0, nil
 	}
 	if preview {
 		zones := syncer.zones.Current().Zones
 		plan := planUniFiZones(&zones, desired, syncer.now())
 		plan.Skipped = append(skipped, plan.Skipped...)
-		plan.HostsByNetwork = inventory.HostCounts()
+		plan.HostsByNetwork = mappedHostCounts(settings, inventory)
+		plan.MissingNetworks = missingUniFiNetworks(settings, inventory)
 		plan.Hosts = mappedUniFiHosts(settings, plan.HostsByNetwork)
 		return plan, plan.Hosts, nil
 	}
@@ -334,9 +336,35 @@ func (syncer *unifiSyncer) synchronize(ctx context.Context, settings config.UniF
 		return unifi.Plan{}, 0, err
 	}
 	plan.Skipped = append(skipped, plan.Skipped...)
-	plan.HostsByNetwork = inventory.HostCounts()
+	plan.HostsByNetwork = mappedHostCounts(settings, inventory)
+	plan.MissingNetworks = missingUniFiNetworks(settings, inventory)
 	plan.Hosts = mappedUniFiHosts(settings, plan.HostsByNetwork)
 	return plan, plan.Hosts, nil
+}
+
+// mappedHostCounts counts the hosts on each network, and also files each
+// mapping's count under the ID the mapping was saved with, which can be an
+// alias of the network's ID, such as the UUID _id Network 11 reports.
+func mappedHostCounts(settings config.UniFi, inventory unifi.Inventory) map[string]int {
+	counts := inventory.HostCounts()
+	for _, mapping := range settings.Networks {
+		if network, known := inventory.NetworkByID(mapping.ID); known && network.ID != mapping.ID {
+			counts[mapping.ID] = counts[network.ID]
+		}
+	}
+	return counts
+}
+
+// missingUniFiNetworks lists the active mappings whose network the controller
+// did not report, in mapping order.
+func missingUniFiNetworks(settings config.UniFi, inventory unifi.Inventory) []string {
+	var missing []string
+	for _, mapping := range settings.ActiveNetworks() {
+		if _, known := inventory.NetworkByID(mapping.ID); !known {
+			missing = append(missing, mapping.ID)
+		}
+	}
+	return missing
 }
 
 // applyUniFiPlan writes the desired records, then notifies the secondaries of
@@ -400,7 +428,7 @@ func desiredUniFiRecords(settings config.UniFi, inventory unifi.Inventory) (map[
 			plan.skip("network %s is mapped but the controller no longer reports it", mapping.DisplayName())
 			continue
 		}
-		plan.addNetwork(mapping, network, template, hostsByNetwork[mapping.ID])
+		plan.addNetwork(mapping, network, template, hostsByNetwork[network.ID])
 	}
 	for _, entry := range plan.zones {
 		entry.records = dedupeUniFiRecords(entry.records)

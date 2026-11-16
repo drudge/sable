@@ -21,6 +21,10 @@ type Status struct {
 	// network that produced no record, so the console can show it after setup
 	// as well as in the wizard's preview.
 	Skipped []string
+	// MissingNetworks lists the mapped network IDs the controller did not
+	// report on the last successful run, so the mapping table can say so
+	// instead of calling them Active.
+	MissingNetworks []string
 }
 
 // Plan is the difference one synchronization would make. The setup wizard
@@ -42,6 +46,9 @@ type Plan struct {
 	// HostsByNetwork counts the hosts on each network the controller reported,
 	// keyed by network ID.
 	HostsByNetwork map[string]int
+	// MissingNetworks lists the IDs of active mappings whose network the
+	// controller no longer reports.
+	MissingNetworks []string
 }
 
 // PlanRecord is one record a plan would add, change, or remove.

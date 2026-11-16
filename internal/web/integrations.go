@@ -72,7 +72,7 @@ func (server *Server) integrationsView(request *http.Request, message, errorMess
 			SyncActive:       settings.SyncsActiveClients(),
 			CAFile:           settings.CAFile,
 			Insecure:         settings.Insecure,
-			Mappings:         unifiMappingViews(settings, nil),
+			Mappings:         unifiMappingViews(settings, unifi.Status{}),
 		},
 	}
 	view.DynamicDNS = server.dynamicDNSView(request, console.TimeDisplay)
@@ -103,7 +103,7 @@ func (server *Server) integrationsView(request *http.Request, message, errorMess
 	view.UniFi.Username = credentials.Username
 	status := server.unifi.Status()
 	view.UniFi.Status = unifiStatusView(status, view.Console.TimeDisplay)
-	view.UniFi.Mappings = unifiMappingViews(settings, status.HostsByNetwork)
+	view.UniFi.Mappings = unifiMappingViews(settings, status)
 	return view
 }
 
@@ -117,7 +117,8 @@ func unifiAuthMode(credentials unifi.Credentials) string {
 // unifiMappingViews renders the mapped networks. Host counts come from the last
 // synchronization, so before one has run they are unknown rather than zero and
 // the table says so instead of claiming an empty network.
-func unifiMappingViews(settings config.UniFi, hosts map[string]int) []pages.UniFiMappingView {
+func unifiMappingViews(settings config.UniFi, status unifi.Status) []pages.UniFiMappingView {
+	hosts := status.HostsByNetwork
 	mappings := make([]pages.UniFiMappingView, 0, len(settings.Networks))
 	for _, network := range settings.Networks {
 		mappings = append(mappings, pages.UniFiMappingView{
@@ -125,6 +126,7 @@ func unifiMappingViews(settings config.UniFi, hosts map[string]int) []pages.UniF
 			Template: network.HostnameTemplate, TTL: network.TTL,
 			Reverse: network.Reverse, Enabled: network.Enabled,
 			Hosts: hosts[network.ID], HostsKnown: hosts != nil,
+			Missing: network.Enabled && slices.Contains(status.MissingNetworks, network.ID),
 			Preview: unifiPreviewName(network.HostnameTemplate, network.DisplayName(), network.Zone),
 		})
 	}
