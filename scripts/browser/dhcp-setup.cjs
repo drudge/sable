@@ -22,15 +22,36 @@ const {chromium} = require('playwright');
 
     const dialog = page.getByRole('dialog', {name: 'Add Scope'}).filter({visible: true});
     await dialog.waitFor();
-    assert.equal(await dialog.getByLabel('ID').inputValue(), 'lan');
+    assert.equal(await dialog.getByLabel('Name').inputValue(), 'LAN');
     assert.equal(await dialog.getByLabel('Subnet').inputValue(), '192.0.2.0/24');
     assert.equal(await dialog.getByLabel('Range Start').inputValue(), '192.0.2.100');
     assert.equal(await dialog.getByLabel('Range End').inputValue(), '192.0.2.199');
     assert.equal(await dialog.getByLabel('Router').inputValue(), '192.0.2.1');
+    assert.equal(await dialog.getByLabel('ID').isVisible(), false, 'the ID waits under Advanced Options');
+    await dialog.getByText('Advanced Options').click();
     const id = dialog.getByLabel('ID');
+    assert.equal(await id.inputValue(), '', 'an add leaves the ID to the name');
+    assert.equal(await id.getAttribute('placeholder'), 'lan');
+    await dialog.getByLabel('Name').fill('Home Lab');
+    assert.equal(await id.getAttribute('placeholder'), 'home-lab', 'the placeholder shows the ID the name makes');
     await id.fill('Bad ID');
     assert.equal(await id.evaluate(input => input.validity.patternMismatch), true, 'the ID pattern refuses capitals and spaces');
-    await id.fill('lan');
+    await id.fill('');
+    await dialog.getByLabel('Name').fill('LAN');
+
+    // Typing a subnet fills the range and router in, but never over a value
+    // the operator typed.
+    await dialog.getByLabel('Range End').fill('192.0.2.150');
+    await dialog.getByLabel('Router').fill('');
+    await dialog.getByLabel('Subnet').fill('');
+    await dialog.getByLabel('Subnet').pressSequentially('198.51.100.0/24');
+    assert.equal(await dialog.getByLabel('Range End').inputValue(), '192.0.2.150', 'a typed end stays');
+    assert.equal(await dialog.getByLabel('Router').inputValue(), '198.51.100.1', 'an empty router is filled from the subnet');
+    await dialog.getByLabel('Subnet').fill('192.0.2.0/24');
+    await dialog.getByLabel('Subnet').dispatchEvent('input');
+    await dialog.getByLabel('Range End').fill('192.0.2.199');
+    assert.equal(await dialog.getByLabel('Router').inputValue(), '192.0.2.1', 'the filled router follows the subnet');
+    console.log('PASS Add Scope makes the ID from the name and fills the range from the subnet');
     await dialog.getByRole('button', {name: 'Add Scope'}).click();
     await page.getByText('Saved scope LAN').first().waitFor();
     console.log('PASS Set Up adds the scope suggested for the network');

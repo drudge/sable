@@ -3064,6 +3064,51 @@
 	  syncZoneCreateType(form);
 	};
 
+	// dhcpScopeID mirrors config.DHCPScopeID, the ID an added scope gets from
+	// its name: letters and digits in lowercase, one hyphen for each run of
+	// anything else, at most 32 characters.
+	const dhcpScopeID = (text) => text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).join("-").slice(0, 32).replace(/-+$/, "");
+
+	// dhcpScopeSuggestion mirrors dhcpSuggestedScope for a typed IPv4 subnet:
+	// .100 to .199 on a /24 or larger, the top half of a smaller one, and the
+	// first host as the router. It's null until the subnet reads as one.
+	const dhcpScopeSuggestion = (subnet) => {
+	  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/.exec(subnet.trim());
+	  if (!match) return null;
+	  const octets = match.slice(1, 5).map(Number);
+	  const bits = Number(match[5]);
+	  if (octets.some((octet) => octet > 255) || bits < 8 || bits > 30) return null;
+	  const size = 2 ** (32 - bits);
+	  const first = Math.floor(octets.reduce((sum, octet) => sum * 256 + octet, 0) / size) * size;
+	  const address = (number) => [24, 16, 8, 0].map((shift) => Math.floor(number / 2 ** shift) % 256).join(".");
+	  const [start, end] = size >= 256 ? [first + 100, first + 199] : [first + size / 2, first + size - 2];
+	  return {range_start: address(start), range_end: address(end), router: address(first + 1)};
+	};
+
+	// setupDHCPScopeForm fills the range and router in from the subnet as it's
+	// typed, without touching a value the operator typed, and shows the ID an
+	// add will get from its name.
+	const setupDHCPScopeForm = (form) => {
+	  if (form.dataset.dhcpScopeReady === "true") return;
+	  form.dataset.dhcpScopeReady = "true";
+	  const name = form.querySelector("[data-dhcp-scope-name]");
+	  const id = form.querySelector("[data-dhcp-scope-id]");
+	  const subnet = form.querySelector("[data-dhcp-scope-subnet]");
+	  const fields = [...form.querySelectorAll("[data-dhcp-scope-fill]")];
+	  const filled = new WeakMap();
+	  const syncID = () => { if (id) id.placeholder = dhcpScopeID(name.value) || "lan"; };
+	  name.addEventListener("input", syncID);
+	  subnet.addEventListener("input", () => {
+		const suggestion = dhcpScopeSuggestion(subnet.value);
+		for (const field of fields) {
+		  if (field.value !== "" && field.value !== filled.get(field)) continue;
+		  field.value = suggestion?.[field.dataset.dhcpScopeFill] ?? "";
+		  filled.set(field, field.value);
+		}
+	  });
+	  form.addEventListener("reset", () => queueMicrotask(syncID));
+	};
+
 	const setupCreateUserForm = (form) => {
 	  if (!form || form.dataset.userValidationReady === "true") return;
 	  form.dataset.userValidationReady = "true";
@@ -3965,6 +4010,7 @@
 	  ["[data-cluster-tls-accordion]", setupClusterTLSAccordion],
 	  ["[data-create-user-form]", setupCreateUserForm],
 	  ["[data-zone-create-form]", setupCreateZoneForm],
+	  ["[data-dhcp-scope-form]", setupDHCPScopeForm],
 	  ["[data-unifi-auth-root]", setupUniFiAuthModes],
 	  ["[data-unifi-zone-rows]", setupUniFiZoneRows],
 	  ["[data-log-live-panel]", setupLogLivePanel],

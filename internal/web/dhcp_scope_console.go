@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -16,6 +17,12 @@ func (server *Server) saveDHCPScope(writer http.ResponseWriter, request *http.Re
 	id, add := strings.TrimSpace(request.FormValue("id")), request.FormValue("new") != ""
 	notice := "#" + pages.DHCPScopeNoticeID(id, request.FormValue("suggest"), add)
 	server.dhcpMutation(writer, request, notice, func(service dhcpService, who actor) (string, error) {
+		if add && id == "" {
+			var err error
+			if id, err = dhcpNewScopeID(service, who, request.FormValue("name")); err != nil {
+				return "", err
+			}
+		}
 		scope, err := dhcpScopeFromForm(service, who, id, add, request)
 		if err != nil {
 			return "", err
@@ -54,6 +61,29 @@ func (server *Server) setDHCPEnabled(writer http.ResponseWriter, request *http.R
 	default:
 		server.renderDHCP(writer, request, ifThenString(enabled, "Turned DHCP on", "Turned DHCP off"))
 	}
+}
+
+// dhcpNewScopeID is the ID an add gets when its form leaves the ID empty:
+// one made from the name, or lan, with -2, -3, and so on after it while
+// another scope has it.
+func dhcpNewScopeID(service dhcpService, who actor, name string) (string, error) {
+	state, err := service.State(who)
+	if err != nil {
+		return "", err
+	}
+	base := config.DHCPScopeID(name)
+	if base == "" {
+		base = "lan"
+	}
+	taken := make(map[string]bool, len(state.Settings.Scopes))
+	for _, scope := range state.Settings.Scopes {
+		taken[strings.ToLower(scope.ID)] = true
+	}
+	id := base
+	for suffix := 2; taken[id]; suffix++ {
+		id = fmt.Sprintf("%s-%d", base, suffix)
+	}
+	return id, nil
 }
 
 // dhcpScopeFromForm starts from the saved scope, so a field the dialog

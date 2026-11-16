@@ -155,6 +155,20 @@ func (settings *DHCP) Normalize() {
 	}
 }
 
+// DHCPScopeID makes a scope ID from text such as a scope's name: its
+// letters and digits in lowercase, with one hyphen for each run of anything
+// else, cut to 32 characters. It's empty when text has no letter or digit.
+func DHCPScopeID(text string) string {
+	words := strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9')
+	})
+	id := strings.Join(words, "-")
+	if len(id) > 32 {
+		id = strings.TrimRight(id[:32], "-")
+	}
+	return id
+}
+
 // normalize canonicalizes what has one canonical form and leaves anything
 // unparsable as written, so validation can name it.
 func (scope *DHCPScope) normalize() {

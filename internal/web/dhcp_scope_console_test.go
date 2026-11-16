@@ -109,3 +109,25 @@ func TestDHCPServiceOperatorCannotTurnTheServerOff(t *testing.T) {
 		t.Fatalf("Administrator SetEnabled(false) = %v, enabled %v", err, configuration.snapshot.Config.DHCP.Enabled)
 	}
 }
+
+// An add whose form leaves the ID empty gets one made from the name, with a
+// number after it when another scope has it.
+func TestDHCPConsoleAddMakesTheIDFromTheName(t *testing.T) {
+	t.Parallel()
+	server, configuration, _ := newDHCPConsoleServer(t)
+	for _, test := range []struct{ name, network, id string }{
+		{"Guest Wi-Fi", "198.51.100.", "guest-wi-fi"},
+		{"LAN", "203.0.113.", "lan-2"},
+	} {
+		form := url.Values{"new": {"1"}, "id": {""}, "name": {test.name}, "subnet": {test.network + "0/24"},
+			"range_start": {test.network + "100"}, "range_end": {test.network + "199"}}
+		response := dhcpConsoleRequest(t, server, http.MethodPost, "/ui/dhcp/scopes", form)
+		if response.Code != http.StatusOK {
+			t.Fatalf("add %s = %d: %s", test.name, response.Code, response.Body.String())
+		}
+		scopes := configuration.snapshot.Config.DHCP.Scopes
+		if added := scopes[len(scopes)-1]; added.ID != test.id || added.Name != test.name {
+			t.Fatalf("add %s made scope %q, want %q", test.name, added.ID, test.id)
+		}
+	}
+}
