@@ -55,10 +55,23 @@ templ dhcpImportDialog(view DHCPPageView) {
 	}
 }
 
+// dhcpScopeSelect picks the scope a reservation or an import goes into.
+templ dhcpScopeSelect(id string, scopes []DHCPImportScope, selected string) {
+	@components.Field(components.FieldProps{ID: id, Label: "Scope"}) {
+		<select name="scope" data-styled-select>
+			for _, scope := range scopes {
+				<option value={ scope.ID } selected?={ scope.ID == selected }>{ scope.Label }</option>
+			}
+		</select>
+	}
+}
+
+// DHCPImportScopes lists the scopes a reservation or an import can go into,
+// by name and subnet.
 func DHCPImportScopes(scopes []DHCPScopeView) []DHCPImportScope {
 	options := make([]DHCPImportScope, 0, len(scopes))
 	for _, scope := range scopes {
-		options = append(options, DHCPImportScope{ID: scope.ID, Label: scope.Name + " (" + scope.Subnet + ")"})
+		options = append(options, DHCPImportScope{ID: scope.ID, Label: dhcpScopeTitle(scope) + " (" + scope.Subnet + ")"})
 	}
 	return options
 }
@@ -76,11 +89,7 @@ templ DHCPImportSource(view DHCPImportSourceView) {
 	@dhcpImportForm() {
 		<div class="dhcp-form-notice" id={ DHCPImportNoticeID }></div>
 		if len(view.Scopes) > 1 {
-			<label><span>Scope</span><select name="scope">
-				for _, scope := range view.Scopes {
-					<option value={ scope.ID } selected?={ scope.ID == view.Scope }>{ scope.Label }</option>
-				}
-			</select></label>
+			@dhcpScopeSelect("dhcp-import-scope", view.Scopes, view.Scope)
 		} else if len(view.Scopes) == 1 {
 			<input type="hidden" name="scope" value={ view.Scopes[0].ID }/>
 		}

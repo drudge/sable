@@ -168,7 +168,7 @@ func dhcpState(status DHCPStatusView) string {
 	case status.Serving:
 		return "Serving"
 	case status.Clustered && status.Enabled:
-		return "Held"
+		return "Standby"
 	case status.Enabled:
 		return "Starting"
 	default:
@@ -181,7 +181,7 @@ func dhcpStateDetail(status DHCPStatusView, canConfigure bool) string {
 	case status.Serving:
 		return fmt.Sprintf("Answered %s of %s requests", formatNumber(status.Replied), formatNumber(status.Received))
 	case status.Clustered && status.Enabled:
-		return "No range is pinned to this node and no scope has reservations"
+		return "This node has no range of its own, and no scope has reservations"
 	case status.Enabled:
 		return "Not answering on port 67; check the server logs"
 	case canConfigure:
@@ -316,23 +316,23 @@ templ dhcpReservationDialog(view DHCPPageView, reservation DHCPReservationRow, a
 			<div class="isotope-dialog-body">
 				<div class="dhcp-form-notice" id={ DHCPReservationNoticeID(reservation.Scope, reservation.MAC, add) }></div>
 				if add && len(view.Scopes) > 1 {
-					<label><span>Scope</span><select name="scope">
-						for _, scope := range view.Scopes {
-							<option value={ scope.ID }>{ scope.Name + " (" + scope.Subnet + ")" }</option>
-						}
-					</select></label>
+					@dhcpScopeSelect("dhcp-reservation-new-scope", DHCPImportScopes(view.Scopes), "")
 				} else {
 					<input type="hidden" name="scope" value={ reservation.Scope }/>
 				}
 				if add {
 					<input type="hidden" name="new" value="1"/>
-					@components.Field(components.FieldProps{ID: "dhcp-reservation-new-mac", Label: "MAC Address", Input: templ.Attributes{"name": "mac", "class": "mono-input", "placeholder": "00:11:22:33:44:55", "autocomplete": "off", "spellcheck": "false", "required": true}})
 				} else {
 					<input type="hidden" name="mac" value={ reservation.MAC }/>
 				}
-				@components.Field(components.FieldProps{ID: dhcpReservationDialogID(reservation) + "-address", Label: "Address", Help: "An address in the scope's subnet that no other device has reserved.", Input: templ.Attributes{"name": "address", "value": reservation.Address, "class": "mono-input", "placeholder": "192.168.1.20", "inputmode": "decimal", "autocomplete": "off", "required": true}})
-				@components.Field(components.FieldProps{ID: dhcpReservationDialogID(reservation) + "-name", Label: "Name", Help: "Registered in DNS in the scope's domain; leave empty to use the name the device sends.", Input: templ.Attributes{"name": "name", "value": reservation.Name, "class": "mono-input", "placeholder": "printer", "maxlength": "63", "autocomplete": "off", "spellcheck": "false"}})
-				@components.Field(components.FieldProps{ID: dhcpReservationDialogID(reservation) + "-comment", Label: "Comment", Input: templ.Attributes{"name": "comment", "value": reservation.Comment, "maxlength": "256", "autocomplete": "off"}})
+				<div class={ ifThen(add, "record-field-grid two", "record-field-grid") }>
+					if add {
+						@components.Field(components.FieldProps{ID: "dhcp-reservation-new-mac", Label: "MAC Address", Input: templ.Attributes{"name": "mac", "class": "mono-input", "placeholder": "00:11:22:33:44:55", "autocomplete": "off", "spellcheck": "false", "required": true}})
+					}
+					@components.Field(components.FieldProps{ID: dhcpReservationDialogID(reservation) + "-address", Label: "Address", Input: templ.Attributes{"name": "address", "value": reservation.Address, "class": "mono-input", "placeholder": "192.168.1.20", "inputmode": "decimal", "autocomplete": "off", "required": true}})
+				</div>
+				@components.Field(components.FieldProps{ID: dhcpReservationDialogID(reservation) + "-name", Label: "Name", Help: "The device's name in DNS. Leave empty to use the name it sends.", Input: templ.Attributes{"name": "name", "value": reservation.Name, "class": "mono-input", "placeholder": "printer", "maxlength": "63", "autocomplete": "off", "spellcheck": "false"}})
+				@components.Field(components.FieldProps{ID: dhcpReservationDialogID(reservation) + "-comment", Label: "Comment", Input: templ.Attributes{"name": "comment", "value": reservation.Comment, "placeholder": "Optional note", "maxlength": "256", "autocomplete": "off"}})
 			</div>
 			@components.DialogFooter("Cancel") {
 				@components.Button(components.ButtonProps{Label: ifThen(add, "Add Reservation", "Save Reservation"), Icon: "check", Type: "submit", Attrs: templ.Attributes{"data-replica-primary-action": true}})
