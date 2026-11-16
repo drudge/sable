@@ -336,6 +336,8 @@ func routeTable() []route {
 		{pattern: "GET /api/v1/logs/runtime/export", handler: (*Server).exportRuntimeLogs, perm: auth.PermissionLogsRead},
 		{pattern: "GET /api/v1/logs/queries/export", handler: (*Server).exportQueryLogs, perm: auth.PermissionLogsRead},
 		{pattern: "GET /metrics", handler: (*Server).metrics, perm: auth.PermissionMetricsRead},
+		// Runtime profiles of this node, for chasing memory growth.
+		{pattern: "GET /api/v1/debug/pprof/{profile}", handler: (*Server).debugProfile, perm: auth.PermissionMetricsRead},
 		{pattern: "GET " + technitiumStatsPath, handler: (*Server).technitiumStats, perm: auth.PermissionMetricsRead},
 
 		// Settings, the cache, and certificates. The cache and the

@@ -131,6 +131,18 @@ Watch at least:
 - `process_open_fds` against `process_max_fds`, since a resolver with TCP,
   DoT, and DoH listeners fails once it runs out of file descriptors.
 
+When memory keeps climbing, take a heap profile from the node before you
+restart it, since a restart throws the evidence away:
+
+```sh
+curl --fail --silent --output heap.pprof \
+  --header 'Authorization: Bearer sable_pat_REDACTED' \
+  'http://127.0.0.1:5380/api/v1/debug/pprof/heap?gc=1'
+go tool pprof -top heap.pprof
+```
+
+`goroutine?debug=1` lists what every goroutine is waiting on, in text.
+
 Counters describe the local process. Cluster membership gauges report the
 local node's current view of all members; Sable does not yet aggregate every
 member's DNS/query counters into one cluster-wide series.

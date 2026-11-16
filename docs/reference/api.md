@@ -23,6 +23,7 @@ The Glance integration has a special query-token compatibility path. That is not
 | --- | --- |
 | `GET /api/v1/health` | JSON health snapshot: status, instance ID, build version, configuration revision, DNS statistics, and query-log statistics |
 | `GET /metrics` | Prometheus exposition; requires `metrics.read` |
+| `GET /api/v1/debug/pprof/{profile}` | This node's `heap`, `allocs`, `goroutine`, or `threadcreate` profile in pprof format, for `go tool pprof`; `debug=1` returns text, `debug=2` full goroutine stacks, and `gc=1` collects garbage before a heap profile. Requires `metrics.read` |
 | `GET /api/v1/policy` | JSON policy and resolver summary, including counts, cache entries, trust anchors, and block-list sources |
 | `GET /api/dashboard/stats/get?type=LastDay` | Technitium-compatible DNS Stats response for [Glance](../guides/glance.md) |
 
