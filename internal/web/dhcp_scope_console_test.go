@@ -62,8 +62,9 @@ func TestDHCPConsoleEditsScopes(t *testing.T) {
 
 	edit.Set("range_end", "10.0.0.1")
 	response = dhcpConsoleRequest(t, server, http.MethodPost, "/ui/dhcp/scopes", edit)
-	if body := response.Body.String(); response.Code != http.StatusUnprocessableEntity || !strings.Contains(body, "toast-error") {
-		t.Fatalf("a range outside the subnet = %d: %s", response.Code, body)
+	if body := response.Body.String(); response.Code != http.StatusUnprocessableEntity || !strings.Contains(body, "toast-error") ||
+		strings.Contains(body, "dhcp.scopes[") {
+		t.Fatalf("a range outside the subnet = %d, want a refusal in the form's words: %s", response.Code, body)
 	}
 
 	add := url.Values{"new": {"1"}, "id": {"lan"}, "name": {"Again"}, "subnet": {"203.0.113.0/24"}}
