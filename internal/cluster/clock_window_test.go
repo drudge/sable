@@ -159,3 +159,44 @@ func TestReplicaAnswersThePrimarysClockChallengeOnce(t *testing.T) {
 		t.Fatalf("replica signed a malformed challenge %q", got)
 	}
 }
+
+// A member that dies while refused for its clock was last heard from at its
+// last answered refusal, not at the last heartbeat from before its clock went
+// wrong: once the refusal goes stale the member is down, but the node-down
+// alert counts from its real last check-in (F81). The same holds on a replica
+// for a primary that refused it.
+func TestClockRefusedNodeKeepsItsLastContactOnceStale(t *testing.T) {
+	service, memberID := serviceWithMember(t)
+	now := time.Now()
+	heartbeat := Heartbeat{NodeID: memberID, SentAt: now.Add(5 * time.Minute), UpSince: now.Add(-time.Hour)}
+	_, err := service.Synchronize(context.Background(), heartbeat, heartbeatSignature(service.manifest.StatusKey, heartbeat))
+	answer := Heartbeat{NodeID: memberID, SentAt: now.Add(5 * time.Minute), UpSince: heartbeat.UpSince, ClockChallenge: ClockChallenge(err)}
+	_, _ = service.Synchronize(context.Background(), answer, heartbeatSignature(service.manifest.StatusKey, answer))
+	service.mu.Lock()
+	refusal := service.clockRefused[memberID]
+	refusal.received = refusal.received.Add(-heartbeatFreshness - 2*time.Second)
+	service.clockRefused[memberID] = refusal
+	service.mu.Unlock()
+	node := memberNode(t, service, memberID)
+	if node.State == StateOnline || node.SyncState == SyncClock {
+		t.Fatalf("member = %s/%s after its refusal went stale; want it down", node.State, node.SyncState)
+	}
+	if !node.LastContact.Equal(refusal.received) {
+		t.Fatalf("member's last contact = %v; want its last answered refusal %v", node.LastContact, refusal.received)
+	}
+
+	_, _, replica, _ := fencingCluster(t)
+	primaryID := replica.Snapshot().PrimaryID
+	replica.mu.Lock()
+	if observed, heard := replica.telemetry[primaryID]; heard {
+		observed.received = time.Now().Add(-time.Minute)
+		replica.telemetry[primaryID] = observed
+	}
+	replica.primaryClockRefusedAt = time.Now().Add(-heartbeatFreshness - 2*time.Second)
+	refusedAt := replica.primaryClockRefusedAt
+	replica.mu.Unlock()
+	primary := memberNode(t, replica, primaryID)
+	if primary.SyncState == SyncClock || !primary.LastContact.Equal(refusedAt) {
+		t.Fatalf("primary = %s, last contact %v; want its clock no longer shown out of step and last contact %v", primary.SyncState, primary.LastContact, refusedAt)
+	}
+}
