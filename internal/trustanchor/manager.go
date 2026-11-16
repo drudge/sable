@@ -22,6 +22,17 @@ const (
 
 const revokeFlag = uint16(1 << 7)
 
+// Run waits between failed refreshes, doubling from retryBackoffMin up to
+// retryBackoffMax. A failure that left a later NextRefresh behind (an
+// initialized trust point) then waits out that RFC 5011 retry interval too;
+// one that didn't (never initialized, or the failure couldn't be saved)
+// tries again after the backoff alone, so a node that starts before its
+// network is up picks up its anchors within minutes of it coming up.
+const (
+	retryBackoffMin = 5 * time.Second
+	retryBackoffMax = 5 * time.Minute
+)
+
 type Anchor struct {
 	Owner         string
 	KeyID         string
@@ -78,6 +89,10 @@ type Manager struct {
 	query Query
 	opts  Options
 
+	// wait sleeps for a duration and reports false once ctx is done. Tests
+	// replace it to run Run against a fake clock.
+	wait func(context.Context, time.Duration) bool
+
 	mu       sync.RWMutex
 	snapshot Snapshot
 }
@@ -94,7 +109,7 @@ func New(ctx context.Context, store Store, query Query, options Options) (*Manag
 	if snapshot.Status.Owner == "" {
 		snapshot.Status.Owner = options.Owner
 	}
-	manager := &Manager{store: store, query: query, opts: options, snapshot: cloneSnapshot(snapshot)}
+	manager := &Manager{store: store, query: query, opts: options, wait: waitContext, snapshot: cloneSnapshot(snapshot)}
 	manager.publish()
 	return manager, nil
 }
@@ -178,28 +193,52 @@ func (manager *Manager) Run(ctx context.Context, logger *slog.Logger) {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	for {
+	failures := 0
+	for ctx.Err() == nil {
 		if !manager.opts.Enabled() {
-			if !waitContext(ctx, time.Minute) {
+			if !manager.wait(ctx, time.Minute) {
 				return
 			}
 			continue
 		}
 		status := manager.Status()
 		now := manager.opts.Now()
-		if !status.Initialized || status.NextRefresh.IsZero() || !now.Before(status.NextRefresh) {
-			if err := manager.Refresh(ctx); err != nil {
-				logger.Warn("DNSSEC trust-anchor refresh failed", "owner", manager.opts.Owner, "error", err)
-			} else {
-				status = manager.Status()
-				logger.Info("DNSSEC trust-anchor state refreshed", "owner", manager.opts.Owner, "active", status.Active, "pending", status.Pending, "revoked", status.Revoked, "next_refresh", status.NextRefresh)
+		if status.Initialized && !status.NextRefresh.IsZero() && now.Before(status.NextRefresh) {
+			if !manager.wait(ctx, min(status.NextRefresh.Sub(now), time.Hour)) {
+				return
 			}
 			continue
 		}
-		if !waitContext(ctx, min(time.Until(status.NextRefresh), time.Hour)) {
+		err := manager.Refresh(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		if err == nil {
+			failures = 0
+			status = manager.Status()
+			logger.Info("DNSSEC trust-anchor state refreshed", "owner", manager.opts.Owner, "active", status.Active, "pending", status.Pending, "revoked", status.Revoked, "next_refresh", status.NextRefresh)
+			continue
+		}
+		failures++
+		backoff := retryBackoff(failures)
+		logger.Warn("DNSSEC trust-anchor refresh failed", "owner", manager.opts.Owner, "error", err, "retry_in", backoff)
+		if !manager.wait(ctx, backoff) {
 			return
 		}
 	}
+}
+
+// retryBackoff is how long Run waits after the given run of consecutive
+// failed refreshes.
+func retryBackoff(failures int) time.Duration {
+	backoff := retryBackoffMin
+	for range failures - 1 {
+		if backoff >= retryBackoffMax/2 {
+			return retryBackoffMax
+		}
+		backoff *= 2
+	}
+	return backoff
 }
 
 func waitContext(ctx context.Context, duration time.Duration) bool {
