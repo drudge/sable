@@ -170,7 +170,7 @@ func (server *Server) importDHCPConsole(writer http.ResponseWriter, request *htt
 	const notice = "#" + pages.DHCPImportNoticeID
 	text, err := readImportText(request, dhcpSettingsLimit, "import_text", "export")
 	if err != nil {
-		server.renderFormProblem(writer, request, notice, refuse(http.StatusBadRequest, "%s", err.Error()))
+		server.renderDHCPProblem(writer, request, notice, refuse(http.StatusBadRequest, "%s", err.Error()))
 		return
 	}
 	// The preview sends the export back in a hidden field, and Back shows it
@@ -183,7 +183,7 @@ func (server *Server) importDHCPConsole(writer http.ResponseWriter, request *htt
 	}
 	result, err := server.dhcpService().Import(request.Context(), who, scope, []byte(text), step != "apply")
 	if err != nil {
-		server.renderFormProblem(writer, request, notice, err)
+		server.renderDHCPProblem(writer, request, notice, err)
 		return
 	}
 	if step == "apply" {
