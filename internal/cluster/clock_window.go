@@ -48,17 +48,20 @@ func (err *clockWindowError) Error() string {
 }
 
 // clockRefusal is a member's standing with the primary while it is refused
-// for its clock: received is when a refusal last counted, challenge the one
-// the member must answer next, issued at issued, latest the newest SentAt of
-// its authentic refused heartbeats, and warned when the log last named it.
+// for its clock: received is when a refusal last counted and challenge the
+// one the member must answer next, issued at issued. unanswered is when the
+// log last said the member left a challenge unanswered.
 type clockRefusal struct {
-	received  time.Time
-	offset    time.Duration
-	challenge string
-	issued    time.Time
-	latest    time.Time
-	warned    time.Time
+	received   time.Time
+	offset     time.Duration
+	challenge  string
+	issued     time.Time
+	unanswered time.Time
 }
+
+// clockUnansweredLogEvery spaces the warning about a member that leaves its
+// clock challenge unanswered.
+const clockUnansweredLogEvery = 5 * time.Minute
 
 // noteClockRefusal answers an authentic member heartbeat refused for its
 // clock with a one-time challenge, and counts the member as up only when the
@@ -67,10 +70,11 @@ type clockRefusal struct {
 // clock that stepped back, so freshness comes from this node (D109). A
 // heartbeat that doesn't answer leaves a young challenge in place, so a replay
 // can't spoil the member's next answer. It warns once per out-of-step
-// episode, on the first live heartbeat after none for heartbeatFreshness: one
-// that answers the challenge, or one with no answer at all (a member too old
-// to answer, F82) sent after every one seen before. A replay answers a stale
-// challenge or repeats an old SentAt, so it never logs.
+// episode, on the first answer after none counted for heartbeatFreshness, so
+// a replay never logs that. A heartbeat that leaves a young challenge
+// unanswered is a member on a release without the challenge (1.8.2), which
+// shows as offline, or a replay; the two can't be told apart, so the log says
+// both, at most every clockUnansweredLogEvery (D119).
 func (service *Service) noteClockRefusal(heartbeat Heartbeat, signature string, err error) {
 	var window *clockWindowError
 	if !errors.As(err, &window) || heartbeat.Primary != nil {
@@ -82,16 +86,14 @@ func (service *Service) noteClockRefusal(heartbeat Heartbeat, signature string, 
 	refusal, seen := service.clockRefused[heartbeat.NodeID]
 	young := seen && now.Sub(refusal.issued) <= heartbeatFreshness
 	answered := young && heartbeat.ClockChallenge != "" && hmac.Equal([]byte(heartbeat.ClockChallenge), []byte(refusal.challenge))
-	live := answered || heartbeat.ClockChallenge == "" && heartbeat.SentAt.After(refusal.latest)
-	if heartbeat.SentAt.After(refusal.latest) {
-		refusal.latest = heartbeat.SentAt
-	}
-	if live && service.logger != nil && now.Sub(refusal.warned) > heartbeatFreshness {
+	if answered && service.logger != nil && now.Sub(refusal.received) > heartbeatFreshness {
 		service.logger.Warn("cluster member's clock is out of step; refusing its heartbeats",
 			"node_id", heartbeat.NodeID, "offset", window.offset.Round(time.Second), "allowed", heartbeatClockSkew)
 	}
-	if live {
-		refusal.warned = now
+	if young && !answered && service.logger != nil && now.Sub(refusal.unanswered) > clockUnansweredLogEvery {
+		service.logger.Warn("cluster member's heartbeat is outside the clock window and left the clock check unanswered; it runs a release before 1.9.0, or the heartbeat was replayed",
+			"node_id", heartbeat.NodeID, "offset", window.offset.Round(time.Second), "allowed", heartbeatClockSkew)
+		refusal.unanswered = now
 	}
 	if answered {
 		refusal.received, refusal.offset = now, window.offset
