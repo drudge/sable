@@ -48,12 +48,10 @@ func (err *clockWindowError) Error() string {
 }
 
 // clockRefusal is a member's standing with the primary while it is refused
-// for its clock: received is when a refusal last counted, noted when an
-// authentic one last came in, and challenge the one the member must answer
-// next, issued at issued.
+// for its clock: received is when a refusal last counted and challenge the
+// one the member must answer next, issued at issued.
 type clockRefusal struct {
 	received  time.Time
-	noted     time.Time
 	offset    time.Duration
 	challenge string
 	issued    time.Time
@@ -65,7 +63,9 @@ type clockRefusal struct {
 // heartbeatFreshness. A timestamp can't tell a replayed heartbeat from a
 // clock that stepped back, so freshness comes from this node (D109). A
 // heartbeat that doesn't answer leaves a young challenge in place, so a replay
-// can't spoil the member's next answer.
+// can't spoil the member's next answer. It warns once per out-of-step
+// episode, on the first answer after none counted for heartbeatFreshness, so
+// a replay never logs.
 func (service *Service) noteClockRefusal(heartbeat Heartbeat, signature string, err error) {
 	var window *clockWindowError
 	if !errors.As(err, &window) || heartbeat.Primary != nil {
@@ -77,17 +77,16 @@ func (service *Service) noteClockRefusal(heartbeat Heartbeat, signature string, 
 	refusal, seen := service.clockRefused[heartbeat.NodeID]
 	young := seen && now.Sub(refusal.issued) <= heartbeatFreshness
 	answered := young && heartbeat.ClockChallenge != "" && hmac.Equal([]byte(heartbeat.ClockChallenge), []byte(refusal.challenge))
+	if answered && service.logger != nil && now.Sub(refusal.received) > heartbeatFreshness {
+		service.logger.Warn("cluster member's clock is out of step; refusing its heartbeats",
+			"node_id", heartbeat.NodeID, "offset", window.offset.Round(time.Second), "allowed", heartbeatClockSkew)
+	}
 	if answered {
 		refusal.received, refusal.offset = now, window.offset
 	}
 	if answered || !young {
 		refusal.challenge, refusal.issued = newClockChallenge(), now
 	}
-	if service.logger != nil && now.Sub(refusal.noted) > heartbeatFreshness {
-		service.logger.Warn("cluster member's clock is out of step; refusing its heartbeats",
-			"node_id", heartbeat.NodeID, "offset", window.offset.Round(time.Second), "allowed", heartbeatClockSkew)
-	}
-	refusal.noted = now
 	service.clockRefused[heartbeat.NodeID] = refusal
 	window.challenge = refusal.challenge
 }
