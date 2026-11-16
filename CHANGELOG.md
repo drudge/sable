@@ -8,6 +8,23 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.9.0-beta.3] - 2026-11-16
+
+Sable 1.9.0-beta.3 lines the DHCP dialogs' fields up with their title and
+buttons.
+
+### Upgrading from 1.9.0-beta.2
+
+- Nothing is needed.
+
+### Console
+
+- The DHCP scope and reservation dialogs no longer indent their fields a
+  second time, so the fields line up with the title and the buttons, as in
+  **Create Zone**.
+- The **Advanced Options** toggle's icon lines up with the field labels in
+  the DHCP and zone record dialogs.
+
 ## [1.9.0-beta.2] - 2026-11-16
 
 Sable 1.9.0-beta.2 tidies the DHCP dialogs and moves DHCP into the
