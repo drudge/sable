@@ -57,7 +57,7 @@ func (server *Server) setDHCPEnabled(writer http.ResponseWriter, request *http.R
 		view.Error, view.ProbeRefused = probed.Error(), true
 		server.render(writer, request, pages.DHCPContent(view))
 	case err != nil:
-		server.renderFormProblem(writer, request, "#dhcp-notice", err)
+		server.renderDHCPProblem(writer, request, "#dhcp-notice", err)
 	default:
 		server.renderDHCP(writer, request, ifThenString(enabled, "Turned DHCP on", "Turned DHCP off"))
 	}
