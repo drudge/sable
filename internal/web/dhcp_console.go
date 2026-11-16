@@ -69,7 +69,7 @@ func (server *Server) deleteDHCPReservation(writer http.ResponseWriter, request 
 func (server *Server) dhcpMutation(writer http.ResponseWriter, request *http.Request, notice string, change func(dhcpService, actor) (string, error)) {
 	message, err := change(server.dhcpService(), requestActor(request, ""))
 	if err != nil {
-		server.renderFormProblem(writer, request, notice, err)
+		server.renderDHCPProblem(writer, request, notice, err)
 		return
 	}
 	server.renderDHCP(writer, request, message)
