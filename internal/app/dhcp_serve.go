@@ -31,6 +31,13 @@ const (
 	// the engine is stale. A store that stays down is then read once a second,
 	// not once per datagram with dhcpSaveTimeout behind each.
 	dhcpReloadInterval = time.Second
+	// dhcpRelayWarnInterval is the least time between warnings about one
+	// relay whose address is in no scope; its clients retry every few
+	// seconds.
+	dhcpRelayWarnInterval = time.Hour
+	// dhcpRelayWarnLimit bounds the relays remembered for that, so a flood of
+	// forged giaddrs can't grow the map.
+	dhcpRelayWarnLimit = 64
 )
 
 // dhcpConn is the server's socket: datagrams with the interface they
@@ -132,6 +139,9 @@ type dhcpServer struct {
 	// ownProbes is this node's probes for other DHCP servers in flight; their
 	// DISCOVERs loop back to this socket and aren't client requests (D36).
 	ownProbes *dhcpOwnProbes
+	// relayWarned is when each relay with no scope was last warned about;
+	// only the serve goroutine touches it.
+	relayWarned map[netip.Addr]time.Time
 }
 
 // run serves until ctx ends or the socket fails, then closes the socket.
@@ -248,9 +258,32 @@ func (server *dhcpServer) handle(ctx context.Context, request dhcpRequest) {
 		}
 		counter.Add(1)
 		server.logger.Debug(message, "type", packet.MessageType(), "reason", result.Drop)
+		if result.Drop == dhcp.DropRelayNoScope {
+			server.warnRelayNoScope(packet)
+		}
 		return
 	}
 	server.send(ctx, packet, result, request.ifIndex)
+}
+
+// warnRelayNoScope says, once an hour per relay, that a relay sends requests
+// for a network with no scope. It names the relay's link selection hint when
+// there is one, since a relay that sends one may put an address outside the
+// client's subnet in giaddr.
+func (server *dhcpServer) warnRelayNoScope(packet dhcp.Packet) {
+	now := server.now()
+	if last, found := server.relayWarned[packet.GIAddr]; found && now.Sub(last) < dhcpRelayWarnInterval {
+		return
+	}
+	if server.relayWarned == nil || len(server.relayWarned) >= dhcpRelayWarnLimit {
+		server.relayWarned = map[netip.Addr]time.Time{}
+	}
+	server.relayWarned[packet.GIAddr] = now
+	attrs := []any{"relay_address", packet.GIAddr}
+	if hint, source := dhcp.LinkHint(packet); source != "" {
+		attrs = append(attrs, "client_subnet_hint", hint, "hint_option", source)
+	}
+	server.logger.Warn("a DHCP relay forwarded a request for a network with no scope; add a scope whose subnet holds the relay address", attrs...)
 }
 
 // recordConflict takes a probed address out of the pool, in the serve

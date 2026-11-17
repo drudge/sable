@@ -60,6 +60,7 @@ const (
 	optionClientFQDN    = 81
 	optionRelayInfo     = 82
 	optionV6OnlyPrefer  = 108
+	optionSubnetSelect  = 118
 	optionSearch        = 119
 	optionRoutes        = 121
 	optionTFTPAddresses = 150
@@ -180,6 +181,11 @@ type Result struct {
 	ProbeTimeout time.Duration
 	Drop         string
 }
+
+// DropRelayNoScope is the Drop for a relayed request whose giaddr is in no
+// scope. Unlike a broadcast on a link with no scope, it is always a setup
+// mistake: the relay was pointed at this server.
+const DropRelayNoScope = "relay address is in no scope"
 
 // LeaseState is where a lease stands.
 type LeaseState string
