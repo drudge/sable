@@ -3320,13 +3320,44 @@
 		  ctx.sableLogLiveURL = panel.dataset.liveUrl;
 		}
 	  });
+	  // Both logs list the newest row first and a refresh replaces the whole
+	  // panel, list included, so one landing while the operator reads further
+	  // down would throw them back to the top. Refreshes wait while the list is
+	  // scrolled and catch up as soon as it returns to the top.
+	  const list = () => panel.querySelector(".query-log-table-scroll, .runtime-log-viewer");
+	  const readingBelowTop = () => {
+		const element = list();
+		if (!element) return false;
+		if (element.scrollHeight > element.clientHeight + 1) return element.scrollTop > 2;
+		// On narrow screens the list grows with the page, and the page scrolls.
+		return element.getBoundingClientRect().top < 0;
+	  };
+	  let heldForScroll = false;
+	  const catchUpAtTop = () => {
+		if (!heldForScroll || readingBelowTop()) return;
+		heldForScroll = false;
+		poll();
+	  };
+	  panel.addEventListener("scroll", catchUpAtTop, {capture: true, passive: true});
+	  const onPageScroll = () => {
+		if (document.contains(panel)) catchUpAtTop();
+		else window.removeEventListener("scroll", onPageScroll);
+	  };
+	  window.addEventListener("scroll", onPageScroll, {passive: true});
 	  panel.addEventListener("htmx:before:swap", (event) => {
 		const ctx = event.detail?.ctx;
-		if (ctx?.sableLiveRefresh && (panel.dataset.live !== "true" || ctx.sableLogLiveURL !== panel.dataset.liveUrl)) event.preventDefault();
+		if (!ctx?.sableLiveRefresh) return;
+		if (panel.dataset.live !== "true" || ctx.sableLogLiveURL !== panel.dataset.liveUrl) {
+		  event.preventDefault();
+		} else if (readingBelowTop()) {
+		  heldForScroll = true;
+		  event.preventDefault();
+		}
 	  });
 	  const poll = () => {
 		if (!document.contains(panel)) { stop(); return; }
 		if (document.hidden || requestInFlight || isLiveRegionInUse(panel) || panel.dataset.live !== "true") return;
+		if (readingBelowTop()) { heldForScroll = true; return; }
 		// A log in a tab that isn't showing waits; it catches up when shown.
 		if (panel.closest("[data-isotope-panel][hidden]")) return;
 		requestInFlight = true;

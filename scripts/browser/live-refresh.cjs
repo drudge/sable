@@ -147,6 +147,57 @@ async function holdNextRefresh(page, pattern, interval) {
     }
 
     {
+      // Rows arrive at the top, so a refresh while reading further down would
+      // throw the list back to the first row. Refreshes wait while the list is
+      // scrolled and catch up once it is back at the top.
+      const page = await open('logs');
+      let polls = 0;
+      page.on('request', request => { if (new URL(request.url()).pathname === '/ui/logs/queries') polls++; });
+      const list = page.locator('.query-log-table-scroll');
+      // The Logs page bounds the card to the window; the fixture has no page
+      // around it, so the list is bounded here instead.
+      const scrollList = top => list.evaluate((element, top) => { element.style.maxHeight = '30rem'; element.scrollTop = top; window.originalList = element; }, top);
+      await scrollList(600);
+      const completed = await page.evaluate(() => window.finishedRefreshes);
+      await page.clock.runFor(9100);
+      assert.equal(polls, 0, 'no refresh is sent while the list is scrolled');
+      assert.equal(await list.evaluate(element => element === window.originalList && element.scrollTop), 600, 'the list keeps its place');
+
+      // A refresh already in flight when scrolling starts is dropped on arrival.
+      await list.evaluate(element => { element.scrollTop = 0; });
+      await page.waitForFunction(previous => window.finishedRefreshes > previous, completed);
+      await page.waitForFunction(() => !window.originalList.isConnected);
+      console.log('PASS scrolled query log holds refreshes and catches up at the top');
+      const finish = await holdNextRefresh(page, '**/ui/logs/queries**', 3000);
+      await scrollList(400);
+      await finish();
+      assert.equal(await list.evaluate(element => element === window.originalList && element.scrollTop), 400, 'an in-flight refresh does not reset the scrolled list');
+      console.log('PASS refresh in flight when scrolling starts is discarded');
+      await page.close();
+    }
+
+    {
+      // On narrow screens the list grows with the page, and the page scrolls.
+      const page = await open('logs', 600);
+      await page.evaluate(() => { window.originalList = document.querySelector('.query-log-table-scroll'); });
+      const overflows = await page.evaluate(() => window.originalList.scrollHeight > window.originalList.clientHeight + 1);
+      if (!overflows) {
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        let polls = 0;
+        page.on('request', request => { if (new URL(request.url()).pathname === '/ui/logs/queries') polls++; });
+        const completed = await page.evaluate(() => window.finishedRefreshes);
+        await page.clock.runFor(6100);
+        assert.equal(polls, 0, 'no refresh is sent while the page is scrolled into the list');
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await page.waitForFunction(previous => window.finishedRefreshes > previous, completed);
+        console.log('PASS narrow query log holds refreshes while the page is scrolled into it');
+      } else {
+        console.log('SKIP narrow query log: the list still scrolls inside its card at this width');
+      }
+      await page.close();
+    }
+
+    {
       let pending;
       const page = await open('loading', 1400, async page => {
         await page.route('**/ui/stats/insights**', route => { pending = route; }, {times: 1});
