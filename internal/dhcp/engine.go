@@ -215,6 +215,9 @@ func (engine *Engine) Handle(now time.Time, request Packet, meta Meta) Result {
 	defer engine.mutex.Unlock()
 	compiled, serverID := engine.scopeFor(request, meta)
 	if compiled == nil {
+		if !isZero(request.GIAddr) {
+			return Result{Drop: DropRelayNoScope}
+		}
 		return Result{Drop: "no scope for this link"}
 	}
 	if !validHardware(request) {

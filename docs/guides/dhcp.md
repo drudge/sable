@@ -83,6 +83,10 @@ Sable owns both the DHCP server and the zone, so it doesn't use DHCID records (R
 
 Sable serves every network it has an address on. For networks it isn't on, point the router's DHCP relay at Sable's address and add a scope for each network. Sable answers a relayed request when the relay's address (`giaddr`) is inside one of its scopes, replies to the relay, and echoes the relay agent information (option 82, RFC 3046) back unchanged.
 
+- **Which scope.** Sable picks the scope from the relay's address on the client's network alone. A relay that names the client's subnet some other way, with link selection (RFC 3527) or subnet selection (RFC 3011), isn't supported yet.
+- **Renewals.** A device renews straight with Sable at half its lease, through the router's ordinary routing, so Sable's address must be reachable from every relayed network. Only a rebind goes back through the relay.
+- **A relayed network gets no addresses.** If the relay's address is in no scope, the server log warns once an hour with the relay's address. Add a scope whose subnet holds it.
+
 ## On a cluster
 
 Every node of a cluster serves DHCP. Each scope's range is split into one slice per node, and a node leases only from its own slice, so two nodes that lose touch with each other never hand out the same address. Every node answers every reservation, since a reserved address can't conflict. Leases are shared on the cluster heartbeat, so each node holds all of them and the primary publishes every device's name.
