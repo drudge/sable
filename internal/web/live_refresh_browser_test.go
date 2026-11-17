@@ -4,6 +4,7 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -48,7 +49,11 @@ func TestBrowserLiveRefresh(t *testing.T) {
 	update := pages.UpdateView{Busy: true, Available: true, LatestVersion: "1.1.0", ReleaseURL: "https://github.com/drudge/sable/releases/tag/v1.1.0", ReleaseNotes: "### Improvements\n\n- More reliable updates."}
 	unifi := pages.UniFiAppView{Enabled: true, Mappings: []pages.UniFiMappingView{{Name: "Office", Zone: "office.example.test", Preview: "workstation-with-a-long-name.office.example.test"}}}
 	dynamic := pages.DynamicDNSAppView{Enabled: true}
-	logs := pages.QueryLogsView{Live: true, PageSize: 25}
+	// Enough rows that the list scrolls inside its card.
+	logs := pages.QueryLogsView{Live: true, PageSize: 50}
+	for index := range 50 {
+		logs.Entries = append(logs.Entries, pages.QueryLogEntryView{ID: int64(index + 1), OccurredAt: "11/17 8:18:57 AM", ClientIP: "10.0.0.5", Name: fmt.Sprintf("host-%d.example.test", index), RecordType: "A", Status: "NXDomain", Source: "Blocked", Protocol: "UDP"})
+	}
 	initial := map[string]templ.Component{
 		"chart":    combine(pages.Stats(pages.StatsOverviewView{Scope: pages.StatsScopeAll}), pages.QueryChart(chart), pages.DashboardInsights(insights, false)),
 		"insights": pages.DashboardInsights(insights, false),

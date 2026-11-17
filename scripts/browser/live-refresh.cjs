@@ -147,6 +147,82 @@ async function holdNextRefresh(page, pattern, interval) {
     }
 
     {
+      // Rows arrive at the top, so a refresh while reading further down would
+      // throw the list back to the first row. While the list is scrolled the
+      // panel keeps polling but leaves the list alone, shows a pill when a
+      // newer row is waiting, and catches up once the list is back at the top.
+      const page = await open('logs');
+      const list = page.locator('.query-log-table-scroll');
+      const pill = page.locator('[data-log-new-rows]');
+      // The Logs page bounds the card to the window; the fixture has no page
+      // around it, so the list is bounded here instead.
+      const scrollList = top => list.evaluate((element, top) => { element.style.maxHeight = '30rem'; element.scrollTop = top; window.originalList = element; }, top);
+      await scrollList(600);
+      await refresh(page, 3000);
+      assert.equal(await list.evaluate(element => element === window.originalList && element.scrollTop), 600, 'the list keeps its place');
+      assert.equal(await pill.locator('button').isHidden(), true, 'nothing newer, no pill');
+
+      await page.route('**/ui/logs/queries**', async route => {
+        const response = await route.fetch();
+        await route.fulfill({response, body: (await response.text()).replace('data-log-newest="0"', 'data-log-newest="51"')});
+      });
+      await refresh(page, 3000);
+      assert.equal(await list.evaluate(element => element === window.originalList && element.scrollTop), 600, 'a newer answer keeps the list in place too');
+      assert.equal(await pill.locator('button').isVisible(), true, 'a newer row shows the pill');
+      assert.equal((await pill.textContent()).trim(), 'New queries');
+      let polls = 0;
+      page.on('request', request => { if (new URL(request.url()).pathname === '/ui/logs/queries') polls++; });
+      await page.clock.runFor(6100);
+      assert.equal(polls, 0, 'polling rests while the pill is up');
+
+      const completed = await page.evaluate(() => window.finishedRefreshes);
+      await pill.locator('button').click();
+      await page.waitForFunction(previous => window.finishedRefreshes > previous, completed);
+      await page.waitForFunction(() => !window.originalList.isConnected);
+      assert.equal(await page.locator('#query-logs-panel').getAttribute('data-log-newest'), '51', 'the list caught up');
+      assert.equal(await pill.locator('button').isHidden(), true, 'the pill goes with the catch-up');
+      await page.unrouteAll();
+      console.log('PASS scrolled query log keeps its place, shows newer rows, and catches up from the pill');
+
+      // A refresh already in flight when scrolling starts is dropped on arrival.
+      const finish = await holdNextRefresh(page, '**/ui/logs/queries**', 3000);
+      await scrollList(400);
+      await finish();
+      assert.equal(await list.evaluate(element => element === window.originalList && element.scrollTop), 400, 'an in-flight refresh does not reset the scrolled list');
+      console.log('PASS refresh in flight when scrolling starts is discarded');
+      await page.close();
+    }
+
+    {
+      // On narrow screens the list grows with the page, and the page scrolls.
+      // The pill floats in the window there, since the top of the list is off
+      // screen.
+      const page = await open('logs', 600);
+      await page.evaluate(() => { window.originalList = document.querySelector('.query-log-table-scroll'); });
+      const overflows = await page.evaluate(() => window.originalList.scrollHeight > window.originalList.clientHeight + 1);
+      if (!overflows) {
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        await page.route('**/ui/logs/queries**', async route => {
+          const response = await route.fetch();
+          await route.fulfill({response, body: (await response.text()).replace('data-log-newest="0"', 'data-log-newest="51"')});
+        });
+        await refresh(page, 3000);
+        assert.equal(await page.evaluate(() => window.originalList.isConnected), true, 'the list stays while the page is scrolled into it');
+        const pill = page.locator('[data-log-new-rows]');
+        assert.equal(await pill.locator('button').isVisible(), true);
+        assert.equal(await pill.evaluate(element => element.classList.contains('floating') && element.querySelector('button').getBoundingClientRect().bottom <= window.innerHeight), true, 'the pill floats in the window');
+        const completed = await page.evaluate(() => window.finishedRefreshes);
+        await pill.locator('button').click();
+        await page.waitForFunction(previous => window.finishedRefreshes > previous, completed);
+        await page.waitForFunction(() => !window.originalList.isConnected);
+        console.log('PASS narrow query log holds while the page is scrolled, and the floating pill catches up');
+      } else {
+        console.log('SKIP narrow query log: the list still scrolls inside its card at this width');
+      }
+      await page.close();
+    }
+
+    {
       let pending;
       const page = await open('loading', 1400, async page => {
         await page.route('**/ui/stats/insights**', route => { pending = route; }, {times: 1});

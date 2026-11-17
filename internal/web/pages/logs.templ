@@ -138,7 +138,7 @@ templ pendingLogsPanel(id, loadURL, loading string) {
 }
 
 templ RuntimeLogsPanel(view RuntimeLogsView) {
-	@components.Card(components.CardProps{ID: "runtime-logs-panel", Class: "logs-card", Attrs: templ.Attributes{"aria-labelledby": "runtime-log-title", "tabindex": "-1", "data-log-live-panel": true, "data-live-refresh": true, "data-live": fmt.Sprint(view.Live), "data-live-url": runtimePanelURL(view)}}) {
+	@components.Card(components.CardProps{ID: "runtime-logs-panel", Class: "logs-card", Attrs: templ.Attributes{"aria-labelledby": "runtime-log-title", "tabindex": "-1", "data-log-live-panel": true, "data-live-refresh": true, "data-live": fmt.Sprint(view.Live), "data-live-url": runtimePanelURL(view), "data-log-newest": runtimeNewest(view)}}) {
 		<header class="logs-toolbar">
 			<div><div class="log-title"><h2 id="runtime-log-title">@Icon("file-text")<span>Runtime Log</span></h2><span class="log-total">{ runtimeLogCount(view) }</span></div></div>
 			<div class="logs-toolbar-actions">
@@ -164,6 +164,7 @@ templ RuntimeLogsPanel(view RuntimeLogsView) {
 			@components.EmptyState(components.EmptyStateProps{Description: "No runtime log entries match these filters.", Class: "logs-empty", Attrs: templ.Attributes{"role": "status"}})
 		} else {
 			<div class="runtime-log-viewer" role="log" aria-live="polite" aria-relevant="additions text" aria-atomic="false" aria-label="Runtime log entries" tabindex="0">
+				@logNewRows("New entries")
 				for _, entry := range view.Entries {
 					<div class={ "runtime-log-line level-" + entry.Level }><time>{ entry.OccurredAt }</time><span class="runtime-log-level">{ strings.ToUpper(entry.Level) }</span><span class="runtime-log-message">{ entry.Message }</span>if entry.Attributes != "" {
 						<span class="runtime-log-attributes">{ entry.Attributes }</span>
@@ -179,7 +180,7 @@ templ RuntimeLogsPanel(view RuntimeLogsView) {
 
 templ QueryLogsPanel(view QueryLogsView) {
 	{{ tokens := queryFilterTokens(view) }}
-	@components.Card(components.CardProps{ID: "query-logs-panel", Class: "logs-card", Attrs: templ.Attributes{"aria-labelledby": "query-log-title", "tabindex": "-1", "data-log-live-panel": true, "data-live-refresh": true, "data-live": fmt.Sprint(view.Live), "data-live-url": queryPanelLiveURL(view), "data-page-url": queryFilterURL(view)}}) {
+	@components.Card(components.CardProps{ID: "query-logs-panel", Class: "logs-card", Attrs: templ.Attributes{"aria-labelledby": "query-log-title", "tabindex": "-1", "data-log-live-panel": true, "data-live-refresh": true, "data-live": fmt.Sprint(view.Live), "data-live-url": queryPanelLiveURL(view), "data-page-url": queryFilterURL(view), "data-log-newest": fmt.Sprint(view.NewestID)}}) {
 		<header class="logs-toolbar query-logs-toolbar">
 			<div>
 				<div class="log-title"><h2 id="query-log-title">@Icon("logs")<span>DNS Query Log</span></h2><span class="log-total">{ fmt.Sprintf("%s entries", queryTotal(view)) }</span></div>
@@ -261,7 +262,7 @@ templ QueryLogsPanel(view QueryLogsView) {
 		} else if len(view.Entries) == 0 {
 			@components.EmptyState(components.EmptyStateProps{Description: "No DNS queries match these filters.", Class: "logs-empty", Attrs: templ.Attributes{"role": "status"}})
 		} else {
-			<div class="table-scroll query-log-table-scroll" role="region" aria-label="DNS query results" tabindex="0"><table class="query-log-table full isotope-query-log-table"><caption class="sr-only">DNS query results. Use the details button in each row for the full decision path.</caption><thead><tr><th class="query-col-time">Timestamp</th><th class="query-col-client">Client IP</th><th class="query-col-domain">Domain</th><th class="query-col-type">Type</th><th class="query-col-source">Response</th><th class="query-col-status">Status</th><th class="query-col-protocol">Protocol</th><th class="query-col-answer">Answer</th><th class="query-col-actions"><span class="sr-only">Actions</span></th></tr></thead><tbody>
+			<div class="table-scroll query-log-table-scroll" role="region" aria-label="DNS query results" tabindex="0">@logNewRows("New queries")<table class="query-log-table full isotope-query-log-table"><caption class="sr-only">DNS query results. Use the details button in each row for the full decision path.</caption><thead><tr><th class="query-col-time">Timestamp</th><th class="query-col-client">Client IP</th><th class="query-col-domain">Domain</th><th class="query-col-type">Type</th><th class="query-col-source">Response</th><th class="query-col-status">Status</th><th class="query-col-protocol">Protocol</th><th class="query-col-answer">Answer</th><th class="query-col-actions"><span class="sr-only">Actions</span></th></tr></thead><tbody>
 				for _, entry := range view.Entries {
 					@QueryLogTableRow(entry, view.CanBlocking)
 				}
@@ -691,6 +692,22 @@ templ QueryPolicyAction(domain, action, icon, label string) {
 	<form hx-post="/ui/blocking/query-domain" hx-target="body" hx-swap="beforeend"><input type="hidden" name="domain" value={ domain }/><input type="hidden" name="action" value={ action }/><button class={ "query-policy-action " + action } type="submit" aria-label={ label } title={ label }>@Icon(icon)</button></form>
 }
 
+
+// logNewRows appears at the top of a scrolled log when newer rows are
+// waiting; live refreshes hold while the operator reads further down.
+templ logNewRows(label string) {
+	<div class="log-new-rows" data-log-new-rows hidden><button class="button" type="button">@Icon("chevron-up")<span>{ label }</span></button></div>
+}
+
+// runtimeNewest names the newest runtime entry shown, so a held refresh can
+// tell whether anything newer has arrived. Entries carry no ID, so the time,
+// to the millisecond, and message stand in for one.
+func runtimeNewest(view RuntimeLogsView) string {
+	if len(view.Entries) == 0 {
+		return ""
+	}
+	return view.Entries[0].OccurredAt + " " + view.Entries[0].Message
+}
 
 templ LogLiveButton(live bool) {
 	<button class={ ifThen(live, "button outline live active", "button outline live") } type="button" data-log-live-toggle aria-pressed={ fmt.Sprint(live) }><span class="live-icon play">@Icon("play")</span><span class="live-icon pause">@Icon("pause")</span><span data-log-live-label>{ ifThen(live, "Pause", "Live") }</span></button>

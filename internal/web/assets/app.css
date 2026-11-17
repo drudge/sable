@@ -3238,6 +3238,13 @@ html:has(> .auth-body) { background: var(--background); scrollbar-gutter: stable
 	.runtime-log-viewer { height: auto; }
 	.query-log-table-scroll { max-height: none; }
 }
+/* Newer rows waiting above a scrolled log. It rides the top of the list,
+   under the query table's sticky header; when the page scrolls instead of the
+   list, it floats at the bottom of the window. */
+.log-new-rows { position: sticky; top: .5rem; z-index: 3; display: flex; height: 0; justify-content: center; pointer-events: none; }
+.query-log-table-scroll > .log-new-rows { top: 3rem; }
+.log-new-rows.floating { position: fixed; top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem); left: 0; right: 0; height: auto; }
+.log-new-rows .button { pointer-events: auto; gap: .35rem; box-shadow: 0 6px 20px rgb(0 0 0 / .28); }
 .isotope-query-log-table thead { position: sticky; top: 0; z-index: 2; background: color-mix(in oklch, var(--muted) 82%, transparent); backdrop-filter: blur(8px); }
 .isotope-query-log-table th { text-transform: none; letter-spacing: 0; }
 .isotope-query-log-table td { height: auto; min-height: 3.5rem; padding-block: .65rem; }
