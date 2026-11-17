@@ -8,6 +8,42 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.9.1-beta.1] - 2026-11-17
+
+Sable 1.9.1-beta.1 keeps the query and server logs still while you scroll
+them, puts DHCP lease saves ahead of other database writes, and warns when a
+DHCP relay forwards for a network that has no scope.
+
+### Upgrading from 1.9.0
+
+- Nothing is needed. Settings, scopes, leases and the database are
+  unchanged.
+
+### Console
+
+- **Query Logs** and **Server Logs** no longer jump back to the first row
+  every few seconds while you read further down. Live refresh waits while
+  the list is scrolled and catches up when you return to the top.
+- When newer rows arrive while the list is scrolled, a **New queries** (or
+  **New entries**) pill appears at the top of the list, or at the bottom of
+  the window on phones. Click it to jump back to the top and see them.
+
+### DHCP
+
+- A request relayed from a network that matches no scope used to be dropped
+  silently. Sable now logs a warning, at most once an hour per relay, naming
+  the relay's address and any link selection or subnet selection hint it
+  sent, so a router relay set up before its scope is easy to spot.
+- The DHCP guide explains which scope a relayed request lands in, how
+  renewals reach Sable, and what the new warning means.
+
+### Fixed
+
+- With SQLite, a write could wait forever behind a stuck one when the caller
+  set no deadline. Waits for the database writer now end after 30 seconds.
+- DHCP lease saves take the database writer ahead of query log flushes and
+  other queued writes, so a busy query log no longer delays an ACK.
+
 ## [1.9.0] - 2026-11-16
 
 Sable 1.9.0 adds a DHCP server. Sable can now hand out addresses on your
