@@ -107,7 +107,9 @@ func (store *Store) SaveDHCPLease(ctx context.Context, lease DHCPLease) (DHCPLea
 // SaveDHCPLeases writes leases in order in one transaction, each with the
 // node's next sequence number. The server calls it before it sends the ACK,
 // so a lease a client was told it holds is never lost, and a client that
-// moves never leaves its old lease active beside the new one.
+// moves never leaves its old lease active beside the new one. The save goes
+// ahead of query log flushes and other writes waiting for the SQLite writer,
+// so the ACK waits on at most the one transaction already writing.
 func (store *Store) SaveDHCPLeases(ctx context.Context, leases []DHCPLease) ([]DHCPLease, error) {
 	for _, lease := range leases {
 		if err := validDHCPLease(lease); err != nil {
@@ -115,7 +117,7 @@ func (store *Store) SaveDHCPLeases(ctx context.Context, leases []DHCPLease) ([]D
 		}
 	}
 	saved := slices.Clone(leases)
-	err := store.withTx(ctx, "DHCP leases", func(transaction *sql.Tx) error {
+	err := store.withUrgentTx(ctx, "DHCP leases", func(transaction *sql.Tx) error {
 		for index := range saved {
 			seq, err := store.nextDHCPLeaseSeq(ctx, transaction, saved[index].NodeID)
 			if err != nil {

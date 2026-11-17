@@ -27,9 +27,12 @@ import (
 type Store struct {
 	database *sql.DB
 	driver   string
-	// writer queues this process's SQLite transactions; see withTxOptions.
-	// It is nil on PostgreSQL.
-	writer chan struct{}
+	// writer queues this process's SQLite transactions; see runTx. It is
+	// nil on PostgreSQL.
+	writer *writerQueue
+	// writerWait overrides how long a transaction waits for writer; zero
+	// means writerWaitLimit. Tests set it to see the limit without waiting.
+	writerWait time.Duration
 	// trackingOff stops client sightings and identities from being recorded
 	// while Insights is off.
 	trackingOff atomic.Bool
@@ -69,7 +72,7 @@ func Open(ctx context.Context, driver, dsn string) (*Store, error) {
 	}
 	store := &Store{database: database, driver: driver}
 	if driver == "sqlite" {
-		store.writer = make(chan struct{}, 1)
+		store.writer = &writerQueue{}
 	}
 	if err := database.PingContext(ctx); err != nil {
 		database.Close()
