@@ -3322,9 +3322,12 @@
 	  });
 	  // Both logs list the newest row first and a refresh replaces the whole
 	  // panel, list included, so one landing while the operator reads further
-	  // down would throw them back to the top. Refreshes wait while the list is
-	  // scrolled and catch up as soon as it returns to the top.
+	  // down would throw them back to the top. While the list is scrolled the
+	  // panel keeps polling but leaves the list alone: a newer row than the one
+	  // on screen shows a pill at the top instead, and the list catches up as
+	  // soon as it is back at the top.
 	  const list = () => panel.querySelector(".query-log-table-scroll, .runtime-log-viewer");
+	  const newRows = panel.querySelector("[data-log-new-rows]");
 	  const readingBelowTop = () => {
 		const element = list();
 		if (!element) return false;
@@ -3336,8 +3339,18 @@
 	  const catchUpAtTop = () => {
 		if (!heldForScroll || readingBelowTop()) return;
 		heldForScroll = false;
+		newRows?.setAttribute("hidden", "");
 		poll();
 	  };
+	  newRows?.querySelector("button").addEventListener("click", () => {
+		const element = list();
+		const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+		if (element.scrollHeight > element.clientHeight + 1) element.scrollTo({top: 0, behavior});
+		else window.scrollBy({top: element.getBoundingClientRect().top - 96, behavior});
+		// Focus left in the panel holds live refreshes, and the pill goes away
+		// with the catch-up anyway.
+		document.activeElement?.blur();
+	  });
 	  panel.addEventListener("scroll", catchUpAtTop, {capture: true, passive: true});
 	  const onPageScroll = () => {
 		if (document.contains(panel)) catchUpAtTop();
@@ -3352,12 +3365,22 @@
 		} else if (readingBelowTop()) {
 		  heldForScroll = true;
 		  event.preventDefault();
+		  const fragment = (event.detail.tasks || [])[0]?.fragment;
+		  const newest = fragment?.querySelector?.("[data-log-newest]")?.dataset.logNewest;
+		  if (newest && newest !== panel.dataset.logNewest && newRows?.hidden) {
+			const element = list();
+			newRows.classList.toggle("floating", element.scrollHeight <= element.clientHeight + 1);
+			newRows.removeAttribute("hidden");
+			announce(newRows.textContent.trim() + " above");
+		  }
 		}
 	  });
 	  const poll = () => {
 		if (!document.contains(panel)) { stop(); return; }
 		if (document.hidden || requestInFlight || isLiveRegionInUse(panel) || panel.dataset.live !== "true") return;
-		if (readingBelowTop()) { heldForScroll = true; return; }
+		// Once the pill says there is something newer, there is nothing more
+		// to learn until the operator goes back up for it.
+		if (newRows && !newRows.hidden && readingBelowTop()) return;
 		// A log in a tab that isn't showing waits; it catches up when shown.
 		if (panel.closest("[data-isotope-panel][hidden]")) return;
 		requestInFlight = true;
