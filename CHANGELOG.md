@@ -8,6 +8,62 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.9.1] - 2026-11-24
+
+Sable 1.9.1 fixes recursive lookups that could use up all of a node's
+memory in seconds and get it killed. It also keeps the query and server logs
+still while you scroll them, puts DHCP lease saves ahead of other database
+writes, and warns when a DHCP relay forwards for a network that has no scope.
+
+### Upgrading from 1.9.0
+
+- Nothing is needed. Settings, zones, scopes, leases and the database are
+  unchanged, and 1.9.1 can run alongside 1.9.0 in a cluster while you update
+  each node.
+- If you run recursive mode on 1.6.1 or later, update soon. A single lookup
+  of the wrong name can take a node down.
+
+### Recursive resolution
+
+- Some domains name each other's name servers in a circle. syntis.net,
+  syntis.com and syntis.fr do, and yum's mirror list includes a host in
+  them. Looking up such a name in recursive mode started more and more
+  lookups of the same name servers until the node ran out of memory. One
+  question could take a node to several gigabytes in under half a minute,
+  and clients that retried on another node took that one down too. Sable
+  now stops when a lookup comes back round to a name server it is already
+  looking up, and caps how many name-server lookups one question may start.
+  Those names now resolve normally. The problem dated from 1.6.1.
+
+### Console
+
+- **Query Logs** and **Server Logs** no longer jump back to the first row
+  every few seconds while you read further down. Live refresh waits while
+  the list is scrolled and catches up when you return to the top.
+- When newer rows arrive while the list is scrolled, a **New queries** (or
+  **New entries**) pill appears at the top of the list, or at the bottom of
+  the window on phones. Click it to jump back to the top and see them.
+
+### DHCP
+
+- A request relayed from a network that matches no scope used to be dropped
+  silently. Sable now logs a warning, at most once an hour per relay, naming
+  the relay's address and any link selection or subnet selection hint it
+  sent, so a router relay set up before its scope is easy to spot.
+- The DHCP guide explains which scope a relayed request lands in, how
+  renewals reach Sable, and what the new warning means.
+
+### Fixed
+
+- With SQLite, a write could wait forever behind a stuck one when the caller
+  set no deadline. Waits for the database writer now end after 30 seconds.
+- DHCP lease saves take the database writer ahead of query log flushes and
+  other queued writes, so a busy query log no longer delays an ACK.
+
+### Changed
+
+- Sable is built with golang.org/x/net 0.63.0.
+
 ## [1.9.1-beta.3] - 2026-11-24
 
 Sable 1.9.1-beta.3 picks up a newer release of Go's networking library. It
