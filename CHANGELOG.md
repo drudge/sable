@@ -18,8 +18,7 @@ writes, and warns when a DHCP relay forwards for a network that has no scope.
 ### Upgrading from 1.9.0
 
 - Nothing is needed. Settings, zones, scopes, leases and the database are
-  unchanged, and 1.9.1 can run alongside 1.9.0 in a cluster while you update
-  each node.
+  unchanged.
 - If you run recursive mode on 1.6.1 or later, update soon. A single lookup
   of the wrong name can take a node down.
 
