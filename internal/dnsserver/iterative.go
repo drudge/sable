@@ -18,6 +18,12 @@ import (
 const (
 	maximumIterativeDepth   = 24
 	maximumIterativeQueries = 96
+	// maximumNameServerLookups caps the name-server address lookups one
+	// question may start, nested ones included. The query budget alone does
+	// not bound them: lookups that wait on a question already in flight spend
+	// nothing, so a tangle of zones that name each other's servers could start
+	// lookups without end while sending almost nothing.
+	maximumNameServerLookups = 32
 	// The bounds on how long a name found inside a zone is remembered.
 	defaultNoCutTTL = 300
 	minimumNoCutTTL = 30
@@ -41,6 +47,9 @@ var defaultRootHints = []string{
 type iterativeBudget struct {
 	mu        sync.Mutex
 	remaining int
+	// lookups counts the name servers whose addresses this lookup has gone
+	// looking for, up to maximumNameServerLookups.
+	lookups int
 	// shared holds the questions in flight once the lookup has gone
 	// parallel. The A and AAAA lookups of one name server walk the same
 	// zones, and each question they share is asked once.
@@ -114,6 +123,48 @@ func (call *sharedExchange) wait(ctx context.Context) (*dns.Msg, error) {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+}
+
+// startLookups claims up to wanted name-server lookups and reports how many
+// may start.
+func (budget *iterativeBudget) startLookups(wanted int) int {
+	budget.mu.Lock()
+	defer budget.mu.Unlock()
+	allowed := min(wanted, maximumNameServerLookups-budget.lookups)
+	if allowed <= 0 {
+		return 0
+	}
+	budget.lookups += allowed
+	return allowed
+}
+
+// nameServerChain is the name servers whose addresses are being looked up on
+// the way to the current question, innermost first. Zones that name each
+// other's servers, as syntis.net, syntis.com and syntis.fr do, would otherwise
+// send the lookup round the circle until the depth limit, starting four more
+// lookups at every turn.
+type nameServerChain struct {
+	name   string
+	parent *nameServerChain
+}
+
+type nameServerChainKey struct{}
+
+// lookingUpNameServer reports whether name's addresses are already being
+// looked up further out in this lookup.
+func lookingUpNameServer(ctx context.Context, name string) bool {
+	name = normalizeName(name)
+	for link, _ := ctx.Value(nameServerChainKey{}).(*nameServerChain); link != nil; link = link.parent {
+		if link.name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func withNameServer(ctx context.Context, name string) context.Context {
+	parent, _ := ctx.Value(nameServerChainKey{}).(*nameServerChain)
+	return context.WithValue(ctx, nameServerChainKey{}, &nameServerChain{name: normalizeName(name), parent: parent})
 }
 
 // take spends one query, reporting false when none are left.
@@ -855,6 +906,13 @@ const parallelNameServerLookups = 2
 // once, remembers each name's addresses, and returns them in the order of
 // names, IPv4 first.
 func (handler *Handler) resolveNameServerAddresses(ctx context.Context, names []string, runtime *Runtime, budget *iterativeBudget, depth int) []string {
+	// A name server already being looked up further out cannot help: its
+	// lookup is what is waiting on this one.
+	names = slices.DeleteFunc(slices.Clone(names), func(name string) bool { return lookingUpNameServer(ctx, name) })
+	names = names[:budget.startLookups(len(names))]
+	if len(names) == 0 {
+		return nil
+	}
 	budget.goParallel()
 	recordTypes := []uint16{dns.TypeA, dns.TypeAAAA}
 	found := make([][]dns.RR, len(names)*len(recordTypes))
@@ -862,7 +920,7 @@ func (handler *Handler) resolveNameServerAddresses(ctx context.Context, names []
 	for index := range found {
 		name, recordType := names[index/len(recordTypes)], recordTypes[index%len(recordTypes)]
 		wait.Go(func() {
-			response, err := handler.resolveIterativeQuestion(ctx, dns.Question{Name: dns.Fqdn(name), Qtype: recordType, Qclass: dns.ClassINET}, runtime, budget, depth)
+			response, err := handler.resolveIterativeQuestion(withNameServer(ctx, name), dns.Question{Name: dns.Fqdn(name), Qtype: recordType, Qclass: dns.ClassINET}, runtime, budget, depth)
 			if err == nil {
 				found[index] = response.Answer
 			}
