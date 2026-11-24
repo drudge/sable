@@ -8,6 +8,21 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.9.1-beta.3] - 2026-11-24
+
+Sable 1.9.1-beta.3 picks up a newer release of Go's networking library. It
+has no other changes from 1.9.1-beta.2, which fixed recursive lookups that
+could use up a node's memory.
+
+### Upgrading from 1.9.1-beta.2
+
+- Nothing is needed. Settings and the database are unchanged.
+
+### Changed
+
+- Sable is built with golang.org/x/net 0.63.0, which brings the upstream
+  fixes in Go's HTTP/2, DNS message and network libraries.
+
 ## [1.9.1-beta.2] - 2026-11-24
 
 Sable 1.9.1-beta.2 fixes a recursive lookup that could use up all of a
