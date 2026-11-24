@@ -3,6 +3,7 @@ package dnsserver
 import (
 	"context"
 	"fmt"
+	goruntime "runtime"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -265,5 +266,88 @@ func TestInZone(t *testing.T) {
 		if got := inZone(test.name, test.zone); got != test.want {
 			t.Errorf("inZone(%q, %q) = %t, want %t", test.name, test.zone, got, test.want)
 		}
+	}
+}
+
+// syntis.net, syntis.com and syntis.fr each name all three companies' servers
+// and carry glue for only their own. Finding a second server for any of them
+// means looking up a server in one of the others, which leads back round the
+// circle. Sable used to follow it to the depth limit, starting four lookups
+// at every turn: one question for mir01.syntis.net took it to hundreds of
+// thousands of goroutines and 6 GB within seconds, and got it killed.
+func TestIterativeResolverStopsAtNameServersThatNameEachOther(t *testing.T) {
+	t.Parallel()
+	nameServers := map[string]string{
+		"authns1.syntis.com.": "192.0.2.11",
+		"authns2.syntis.net.": "192.0.2.10",
+		"authns3.syntis.fr.":  "192.0.2.12",
+	}
+	zoneOf := func(name string) string {
+		for _, zone := range []string{"syntis.net.", "syntis.com.", "syntis.fr."} {
+			if dns.IsSubDomain(zone, name) {
+				return zone
+			}
+		}
+		return ""
+	}
+	runtime := recursiveTestRuntime(t)
+	runtime.timeout = 3 * time.Second
+	handler := NewHandler(runtime)
+	defer handler.Close()
+	var queries atomic.Int32
+	handler.upstreamExchange = func(_ context.Context, request *dns.Msg, endpoint string, _ time.Duration) (*dns.Msg, error) {
+		queries.Add(1)
+		// Real servers take a while to answer, and meanwhile the other
+		// lookups pile up behind the questions in flight.
+		time.Sleep(5 * time.Millisecond)
+		question := request.Question[0]
+		zone := zoneOf(question.Name)
+		switch {
+		case endpoint == "udp://192.0.2.1:53" && zone != "":
+			// The parent names all three servers, with glue only for the
+			// one inside the zone it delegates.
+			response := new(dns.Msg)
+			response.SetReply(request)
+			for name, address := range nameServers {
+				response.Ns = append(response.Ns, &dns.NS{Hdr: dns.RR_Header{Name: zone, Rrtype: dns.TypeNS, Class: dns.ClassINET, Ttl: 300}, Ns: name})
+				if zoneOf(name) == zone {
+					response.Extra = append(response.Extra, &dns.A{Hdr: dns.RR_Header{Name: name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 300}, A: netIP(address)})
+				}
+			}
+			return response, nil
+		case endpoint == "udp://192.0.2.1:53":
+			return noDataResponse(request, "."), nil
+		case question.Qtype == dns.TypeA && nameServers[question.Name] != "":
+			return addressResponse(request, nameServers[question.Name]), nil
+		case question.Name == "mir01.syntis.net." && question.Qtype == dns.TypeA:
+			return addressResponse(request, "192.0.2.44"), nil
+		default:
+			return noDataResponse(request, zone), nil
+		}
+	}
+	var mostGoroutines atomic.Int64
+	done := make(chan struct{})
+	go func() {
+		for {
+			mostGoroutines.Store(max(mostGoroutines.Load(), int64(goruntime.NumGoroutine())))
+			select {
+			case <-done:
+				return
+			case <-time.After(time.Millisecond):
+			}
+		}
+	}()
+	request := new(dns.Msg)
+	request.SetQuestion("mir01.syntis.net.", dns.TypeA)
+	response, err := handler.resolveNetworkWithinTimeout(request, runtime, nil)
+	close(done)
+	if err != nil || len(response.Answer) != 1 {
+		t.Fatalf("resolveNetwork = %v, %v", response, err)
+	}
+	if got := queries.Load(); got > maximumIterativeQueries {
+		t.Fatalf("sent %d queries, want no more than the budget of %d", got, maximumIterativeQueries)
+	}
+	if got := mostGoroutines.Load(); got > 500 {
+		t.Fatalf("%d goroutines at once, want the name-server lookups to stop at the circle", got)
 	}
 }
