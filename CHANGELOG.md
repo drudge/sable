@@ -8,6 +8,27 @@ Create a passphrase-sealed application backup before upgrading and keep
 mixed-version cluster windows short. Cross-version restore and downgrade
 compatibility are not yet a published contract.
 
+## [1.9.1-beta.2] - 2026-11-24
+
+Sable 1.9.1-beta.2 fixes a recursive lookup that could use up all of a
+node's memory in seconds and get it killed.
+
+### Upgrading from 1.9.1-beta.1
+
+- Nothing is needed. Settings and the database are unchanged.
+
+### Fixed
+
+- Some domains name each other's name servers in a circle. syntis.net,
+  syntis.com and syntis.fr do, and yum's mirror list includes a host in
+  them. Looking up such a name in recursive mode started more and more
+  lookups of the same name servers until the node ran out of memory. One
+  question could take a node to several gigabytes in under half a minute,
+  and clients that retried on the next node took that one down too. Sable
+  now stops when a lookup comes back round to a name server it is already
+  looking up, and caps how many name-server lookups one question may start.
+  Those names now resolve normally. This came in with 1.6.1-beta.4.
+
 ## [1.9.1-beta.1] - 2026-11-17
 
 Sable 1.9.1-beta.1 keeps the query and server logs still while you scroll
