@@ -175,10 +175,10 @@ const reconciled = await agent(`These are the changes described since Sable ${pr
 
 - Merge entries about the same thing into one, described the way it works at the end. A rename, a moved setting, or a changed default shows up only in its final form.
 - Drop anything added and then removed before ${version}, and fixes to bugs that only ever existed in a beta, since people on ${previous} never saw them. When the notes don't settle it, check the code in this checkout.
-- Keep upgrade notes only when they matter to someone coming from ${previous}: a changed default, a moved setting or menu, a config migration, new background work, or something that now starts off.
-- Leave out internal changes.
-- Put each entry in an area. Reuse the ### headings of the notes for ${previous} and the stable release before it where they fit, and use Fixes and Configuration for those kinds.
-- Write each entry's text as one bullet in the voice of those notes: it starts with a verb, keeps UI names in **bold** and config keys in backticks, and says what the user gets.
+- Keep upgrade notes only when someone coming from ${previous} has something to do or a risk to know: a config key, a role or permission change, a cluster or rollback limit, or an urgent fix.
+- Leave out internal changes and the development story. Follow the "Release notes" section of docs/releasing.md in this checkout; read it first.
+- Put each entry in an area named for what the reader gets, like "Logs hold still while you read", not the part of Sable that changed. A big new feature can use its own name. Use Fixes and Under the hood for those kinds.
+- Write each entry's text as one bullet: a bold one-line takeaway, then at most two sentences on what used to happen and what happens now. Keep UI names in **bold** and config keys in backticks.
 - claims are the exact things a reader could check: UI names and menu paths, setting names, defaults, limits, and config keys.
 - Mark as headline the two or three changes the intro should lead with.
 Return every dropped change with the reason.
@@ -262,8 +262,10 @@ log(`${final.length} entries kept: ${corrected.length} corrected, ${leftOut.leng
 phase('Write')
 const written = await agent(`Write the Sable ${version} section of CHANGELOG.md in this checkout as "## [${version}] - ${date}", directly above the newest section.
 
-- Match the shape and voice of the most recent stable ${minor ? '.0 release, such as 1.5.0' : 'patch release'} in the file: a short intro that leads with ${final.filter(entry => entry.headline).map(entry => entry.id).join(', ') || 'the biggest changes'}, then "### Upgrading from ${upgradingFrom}" if there are upgrade notes, then one ### section per area with the biggest first, and Console, Fixes, and Configuration last.
-- Use these entries and nothing else. You may tighten the wording, merge two bullets that say the same thing, and order them, but keep every fact.
+- Follow the "Release notes" section of docs/releasing.md in this checkout; read it first. Don't copy the shape or length of earlier sections in CHANGELOG.md, which predate it.
+- Lead with ${final.filter(entry => entry.headline).map(entry => entry.id).join(', ') || 'the biggest changes'}. Add an intro of one or two sentences only when there is a headline feature. Then "### Upgrading from ${upgradingFrom}" if there are upgrade notes, then one ### section per area with the biggest first, and Fixes and Under the hood last.
+- Use these entries and nothing else. You may tighten the wording, merge two bullets that say the same thing, order them, and drop detail the style rules leave out, but keep every fact a user would act on.
+- Aim for about ${minor ? 700 : 250} words.
 - Compare only with ${previous}. Never mention betas, commits, or pull requests.
 - Wrap lines at 80 characters like the rest of the file.
 
@@ -290,7 +292,7 @@ phase('Check')
 const [checks, coverage, reader] = await parallel([
   () => agent(checksPrompt, { label: 'release checks', phase: 'Check', schema: CHECKS, effort: 'low' }),
   () => agent(coveragePrompt(final), { label: 'coverage', phase: 'Check', schema: COVERAGE }),
-  () => agent(`Read the "## [${version}]" section of CHANGELOG.md in this checkout as someone about to upgrade from ${previous}. List anything that would trip them up: jargon or internal names, a bullet about what changed in the code instead of what they get, anything that assumes they ran a beta, or an upgrade surprise with no warning under "Upgrading from ${upgradingFrom}". Rewording and a missing warning are mechanical. Leaving something out or changing what the release leads with is needs-nick. Don't change files.`, { label: 'read as an upgrader', phase: 'Check', schema: READER }),
+  () => agent(`Read the "## [${version}]" section of CHANGELOG.md in this checkout as someone about to upgrade from ${previous}. List anything that would trip them up or that the "Release notes" section of docs/releasing.md rules out: jargon or internal names, the development story (how a bug was found, debugging examples, what was tested), a bullet about what changed in the code instead of what they get, a bullet without a bold takeaway, a heading that names a subsystem instead of what the reader gets, "Nothing is needed" boilerplate, a library list, anything that assumes they ran a beta, an upgrade surprise with no warning under "Upgrading from ${upgradingFrom}", or a section well over ${minor ? 700 : 250} words. Rewording, trimming detail, and a missing warning are mechanical. Leaving a whole change out or changing what the release leads with is needs-nick. Don't change files.`, { label: 'read as an upgrader', phase: 'Check', schema: READER }),
 ])
 for (const [name, result] of [['release checks', checks], ['coverage check', coverage], ['upgrader read', reader]]) if (!result) unfinished.push(`The ${name} did not finish.`)
 for (const finding of reader?.findings || []) if (finding.fix === 'needs-nick') needsNick.push({ where: finding.where, problem: finding.problem, evidence: finding.suggestion })

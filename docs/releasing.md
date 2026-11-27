@@ -92,8 +92,8 @@ Only after every archive, checksum, and container image is published does it
 apply the matching curated changelog section and make the GitHub release
 visible. Every release, including a release candidate, requires a nonempty exact
 version section. Missing notes stop the workflow before it creates a tag or
-publishes artifacts. Write user-visible changes rather than merge messages,
-commit hashes, or internal housekeeping; automatic commit lists are disabled. The job has
+publishes artifacts. Automatic commit lists are disabled; write the notes as
+[Release notes](#release-notes) describes. The job has
 repository write permissions only for that gated run, and it never pushes a
 branch.
 
@@ -108,6 +108,40 @@ which makes partial publication retryable without moving the tag. It refuses to
 replace an already published release or a tag that is not reachable from
 `main`. `mage publish` is guarded for CI use and cannot publish from a developer
 workstation by accident.
+
+## Release notes
+
+Write for someone who runs Sable, not someone who built it. Each section should
+tell a reader in a minute what changed for them and whether they need to do
+anything.
+
+- **Headings name what the reader gets**, like "Logs hold still while you
+  read", not the part of Sable that changed. A big new feature can use its own
+  name, like "A DHCP server, built in".
+- **Every bullet starts with a bold, one-line takeaway**, then at most two
+  sentences on what used to happen and what happens now.
+- **Leave out the development story**: how a bug was found, domains or hosts
+  from debugging, internal names (the writer queue, heartbeats, flushes), what
+  was or wasn't tested, and exact backoffs, budgets or caps a user can't set.
+  Reference detail such as API parameters and full option lists belongs in the
+  guide; link it.
+- **RFCs are fine for protocol behavior**, DNS or DHCP, as a short tag at the
+  end of the bullet, like "(RFC 2308)". Don't lead with one, cite section
+  numbers, or name DHCP option numbers; the console doesn't use them.
+- **An intro only when a release has a headline feature**: one or two
+  sentences, never a summary of every section.
+- **"Upgrading from X" only when there's something to do or a risk to know**:
+  a config key, a role or permission change, a cluster or rollback limit, or
+  an urgent fix. Don't write "Nothing is needed."
+- **Fixes are one line each**, symptom first.
+- **"Under the hood" is one line**: the Go version, a security fix with its
+  advisory ID, or a dependency a user would notice. No library lists.
+- **Keep it short**: a patch release in about 250 words, a minor release in
+  about 700.
+
+A beta's notes follow the same rules and may compare with earlier betas. A
+stable release's notes compare only with the previous stable release and never
+mention betas, commit hashes or PR numbers; `go test ./docs` checks that.
 
 ## Published artifact contract
 
