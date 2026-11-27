@@ -224,7 +224,7 @@ The query path in `internal/dnsserver` runs for every lookup. `ServeDNS` leads t
 
 - Write docs in plain, short sentences. Name console controls in bold, as they appear: **Settings → Alerts**.
 - Update the matching guide, `docs/configuration.md`, or `docs/reference/api.md` in the same PR as the change.
-- Release notes live in `CHANGELOG.md`, one section per version.
+- Release notes live in `CHANGELOG.md`, one section per version. Write them the way [docs/releasing.md](docs/releasing.md#release-notes) says: headings that name what the reader gets, a bold takeaway per bullet, and no development story.
   - A beta's notes may compare it with earlier betas.
   - A stable release's notes describe only the change since the last stable release. They never mention betas, commit hashes, or PR numbers, and `docs/docs_test.go` enforces that.
 
